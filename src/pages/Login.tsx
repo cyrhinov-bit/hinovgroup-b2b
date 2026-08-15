@@ -8,18 +8,10 @@ import illustration from '../assets/login_illustration.png';
 import { InstallButton } from '../components/InstallButton';
 import type { User } from '../context/AppContext';
 
-const testRoles: { label: string; role: User['role']; posActive: boolean; path: string; icon: string }[] = [
-  { label: 'Super Admin', role: 'SuperAdmin', posActive: false, path: '/utilisateurs', icon: '👑' },
-  { label: 'Admin POS', role: 'Directeur', posActive: true, path: '/pos', icon: '📊' },
-  { label: 'Gérant POS', role: 'Gerant', posActive: true, path: '/pos', icon: '🛒' },
-  { label: 'Caissier POS', role: 'Caissier', posActive: true, path: '/pos/terminal', icon: '💰' },
-  { label: 'CRM', role: 'Directeur', posActive: false, path: '/', icon: '📋' },
-  { label: 'Responsable CRM', role: 'Responsable', posActive: false, path: '/', icon: '🏢' },
-  { label: 'Commercial', role: 'Commercial', posActive: false, path: '/commercial', icon: '🤝' },
-];
+
 
 export function Login() {
-  const { login, loginAsTestUser, currentUser, loading } = useAuth();
+  const { login, currentUser, loading } = useAuth();
   const { setPosWorkspace } = useAppContext();
   const navigate = useNavigate();
   
@@ -52,12 +44,7 @@ export function Login() {
     }
   };
 
-  const handleTestAccess = (r: typeof testRoles[0]) => {
-    navigatingRef.current = true;
-    loginAsTestUser(r.role);
-    setPosWorkspace({ active: r.posActive });
-    navigate(r.path, { replace: true });
-  };
+
 
   if (loading && !currentUser) {
     return (
@@ -126,25 +113,6 @@ export function Login() {
           
           <InstallButton />
         </form>
-
-        <div className="test-access-section">
-          <div className="test-access-divider">
-            <span>Accès test</span>
-          </div>
-          <div className="test-access-grid">
-            {testRoles.map((r) => (
-              <button
-                key={r.label}
-                type="button"
-                className="test-access-btn"
-                onClick={() => handleTestAccess(r)}
-              >
-                <span className="test-access-icon">{r.icon}</span>
-                <span className="test-access-label">{r.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
       </div>
     </div>
