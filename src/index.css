@@ -106,6 +106,8 @@ a:hover {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  min-width: 0;
+  width: 100%;
 }
 
 .page-wrapper {
