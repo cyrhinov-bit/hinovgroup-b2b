@@ -47,7 +47,7 @@ export class WindowManager {
     const state = WindowStateService.loadState(1440, 900);
 
     this.mainWindow = new BrowserWindow({
-      title: 'Hinov Devis Desktop',
+      title: 'Hinov Business Suite Desktop',
       x: state.x,
       y: state.y,
       width: state.width,

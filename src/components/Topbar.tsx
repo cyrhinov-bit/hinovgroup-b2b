@@ -99,7 +99,7 @@ export function Topbar() {
           <button className="icon-button menu-toggle">
             <Menu />
           </button>
-          <span className="brand-name">{posWorkspace.active ? 'HINOV POS' : 'HINOV DEVIS'}</span>
+          <span className="brand-name">{posWorkspace.active ? 'HINOV POS' : 'HINOV BUSINESS SUITE'}</span>
           {currentUser?.role === 'Directeur' && (
             <button
               onClick={() => {

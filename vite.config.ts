@@ -25,7 +25,7 @@ export default defineConfig({
       },
       includeAssets: ['logoh.png', 'pwa-192x192.png', 'pwa-512x512.png'],
       manifest: {
-        name: 'Hinov Devis',
+        name: 'Hinov Business Suite',
         short_name: 'Hinov',
         description: 'Application de gestion de devis',
         theme_color: '#0056b3',

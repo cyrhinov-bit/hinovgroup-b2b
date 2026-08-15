@@ -50,7 +50,7 @@ export function Login() {
     return (
       <div className="login-container">
         <div className="login-header">
-          <h2 style={{ color: 'var(--color-primary)' }}>HINOV DEVIS</h2>
+          <h2 style={{ color: 'var(--color-primary)' }}>HINOV BUSINESS SUITE</h2>
         </div>
       </div>
     );
@@ -72,7 +72,7 @@ export function Login() {
             <div className="login-logo">
               <img src={logo} alt="Hinov" />
             </div>
-            <h2 className="animated-title">Hinov Devis</h2>
+            <h2 className="animated-title">Hinov Business Suite</h2>
             <p>Connectez-vous à votre espace</p>
           </div>
 
