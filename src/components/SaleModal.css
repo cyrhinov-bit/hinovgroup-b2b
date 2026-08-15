@@ -1,0 +1,100 @@
+.sale-modal {
+  position: relative;
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  width: 720px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  padding: 24px;
+  animation: confirmModalSlide 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sale-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sale-modal-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: var(--color-success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sale-modal-header h3 {
+  margin: 0 0 4px 0;
+  font-size: 1.15rem;
+}
+
+.sale-modal-header p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.sale-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sale-lines-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sale-lines-table th,
+.sale-lines-table td {
+  border: 1px solid var(--color-border);
+  padding: 8px;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.sale-lines-table th {
+  background-color: #f5f5f5;
+  font-weight: 600;
+}
+
+.sale-lines-table input {
+  width: 100%;
+}
+
+.sale-totals {
+  background-color: #f9f9f9;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.sale-totals .total-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 0.9rem;
+}
+
+.sale-totals .grand-total {
+  border-top: 1px solid var(--color-border);
+  margin-top: 8px;
+  padding-top: 8px;
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+.sale-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
+}

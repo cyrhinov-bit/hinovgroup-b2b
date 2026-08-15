@@ -1,0 +1,34 @@
+{
+  "appId": "com.erp.pos",
+  "productName": "ERP POS Desktop",
+  "copyright": "Copyright © 2026 ERP POS",
+  "directories": {
+    "output": "release/",
+    "buildResources": "build"
+  },
+  "files": [
+    "dist/**/*",
+    "dist-electron/**/*"
+  ],
+  "win": {
+    "target": ["nsis", "portable", "zip"],
+    "icon": "build/icons/icon.ico"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "ERP POS",
+    "uninstallDisplayName": "ERP POS",
+    "deleteAppDataOnUninstall": false
+  },
+  "mac": {
+    "target": ["dmg", "pkg"],
+    "icon": "build/icons/icon.icns"
+  },
+  "linux": {
+    "target": ["AppImage", "deb"],
+    "icon": "build/icons"
+  }
+}
