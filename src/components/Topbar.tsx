@@ -5,7 +5,7 @@ import { useAppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import './Topbar.css';
 
-export function Topbar() {
+export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
   const { currentUser, logout, updatePin } = useAuth();
   const { posWorkspace, setPosWorkspace, updateMyProfile } = useAppContext();
   const navigate = useNavigate();
@@ -96,7 +96,7 @@ export function Topbar() {
     <>
       <nav className="topbar">
         <div className="topbar-left">
-          <button className="icon-button menu-toggle">
+          <button className="icon-button menu-toggle" onClick={onToggleMenu}>
             <Menu />
           </button>
           <span className="brand-name">{posWorkspace.active ? 'HINOV POS' : 'HINOV BUSINESS SUITE'}</span>

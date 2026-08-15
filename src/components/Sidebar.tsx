@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAppContext } from '../context/AppContext';
 import './Sidebar.css';
 
-export function Sidebar() {
+export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; setMobileOpen?: (val: boolean) => void }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
@@ -79,7 +79,7 @@ export function Sidebar() {
   );
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
       <div className="user-profile">
         <div className="avatar">
           <UserCircle size={48} />
