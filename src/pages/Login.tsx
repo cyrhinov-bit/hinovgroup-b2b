@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAppContext } from '../context/AppContext';
 import './Login.css';
 import logo from '../assets/logoh.png';
-import illustration from '../assets/login_illustration.png';
+import illustration from '../assets/login_illustration_new.jpg';
 import { InstallButton } from '../components/InstallButton';
 import type { User } from '../context/AppContext';
 
@@ -61,8 +61,8 @@ export function Login() {
       <div className="login-illustration">
         <img src={illustration} alt="Gestion des devis" />
         <div className="illustration-overlay">
-          <h2>Simplifiez la gestion de vos devis</h2>
-          <p>La solution connectée et hors-ligne pour votre entreprise.</p>
+          <h2>Hinov Business Suite</h2>
+          <p>La solution complète de gestion : ERP, CRM, et Caisse Connectée.</p>
         </div>
       </div>
       
