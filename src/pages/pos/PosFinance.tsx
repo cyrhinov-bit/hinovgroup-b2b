@@ -204,7 +204,8 @@ export default function PosFinance() {
       {/* Daily movements */}
       <div style={{ ...cardStyle, marginBottom: '24px' }}>
         <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>Mouvements journaliers</h3>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
               <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Date</th>
@@ -271,13 +272,15 @@ export default function PosFinance() {
             )}
           </tbody>
         </table>
+</div>
       </div>
 
       {/* Rapprochement caisse */}
       {closedSessions.length > 0 && (
         <div style={{ ...cardStyle, marginBottom: '24px' }}>
           <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>Rapprochement caisse</h3>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
                 <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Session</th>
@@ -313,6 +316,7 @@ export default function PosFinance() {
               })}
             </tbody>
           </table>
+</div>
         </div>
       )}
 
@@ -320,7 +324,8 @@ export default function PosFinance() {
       {margins.length > 0 && (
         <div style={cardStyle}>
           <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>Analyse des marges</h3>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
                 <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Produit</th>
@@ -358,6 +363,7 @@ export default function PosFinance() {
               </tr>
             </tbody>
           </table>
+</div>
         </div>
       )}
     </div>

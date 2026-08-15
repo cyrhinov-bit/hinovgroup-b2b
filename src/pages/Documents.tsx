@@ -69,7 +69,8 @@ export function Documents() {
       </div>
 
       <div className="card">
-        <table className="data-table">
+        <div className="table-responsive">
+<table className="data-table">
           <thead>
             <tr>
               <th>Nom du fichier</th>
@@ -103,6 +104,7 @@ export function Documents() {
             )}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );

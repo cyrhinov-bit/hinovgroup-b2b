@@ -64,7 +64,8 @@ export function PaymentModal({ sale, client, installments, isOpen, onClose, onPa
         </div>
 
         <div className="sale-modal-body">
-          <table className="sale-lines-table">
+          <div className="table-responsive">
+<table className="sale-lines-table">
             <thead>
               <tr>
                 <th>Date</th>
@@ -89,6 +90,7 @@ export function PaymentModal({ sale, client, installments, isOpen, onClose, onPa
               )}
             </tbody>
           </table>
+</div>
 
           {unpaid.length > 0 ? (
             <div className="form-group">

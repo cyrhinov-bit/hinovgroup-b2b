@@ -33,7 +33,8 @@ export function CommercialClients() {
           />
         </div>
 
-        <table className="data-table">
+        <div className="table-responsive">
+<table className="data-table">
           <thead>
             <tr>
               <th>Nom</th>
@@ -66,6 +67,7 @@ export function CommercialClients() {
             )}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );

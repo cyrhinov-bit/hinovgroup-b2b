@@ -153,7 +153,8 @@ export function QuoteCreation() {
 
         <section className="form-section">
           <h3>Prestations</h3>
-          <table className="prestations-table">
+          <div className="table-responsive">
+<table className="prestations-table">
             <thead>
               <tr>
                 <th>Service (Catalogue)</th>
@@ -204,6 +205,7 @@ export function QuoteCreation() {
               )}
             </tbody>
           </table>
+</div>
           <button className="btn btn-outline" style={{ marginTop: '16px' }} onClick={handleAddLine}>
             <Plus size={16} style={{ marginRight: '8px' }} /> Ajouter une ligne
           </button>

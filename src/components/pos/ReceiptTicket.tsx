@@ -47,7 +47,8 @@ export default function ReceiptTicket({ data, settings, preview = false }: Recei
 
       {/* Lignes de commande */}
       <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '8px 0', marginBottom: '12px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
               <th style={{ textAlign: 'left', paddingBottom: '4px' }}>Qté</th>
@@ -70,6 +71,7 @@ export default function ReceiptTicket({ data, settings, preview = false }: Recei
             ))}
           </tbody>
         </table>
+</div>
       </div>
 
       {/* Totaux */}

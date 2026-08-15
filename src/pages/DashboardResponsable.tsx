@@ -79,7 +79,8 @@ export function DashboardResponsable() {
 
       <div className="card">
         <h3>Activité du service (Simulée)</h3>
-        <table className="data-table">
+        <div className="table-responsive">
+<table className="data-table">
           <thead>
             <tr>
               <th>Responsable</th>
@@ -99,6 +100,7 @@ export function DashboardResponsable() {
             </tr>
           </tbody>
         </table>
+</div>
       </div>
 
       <div className="card">
@@ -107,7 +109,8 @@ export function DashboardResponsable() {
           {overdueTotal > 0 ? `Total restant à percevoir : ${overdueTotal.toLocaleString('fr-FR')} FCFA sur ${overdueInstallments.length} échéance(s).` : 'Aucune échéance en retard.'}
         </p>
         {overdueInstallments.length > 0 && (
-          <table className="data-table">
+          <div className="table-responsive">
+<table className="data-table">
             <thead>
               <tr>
                 <th>Client</th>
@@ -129,6 +132,7 @@ export function DashboardResponsable() {
               ))}
             </tbody>
           </table>
+</div>
         )}
       </div>
     </div>

@@ -399,7 +399,8 @@ export default function PosReturns() {
       <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
         {filteredReturns.length > 0 ? (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
+            <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
               <thead><tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left', background: 'var(--color-surface)' }}>
                 <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Retour</th>
                 <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Transaction</th>
@@ -457,6 +458,7 @@ export default function PosReturns() {
                 })}
               </tbody>
             </table>
+</div>
           </div>
         ) : (
           <div style={{ padding: '60px 24px', textAlign: 'center' }}>
@@ -571,7 +573,8 @@ export default function PosReturns() {
                 <div style={{ marginBottom: '32px' }}>
                   <h3 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}><span style={{ background: 'var(--color-surface-alt)', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>3</span> Articles retournables</h3>
                   <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead style={{ background: 'var(--color-surface-alt)' }}>
                         <tr style={{ textAlign: 'left' }}>
                           <th style={{ padding: '12px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Produit</th>
@@ -606,6 +609,7 @@ export default function PosReturns() {
                         })}
                       </tbody>
                     </table>
+</div>
                   </div>
                   <div style={{ textAlign: 'right', marginTop: '12px', fontSize: '14px', color: 'var(--color-text-muted)' }}>
                     Valeur totale retournée : <strong style={{ color: 'var(--color-text)', fontSize: '16px' }}>{totalRefundAmount.toLocaleString()} FCFA</strong>
@@ -627,7 +631,8 @@ export default function PosReturns() {
                     {exchangeLines.length === 0 ? (
                       <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>Aucun article sélectionné pour l'échange.</div>
                     ) : (
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead style={{ background: 'var(--color-surface-alt)' }}>
                           <tr style={{ textAlign: 'left' }}>
                             <th style={{ padding: '12px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Produit</th>
@@ -653,6 +658,7 @@ export default function PosReturns() {
                           ))}
                         </tbody>
                       </table>
+</div>
                     )}
                   </div>
                   {exchangeLines.length > 0 && (
@@ -770,7 +776,8 @@ export default function PosReturns() {
 
               <h3 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px', color: 'var(--color-text)' }}>Articles retournés</h3>
               <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', marginBottom: '24px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead style={{ background: 'var(--color-surface-alt)' }}>
                     <tr style={{ textAlign: 'left' }}>
                       <th style={{ padding: '12px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Article</th>
@@ -792,13 +799,15 @@ export default function PosReturns() {
                     ))}
                   </tbody>
                 </table>
+</div>
               </div>
 
               {detailObj.exchangeLines && detailObj.exchangeLines.length > 0 && (
                 <>
                   <h3 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px', color: 'var(--color-text)' }}>Articles remis en échange</h3>
                   <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', marginBottom: '24px' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead style={{ background: 'var(--color-surface-alt)' }}>
                         <tr style={{ textAlign: 'left' }}>
                           <th style={{ padding: '12px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Article</th>
@@ -818,6 +827,7 @@ export default function PosReturns() {
                         ))}
                       </tbody>
                     </table>
+</div>
                   </div>
                 </>
               )}

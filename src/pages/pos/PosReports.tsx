@@ -52,7 +52,8 @@ export default function PosReports() {
       </div>
       <div style={cardStyle}>
         <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>Top 10 Produits</h3>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}><th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>#</th><th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Produit</th><th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Qté vendue</th><th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Revenu</th></tr></thead>
           <tbody>
             {topProducts.map((p, i) => (
@@ -66,6 +67,7 @@ export default function PosReports() {
             {topProducts.length === 0 && <tr><td colSpan={4} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Aucune donnée</td></tr>}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );

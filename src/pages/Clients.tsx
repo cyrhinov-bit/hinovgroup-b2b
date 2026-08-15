@@ -170,7 +170,8 @@ export function Clients() {
       )}
 
       <div className="card">
-        <table className="data-table">
+        <div className="table-responsive">
+<table className="data-table">
           <thead>
             <tr>
               <th>Entreprise</th>
@@ -219,6 +220,7 @@ export function Clients() {
             )}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );

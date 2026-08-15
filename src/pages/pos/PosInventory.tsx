@@ -80,7 +80,8 @@ export default function PosInventory() {
           <h4 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Lignes ajustées ({viewingInventory.lines.length})</h4>
           {viewingInventory.lines.length > 0 ? (
             <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead style={{ position: 'sticky', top: 0, background: 'white' }}>
                   <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
                     <th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Produit</th>
@@ -105,6 +106,7 @@ export default function PosInventory() {
                   })}
                 </tbody>
               </table>
+</div>
             </div>
           ) : (
             <div style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)', background: 'var(--color-surface-alt)', borderRadius: 'var(--radius-md)' }}>
@@ -136,7 +138,8 @@ export default function PosInventory() {
             </div>
           </div>
           <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead style={{ position: 'sticky', top: 0, background: 'white' }}><tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}><th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Produit</th><th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Stock attendu</th><th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right', width: '100px' }}>Compté</th><th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Écart</th></tr></thead>
               <tbody>
                 {form.lines
@@ -180,6 +183,7 @@ export default function PosInventory() {
                 })}
               </tbody>
             </table>
+</div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--color-border)', paddingTop: '16px', marginTop: '16px' }}>
             <div style={{ fontSize: '16px', fontWeight: 600, color: totalDifference !== 0 ? 'var(--color-error)' : 'var(--color-success)' }}>Écart total: {totalDifference > 0 ? '+' : ''}{totalDifference}</div>
@@ -191,7 +195,8 @@ export default function PosInventory() {
         </div>
       )}
       <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
               <th style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Référence</th>
@@ -222,6 +227,7 @@ export default function PosInventory() {
             {posInventories.length === 0 && <tr><td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Aucun inventaire</td></tr>}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );

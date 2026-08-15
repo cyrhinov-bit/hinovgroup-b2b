@@ -62,7 +62,8 @@ export function Rapports() {
       </div>
 
       <div className="card">
-        <table className="data-table">
+        <div className="table-responsive">
+<table className="data-table">
           <thead>
             <tr>
               <th>Expéditeur</th>
@@ -114,6 +115,7 @@ export function Rapports() {
             )}
           </tbody>
         </table>
+</div>
       </div>
 
       <div className="widgets-grid" style={{ marginTop: '24px' }}>

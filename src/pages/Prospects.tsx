@@ -165,7 +165,8 @@ export function Prospects() {
           </select>
         </div>
 
-        <table className="data-table">
+        <div className="table-responsive">
+<table className="data-table">
           <thead>
             <tr>
               <th>N° Prospect</th>
@@ -208,6 +209,7 @@ export function Prospects() {
             )}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );

@@ -101,7 +101,8 @@ export function Devis() {
           </select>
         </div>
 
-        <table className="data-table">
+        <div className="table-responsive">
+<table className="data-table">
           <thead>
             <tr>
               <th>N° Devis</th>
@@ -208,6 +209,7 @@ export function Devis() {
             )}
           </tbody>
         </table>
+</div>
       </div>
       {activeSendQuote && (
         <SendModal

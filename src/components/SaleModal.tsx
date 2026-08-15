@@ -108,7 +108,8 @@ export function SaleModal({ quote, client, sale, isOpen, onClose, onSaved }: Sal
         </div>
 
         <div className="sale-modal-body">
-          <table className="sale-lines-table">
+          <div className="table-responsive">
+<table className="sale-lines-table">
             <thead>
               <tr>
                 <th>Description</th>
@@ -139,6 +140,7 @@ export function SaleModal({ quote, client, sale, isOpen, onClose, onSaved }: Sal
               ))}
             </tbody>
           </table>
+</div>
 
           <div className="sale-totals">
             <div className="total-row">

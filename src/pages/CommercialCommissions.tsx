@@ -79,7 +79,8 @@ export function CommercialCommissions() {
           </select>
         </div>
 
-        <table className="data-table">
+        <div className="table-responsive">
+<table className="data-table">
           <thead>
             <tr>
               <th>Client</th>
@@ -112,6 +113,7 @@ export function CommercialCommissions() {
             )}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );

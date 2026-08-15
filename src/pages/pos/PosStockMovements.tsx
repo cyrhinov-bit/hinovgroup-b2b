@@ -195,7 +195,8 @@ export default function PosStockMovements() {
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead style={{ backgroundColor: 'var(--color-surface-alt)', borderBottom: '1px solid var(--color-border)' }}>
               <tr>
                 <th style={{ padding: 'var(--spacing-3)', fontWeight: 500 }}>Date</th>
@@ -265,6 +266,7 @@ export default function PosStockMovements() {
               )}
             </tbody>
           </table>
+</div>
         </div>
       </div>
     </div>

@@ -132,7 +132,8 @@ export function ClientPortal() {
           </div>
 
           <div className="devis-body">
-            <table className="devis-table">
+            <div className="table-responsive">
+<table className="devis-table">
               <thead>
                 <tr>
                   <th>Description</th>
@@ -156,6 +157,7 @@ export function ClientPortal() {
                 ))}
               </tbody>
             </table>
+</div>
           </div>
 
           <div className="devis-footer">

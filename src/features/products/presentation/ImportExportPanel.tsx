@@ -281,7 +281,8 @@ export default function ImportExportPanel() {
             <div>
               <h4 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Détails des erreurs</h4>
               <div style={{ maxHeight: '200px', overflow: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
                       <th style={{ padding: '8px', textAlign: 'left', fontSize: '12px', color: 'var(--color-text-muted)' }}>Ligne</th>
@@ -299,6 +300,7 @@ export default function ImportExportPanel() {
                     ))}
                   </tbody>
                 </table>
+</div>
               </div>
               {currentReport.session.errors.length > 20 && (
                 <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '8px' }}>
@@ -357,7 +359,8 @@ export default function ImportExportPanel() {
       {importSessions.length > 0 && (
         <div className="card" style={{ padding: '20px' }}>
           <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>Historique des imports</h3>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
                 <th style={{ padding: '8px', textAlign: 'left', fontSize: '12px', color: 'var(--color-text-muted)' }}>Statut</th>
@@ -381,6 +384,7 @@ export default function ImportExportPanel() {
               ))}
             </tbody>
           </table>
+</div>
         </div>
       )}
     </div>

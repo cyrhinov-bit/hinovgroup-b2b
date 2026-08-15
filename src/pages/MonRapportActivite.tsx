@@ -332,7 +332,8 @@ export function MonRapportActivite() {
         </div>
 
         {weekReports.length > 0 && (
-          <table className="data-table" style={{ marginTop: '16px' }}>
+          <div className="table-responsive">
+<table className="data-table" style={{ marginTop: '16px' }}>
             <thead>
               <tr>
                 <th>Date</th>
@@ -362,6 +363,7 @@ export function MonRapportActivite() {
               ))}
             </tbody>
           </table>
+</div>
         )}
       </div>
 

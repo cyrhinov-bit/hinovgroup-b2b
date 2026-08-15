@@ -66,24 +66,11 @@
   margin-top: var(--spacing-3);
 }
 
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: var(--spacing-3);
-}
 
-.data-table th, .data-table td {
-  padding: var(--spacing-2) var(--spacing-3);
-  text-align: left;
-  border-bottom: 1px solid var(--color-border);
-}
 
-.data-table th {
-  font-weight: 700;
-  color: var(--color-text-muted);
-  font-size: 0.85rem;
-  text-transform: uppercase;
-}
+
+
+
 
 .badge-status {
   padding: 4px 8px;

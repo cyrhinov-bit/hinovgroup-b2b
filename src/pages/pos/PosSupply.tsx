@@ -139,7 +139,8 @@ export default function PosSupply() {
             </div>
             <div><div style={{ fontSize: '13px', marginBottom: '4px', fontWeight: 500 }}>Notes</div><input style={inputStyle} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></div>
           </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '12px' }}>
+          <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '12px' }}>
             <thead><tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}><th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Produit</th><th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', width: '100px' }}>Qté</th><th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', width: '120px' }}>Prix achat</th><th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', width: '120px' }}>Total</th><th style={{ padding: '8px', width: '40px' }}></th></tr></thead>
             <tbody>
               {form.lines.map(line => (
@@ -161,6 +162,7 @@ export default function PosSupply() {
               ))}
             </tbody>
           </table>
+</div>
           <button onClick={addLine} style={{ fontSize: '13px', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500, marginBottom: '16px' }}>+ Ajouter une ligne</button>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--color-border)', paddingTop: '16px' }}>
             <div style={{ fontSize: '18px', fontWeight: 700 }}>Total: {totalAmount.toLocaleString()} FCFA</div>
@@ -172,7 +174,8 @@ export default function PosSupply() {
         </div>
       )}
       <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}><th style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Référence</th><th style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Date</th><th style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Statut</th><th style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Montant</th></tr></thead>
           <tbody>
             {posStockEntries.sort((a, b) => b.date.localeCompare(a.date)).map(e => (
@@ -186,6 +189,7 @@ export default function PosSupply() {
             {posStockEntries.length === 0 && <tr><td colSpan={4} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Aucun approvisionnement</td></tr>}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );

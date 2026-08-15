@@ -100,7 +100,8 @@ export function Prestations() {
       )}
 
       <div className="card">
-        <table className="data-table">
+        <div className="table-responsive">
+<table className="data-table">
           <thead>
             <tr>
               <th>Code</th>
@@ -144,6 +145,7 @@ export function Prestations() {
             )}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );

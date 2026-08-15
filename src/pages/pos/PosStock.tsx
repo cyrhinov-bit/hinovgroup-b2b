@@ -54,7 +54,8 @@ export default function PosStock() {
       {lowStock.length > 0 && (
         <div style={{ ...cardStyle, marginBottom: '24px' }}>
           <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px', color: 'var(--color-error)' }}>Alertes Stock ({lowStock.length})</h3>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}><th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Produit</th><th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Stock actuel</th><th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Stock minimum</th></tr></thead>
             <tbody>
               {lowStock.map(p => (
@@ -66,6 +67,7 @@ export default function PosStock() {
               ))}
             </tbody>
           </table>
+</div>
         </div>
       )}
 
@@ -78,7 +80,8 @@ export default function PosStock() {
           </div>
         </div>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
                 <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Référence</th>
@@ -111,6 +114,7 @@ export default function PosStock() {
               )}
             </tbody>
           </table>
+</div>
         </div>
       </div>
     </div>

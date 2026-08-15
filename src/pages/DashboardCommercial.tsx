@@ -72,7 +72,8 @@ export function DashboardCommercial() {
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px', marginTop: '24px' }}>
         <div className="card">
           <h3>Prospects récents</h3>
-          <table className="data-table">
+          <div className="table-responsive">
+<table className="data-table">
             <thead>
               <tr>
                 <th>Nom</th>
@@ -97,6 +98,7 @@ export function DashboardCommercial() {
               )}
             </tbody>
           </table>
+</div>
         </div>
 
         <div className="card">

@@ -122,7 +122,8 @@ export function Services() {
       )}
 
       <div className="card">
-        <table className="data-table">
+        <div className="table-responsive">
+<table className="data-table">
           <thead>
             <tr>
               <th>Service</th>
@@ -159,6 +160,7 @@ export function Services() {
             )}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );

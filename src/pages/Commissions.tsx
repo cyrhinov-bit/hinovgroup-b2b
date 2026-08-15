@@ -88,7 +88,8 @@ export function Commissions() {
           </select>
         </div>
 
-        <table className="data-table">
+        <div className="table-responsive">
+<table className="data-table">
           <thead>
             <tr>
               <th>Client</th>
@@ -149,6 +150,7 @@ export function Commissions() {
             )}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );

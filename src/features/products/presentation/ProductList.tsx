@@ -129,7 +129,8 @@ export default function ProductList() {
       </div>
 
       <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
               <th style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'left' }}>Produit</th>
@@ -226,6 +227,7 @@ export default function ProductList() {
             )}
           </tbody>
         </table>
+</div>
       </div>
 
       {editingProduct && (

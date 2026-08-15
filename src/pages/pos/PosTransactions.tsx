@@ -57,7 +57,8 @@ export default function PosTransactions() {
         <input autoFocus style={{ width: '100%', padding: '10px 12px 10px 36px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '14px', outline: 'none' }} placeholder="Rechercher par numéro ou date..." value={search} onChange={e => setSearch(e.target.value)} />
       </div>
       <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
             <th style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>N° Transaction</th>
             <th style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Date</th>
@@ -95,6 +96,7 @@ export default function PosTransactions() {
             {filtered.length === 0 && <tr><td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Aucune transaction</td></tr>}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );

@@ -70,7 +70,8 @@ export function Sales() {
           </select>
         </div>
 
-        <table className="data-table">
+        <div className="table-responsive">
+<table className="data-table">
           <thead>
             <tr>
               <th>N° Vente</th>
@@ -147,6 +148,7 @@ export function Sales() {
             )}
           </tbody>
         </table>
+</div>
       </div>
 
       {editingSale && (

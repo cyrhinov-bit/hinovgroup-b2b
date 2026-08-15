@@ -166,7 +166,8 @@ export default function PosCash() {
           <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--color-text-muted)' }}>Aucune session clôturée</div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <div className="table-responsive">
+<table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
                   <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Ouverture</th>
@@ -198,6 +199,7 @@ export default function PosCash() {
                 })}
               </tbody>
             </table>
+</div>
           </div>
         )}
       </div>
