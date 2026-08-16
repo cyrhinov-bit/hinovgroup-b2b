@@ -95,7 +95,7 @@ export function Prospects() {
       {showForm && (
         <div className="card" style={{ marginBottom: '24px', padding: '24px' }}>
           <h3>Créer un prospect</h3>
-          <form onSubmit={handleAdd} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginTop: '16px' }}>
+          <form onSubmit={handleAdd} className="responsive-form-grid">
             <select className="table-input" value={newProspect.type} onChange={e => setNewProspect({...newProspect, type: e.target.value as any})}>
               <option value="Entreprise">Entreprise</option>
               <option value="Particulier">Particulier</option>
@@ -137,7 +137,7 @@ export function Prospects() {
       )}
 
       <div className="card">
-        <div style={{ display: 'flex', gap: '16px', marginBottom: '24px' }}>
+        <div className="responsive-flex-actions" style={{ marginBottom: '24px' }}>
           <input 
             type="text" 
             className="table-input" 

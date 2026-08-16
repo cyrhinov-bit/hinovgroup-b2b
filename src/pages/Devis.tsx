@@ -77,7 +77,7 @@ export function Devis() {
       </div>
 
       <div className="card">
-        <div style={{ display: 'flex', gap: '16px', marginBottom: '24px' }}>
+        <div className="responsive-flex-actions" style={{ marginBottom: '24px' }}>
           <input 
             type="text" 
             className="table-input" 

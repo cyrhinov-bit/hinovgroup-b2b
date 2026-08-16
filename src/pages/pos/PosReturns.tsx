@@ -498,7 +498,7 @@ export default function PosReturns() {
               {/* ETAPE 1 */}
               <div style={{ marginBottom: '32px' }}>
                 <h3 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}><span style={{ background: 'var(--color-surface-alt)', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>1</span> Type d'opération</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="responsive-form-grid">
                   <div onClick={() => setReturnType('Retour simple')} style={{ padding: '16px', border: `2px solid ${returnType === 'Retour simple' ? 'var(--color-primary)' : 'var(--color-border)'}`, borderRadius: 'var(--radius-md)', cursor: 'pointer', background: returnType === 'Retour simple' ? 'var(--color-primary-tint)' : 'white' }}>
                     <div style={{ fontWeight: 600, fontSize: '15px', color: returnType === 'Retour simple' ? 'var(--color-primary)' : 'var(--color-text)' }}>Retour simple</div>
                     <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginTop: '4px' }}>Rembourser les articles retournés.</div>

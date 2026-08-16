@@ -48,7 +48,7 @@ export default function PosSettings() {
         </div>
       </div>
       <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        <div className="responsive-form-grid">
           <div style={{ gridColumn: '1 / -1' }}>
             <div style={labelStyle}>Nom de la librairie</div>
             <input style={inputStyle} value={form.libraryName} onChange={e => setForm({ ...form, libraryName: e.target.value })} />

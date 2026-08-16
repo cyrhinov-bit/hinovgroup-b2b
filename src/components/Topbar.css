@@ -434,4 +434,14 @@
   .menu-toggle {
     display: flex;
   }
+  .brand-name {
+    display: none;
+  }
+  .search-bar {
+    margin-right: var(--spacing-2);
+    width: 150px;
+  }
+  .search-bar input {
+    width: 100%;
+  }
 }

@@ -230,7 +230,7 @@ export function MonRapportActivite() {
 
       <div className="card" style={{ marginBottom: '24px', padding: '24px' }}>
         <h3>Rapport journalier d'activité</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginTop: '16px' }}>
+        <div className="responsive-form-grid">
           <div>
             <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Date</label>
             <input className="form-control" type="date" style={{ width: '100%' }} value={date} max={getToday()} onChange={e => setDate(e.target.value)} />
@@ -245,7 +245,7 @@ export function MonRapportActivite() {
           <div />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginTop: '16px' }}>
+        <div className="responsive-form-grid">
           <div>
             <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Réalisations du jour</label>
             <textarea className="form-control" style={{ minHeight: '140px', width: '100%' }} value={realisations} onChange={e => setRealisations(e.target.value)} placeholder="Décrivez ce que vous avez accompli aujourd'hui..." />

@@ -76,7 +76,7 @@ export function Prestations() {
       {showForm && (
         <div className="card" style={{ marginBottom: '24px', padding: '24px' }}>
           <h3>{editingId ? 'Modifier la prestation' : 'Ajouter une prestation'}</h3>
-          <form onSubmit={handleAdd} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginTop: '16px' }}>
+          <form onSubmit={handleAdd} className="responsive-form-grid">
             <input className="table-input" placeholder="Code (ex: DEV-REACT)" required value={newPrestation.code || ''} onChange={e => setNewPrestation({...newPrestation, code: e.target.value})} />
             <input className="table-input" placeholder="Nom de la prestation" required value={newPrestation.name || ''} onChange={e => setNewPrestation({...newPrestation, name: e.target.value})} />
             <select className="table-input" required value={newPrestation.serviceId || ''} onChange={e => setNewPrestation({...newPrestation, serviceId: e.target.value})}>

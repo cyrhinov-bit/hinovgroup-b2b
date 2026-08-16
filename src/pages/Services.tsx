@@ -65,7 +65,7 @@ export function Services() {
       {showForm && (
         <div className="card" style={{ marginBottom: '24px', padding: '24px' }}>
           <h3>Nouveau service</h3>
-          <form onSubmit={handleAdd} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+          <form onSubmit={handleAdd} className="responsive-form-grid">
             <input
               className="table-input"
               placeholder="Nom du service *"
@@ -92,7 +92,7 @@ export function Services() {
       {editingService && (
         <div className="card" style={{ marginBottom: '24px', padding: '24px', borderLeft: '4px solid var(--color-primary)' }}>
           <h3>Modifier le service : {editingService.name}</h3>
-          <form onSubmit={handleSaveEdit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+          <form onSubmit={handleSaveEdit} className="responsive-form-grid">
             <div>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Nom du service *</label>
               <input

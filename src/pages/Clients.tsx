@@ -78,7 +78,7 @@ export function Clients() {
       {showForm && (
         <div className="card" style={{ marginBottom: '24px', padding: '24px' }}>
           <h3>Ajouter un client</h3>
-          <form onSubmit={handleAdd} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+          <form onSubmit={handleAdd} className="responsive-form-grid">
             <input className="table-input" placeholder="Entreprise" onChange={e => setNewClient({...newClient, name: e.target.value})} />
             <input className="table-input" placeholder="Responsable" required onChange={e => setNewClient({...newClient, contact: e.target.value})} />
             <input className="table-input" placeholder="Email" type="email" required onChange={e => setNewClient({...newClient, email: e.target.value})} />
@@ -98,7 +98,7 @@ export function Clients() {
       {editingClient && (
         <div className="card" style={{ marginBottom: '24px', padding: '24px', borderLeft: '4px solid var(--color-primary)' }}>
           <h3>Modifier le client : {editingClient.name || editingClient.contact}</h3>
-          <form onSubmit={handleSaveEdit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+          <form onSubmit={handleSaveEdit} className="responsive-form-grid">
             <div>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Nom de l'entreprise</label>
               <input

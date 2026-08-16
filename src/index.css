@@ -189,7 +189,7 @@ a:hover {
   -webkit-overflow-scrolling: touch;
   margin-top: var(--spacing-3);
 }
-.table-responsive .data-table {
+.table-responsive table {
   margin-top: 0;
   min-width: 600px;
 }
@@ -214,8 +214,22 @@ a:hover {
   display: grid;
   gap: var(--spacing-4);
 }
+.responsive-form-grid {
+  display: grid;
+  gap: var(--spacing-3);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.responsive-flex-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-3);
+  align-items: center;
+}
 @media (max-width: 768px) {
   .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .responsive-form-grid {
     grid-template-columns: 1fr !important;
   }
   .ui-modal {
@@ -223,4 +237,14 @@ a:hover {
     max-width: 95% !important;
     padding: 16px !important;
   }
+  .pos-terminal-container {
+    flex-direction: column !important;
+    height: calc(100vh - 80px) !important;
+    padding: 0 12px 12px !important;
+  }
+  .pos-terminal-container > div {
+    width: 100% !important;
+    flex: 1 1 50% !important;
+  }
 }
+

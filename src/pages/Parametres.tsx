@@ -59,7 +59,7 @@ export function Parametres() {
             <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '8px' }}>Cette image remplacera le texte d'en-tête sur le portail client.</p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="responsive-form-grid">
             <div className="form-group">
               <label>Nom de l'entreprise</label>
               <input type="text" className="table-input" value={localSettings.companyName} onChange={e => setLocalSettings({...localSettings, companyName: e.target.value})} />
@@ -77,7 +77,7 @@ export function Parametres() {
 
         <section style={{ marginBottom: '32px' }}>
           <h3 style={{ color: 'var(--color-primary)', borderBottom: '1px solid var(--color-border)', paddingBottom: '8px', marginBottom: '16px' }}>Configuration des devis</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="responsive-form-grid">
             <div className="form-group">
               <label>Durée de validité par défaut (jours)</label>
               <input type="number" className="table-input" value={localSettings.defaultValidity} onChange={e => setLocalSettings({...localSettings, defaultValidity: Number(e.target.value)})} />
