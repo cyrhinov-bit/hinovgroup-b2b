@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, CheckCircle2, FileText, Mail, Trash2, AlertCircle, Download, PieChart, Eye } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Calendar, CheckCircle2, FileText, Mail, AlertCircle, Download, Eye } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
-import { generateWeeklyReportPdf, buildWeeklyReportPdf, buildDailyReportPdf } from '../lib/pdfUtils';
-import type { ActivityReport, WeeklyReport } from '../context/AppContext';
+import { generateWeeklyReportPdf, buildWeeklyReportPdf } from '../lib/pdfUtils';
+import type { WeeklyReport } from '../context/AppContext';
 import { ReportPdfPreview } from '../components/ReportPdfPreview';
 import type { ReportPdfPreviewData } from '../components/ReportPdfPreview';
 
@@ -63,20 +63,16 @@ function computeActivityKPIs(
   };
 }
 
-export function MonRapportActivite() {
+export function MonRapportHebdo() {
   const {
-    prospects, prospectActivities, prospectFollowUps, clients, quotes, sales, commissions, installments,
+    prospects, prospectActivities, prospectFollowUps,
     activityReports, weeklyReports, users,
-    upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, settings,
+    saveWeeklyReport, markWeeklyReportSent, settings,
     services, categories
   } = useAppContext();
   const { currentUser } = useAuth();
 
   const [date, setDate] = useState(getToday());
-  const [realisations, setRealisations] = useState('');
-  const [difficultes, setDifficultes] = useState('');
-  const [remarques, setRemarques] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
 
   const weekStart = getWeekStart(date);
@@ -90,7 +86,6 @@ export function MonRapportActivite() {
   const weekReports = myReports.filter(r => r.date >= weekStart && r.date <= weekEnd);
   const weekActivity = weekReports.filter(r => r.type === 'Activité');
   
-  // NOUVEAU: Récupérer les prospects créés par le commercial dans la semaine
   const weeklyProspects = useMemo(() => {
     return prospects.filter(p => {
       if (p.commercialId !== authorId) return false;
@@ -104,43 +99,11 @@ export function MonRapportActivite() {
     [authorId, weekStart, prospects, prospectActivities, prospectFollowUps]
   );
 
-  const existing = myReports.find(r => r.type === 'Activité' && r.date === date);
-  useEffect(() => {
-    const current = myReports.find(r => r.type === 'Activité' && r.date === date);
-    if (current) {
-      setEditingId(current.id);
-      setRealisations(current.realisations);
-      setDifficultes(current.difficultes);
-      setRemarques(current.remarques);
-    } else {
-      setEditingId(null);
-      setRealisations('');
-      setDifficultes('');
-      setRemarques('');
-    }
-  }, [myReports, date]);
-
-  const handleSave = async () => {
-    if (!currentUser || !date) return;
-    const report: ActivityReport = {
-      id: editingId || crypto.randomUUID(),
-      authorId: currentUser.id,
-      role: currentUser.role as ActivityReport['role'],
-      type: 'Activité',
-      date,
-      realisations,
-      difficultes,
-      remarques,
-    };
-    await upsertActivityReport(report);
-  };
-
   const makeWeeklyReport = (status: WeeklyReport['status']): WeeklyReport | null => {
     if (!currentUser) return null;
     const sections = [
       { type: 'Activité' as const, content: weekActivity.map(r => `- ${r.date}: ${r.realisations}`).join('\n') },
     ];
-    // Réutiliser l'UUID du rapport existant de cette semaine (id stable pour le sync serveur)
     const existingWeekly = weeklyReports.find(r => r.authorId === currentUser.id && r.weekStart === weekStart);
     return {
       id: existingWeekly?.id || crypto.randomUUID(),
@@ -153,30 +116,15 @@ export function MonRapportActivite() {
     };
   };
 
-  const handlePreviewDaily = () => {
-    if (!currentUser || !date) return;
-    const doc = buildDailyReportPdf(
-      { type: 'Activité', date, realisations, difficultes, remarques },
-      currentUser,
-      settings
-    );
-    setPreview({
-      dataUrl: doc.output('dataurlstring'),
-      filename: `Rapport_Activite_${date}.pdf`,
-      title: `Aperçu — Rapport d'activité du ${new Date(date + 'T00:00:00').toLocaleDateString('fr-FR')}`,
-    });
-  };
-
   const handlePreviewWeekly = () => {
     if (!currentUser) return;
     const report = makeWeeklyReport('Brouillon');
     if (!report) return;
-    // On passe weeklyProspects pour générer la section "Rapport de Prospection"
     const doc = buildWeeklyReportPdf(report, weekReports, kpis, currentUser, settings, weeklyProspects, services, categories);
     setPreview({
       dataUrl: doc.output('dataurlstring'),
       filename: `Rapport_Hebdomadaire_${weekStart}.pdf`,
-      title: `Aperçu — Rapport hebdomadaire combiné (semaine du ${new Date(weekStart + 'T00:00:00').toLocaleDateString('fr-FR')})`,
+      title: `Aperçu — Rapport hebdomadaire (semaine du ${new Date(weekStart + 'T00:00:00').toLocaleDateString('fr-FR')})`,
     });
   };
 
@@ -216,66 +164,78 @@ export function MonRapportActivite() {
     <div className="dashboard">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <h2 style={{ margin: 0 }}>Rapport d'activité</h2>
+          <h2 style={{ margin: 0 }}>Rapport hebdomadaire</h2>
           <p style={{ color: 'var(--color-text-muted)', marginTop: '4px', fontSize: '0.85rem' }}>
-            Rédigez votre rapport journalier puis générez le rapport hebdomadaire.
+            Générez et envoyez votre rapport consolidé pour la semaine.
           </p>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-outline" onClick={() => window.location.reload()} style={{ display: 'flex', alignItems: 'center' }}>
-            <PieChart size={16} style={{ marginRight: '8px' }} /> Rafraîchir les données
-          </button>
         </div>
       </div>
 
       <div className="card" style={{ marginBottom: '24px', padding: '24px' }}>
-        <h3>Rapport journalier d'activité</h3>
-        <div className="responsive-form-grid">
-          <div>
-            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Date</label>
-            <input className="form-control" type="date" style={{ width: '100%' }} value={date} max={getToday()} onChange={e => setDate(e.target.value)} />
+        <div className="responsive-flex-actions" style={{ alignItems: 'center', marginBottom: '24px' }}>
+          <div style={{ flex: '0 0 auto', width: '250px' }}>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Semaine du</label>
+            <input 
+              className="table-input" 
+              type="date" 
+              style={{ width: '100%' }} 
+              value={date} 
+              onChange={e => setDate(e.target.value)} 
+            />
           </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '8px' }}>
-            {existing ? (
-              <span className="badge-status bg-success">Déjà rédigé — modification</span>
-            ) : (
-              <span className="badge-status bg-primary">Nouveau</span>
-            )}
-          </div>
-          <div />
-        </div>
-
-        <div className="responsive-form-grid">
-          <div>
-            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Réalisations du jour</label>
-            <textarea className="form-control" style={{ minHeight: '140px', width: '100%' }} value={realisations} onChange={e => setRealisations(e.target.value)} placeholder="Décrivez ce que vous avez accompli aujourd'hui..." />
-          </div>
-          <div>
-            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Difficultés rencontrées</label>
-            <textarea className="form-control" style={{ minHeight: '140px', width: '100%' }} value={difficultes} onChange={e => setDifficultes(e.target.value)} placeholder="Problèmes, blocages ou obstacles..." />
-          </div>
-          <div>
-            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Remarques / observations</label>
-            <textarea className="form-control" style={{ minHeight: '140px', width: '100%' }} value={remarques} onChange={e => setRemarques(e.target.value)} placeholder="Toute autre information utile..." />
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
-          <button className="btn btn-outline" onClick={handlePreviewDaily} style={{ display: 'flex', alignItems: 'center' }}>
-            <Eye size={16} style={{ marginRight: '8px' }} /> Prévisualiser le rendu
-          </button>
-          <button className="btn btn-primary" onClick={handleSave} style={{ display: 'flex', alignItems: 'center' }}>
-            <CheckCircle2 size={16} style={{ marginRight: '8px' }} /> {editingId ? 'Mettre à jour' : 'Enregistrer'}
-          </button>
-          {editingId && (
-            <button className="btn btn-outline text-error" onClick={() => deleteActivityReport(editingId)} style={{ display: 'flex', alignItems: 'center' }}>
-              <Trash2 size={16} style={{ marginRight: '8px' }} /> Supprimer
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingTop: '22px' }}>
+            <button className="btn btn-outline" onClick={handlePreviewWeekly} style={{ display: 'flex', alignItems: 'center' }}>
+              <Eye size={16} style={{ marginRight: '8px' }} /> Prévisualiser
             </button>
-          )}
+            <button className="btn btn-outline" onClick={handleExport} style={{ display: 'flex', alignItems: 'center' }}>
+              <Download size={16} style={{ marginRight: '8px' }} /> Télécharger PDF
+            </button>
+            <button className="btn btn-primary" onClick={handleSendOutlook} style={{ display: 'flex', alignItems: 'center' }}>
+              <Mail size={16} style={{ marginRight: '8px' }} /> Envoyer
+            </button>
+          </div>
+        </div>
+
+        {missingDays.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', padding: '12px', backgroundColor: '#fff7ed', borderRadius: '8px', color: '#9a3412' }}>
+            <AlertCircle size={16} />
+            <span style={{ fontSize: '0.85rem' }}>
+              Jours sans rapport d'activité : {missingDays.map(d => new Date(d + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit' })).join(', ') || 'aucun'}
+            </span>
+          </div>
+        )}
+
+        <div className="widgets-grid">
+          <div className="widget-card">
+            <div className="widget-icon bg-info"><FileText size={32} color="white" /></div>
+            <div className="widget-content">
+              <div className="widget-label">PROSPECTS CRÉÉS</div>
+              <div className="widget-value">{kpis.prospectsCrees}</div>
+            </div>
+          </div>
+          <div className="widget-card">
+            <div className="widget-icon bg-success"><CheckCircle2 size={32} color="white" /></div>
+            <div className="widget-content">
+              <div className="widget-label">CONVERSIONS</div>
+              <div className="widget-value">{kpis.prospectsConvertis}</div>
+            </div>
+          </div>
+          <div className="widget-card">
+            <div className="widget-icon bg-primary"><FileText size={32} color="white" /></div>
+            <div className="widget-content">
+              <div className="widget-label">RELANCES TERMINÉES</div>
+              <div className="widget-value">{kpis.relancesTerminees}</div>
+            </div>
+          </div>
+          <div className="widget-card">
+            <div className="widget-icon bg-warning"><Calendar size={32} color="white" /></div>
+            <div className="widget-content">
+              <div className="widget-label">JOURS RENSEIGNÉS</div>
+              <div className="widget-value">{new Set(weekActivity.map(r => r.date)).size}/7</div>
+            </div>
+          </div>
         </div>
       </div>
-
-
 
       <ReportPdfPreview preview={preview} onClose={() => setPreview(null)} />
     </div>

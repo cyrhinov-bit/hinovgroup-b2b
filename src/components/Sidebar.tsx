@@ -27,6 +27,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Commissions', icon: Coins, path: '/commissions', roles: ['Directeur', 'Responsable'] },
     { label: 'Mes Commissions', icon: Coins, path: '/mes-commissions', roles: ['Responsable'] },
     { label: 'Rapport d\'activité', icon: FileText, path: '/rapport-activite', roles: ['Responsable'] },
+    { label: 'Rapport hebdo', icon: Calendar, path: '/rapport-hebdo', roles: ['Responsable'] },
     { label: 'Rapport de prospection', icon: FileText, path: '/rapport-prospection', roles: ['Responsable'] },
     { label: 'Documents', icon: Folder, path: '/documents', roles: ['Directeur', 'Responsable'] },
     { label: 'Utilisateurs', icon: Shield, path: '/utilisateurs', roles: ['Directeur', 'SuperAdmin'] as any },
@@ -38,6 +39,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Clients Apportés', icon: Users, path: '/commercial/clients', roles: ['Commercial'] },
     { label: 'Mes Commissions', icon: Coins, path: '/commercial/commissions', roles: ['Commercial'] },
     { label: 'Rapport d\'activité', icon: FileText, path: '/commercial/rapport-activite', roles: ['Commercial'] },
+    { label: 'Rapport hebdo', icon: Calendar, path: '/commercial/rapport-hebdo', roles: ['Commercial'] },
     { label: 'Rapport de prospection', icon: FileText, path: '/commercial/rapport-prospection', roles: ['Commercial'] },
   ];
 
