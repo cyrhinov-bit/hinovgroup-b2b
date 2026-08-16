@@ -69,36 +69,33 @@ export function DashboardCommercial() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px', marginTop: '24px' }}>
+      <div className="responsive-form-grid" style={{ marginTop: '24px' }}>
         <div className="card">
           <h3>Prospects récents</h3>
-          <div className="table-responsive">
-<table className="data-table">
-            <thead>
-              <tr>
-                <th>Nom</th>
-                <th>Entreprise</th>
-                <th>Service</th>
-                <th>Statut</th>
-              </tr>
-            </thead>
-            <tbody>
+          {myProspects.length > 0 ? (
+            <div className="mobile-card-grid">
               {myProspects.slice(0, 5).map(p => (
-                <tr key={p.id}>
-                  <td>{p.name}</td>
-                  <td>{p.company || '-'}</td>
-                  <td>{p.serviceId || '-'}</td>
-                  <td><span className="badge-status bg-primary">{p.status}</span></td>
-                </tr>
+                <div key={p.id} className="mobile-card">
+                  <div className="mobile-card-header">
+                    <div className="mobile-card-title">{p.name}</div>
+                    <span className="badge-status bg-primary">{p.status}</span>
+                  </div>
+                  <div className="mobile-card-body">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span className="mobile-card-label">Entreprise</span>
+                      <span>{p.company || '-'}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px' }}>
+                      <span className="mobile-card-label">Service</span>
+                      <span>{p.serviceId || '-'}</span>
+                    </div>
+                  </div>
+                </div>
               ))}
-              {myProspects.length === 0 && (
-                <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '24px' }}>Aucun prospect.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-</div>
+            </div>
+          ) : (
+            <p style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-muted)' }}>Aucun prospect.</p>
+          )}
         </div>
 
         <div className="card">
@@ -113,7 +110,7 @@ export function DashboardCommercial() {
                       <strong>{prospect?.name || 'Inconnu'}</strong>
                       <span className={`badge-status ${f.priority === 'Haute' || f.priority === 'Urgente' ? 'bg-error' : 'bg-warning'}`}>{f.priority}</span>
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center' }}>
                       <Calendar size={14} style={{ marginRight: '4px' }} />{f.date} {f.time || ''}
                     </div>
                     {f.observation && <div style={{ fontSize: '0.85rem', marginTop: '4px' }}>{f.observation}</div>}
