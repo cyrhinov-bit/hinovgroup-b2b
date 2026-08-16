@@ -122,13 +122,13 @@ export function Prospects() {
             </select>
             <input className="table-input" placeholder="Source du prospect" onChange={e => setNewProspect({...newProspect, source: e.target.value})} />
             <input className="table-input" type="number" placeholder="Budget estimatif (FCFA)" value={newProspect.budget || ''} onChange={e => setNewProspect({...newProspect, budget: Number(e.target.value)})} />
-            <div style={{ gridColumn: 'span 3' }}>
+            <div style={{ gridColumn: '1 / -1' }}>
               <textarea className="table-input" placeholder="Besoin exprimé" rows={2} onChange={e => setNewProspect({...newProspect, need: e.target.value})} />
             </div>
-            <div style={{ gridColumn: 'span 3' }}>
+            <div style={{ gridColumn: '1 / -1' }}>
               <textarea className="table-input" placeholder="Commentaires" rows={2} onChange={e => setNewProspect({...newProspect, comments: e.target.value})} />
             </div>
-            <div style={{ gridColumn: 'span 3', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Annuler</button>
               <button type="submit" className="btn btn-primary">Enregistrer</button>
             </div>
