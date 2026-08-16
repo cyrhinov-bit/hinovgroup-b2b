@@ -1,5 +1,5 @@
 import React from 'react';
-import type { PosSettings } from '../../context/AppContext';
+import type { PosSettings, AppSettings } from '../../context/AppContext';
 
 export interface ReceiptData {
   transaction: any;
@@ -15,10 +15,11 @@ export interface ReceiptData {
 interface ReceiptTicketProps {
   data: ReceiptData | null;
   settings: PosSettings;
+  crmSettings?: AppSettings;
   preview?: boolean;
 }
 
-export default function ReceiptTicket({ data, settings, preview = false }: ReceiptTicketProps) {
+export default function ReceiptTicket({ data, settings, crmSettings, preview = false }: ReceiptTicketProps) {
   if (!data) return null;
 
   const { transaction, cart, paymentMethod, cashAmount, changeAmount, total, subtotal, globalDiscount } = data;
@@ -35,6 +36,15 @@ export default function ReceiptTicket({ data, settings, preview = false }: Recei
     <div className={preview ? "" : "receipt-print-zone"} style={{ width: '80mm', padding: '10px', fontSize: '12px', fontFamily: 'monospace', color: '#000', margin: '0 auto', background: '#fff' }}>
       {/* En-tête */}
       <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+        {(crmSettings?.headerLogoBase64 || crmSettings?.companyLogo) && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
+            <img 
+              src={crmSettings.headerLogoBase64 || crmSettings.companyLogo} 
+              alt="Logo" 
+              style={{ maxWidth: '80%', maxHeight: '60px', objectFit: 'contain' }} 
+            />
+          </div>
+        )}
         <h2 style={{ fontSize: '16px', margin: '0 0 4px 0', textTransform: 'uppercase' }}>{settings.libraryName}</h2>
         {settings.address && <div style={{ marginBottom: '2px' }}>{settings.address}</div>}
         {settings.phone && <div style={{ marginBottom: '2px' }}>Tel: {settings.phone}</div>}

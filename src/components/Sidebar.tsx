@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Users, Briefcase, FileText, Folder, Shield, PieChart, Settings, UserCircle, LogOut, Receipt, Coins, Target, ShoppingCart, Package, Truck, ClipboardList, Warehouse, Tag, BarChart3, DollarSign, RotateCcw, FileSpreadsheet, Wallet } from 'lucide-react';
+import { Home, Users, Briefcase, FileText, Folder, Shield, PieChart, Settings, UserCircle, LogOut, Receipt, Coins, Target, ShoppingCart, Package, Truck, ClipboardList, Warehouse, Tag, BarChart3, DollarSign, RotateCcw, FileSpreadsheet, Wallet, ToggleRight } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAppContext } from '../context/AppContext';
@@ -48,30 +48,42 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Finance', icon: DollarSign, path: '/pos/finance', roles: ['Directeur', 'Gerant'] },
     { label: 'Caisse', icon: ShoppingCart, path: '/pos/terminal', roles: ['Caissier'] },
     { label: 'Catalogue', icon: Package, path: '/pos/products', roles: ['Directeur', 'Gerant', 'Caissier'] },
-    { label: 'Mouvements Stock', icon: Package, path: '/pos/stock-movements', roles: ['Directeur', 'Gerant'] },
-    { label: 'Retours', icon: RotateCcw, path: '/pos/returns', roles: ['Directeur', 'Gerant'] },
+    { label: 'Mouvements Stock', icon: Package, path: '/pos/stock-movements', roles: ['Directeur', 'Gerant', 'Caissier'] },
+    { label: 'Retours', icon: RotateCcw, path: '/pos/returns', roles: ['Directeur', 'Gerant', 'Caissier'] },
     { label: 'Gestion de caisse', icon: Wallet, path: '/pos/cash', roles: ['Caissier'] },
     { label: 'Historique', icon: Receipt, path: '/pos/transactions', roles: ['Directeur', 'Caissier'] },
     // Administration Directeur
     { label: 'Paramètres', icon: Settings, path: '/pos/settings', roles: ['Directeur'] },
-    { label: 'Utilisateurs', icon: Shield, path: '/pos/users', roles: ['Directeur'] },
+    { label: 'Utilisateurs', icon: Shield, path: '/pos/users', roles: ['Directeur', 'Gerant'] },
+    { label: 'Modules Caissier', icon: ToggleRight, path: '/pos/cashier-modules', roles: ['Directeur', 'Gerant'] },
+    { label: 'Erreurs Sync', icon: Shield, path: '/pos/sync-errors', roles: ['Directeur', 'Gerant'] },
     { label: 'Remises', icon: Tag, path: '/pos/discounts', roles: ['Directeur'] },
     { label: 'Rapports', icon: BarChart3, path: '/pos/reports', roles: ['Directeur'] },
     // Gestion catalogue Gérant
     { label: 'Produits à compléter', icon: FileSpreadsheet, path: '/pos/products?tab=complete', roles: ['Gerant'] },
     { label: 'Fournisseurs', icon: Truck, path: '/pos/suppliers', roles: ['Directeur', 'Gerant'] },
-    { label: 'Stock', icon: Warehouse, path: '/pos/stock', roles: ['Directeur', 'Gerant'] },
-    { label: 'Approvisionnement', icon: Truck, path: '/pos/supply', roles: ['Directeur', 'Gerant'] },
-    { label: 'Inventaire', icon: ClipboardList, path: '/pos/inventory', roles: ['Directeur', 'Gerant'] },
+    { label: 'Stock', icon: Warehouse, path: '/pos/stock', roles: ['Directeur', 'Gerant', 'Caissier'] },
+    { label: 'Approvisionnement', icon: Truck, path: '/pos/supply', roles: ['Directeur', 'Gerant', 'Caissier'] },
+    { label: 'Inventaire', icon: ClipboardList, path: '/pos/inventory', roles: ['Directeur', 'Gerant', 'Caissier'] },
   ];
 
   const isPos = posWorkspace.active;
   const navItems = isPos ? posNavItems : crmNavItems;
 
-  // Filtrer les éléments selon le rôle de l'utilisateur connecté
-  const visibleNavItems = navItems.filter(item => 
-    currentUser ? item.roles.includes(currentUser.role as any) : false
-  );
+  // Filtrer les éléments selon le rôle de l'utilisateur connecté et ses permissions
+  const visibleNavItems = navItems.filter(item => {
+    if (!currentUser) return false;
+    if (!item.roles.includes(currentUser.role as any)) return false;
+
+    if (isPos && currentUser.role === 'Caissier') {
+      if (item.label === 'Catalogue' && !currentUser.posCatalogueEnabled) return false;
+      if (item.label === 'Retours' && !currentUser.posReturnsEnabled) return false;
+      if (item.label === 'Approvisionnement' && !currentUser.posSupplyEnabled) return false;
+      if (item.label === 'Inventaire' && !currentUser.posInventoryEnabled) return false;
+      if ((item.label === 'Stock' || item.label === 'Mouvements Stock') && !currentUser.posStockEnabled) return false;
+    }
+    return true;
+  });
 
   // Unique paths for POS (some items share the same path for different roles)
   const uniqueVisibleNavItems = visibleNavItems.filter((item, index, self) => 

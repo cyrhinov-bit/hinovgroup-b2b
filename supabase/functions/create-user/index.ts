@@ -1,6 +1,9 @@
-// @ts-nocheck
+// @ts-ignore
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts"
+// @ts-ignore
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+
+declare var Deno: any;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -37,14 +40,30 @@ serve(async (req: Request) => {
 
     const callerRole = profile?.role || 'Inconnu'
 
-    const { email, pin, name, role, serviceId } = await req.json()
+    interface CreateUserPayload {
+      email: string;
+      pin: string;
+      name: string;
+      role: string;
+      serviceId?: string;
+      posReturnsEnabled?: boolean;
+      posCatalogueEnabled?: boolean;
+      posSupplyEnabled?: boolean;
+      posInventoryEnabled?: boolean;
+      posStockEnabled?: boolean;
+    }
+
+    const { email, pin, name, role, serviceId, posReturnsEnabled, posCatalogueEnabled, posSupplyEnabled, posInventoryEnabled, posStockEnabled } = await req.json() as CreateUserPayload
 
     // Autorisations
     if (role === 'SuperAdmin') throw new Error('Impossible de créer un SuperAdmin')
     if (role === 'Directeur' && callerRole !== 'SuperAdmin') {
       throw new Error('Seul un SuperAdmin peut créer un Directeur')
     }
-    if (callerRole !== 'SuperAdmin' && callerRole !== 'Directeur') {
+    if (callerRole === 'Gerant' && role !== 'Caissier') {
+      throw new Error('Un Gérant ne peut créer que des Caissiers')
+    }
+    if (callerRole !== 'SuperAdmin' && callerRole !== 'Directeur' && callerRole !== 'Gerant') {
       throw new Error('Vous n\'avez pas les droits pour créer un utilisateur')
     }
 
@@ -69,7 +88,12 @@ serve(async (req: Request) => {
         role,
         pin,
         service_id: serviceId || null,
-        active: true
+        active: true,
+        pos_returns_enabled: posReturnsEnabled === true,
+        pos_catalogue_enabled: posCatalogueEnabled === true,
+        pos_supply_enabled: posSupplyEnabled === true,
+        pos_inventory_enabled: posInventoryEnabled === true,
+        pos_stock_enabled: posStockEnabled === true
       }])
 
     if (profileError) {
@@ -79,7 +103,7 @@ serve(async (req: Request) => {
     }
 
     return new Response(
-      JSON.stringify({ id: newUserId, name, email, role, serviceId }),
+      JSON.stringify({ id: newUserId, name, email, role, serviceId, posReturnsEnabled, posCatalogueEnabled, posSupplyEnabled, posInventoryEnabled, posStockEnabled }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error: any) {

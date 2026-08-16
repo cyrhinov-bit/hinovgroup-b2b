@@ -123,7 +123,7 @@ export function MonRapportActivite() {
   const handleSave = async () => {
     if (!currentUser || !date) return;
     const report: ActivityReport = {
-      id: editingId || `${currentUser.id}-Activité-${date}`,
+      id: editingId || crypto.randomUUID(),
       authorId: currentUser.id,
       role: currentUser.role as ActivityReport['role'],
       type: 'Activité',
@@ -143,7 +143,7 @@ export function MonRapportActivite() {
     // Réutiliser l'UUID du rapport existant de cette semaine (id stable pour le sync serveur)
     const existingWeekly = weeklyReports.find(r => r.authorId === currentUser.id && r.weekStart === weekStart);
     return {
-      id: existingWeekly?.id || `${currentUser.id}-${weekStart}`,
+      id: existingWeekly?.id || crypto.randomUUID(),
       authorId: currentUser.id,
       role: currentUser.role as WeeklyReport['role'],
       weekStart,

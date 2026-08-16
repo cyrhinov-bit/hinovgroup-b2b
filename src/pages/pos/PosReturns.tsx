@@ -17,8 +17,9 @@ interface ReturnLine {
 }
 
 export default function PosReturns() {
-  const { posReturns, posTransactions, addPosReturn, cancelPosReturn, posProducts } = useAppContext();
+  const { posReturns, posTransactions, addPosReturn, cancelPosReturn, posProducts, posCashSessions } = useAppContext();
   const { currentUser } = useAuth();
+  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && s.cashierId === currentUser?.id);
   const { confirm } = useConfirm();
   const location = useLocation();
 
@@ -46,7 +47,7 @@ export default function PosReturns() {
   const [productSearch, setProductSearch] = useState('');
 
   const role = currentUser?.role;
-  const canHandleReturns = role === 'Directeur' || role === 'Gerant';
+  const canHandleReturns = role === 'Directeur' || role === 'Gerant' || (role === 'Caissier' && currentUser?.posReturnsEnabled);
 
   const filteredReturns = useMemo(() => {
     return posReturns.filter(r => {
@@ -262,6 +263,7 @@ export default function PosReturns() {
       id: '',
       returnNumber,
       transactionId: selectedTxId,
+      sessionId: openSession?.id,
       date: new Date().toISOString(),
       type: returnType,
       totalRefund: difference < 0 ? Math.abs(difference) : 0,

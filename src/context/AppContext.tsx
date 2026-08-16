@@ -20,7 +20,12 @@ const mergeData = <T extends { id: string }>(oldData: T[] | null | undefined, ne
   return Array.from(map.values());
 };
 
-export interface User { id: string; name: string; email: string; role: 'SuperAdmin' | 'Directeur' | 'Responsable' | 'Commercial' | 'Gerant' | 'Caissier'; serviceId?: string; pin: string; lastLogin: string; active: boolean; photo?: string; }
+export interface User { id: string; name: string; email: string; role: 'SuperAdmin' | 'Directeur' | 'Responsable' | 'Commercial' | 'Gerant' | 'Caissier'; serviceId?: string; pin: string; lastLogin: string; active: boolean; photo?: string; posReturnsEnabled?: boolean;
+  posCatalogueEnabled?: boolean;
+  posSupplyEnabled?: boolean;
+  posInventoryEnabled?: boolean;
+  posStockEnabled?: boolean;
+}
 export interface Client { id: string; name: string; email: string; phone: string; contact: string; company: string; address: string; status?: string; commercialId?: string; createdAt?: string; }
 export interface Service { id: string; name: string; description: string; members?: number; }
 export interface Category { id: string; serviceId: string; name: string; }
@@ -57,7 +62,7 @@ export interface PosPayment { id: string; transactionId?: string; method: 'Espè
 export interface PosDiscount { id: string; name: string; type: 'Pourcentage' | 'Montant'; value: number; maxPercent?: number; maxAmount?: number; active: boolean; }
 export interface PosReturnLine { id: string; productId?: string; description: string; quantity: number; unitPrice: number; total: number; reason: string; }
 export interface ExchangeLine { id: string; productId: string; description: string; quantity: number; unitPrice: number; total: number; }
-export interface PosReturn { id: string; returnNumber: string; transactionId?: string; date: string; type: 'Retour simple' | 'Retour avec échange'; totalRefund: number; totalExchange: number; amountToPay: number; status: 'En attente' | 'Traité' | 'Annulé'; lines: PosReturnLine[]; exchangeLines?: ExchangeLine[]; notes?: string; createdBy?: string; }
+export interface PosReturn { id: string; returnNumber: string; transactionId?: string; sessionId?: string; date: string; type: 'Retour simple' | 'Retour avec échange'; totalRefund: number; totalExchange: number; amountToPay: number; status: 'En attente' | 'Traité' | 'Annulé'; lines: PosReturnLine[]; exchangeLines?: ExchangeLine[]; notes?: string; createdBy?: string; }
 export interface PosCartItem { id: string; productId: string; name: string; reference: string; unitPrice: number; quantity: number; discountType: 'none' | 'percent' | 'amount'; discountPercent: number; discountAmount: number; total: number; }
 export interface SuspendedCart { id: string; reference?: string; date: string; cart: PosCartItem[]; }
 
@@ -133,7 +138,7 @@ interface AppState {
   deleteCategory: (id: string) => Promise<void>;
   updateSettings: (settings: AppSettings) => Promise<void>;
   addUser: (user: User) => Promise<void>;
-  updateUser: (id: string, data: Pick<User, 'name' | 'role' | 'serviceId'>) => Promise<void>;
+  updateUser: (id: string, data: Pick<User, 'name' | 'role' | 'serviceId' | 'posReturnsEnabled' | 'posCatalogueEnabled' | 'posSupplyEnabled' | 'posInventoryEnabled' | 'posStockEnabled'>) => Promise<void>;
   toggleUserStatus: (id: string) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   addPrestation: (prestation: Prestation) => Promise<void>;
@@ -393,6 +398,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             lastLogin: p.last_login,
             active: p.active !== false, // true par défaut si null
             photo: p.photo || undefined,
+            posReturnsEnabled: p.pos_returns_enabled === true,
+            posCatalogueEnabled: p.pos_catalogue_enabled === true,
+            posSupplyEnabled: p.pos_supply_enabled === true,
+            posInventoryEnabled: p.pos_inventory_enabled === true,
+            posStockEnabled: p.pos_stock_enabled === true,
           }));
           const mergedUsers = mergeData(cachedUsers, parsedUsers);
           setUsers(mergedUsers); await db.profiles.setItem('data', mergedUsers);
@@ -1715,6 +1725,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           name: user.name,
           role: user.role,
           serviceId: user.serviceId || null,
+          posReturnsEnabled: user.posReturnsEnabled,
+          posCatalogueEnabled: user.posCatalogueEnabled
         }),
       }
     );
@@ -1736,17 +1748,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       pin: user.pin,
       lastLogin: 'Jamais',
       active: true,
+      posReturnsEnabled: user.posReturnsEnabled,
+      posCatalogueEnabled: user.posCatalogueEnabled
     };
     const newUsers = [...users, newUser];
     setUsers(newUsers);
     await db.profiles.setItem('data', newUsers);
   };
 
-  const updateUser = async (id: string, data: Pick<User, 'name' | 'role' | 'serviceId'>) => {
+  const updateUser = async (id: string, data: Pick<User, 'name' | 'role' | 'serviceId' | 'posReturnsEnabled' | 'posCatalogueEnabled' | 'posSupplyEnabled' | 'posInventoryEnabled' | 'posStockEnabled'>) => {
     const newUsers = users.map(u => u.id === id ? { ...u, ...data } : u);
     setUsers(newUsers);
     await db.profiles.setItem('data', newUsers);
-    await queueSyncAction('UPDATE_PROFILE', { id, name: data.name, role: data.role, service_id: data.serviceId || null });
+    await queueSyncAction('UPDATE_PROFILE', { 
+      id, 
+      name: data.name, 
+      role: data.role, 
+      service_id: data.serviceId || null,
+      pos_returns_enabled: data.posReturnsEnabled,
+      pos_catalogue_enabled: data.posCatalogueEnabled,
+      pos_supply_enabled: data.posSupplyEnabled,
+      pos_inventory_enabled: data.posInventoryEnabled,
+      pos_stock_enabled: data.posStockEnabled
+    });
   };
 
   const updateMyProfile = async (data: Partial<Pick<User, 'photo' | 'name'>>) => {

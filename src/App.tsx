@@ -40,6 +40,8 @@ const PosFinance = lazy(() => import('./pages/pos/PosFinance'));
 const PosReturns = lazy(() => import('./pages/pos/PosReturns'));
 const PosProducts = lazy(() => import('./pages/pos/PosProducts'));
 const PosStockMovements = lazy(() => import('./pages/pos/PosStockMovements'));
+const CashierModulesManager = lazy(() => import('./pages/pos/CashierModulesManager'));
+const PosSyncErrors = lazy(() => import('./pages/pos/PosSyncErrors'));
 const PosCategories = lazy(() => import('./pages/pos/PosCategories'));
 const PosBrands = lazy(() => import('./pages/pos/PosBrands'));
 const PosSuppliers = lazy(() => import('./pages/pos/PosSuppliers'));
@@ -177,10 +179,12 @@ function App() {
                     <Route path="pos" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><DashboardPos /></Suspense>} />
                     <Route path="pos/settings" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosSettings /></Suspense>} />
                     <Route path="pos/users" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosUsers /></Suspense>} />
+                    <Route path="pos/cashier-modules" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant']}><CashierModulesManager /></RequireRole></Suspense>} />
+          <Route path="pos/sync-errors" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant']}><PosSyncErrors /></RequireRole></Suspense>} />
                     <Route path="pos/discounts" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosDiscounts /></Suspense>} />
                     <Route path="pos/reports" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosReports /></Suspense>} />
                     <Route path="pos/finance" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosFinance /></Suspense>} />
-                    <Route path="pos/returns" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant']}><PosReturns /></RequireRole></Suspense>} />
+                    <Route path="pos/returns" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant', 'Caissier']}><PosReturns /></RequireRole></Suspense>} />
                     <Route path="pos/products" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosProducts /></Suspense>} />
                     <Route path="pos/stock-movements" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosStockMovements /></Suspense>} />
                     <Route path="pos/categories" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosCategories /></Suspense>} />

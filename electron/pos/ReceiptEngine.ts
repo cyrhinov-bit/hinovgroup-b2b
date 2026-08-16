@@ -51,11 +51,16 @@ export class ReceiptEngine {
 <head>
 <meta charset="utf-8" />
 <style>
-  body { font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; color: #000; margin: 0; padding: 8px; width: 72mm; }
+  body { font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; color: #000; margin: 0; padding: 4px; width: 72mm; box-sizing: border-box; }
   .center { text-align: center; }
   h2 { font-size: 15px; margin: 0 0 4px 0; text-transform: uppercase; }
   .dash { border-top: 1px dashed #000; margin: 6px 0; }
   table { width: 100%; border-collapse: collapse; }
+  .items-table { table-layout: fixed; }
+  .items-table th, .items-table td { word-wrap: break-word; }
+  .items-table th:nth-child(1), .items-table td:nth-child(1) { width: 15%; }
+  .items-table th:nth-child(2), .items-table td:nth-child(2) { width: 55%; }
+  .items-table th:nth-child(3), .items-table td:nth-child(3) { width: 30%; text-align: right; }
   td { vertical-align: top; }
 </style>
 </head>
@@ -68,7 +73,7 @@ export class ReceiptEngine {
     <div>Date : ${ReceiptEngine.esc(date)}</div>
   </div>
   <div class="dash"></div>
-  <table>
+  <table class="items-table">
     <thead><tr><th style="text-align:left">Qté</th><th style="text-align:left">Désignation</th><th style="text-align:right">Total</th></tr></thead>
     <tbody>${lines}</tbody>
   </table>

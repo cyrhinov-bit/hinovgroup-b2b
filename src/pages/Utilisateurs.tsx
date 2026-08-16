@@ -12,19 +12,18 @@ export function Utilisateurs() {
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
-  const [newUser, setNewUser] = useState({ email: '', role: 'Responsable', serviceId: '', pin: '' });
+  const [newUser, setNewUser] = useState({ name: '', email: '', role: 'Responsable', serviceId: '', pin: '' });
   const [editForm, setEditForm] = useState({ name: '', role: 'Responsable' as User['role'], serviceId: '' });
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUser.email || !newUser.pin) {
-      alert('Veuillez remplir l\'e-mail et le mot de passe.');
+    if (!newUser.name || !newUser.email || !newUser.pin) {
+      alert('Veuillez remplir le nom, l\'e-mail et le mot de passe.');
       return;
     }
-    const name = newUser.email.split('@')[0].replace('.', ' ').toUpperCase();
     addUser({
       id: Date.now().toString(),
-      name: name,
+      name: newUser.name,
       email: newUser.email,
       role: newUser.role as User['role'],
       serviceId: newUser.serviceId,
@@ -33,7 +32,7 @@ export function Utilisateurs() {
       active: true,
     });
     setShowForm(false);
-    setNewUser({ email: '', role: 'Responsable', serviceId: '', pin: '' });
+    setNewUser({ name: '', email: '', role: 'Responsable', serviceId: '', pin: '' });
   };
 
   const startEdit = (u: User) => {
@@ -88,6 +87,11 @@ export function Utilisateurs() {
           <h3>Ajouter un utilisateur</h3>
           <form onSubmit={handleAdd} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
             <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Nom complet *</label>
+              <input type="text" className="table-input" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} placeholder="Ex: Jean Dupont" required />
+            </div>
+
+            <div>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Adresse e-mail *</label>
               <input type="email" className="table-input" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} placeholder="Ex: collaborateur@hinov.com" required />
             </div>
@@ -97,20 +101,26 @@ export function Utilisateurs() {
               <input type="password" className="table-input" value={newUser.pin} onChange={e => setNewUser({...newUser, pin: e.target.value})} placeholder="******" required />
             </div>
 
-            <select className="table-input" required value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value as User['role'] })}>
-              <option value="Caissier">Caissier</option>
-              <option value="Gerant">Gérant</option>
-              <option value="Commercial">Commercial</option>
-              <option value="Responsable">Responsable</option>
-              {currentUser?.role === 'SuperAdmin' && (
-                <option value="Directeur">Directeur</option>
-              )}
-            </select>
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Rôle *</label>
+              <select className="table-input" required value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value as User['role'] })}>
+                <option value="Caissier">Caissier</option>
+                <option value="Gerant">Gérant</option>
+                <option value="Commercial">Commercial</option>
+                <option value="Responsable">Responsable</option>
+                {currentUser?.role === 'SuperAdmin' && (
+                  <option value="Directeur">Directeur</option>
+                )}
+              </select>
+            </div>
 
-            <select className="table-input" value={newUser.serviceId || ''} onChange={e => setNewUser({ ...newUser, serviceId: e.target.value })}>
-              <option value="">Sélectionner un service (Optionnel)</option>
-              {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            <div style={{ gridColumn: 'span 2' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Service</label>
+              <select className="table-input" value={newUser.serviceId || ''} onChange={e => setNewUser({ ...newUser, serviceId: e.target.value })}>
+                <option value="">Sélectionner un service (Optionnel)</option>
+                {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
 
             <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Annuler</button>

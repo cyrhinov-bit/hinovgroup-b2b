@@ -10,26 +10,30 @@ import type { ReceiptData } from '../../components/pos/ReceiptTicket';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { toast } from 'react-hot-toast';
+import { platform } from '../../platform';
 
 interface CartItem { id: string; productId: string; name: string; reference: string; unitPrice: number; quantity: number; discountType: 'none' | 'percent' | 'amount'; discountPercent: number; discountAmount: number; total: number; }
 
 export default function PosTerminal() {
-  const { posProducts, posSettings, posCashSessions, addPosTransaction, addPosCashSession, suspendedCarts, addSuspendedCart, removeSuspendedCart } = useAppContext();
+  const { posProducts, posSettings, posCashSessions, addPosTransaction, addPosCashSession, suspendedCarts, addSuspendedCart, removeSuspendedCart, settings: crmSettings } = useAppContext();
   const { currentUser } = useAuth();
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>(() => {
-    try { const saved = localStorage.getItem('pos_active_cart'); return saved ? JSON.parse(saved) : []; } catch { return []; }
+    if (!currentUser) return [];
+    try { const saved = localStorage.getItem(`pos_active_cart_${currentUser.id}`); return saved ? JSON.parse(saved) : []; } catch { return []; }
   });
   const [discountType, setDiscountType] = useState<'none' | 'percent' | 'amount'>(() => {
-    return (localStorage.getItem('pos_active_discount_type') as any) || 'none';
+    if (!currentUser) return 'none';
+    return (localStorage.getItem(`pos_active_discount_type_${currentUser.id}`) as any) || 'none';
   });
   const [discountValue, setDiscountValue] = useState(() => {
-    return Number(localStorage.getItem('pos_active_discount_value')) || 0;
+    if (!currentUser) return 0;
+    return Number(localStorage.getItem(`pos_active_discount_value_${currentUser.id}`)) || 0;
   });
 
-  useEffect(() => { localStorage.setItem('pos_active_cart', JSON.stringify(cart)); }, [cart]);
-  useEffect(() => { localStorage.setItem('pos_active_discount_type', discountType); }, [discountType]);
-  useEffect(() => { localStorage.setItem('pos_active_discount_value', String(discountValue)); }, [discountValue]);
+  useEffect(() => { if (currentUser) localStorage.setItem(`pos_active_cart_${currentUser.id}`, JSON.stringify(cart)); }, [cart, currentUser]);
+  useEffect(() => { if (currentUser) localStorage.setItem(`pos_active_discount_type_${currentUser.id}`, discountType); }, [discountType, currentUser]);
+  useEffect(() => { if (currentUser) localStorage.setItem(`pos_active_discount_value_${currentUser.id}`, String(discountValue)); }, [discountValue, currentUser]);
 
   const [paymentMethod, setPaymentMethod] = useState<'Espèces' | 'Mobile Money' | 'Mixte'>('Espèces');
   const [cashAmount, setCashAmount] = useState<number | ''>('');
@@ -177,7 +181,7 @@ export default function PosTerminal() {
 
     await addPosTransaction(tx);
 
-    setReceiptData({
+    const currentReceiptData = {
       transaction: tx,
       cart: [...cart],
       paymentMethod,
@@ -185,8 +189,12 @@ export default function PosTerminal() {
       changeAmount,
       total,
       subtotal,
-      globalDiscount
-    });
+      globalDiscount,
+      settings: posSettings,
+      crmSettings: crmSettings
+    };
+
+    setReceiptData(currentReceiptData);
     
     setCart([]);
     setShowPayment(false);
@@ -212,8 +220,16 @@ export default function PosTerminal() {
       localStorage.removeItem('pos_active_discount_value');
 
       toast.success('Paiement validé avec succès !');
-      setTimeout(() => {
-        window.print();
+      setTimeout(async () => {
+        if (platform.isDesktop) {
+          try {
+            await platform.pos.printReceipt(currentReceiptData);
+          } catch (e: any) {
+            toast.error("Erreur d'impression: " + (e.message || e));
+          }
+        } else {
+          window.print();
+        }
       }, 100);
     }
   };
@@ -249,7 +265,14 @@ export default function PosTerminal() {
       // Modals Enter handling
       if (showPreviewModal && e.key === 'Enter') {
         e.preventDefault();
-        setTimeout(() => { window.print(); }, 100);
+        if (platform.isDesktop && receiptData) {
+          platform.pos.printReceipt({
+            ...receiptData,
+            settings: posSettings
+          }).catch((err: any) => toast.error("Erreur d'impression: " + (err.message || err)));
+        } else {
+          setTimeout(() => { window.print(); }, 100);
+        }
         setShowPreviewModal(false);
         return;
       }
@@ -318,7 +341,7 @@ export default function PosTerminal() {
 
   return (
     <>
-      <ReceiptTicket data={receiptData} settings={posSettings} />
+      <ReceiptTicket data={receiptData} settings={posSettings} crmSettings={crmSettings} />
       <div className="pos-terminal-container" style={{ display: 'flex', height: 'calc(100vh - 120px)', gap: '16px', padding: '0 24px 24px' }}>
         {/* Left: Product catalog */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'white', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
@@ -538,10 +561,22 @@ export default function PosTerminal() {
         <div style={{ marginBottom: '16px' }}>
           <label style={{ fontSize: '13px', marginBottom: '4px', display: 'block', fontWeight: 500 }}>Fonds de caisse initial (FCFA)</label>
           <input 
-            type="number" 
+            type="text" 
+            inputMode="numeric"
             style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }} 
             value={initialFund} 
-            onChange={e => setInitialFund(e.target.value)} 
+            onChange={e => setInitialFund(e.target.value.replace(/\D/g, ''))}
+            onKeyDown={async e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                const fund = Number(initialFund);
+                if (!isNaN(fund)) {
+                  await addPosCashSession({ id: uuidv4(), cashierId: currentUser?.id, openedAt: new Date().toISOString(), initialFund: fund, status: 'Ouverte' });
+                  setShowOpenModal(false);
+                  setInitialFund('');
+                }
+              }
+            }}
             autoFocus 
           />
         </div>
@@ -613,13 +648,27 @@ export default function PosTerminal() {
         width={400}
         footer={
           <>
-            <Button variant="primary" onClick={() => { setTimeout(() => { window.print(); }, 100); setShowPreviewModal(false); }}>Imprimer</Button>
+            <Button variant="primary" onClick={async () => { 
+              if (platform.isDesktop) {
+                try {
+                  await platform.pos.printReceipt({
+                    ...receiptData,
+                    settings: posSettings
+                  });
+                } catch (e: any) {
+                  toast.error("Erreur d'impression: " + (e.message || e));
+                }
+              } else {
+                setTimeout(() => { window.print(); }, 100); 
+              }
+              setShowPreviewModal(false); 
+            }}>Imprimer</Button>
             <Button variant="ghost" onClick={() => setShowPreviewModal(false)}>Fermer</Button>
           </>
         }
       >
         <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '16px', background: '#f5f5f5', maxHeight: '60vh', overflowY: 'auto' }}>
-          <ReceiptTicket data={receiptData} settings={posSettings} preview={true} />
+          <ReceiptTicket data={receiptData} settings={posSettings} crmSettings={crmSettings} preview={true} />
         </div>
       </Modal>
       </div>

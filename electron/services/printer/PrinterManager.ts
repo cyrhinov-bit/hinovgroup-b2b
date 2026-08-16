@@ -109,7 +109,14 @@ export class PrinterManager {
       .then(() => {
         setTimeout(() => {
           win.webContents.print(
-            { silent: true, printBackground: true, deviceName: job.printerName },
+            { 
+              silent: true, 
+              printBackground: true, 
+              deviceName: job.printerName,
+              margins: { marginType: 'none' },
+              scaleFactor: 100,
+              pageSize: { width: 80000, height: 297000 } // 80mm x 297mm in microns
+            },
             (success, failureReason) => {
               if (success) {
                 finish('completed');

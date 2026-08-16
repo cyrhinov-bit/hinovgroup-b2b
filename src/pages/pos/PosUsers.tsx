@@ -12,9 +12,9 @@ export default function PosUsers() {
 
   const handleSave = async () => {
     if (editingUser) {
-      await updateUser(editingUser.id, { name: form.name, role: form.role, serviceId: undefined });
+      await updateUser(editingUser.id, { name: form.name, role: form.role, serviceId: undefined, posReturnsEnabled: !!editingUser.posReturnsEnabled, posCatalogueEnabled: !!editingUser.posCatalogueEnabled });
     } else {
-      await addUser({ id: uuidv4(), name: form.name, email: form.email, pin: form.pin, role: form.role, lastLogin: 'Jamais', active: true });
+      await addUser({ id: uuidv4(), name: form.name, email: form.email, pin: form.pin, role: form.role, lastLogin: 'Jamais', active: true, posReturnsEnabled: false, posCatalogueEnabled: false });
     }
     setShowForm(false);
     setEditingUser(null);

@@ -33,7 +33,7 @@ export default function PosCash() {
   };
 
   const sessionReturns = openSession ? posReturns
-    .filter(r => r.status === 'Traité' && r.transactionId && posTransactions.find(t => t.id === r.transactionId)?.sessionId === openSession.id)
+    .filter(r => r.status === 'Traité' && r.sessionId === openSession.id)
     .reduce((s, r) => s + r.totalRefund, 0) : 0;
   const sessionSales = openSession ? validTx.filter(t => t.sessionId === openSession.id).reduce((s, t) => s + cashOfTransaction(t), 0) : 0;
   const expectedAmount = openSession ? openSession.initialFund + sessionSales - sessionReturns : 0;
@@ -90,7 +90,7 @@ export default function PosCash() {
   const sessionExpected = (s: typeof posCashSessions[number]) => {
     const tx = validTx.filter(t => t.sessionId === s.id).reduce((sum, t) => sum + cashOfTransaction(t), 0);
     const rt = posReturns
-      .filter(r => r.status === 'Traité' && r.transactionId && posTransactions.find(t => t.id === r.transactionId)?.sessionId === s.id)
+      .filter(r => r.status === 'Traité' && r.sessionId === s.id)
       .reduce((sum, r) => sum + r.totalRefund, 0);
     return s.expectedAmount ?? s.initialFund + tx - rt;
   };
@@ -225,6 +225,7 @@ export default function PosCash() {
             inputMode="numeric"
             value={initialFund}
             onChange={e => setInitialFund(e.target.value.replace(/\D/g, ''))}
+            onKeyDown={e => { if (e.key === 'Enter') handleOpen(); }}
             placeholder="Ex : 50000"
           />
         </div>

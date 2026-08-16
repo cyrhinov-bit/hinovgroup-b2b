@@ -114,6 +114,7 @@ export function Login() {
           <InstallButton />
         </form>
       </div>
+      
       </div>
     </div>
   );

@@ -59,7 +59,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         pin: data.pin,
         lastLogin: data.last_login,
         active: data.active !== false,
-        photo: data.photo || undefined
+        photo: data.photo || undefined,
+        posReturnsEnabled: data.pos_returns_enabled === true,
+        posCatalogueEnabled: data.pos_catalogue_enabled === true,
+        posSupplyEnabled: data.pos_supply_enabled === true,
+        posInventoryEnabled: data.pos_inventory_enabled === true,
+        posStockEnabled: data.pos_stock_enabled === true
       });
     }
     setLoading(false);
@@ -110,6 +115,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       pin: '000000',
       lastLogin: new Date().toISOString(),
       active: true,
+      posReturnsEnabled: true, // test user has everything enabled by default
+      posCatalogueEnabled: true,
     };
     setCurrentUser(testUser);
     setLoading(false);
