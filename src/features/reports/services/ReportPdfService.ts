@@ -1,12 +1,53 @@
 import { jsPDF } from 'jspdf';
-import type { User, V2DailyReport, V2WeeklyReport, V2Task } from '../../../context/AppContext';
+import type { User, V2DailyReport, V2WeeklyReport, V2Task, AppSettings } from '../../../context/AppContext';
 
-export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | null | undefined): jsPDF {
+export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | null | undefined, settings?: AppSettings): jsPDF {
   const doc = new jsPDF();
   const pageW = doc.internal.pageSize.getWidth();
   let y = 20;
   
   // En-tête officiel
+  if (settings?.headerLogoBase64) {
+    try {
+      doc.addImage(settings.headerLogoBase64, 'PNG', 20, 10, 60, 20);
+    } catch {
+      // fallback
+    }
+  }
+
+  // Profile photo in top right
+  const cx = pageW - 25;
+  const cy = 20;
+  const r = 10;
+  if (author?.photo) {
+    try {
+      doc.saveGraphicsState();
+      doc.circle(cx, cy, r, 'S');
+      doc.clip();
+      doc.addImage(author.photo, 'PNG', cx - r, cy - r, r * 2, r * 2);
+      doc.restoreGraphicsState();
+    } catch {
+      // fallback to initials
+      doc.setFillColor(240, 244, 247);
+      doc.circle(cx, cy, r, 'F');
+      doc.circle(cx, cy, r, 'S');
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      const initials = (author?.name || '?').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
+      doc.text(initials, cx, cy + 3, { align: 'center' });
+    }
+  } else {
+    // initials only
+    doc.setFillColor(240, 244, 247);
+    doc.circle(cx, cy, r, 'F');
+    doc.circle(cx, cy, r, 'S');
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    const initials = (author?.name || '?').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
+    doc.text(initials, cx, cy + 3, { align: 'center' });
+  }
+
+  y = 40;
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
   doc.text("RAPPORT D’ACTIVITÉ DE SEMAINE", pageW / 2, y, { align: 'center' });
@@ -112,8 +153,8 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
   return doc;
 }
 
-export function generateV2WeeklyReportPdf(report: V2WeeklyReport, author: User | null | undefined) {
-  const doc = buildV2WeeklyReportPdf(report, author);
+export function generateV2WeeklyReportPdf(report: V2WeeklyReport, author: User | null | undefined, settings?: AppSettings) {
+  const doc = buildV2WeeklyReportPdf(report, author, settings);
   const safeName = author?.name ? author.name.replace(/\s+/g, '_') : 'Inconnu';
   doc.save(`Rapport_Hebdomadaire_${safeName}_${report.weekStart}.pdf`);
 }

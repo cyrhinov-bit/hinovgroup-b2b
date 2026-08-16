@@ -43,7 +43,7 @@ export function Rapports() {
 
   const handleDownload = (report: any) => {
     if (report.isV2) {
-      generateV2WeeklyReportPdf(report, report.author);
+      generateV2WeeklyReportPdf(report, report.author, settings);
     } else {
       const daily = activityReports.filter(r => r.authorId === report.authorId && r.role === report.role && r.date >= report.weekStart);
       const kpis = report.kpis || {};
@@ -53,7 +53,7 @@ export function Rapports() {
 
   const handlePreview = (report: any) => {
     if (report.isV2) {
-      const doc = buildV2WeeklyReportPdf(report, report.author);
+      const doc = buildV2WeeklyReportPdf(report, report.author, settings);
       const safeName = report.author?.name ? report.author.name.replace(/\s+/g, '_') : 'Inconnu';
       setPreview({
         dataUrl: doc.output('dataurlstring'),

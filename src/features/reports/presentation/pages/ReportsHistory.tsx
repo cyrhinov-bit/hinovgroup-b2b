@@ -5,7 +5,7 @@ import { useAuth } from '../../../../context/AuthContext';
 import { generateV2WeeklyReportPdf } from '../../services/ReportPdfService';
 
 export const ReportsHistory: React.FC = () => {
-  const { v2DailyReports, v2WeeklyReports, users } = useAppContext();
+  const { v2DailyReports, v2WeeklyReports, users, settings } = useAppContext();
   const { currentUser } = useAuth();
 
   const isDirector = currentUser?.role === 'Directeur';
@@ -38,7 +38,7 @@ export const ReportsHistory: React.FC = () => {
                       <p style={{ margin: 0, fontWeight: 600 }}>Semaine du {new Date(report.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')}</p>
                       <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Projet: {report.project} {isDirector && `• Par: ${author?.name}`}</p>
                     </div>
-                    <button className="btn btn-outline btn-sm" onClick={() => generateV2WeeklyReportPdf(report, author || currentUser)} title="Télécharger PDF">
+                    <button className="btn btn-outline btn-sm" onClick={() => generateV2WeeklyReportPdf(report, author || currentUser, settings)} title="Télécharger PDF">
                       <Download size={16} />
                     </button>
                   </div>

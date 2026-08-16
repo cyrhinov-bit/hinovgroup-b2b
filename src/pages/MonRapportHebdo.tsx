@@ -25,7 +25,7 @@ function getToday(): string {
 }
 
 export function MonRapportHebdo() {
-  const { v2DailyReports, v2WeeklyReports, saveV2WeeklyReport } = useAppContext();
+  const { v2DailyReports, v2WeeklyReports, saveV2WeeklyReport, settings } = useAppContext();
   const { currentUser } = useAuth();
 
   const [date, setDate] = useState(getToday());
@@ -158,14 +158,14 @@ export function MonRapportHebdo() {
     const report = makeReport('Validé');
     if (!report) { toast.error("Veuillez saisir un projet."); return; }
     await saveV2WeeklyReport(report as any);
-    generateV2WeeklyReportPdf(report as any, currentUser);
+    generateV2WeeklyReportPdf(report as any, currentUser, settings);
     toast.success("Rapport validé et PDF généré.");
   };
 
   const handlePreview = () => {
     const report = makeReport(currentStatus);
     if (!report) { toast.error("Veuillez saisir un projet."); return; }
-    const doc = buildV2WeeklyReportPdf(report as any, currentUser);
+    const doc = buildV2WeeklyReportPdf(report as any, currentUser, settings);
     const safeName = currentUser?.name ? currentUser.name.replace(/\s+/g, '_') : 'Inconnu';
     setPreview({
       dataUrl: doc.output('dataurlstring'),
