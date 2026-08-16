@@ -332,38 +332,37 @@ export function MonRapportActivite() {
         </div>
 
         {weekReports.length > 0 && (
-          <div className="table-responsive">
-<table className="data-table" style={{ marginTop: '16px' }}>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Type</th>
-                <th>Réalisations</th>
-                <th>Difficultés</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {weekReports.map(r => (
-                <tr key={r.id}>
-                  <td>{new Date(r.date + 'T00:00:00').toLocaleDateString('fr-FR')}</td>
-                  <td><span className="badge-status bg-primary">{r.type}</span></td>
-                  <td style={{ maxWidth: '300px' }}>{r.realisations || '-'}</td>
-                  <td style={{ maxWidth: '200px' }}>{r.difficultes || '-'}</td>
-                  <td>
-                    {r.type === 'Activité' && (
-                      <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => {
-                        setDate(r.date);
-                      }} title="Modifier">
-                        <FileText size={16} />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-</div>
+          <div className="mobile-card-grid" style={{ marginTop: '16px' }}>
+            {weekReports.map(r => (
+              <div key={r.id} className="mobile-card">
+                <div className="mobile-card-header">
+                  <div className="mobile-card-title">{new Date(r.date + 'T00:00:00').toLocaleDateString('fr-FR')}</div>
+                  <span className="badge-status bg-primary">{r.type}</span>
+                </div>
+                
+                <div className="mobile-card-body">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span className="mobile-card-label">Réalisations</span>
+                    <span style={{ fontSize: '0.9rem', color: 'var(--color-text)' }}>{r.realisations || '-'}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px' }}>
+                    <span className="mobile-card-label">Difficultés</span>
+                    <span style={{ fontSize: '0.9rem', color: 'var(--color-text)' }}>{r.difficultes || '-'}</span>
+                  </div>
+                </div>
+
+                <div className="mobile-card-actions">
+                  {r.type === 'Activité' && (
+                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center' }} onClick={() => {
+                      setDate(r.date);
+                    }} title="Modifier">
+                      <FileText size={16} style={{ marginRight: '8px' }} /> Modifier
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

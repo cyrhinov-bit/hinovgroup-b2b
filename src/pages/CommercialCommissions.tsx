@@ -79,41 +79,53 @@ export function CommercialCommissions() {
           </select>
         </div>
 
-        <div className="table-responsive">
-<table className="data-table">
-          <thead>
-            <tr>
-              <th>Client</th>
-              <th>Service</th>
-              <th>Total HT</th>
-              <th>Marge</th>
-              <th>Commission</th>
-              <th>Statut</th>
-              <th>Date</th>
-            </tr>
-          </thead>
-          <tbody>
+        {filteredCommissions.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-muted)' }}>
+            Aucune commission trouvée.
+          </div>
+        ) : (
+          <div className="mobile-card-grid">
             {filteredCommissions.map(c => (
-              <tr key={c.id}>
-                <td>{getClientName(c.clientId || '')}</td>
-                <td>{c.serviceId ? getServiceName(c.serviceId) : '-'}</td>
-                <td>{c.totalHt.toLocaleString('fr-FR')} FCFA</td>
-                <td>{c.marginAmount.toLocaleString('fr-FR')} FCFA ({c.marginPercent}%)</td>
-                <td><strong>{c.commissionAmount.toLocaleString('fr-FR')} FCFA</strong>
-                  {c.paidAmount ? <div style={{ fontSize: '0.8rem', color: 'var(--color-success)' }}>Payé : {c.paidAmount.toLocaleString('fr-FR')} FCFA</div> : null}
-                </td>
-                <td><span className={`badge-status ${getBadgeColor(c.status)}`}>{c.status}</span></td>
-                <td>{new Date(c.createdAt).toLocaleDateString('fr-FR')}</td>
-              </tr>
+              <div key={c.id} className="mobile-card">
+                <div className="mobile-card-header">
+                  <div>
+                    <div className="mobile-card-title">{getClientName(c.clientId || '')}</div>
+                    <div className="mobile-card-subtitle">{new Date(c.createdAt).toLocaleDateString('fr-FR')}</div>
+                  </div>
+                  <span className={`badge-status ${getBadgeColor(c.status)}`}>{c.status}</span>
+                </div>
+                
+                <div className="mobile-card-body">
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Service</span>
+                    <span className="mobile-card-value">{c.serviceId ? getServiceName(c.serviceId) : '-'}</span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Total HT</span>
+                    <span className="mobile-card-value">{c.totalHt.toLocaleString('fr-FR')} FCFA</span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Marge</span>
+                    <span className="mobile-card-value">{c.marginAmount.toLocaleString('fr-FR')} FCFA ({c.marginPercent}%)</span>
+                  </div>
+                  <div className="mobile-card-row" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--color-border)' }}>
+                    <span className="mobile-card-label" style={{ fontWeight: 600, color: 'var(--color-text)' }}>Commission</span>
+                    <div style={{ textAlign: 'right' }}>
+                      <span className="mobile-card-value" style={{ fontSize: '1.1rem', color: 'var(--color-primary-strong)' }}>
+                        {c.commissionAmount.toLocaleString('fr-FR')} FCFA
+                      </span>
+                      {c.paidAmount ? (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-success)', marginTop: '4px' }}>
+                          Payé : {c.paidAmount.toLocaleString('fr-FR')} FCFA
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </div>
             ))}
-            {filteredCommissions.length === 0 && (
-              <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '24px' }}>Aucune commission trouvée.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-</div>
+          </div>
+        )}
       </div>
     </div>
   );

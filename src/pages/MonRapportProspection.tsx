@@ -33,11 +33,11 @@ export function MonRapportProspection() {
       </div>
 
       <div className="card" style={{ marginBottom: '24px', padding: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: '250px' }}>
+        <div className="responsive-flex-actions" style={{ alignItems: 'flex-end' }}>
+          <div style={{ flex: '1 1 200px' }}>
             <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Date du rapport</label>
             <input 
-              className="form-control" 
+              className="table-input" 
               type="date" 
               style={{ width: '100%' }} 
               value={selectedDate} 
@@ -45,8 +45,8 @@ export function MonRapportProspection() {
               onChange={e => setSelectedDate(e.target.value)} 
             />
           </div>
-          <div style={{ paddingTop: '22px' }}>
-            <span className="badge-status bg-info" style={{ fontSize: '0.9rem', padding: '8px 12px' }}>
+          <div>
+            <span className="badge-status bg-info" style={{ fontSize: '0.9rem', padding: '8px 12px', display: 'inline-block' }}>
               {dailyProspects.length} prospect{dailyProspects.length !== 1 ? 's' : ''} ajouté{dailyProspects.length !== 1 ? 's' : ''} le {new Date(selectedDate + 'T00:00:00').toLocaleDateString('fr-FR')}
             </span>
           </div>
@@ -59,39 +59,59 @@ export function MonRapportProspection() {
               <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>Aucun prospect n'a été ajouté à cette date.</p>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="mobile-card-grid">
               {dailyProspects.map(prospect => {
                 const serviceName = services.find(s => s.id === prospect.serviceId)?.name || '-';
                 const categoryName = categories.find(c => c.id === prospect.categoryId)?.name || '-';
                 
                 return (
-                  <div key={prospect.id} style={{ border: '1px solid var(--color-border)', borderRadius: '8px', padding: '16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--color-border)' }}>
+                  <div key={prospect.id} className="mobile-card">
+                    <div className="mobile-card-header">
                       <div>
                         <h4 style={{ margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <FileText size={16} color="var(--color-primary)" />
                           {prospect.prospectNumber} - {prospect.name}
                         </h4>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{prospect.company || 'Sans société'}</span>
+                        <span className="mobile-card-subtitle">{prospect.company || 'Sans société'}</span>
                       </div>
                       <span className="badge-status bg-primary">{prospect.status}</span>
                     </div>
                     
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', fontSize: '0.9rem' }}>
-                      <div><strong>Type:</strong> {prospect.type}</div>
-                      <div><strong>Service:</strong> {serviceName}</div>
-                      <div><strong>Catégorie:</strong> {categoryName}</div>
-                      <div><strong>Intérêt:</strong> {prospect.interestLevel}</div>
-                      <div><strong>Source:</strong> {prospect.source || '-'}</div>
-                      <div><strong>Budget:</strong> {prospect.budget ? `${prospect.budget.toLocaleString('fr-FR')} FCFA` : '-'}</div>
+                    <div className="mobile-card-body" style={{ marginTop: '8px' }}>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Type</span>
+                        <span className="mobile-card-value">{prospect.type}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Service</span>
+                        <span className="mobile-card-value">{serviceName}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Catégorie</span>
+                        <span className="mobile-card-value">{categoryName}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Intérêt</span>
+                        <span className="mobile-card-value">{prospect.interestLevel}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Source</span>
+                        <span className="mobile-card-value">{prospect.source || '-'}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Budget</span>
+                        <span className="mobile-card-value">{prospect.budget ? `${prospect.budget.toLocaleString('fr-FR')} FCFA` : '-'}</span>
+                      </div>
                       
-                      {prospect.phone && <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Phone size={14} color="var(--color-text-muted)" /> {prospect.phone}</div>}
-                      {prospect.email && <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Mail size={14} color="var(--color-text-muted)" /> {prospect.email}</div>}
-                      {prospect.address && <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><MapPin size={14} color="var(--color-text-muted)" /> {prospect.address}{prospect.city ? `, ${prospect.city}` : ''}</div>}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--color-border)' }}>
+                        {prospect.phone && <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Phone size={14} color="var(--color-text-muted)" /> {prospect.phone}</div>}
+                        {prospect.email && <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Mail size={14} color="var(--color-text-muted)" /> {prospect.email}</div>}
+                        {prospect.address && <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><MapPin size={14} color="var(--color-text-muted)" /> {prospect.address}{prospect.city ? `, ${prospect.city}` : ''}</div>}
+                      </div>
                     </div>
 
                     {(prospect.need || prospect.comments) && (
-                      <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed var(--color-border)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '0.9rem' }}>
+                      <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed var(--color-border)', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.9rem' }}>
                         {prospect.need && (
                           <div>
                             <strong style={{ color: 'var(--color-text-muted)' }}>Besoin exprimé:</strong>

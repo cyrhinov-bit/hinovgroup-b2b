@@ -165,31 +165,40 @@ export function Prospects() {
           </select>
         </div>
 
-        <div className="table-responsive">
-<table className="data-table">
-          <thead>
-            <tr>
-              <th>N° Prospect</th>
-              <th>Nom</th>
-              <th>Société</th>
-              <th>Service</th>
-              <th>Intérêt</th>
-              <th>Statut</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
+        {filteredProspects.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-muted)' }}>
+            Aucun prospect trouvé.
+          </div>
+        ) : (
+          <div className="mobile-card-grid">
             {filteredProspects.map(p => (
-              <tr key={p.id}>
-                <td>{p.prospectNumber}</td>
-                <td>{p.name}</td>
-                <td>{p.company || '-'}</td>
-                <td>{p.serviceId ? getServiceName(p.serviceId) : '-'}</td>
-                <td>{p.interestLevel}</td>
-                <td><span className={`badge-status ${getBadgeColor(p.status)}`}>{p.status}</span></td>
-                <td>
+              <div key={p.id} className="mobile-card">
+                <div className="mobile-card-header">
+                  <div>
+                    <div className="mobile-card-title">{p.name}</div>
+                    <div className="mobile-card-subtitle">{p.company || 'Particulier'}</div>
+                  </div>
+                  <span className={`badge-status ${getBadgeColor(p.status)}`}>{p.status}</span>
+                </div>
+                
+                <div className="mobile-card-body">
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">N° Prospect</span>
+                    <span className="mobile-card-value">{p.prospectNumber}</span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Service</span>
+                    <span className="mobile-card-value">{p.serviceId ? getServiceName(p.serviceId) : '-'}</span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Intérêt</span>
+                    <span className="mobile-card-value">{p.interestLevel}</span>
+                  </div>
+                </div>
+
+                <div className="mobile-card-actions">
                   <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => navigate(`/commercial/prospects/${p.id}`)} title="Voir">
-                    <Eye size={18} />
+                    <Eye size={20} />
                   </button>
                   <button className="icon-button text-error" onClick={() => confirm({
                     title: 'Supprimer le prospect',
@@ -197,19 +206,13 @@ export function Prospects() {
                     confirmLabel: 'Supprimer',
                     onConfirm: () => deleteProspect(p.id)
                   })} title="Supprimer">
-                    <Trash2 size={16} />
+                    <Trash2 size={20} />
                   </button>
-                </td>
-              </tr>
+                </div>
+              </div>
             ))}
-            {filteredProspects.length === 0 && (
-              <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '24px' }}>Aucun prospect trouvé.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-</div>
+          </div>
+        )}
       </div>
     </div>
   );

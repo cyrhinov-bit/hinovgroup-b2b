@@ -33,41 +33,48 @@ export function CommercialClients() {
           />
         </div>
 
-        <div className="table-responsive">
-<table className="data-table">
-          <thead>
-            <tr>
-              <th>Nom</th>
-              <th>Société</th>
-              <th>Contact</th>
-              <th>Email</th>
-              <th>Téléphone</th>
-              <th>Devis</th>
-              <th>Ventes</th>
-              <th>Statut</th>
-            </tr>
-          </thead>
-          <tbody>
+        {filteredClients.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-muted)' }}>
+            Aucun client apporté.
+          </div>
+        ) : (
+          <div className="mobile-card-grid">
             {filteredClients.map(c => (
-              <tr key={c.id}>
-                <td>{c.name}</td>
-                <td>{c.company || '-'}</td>
-                <td>{c.contact || '-'}</td>
-                <td>{c.email || '-'}</td>
-                <td>{c.phone || '-'}</td>
-                <td>{getClientQuotes(c.id).length}</td>
-                <td>{getClientSales(c.id).length}</td>
-                <td><span className="badge-status bg-success">{c.status || 'Actif'}</span></td>
-              </tr>
+              <div key={c.id} className="mobile-card">
+                <div className="mobile-card-header">
+                  <div>
+                    <div className="mobile-card-title">{c.name}</div>
+                    <div className="mobile-card-subtitle">{c.company || 'Particulier'}</div>
+                  </div>
+                  <span className="badge-status bg-success">{c.status || 'Actif'}</span>
+                </div>
+                
+                <div className="mobile-card-body">
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Contact</span>
+                    <span className="mobile-card-value">{c.contact || c.name}</span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Email</span>
+                    <span className="mobile-card-value">{c.email || '-'}</span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Téléphone</span>
+                    <span className="mobile-card-value">{c.phone || '-'}</span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Devis</span>
+                    <span className="mobile-card-value">{getClientQuotes(c.id).length}</span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Ventes</span>
+                    <span className="mobile-card-value">{getClientSales(c.id).length}</span>
+                  </div>
+                </div>
+              </div>
             ))}
-            {filteredClients.length === 0 && (
-              <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '24px' }}>Aucun client apporté.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-</div>
+          </div>
+        )}
       </div>
     </div>
   );
