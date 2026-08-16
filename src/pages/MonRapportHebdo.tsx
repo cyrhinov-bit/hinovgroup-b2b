@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
-import { Calendar, CheckCircle2, FileText, Mail, AlertCircle, Download, Eye } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Calendar, Save, Eye, FileText, CheckCircle2 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import type { V2Task, V2DailyReport } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
-import { generateWeeklyReportPdf, buildWeeklyReportPdf } from '../lib/pdfUtils';
-import type { WeeklyReport } from '../context/AppContext';
+import { generateV2WeeklyReportPdf, buildV2WeeklyReportPdf } from '../features/reports/services/ReportPdfService';
+import toast from 'react-hot-toast';
 import { ReportPdfPreview } from '../components/ReportPdfPreview';
 import type { ReportPdfPreviewData } from '../components/ReportPdfPreview';
 
@@ -14,7 +15,7 @@ function toDateStr(d: Date): string {
 function getWeekStart(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
   const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
+  const diff = day === 0 ? -6 : 1 - day; // Adjust when day is sunday
   d.setDate(d.getDate() + diff);
   return toDateStr(d);
 }
@@ -23,219 +24,265 @@ function getToday(): string {
   return toDateStr(new Date());
 }
 
-function computeActivityKPIs(
-  authorId: string,
-  weekStart: string,
-  prospects: any[],
-  prospectActivities: any[],
-  prospectFollowUps: any[]
-) {
-  const weekEnd = new Date(new Date(weekStart + 'T00:00:00').getTime() + 6 * 86400000);
-  const inWeek = (date?: string) => !!date && date.slice(0, 10) >= weekStart && date.slice(0, 10) <= toDateStr(weekEnd);
-
-  const myProspects = prospects.filter(p => p.commercialId === authorId);
-  const prospectsCrees = myProspects.filter(p => inWeek(p.createdAt?.split('T')[0])).length;
-  const prospectsConvertis = myProspects.filter(p => p.status === 'Converti' && inWeek(p.updatedAt?.split('T')[0])).length;
-  const prospectsPerdus = myProspects.filter(p => p.status === 'Perdu' && inWeek(p.updatedAt?.split('T')[0])).length;
-
-  const myProspectIds = new Set(myProspects.map(p => p.id));
-  const activities = prospectActivities.filter(a => inWeek(a.date?.split('T')[0]) && myProspectIds.has(a.prospectId));
-  const counts = activities.reduce<Record<string, number>>((acc, a) => {
-    acc[a.type] = (acc[a.type] || 0) + 1;
-    return acc;
-  }, {});
-
-  const relancesTerminees = prospectFollowUps.filter(f =>
-    f.status === 'Terminée' && inWeek(f.date) && myProspectIds.has(f.prospectId)
-  ).length;
-
-  return {
-    prospectsCrees,
-    prospectsConvertis,
-    prospectsPerdus,
-    relancesTerminees,
-    appels: counts['Appel'] || 0,
-    emails: counts['Email'] || 0,
-    visites: counts['Visite'] || 0,
-    reunions: counts['Réunion'] || 0,
-    demos: counts['Démonstration'] || 0,
-    comptesRendus: counts['Compte rendu'] || 0,
-  };
-}
-
 export function MonRapportHebdo() {
-  const {
-    prospects, prospectActivities, prospectFollowUps,
-    activityReports, weeklyReports, users,
-    saveWeeklyReport, markWeeklyReportSent, settings,
-    services, categories
-  } = useAppContext();
+  const { v2DailyReports, v2WeeklyReports, saveV2WeeklyReport } = useAppContext();
   const { currentUser } = useAuth();
 
   const [date, setDate] = useState(getToday());
+  const [project, setProject] = useState('');
+  
+  const weekStart = useMemo(() => getWeekStart(date), [date]);
+  const weekEnd = useMemo(() => toDateStr(new Date(new Date(weekStart + 'T00:00:00').getTime() + 6 * 86400000)), [weekStart]);
+
+  const [weeklyObjectives, setWeeklyObjectives] = useState('');
+  const [summary, setSummary] = useState('');
+  const [nextWeekObjectives, setNextWeekObjectives] = useState('');
+  const [conclusion, setConclusion] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [currentStatus, setCurrentStatus] = useState<'Brouillon' | 'Validé'>('Brouillon');
   const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
 
-  const weekStart = getWeekStart(date);
-  const weekEnd = toDateStr(new Date(new Date(weekStart + 'T00:00:00').getTime() + 6 * 86400000));
+  // Agrégation des rapports journaliers
+  const { dailyReportIds, tasksByDay, pendingTasks, autoObjectives, coverage } = useMemo(() => {
+    if (!currentUser || !project.trim()) {
+      return { dailyReportIds: [], tasksByDay: {}, pendingTasks: [], autoObjectives: '', coverage: [] };
+    }
+    
+    const weekReports = v2DailyReports.filter(r => 
+      r.authorId === currentUser.id && 
+      r.date >= weekStart && r.date <= weekEnd &&
+      r.project.toLowerCase() === project.toLowerCase().trim()
+    );
 
-  const authorId = currentUser?.id || '';
-  const myReports = useMemo(
-    () => activityReports.filter(r => r.authorId === authorId && r.role === currentUser?.role),
-    [activityReports, authorId, currentUser]
-  );
-  const weekReports = myReports.filter(r => r.date >= weekStart && r.date <= weekEnd);
-  const weekActivity = weekReports.filter(r => r.type === 'Activité');
-  
-  const weeklyProspects = useMemo(() => {
-    return prospects.filter(p => {
-      if (p.commercialId !== authorId) return false;
-      const createdDate = p.createdAt?.split('T')[0];
-      return createdDate && createdDate >= weekStart && createdDate <= weekEnd;
+    const ids = weekReports.map(r => r.id);
+    const tasksMap: Record<string, V2Task[]> = {};
+    const pending: V2Task[] = [];
+    const objList: string[] = [];
+    
+    // Déterminer la couverture des jours
+    const days = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+    const coverageResult = days.map((dayName, idx) => {
+      const d = new Date(new Date(weekStart + 'T00:00:00').getTime() + idx * 86400000);
+      const dStr = toDateStr(d);
+      const hasReport = weekReports.some(r => r.date === dStr);
+      return { dayName, dStr, hasReport };
     });
-  }, [prospects, authorId, weekStart, weekEnd]);
 
-  const kpis = useMemo(
-    () => computeActivityKPIs(authorId, weekStart, prospects, prospectActivities, prospectFollowUps),
-    [authorId, weekStart, prospects, prospectActivities, prospectFollowUps]
-  );
+    // Agrégation
+    const jsDays = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+    weekReports.forEach(report => {
+      const d = new Date(report.date + 'T00:00:00');
+      const dayName = jsDays[d.getDay()];
+      const header = `${dayName} ${d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+      
+      if (!tasksMap[header]) tasksMap[header] = [];
+      
+      // On déduplique les objectifs
+      if (report.objectives) {
+        const lines = report.objectives.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        lines.forEach(line => {
+          const cleanLine = line.replace(/^- /, ''); // remove leading dash if present
+          if (!objList.includes(`- ${cleanLine}`)) {
+            objList.push(`- ${cleanLine}`);
+          }
+        });
+      }
+      
+      report.tasks.forEach(task => {
+        tasksMap[header].push(task);
+        if (task.status === 'En cours' || task.status === 'Restante') {
+          // Check for duplication in pending
+          if (!pending.some(p => p.description.toLowerCase() === task.description.toLowerCase())) {
+            pending.push(task);
+          }
+        }
+      });
+    });
 
-  const makeWeeklyReport = (status: WeeklyReport['status']): WeeklyReport | null => {
-    if (!currentUser) return null;
-    const sections = [
-      { type: 'Activité' as const, content: weekActivity.map(r => `- ${r.date}: ${r.realisations}`).join('\n') },
-    ];
-    const existingWeekly = weeklyReports.find(r => r.authorId === currentUser.id && r.weekStart === weekStart);
     return {
-      id: existingWeekly?.id || crypto.randomUUID(),
+      dailyReportIds: ids,
+      tasksByDay: tasksMap,
+      pendingTasks: pending,
+      autoObjectives: objList.join('\n'),
+      coverage: coverageResult
+    };
+  }, [v2DailyReports, currentUser, weekStart, weekEnd, project]);
+
+  useEffect(() => {
+    if (!currentUser || !project.trim()) return;
+    const existing = v2WeeklyReports.find(r => r.authorId === currentUser.id && r.weekStart === weekStart && r.project.toLowerCase() === project.toLowerCase().trim());
+    
+    if (existing) {
+      setEditingId(existing.id);
+      setWeeklyObjectives(existing.weeklyObjectives);
+      setSummary(existing.summary);
+      setNextWeekObjectives(existing.nextWeekObjectives);
+      setConclusion(existing.conclusion);
+      setCurrentStatus(existing.status);
+    } else {
+      setEditingId(null);
+      setWeeklyObjectives(autoObjectives);
+      setSummary('');
+      setNextWeekObjectives(pendingTasks.map(t => `- ${t.description}`).join('\n'));
+      setConclusion('');
+      setCurrentStatus('Brouillon');
+    }
+  }, [v2WeeklyReports, currentUser, weekStart, project, autoObjectives, pendingTasks]);
+
+  const makeReport = (status: 'Brouillon' | 'Validé') => {
+    if (!currentUser || !project.trim()) return null;
+    return {
+      id: editingId || crypto.randomUUID(),
       authorId: currentUser.id,
-      role: currentUser.role as WeeklyReport['role'],
       weekStart,
-      sections,
-      kpis,
-      status,
+      project: project.trim(),
+      dailyReportIds,
+      weeklyObjectives,
+      tasksByDay,
+      pendingTasks,
+      summary,
+      nextWeekObjectives,
+      conclusion,
+      status
     };
   };
 
-  const handlePreviewWeekly = () => {
-    if (!currentUser) return;
-    const report = makeWeeklyReport('Brouillon');
-    if (!report) return;
-    const doc = buildWeeklyReportPdf(report, weekReports, kpis, currentUser, settings, weeklyProspects, services, categories);
+  const handleSave = async () => {
+    const report = makeReport('Brouillon');
+    if (!report) { toast.error("Veuillez saisir un projet."); return; }
+    await saveV2WeeklyReport(report as any);
+    toast.success("Rapport hebdomadaire sauvegardé en brouillon.");
+  };
+
+  const handleValidateAndDownload = async () => {
+    const report = makeReport('Validé');
+    if (!report) { toast.error("Veuillez saisir un projet."); return; }
+    await saveV2WeeklyReport(report as any);
+    generateV2WeeklyReportPdf(report as any, currentUser);
+    toast.success("Rapport validé et PDF généré.");
+  };
+
+  const handlePreview = () => {
+    const report = makeReport(currentStatus);
+    if (!report) { toast.error("Veuillez saisir un projet."); return; }
+    const doc = buildV2WeeklyReportPdf(report as any, currentUser);
+    const safeName = currentUser?.name ? currentUser.name.replace(/\s+/g, '_') : 'Inconnu';
     setPreview({
       dataUrl: doc.output('dataurlstring'),
-      filename: `Rapport_Hebdomadaire_${weekStart}.pdf`,
-      title: `Aperçu — Rapport hebdomadaire (semaine du ${new Date(weekStart + 'T00:00:00').toLocaleDateString('fr-FR')})`,
+      filename: `Rapport_Hebdomadaire_${safeName}_${report.weekStart}.pdf`,
+      title: `Aperçu — Rapport hebdomadaire (${report.project})`,
     });
   };
 
-  const handleExport = () => {
-    if (!currentUser) return;
-    const report = makeWeeklyReport('Brouillon');
-    if (!report) return;
-    generateWeeklyReportPdf(report, weekReports, kpis, currentUser, settings, weeklyProspects, services, categories);
-    saveWeeklyReport(report);
-  };
-
-  const handleSendOutlook = async () => {
-    if (!currentUser) return;
-    const director = users.find(u => u.role === 'Directeur');
-    const report = makeWeeklyReport('Envoyé');
-    if (!report) return;
-    generateWeeklyReportPdf(report, weekReports, kpis, currentUser, settings, weeklyProspects, services, categories);
-    const directorEmail = director?.email || '';
-    const startDate = new Date(weekStart + 'T00:00:00');
-    const subject = `Rapport hebdomadaire combiné – Semaine du ${startDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}`;
-    const body = `Bonjour,\n\nVeuillez trouver ci-joint le rapport hebdomadaire (${report.role}) de la semaine du ${startDate.toLocaleDateString('fr-FR')}.\nCe document inclut l'activité ainsi que la prospection le cas échéant.\n\nLe fichier PDF a été téléchargé : veuillez le joindre à cet email avant l'envoi.\n\nCordialement,\n${currentUser.name}`;
-    window.location.href = `mailto:${encodeURIComponent(directorEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    await markWeeklyReportSent(report.id);
-    await saveWeeklyReport(report);
-  };
-
-  const missingDays = useMemo(() => {
-    const days: string[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(new Date(weekStart + 'T00:00:00').getTime() + i * 86400000).toISOString().split('T')[0];
-      days.push(d);
-    }
-    return days.filter(d => !weekReports.some(r => r.date === d && r.type === 'Activité'));
-  }, [weekStart, weekReports]);
+  const isReadOnly = currentStatus === 'Validé';
 
   return (
     <div className="dashboard">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Rapport hebdomadaire</h2>
-          <p style={{ color: 'var(--color-text-muted)', marginTop: '4px', fontSize: '0.85rem' }}>
-            Générez et envoyez votre rapport consolidé pour la semaine.
-          </p>
-        </div>
+      <div style={{ marginBottom: '24px' }}>
+        <h2 style={{ margin: 0 }}>Rapport Hebdomadaire</h2>
+        <p style={{ color: 'var(--color-text-muted)', marginTop: '4px', fontSize: '0.85rem' }}>
+          Générez votre rapport de semaine automatiquement à partir de vos saisies journalières.
+        </p>
       </div>
 
-      <div className="card" style={{ marginBottom: '24px', padding: '24px' }}>
-        <div className="responsive-flex-actions" style={{ alignItems: 'center', marginBottom: '24px' }}>
-          <div style={{ flex: '0 0 auto', width: '250px' }}>
+      <div className="card" style={{ padding: '24px', marginBottom: '24px' }}>
+        <div className="responsive-form-grid">
+          <div>
             <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Semaine du</label>
-            <input 
-              className="table-input" 
-              type="date" 
-              style={{ width: '100%' }} 
-              value={date} 
-              onChange={e => setDate(e.target.value)} 
-            />
+            <input type="date" className="form-control" style={{ width: '100%' }} value={date} onChange={e => setDate(e.target.value)} disabled={isReadOnly} />
+            <small style={{ color: 'var(--color-text-muted)', display: 'block', marginTop: '4px' }}>
+              Du {new Date(weekStart + 'T00:00:00').toLocaleDateString('fr-FR')} au {new Date(weekEnd + 'T00:00:00').toLocaleDateString('fr-FR')}
+            </small>
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingTop: '22px' }}>
-            <button className="btn btn-outline" onClick={handlePreviewWeekly} style={{ display: 'flex', alignItems: 'center' }}>
-              <Eye size={16} style={{ marginRight: '8px' }} /> Prévisualiser
-            </button>
-            <button className="btn btn-outline" onClick={handleExport} style={{ display: 'flex', alignItems: 'center' }}>
-              <Download size={16} style={{ marginRight: '8px' }} /> Télécharger PDF
-            </button>
-            <button className="btn btn-primary" onClick={handleSendOutlook} style={{ display: 'flex', alignItems: 'center' }}>
-              <Mail size={16} style={{ marginRight: '8px' }} /> Envoyer
-            </button>
+          <div>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Projet</label>
+            <input type="text" className="form-control" style={{ width: '100%' }} placeholder="Nom exact du projet..." value={project} onChange={e => setProject(e.target.value)} disabled={isReadOnly} />
           </div>
-        </div>
-
-        {missingDays.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', padding: '12px', backgroundColor: '#fff7ed', borderRadius: '8px', color: '#9a3412' }}>
-            <AlertCircle size={16} />
-            <span style={{ fontSize: '0.85rem' }}>
-              Jours sans rapport d'activité : {missingDays.map(d => new Date(d + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit' })).join(', ') || 'aucun'}
+          <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '8px' }}>
+            <span className={`badge-status ${currentStatus === 'Brouillon' ? 'bg-warning' : 'bg-success'}`}>
+              {currentStatus}
             </span>
           </div>
-        )}
+        </div>
 
-        <div className="widgets-grid">
-          <div className="widget-card">
-            <div className="widget-icon bg-info"><FileText size={32} color="white" /></div>
-            <div className="widget-content">
-              <div className="widget-label">PROSPECTS CRÉÉS</div>
-              <div className="widget-value">{kpis.prospectsCrees}</div>
+        {project.trim() && (
+          <div style={{ marginTop: '16px', padding: '16px', backgroundColor: 'var(--color-background-alt)', borderRadius: '8px' }}>
+            <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem', marginBottom: '12px' }}>Contrôle de complétude ({dailyReportIds.length} rapport(s) trouvé(s))</p>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {coverage.map(c => (
+                <div key={c.dStr} style={{ 
+                  padding: '4px 8px', 
+                  borderRadius: '4px', 
+                  fontSize: '0.8rem', 
+                  backgroundColor: c.hasReport ? 'var(--color-success)' : 'var(--color-border)', 
+                  color: c.hasReport ? '#fff' : 'inherit'
+                }}>
+                  {c.dayName.substring(0, 3)}. {c.hasReport ? '✅' : '❌'}
+                </div>
+              ))}
             </div>
+            <small style={{ display: 'block', marginTop: '8px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+              Note: Un jour sans rapport n'est pas automatiquement une erreur (ex: week-end ou jour férié).
+            </small>
           </div>
-          <div className="widget-card">
-            <div className="widget-icon bg-success"><CheckCircle2 size={32} color="white" /></div>
-            <div className="widget-content">
-              <div className="widget-label">CONVERSIONS</div>
-              <div className="widget-value">{kpis.prospectsConvertis}</div>
-            </div>
+        )}
+      </div>
+
+      {dailyReportIds.length > 0 && (
+        <div className="card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <h3>Synthèse & Modification</h3>
+          
+          <div>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>1. Objectifs de la semaine (Extraits des rapports journaliers)</label>
+            <textarea className="form-control" style={{ width: '100%', minHeight: '100px' }} value={weeklyObjectives} onChange={e => setWeeklyObjectives(e.target.value)} disabled={isReadOnly} />
           </div>
-          <div className="widget-card">
-            <div className="widget-icon bg-primary"><FileText size={32} color="white" /></div>
-            <div className="widget-content">
-              <div className="widget-label">RELANCES TERMINÉES</div>
-              <div className="widget-value">{kpis.relancesTerminees}</div>
-            </div>
+
+          <div style={{ padding: '16px', backgroundColor: 'var(--color-background-alt)', borderRadius: '8px', borderLeft: '4px solid var(--color-primary)' }}>
+            <p style={{ fontSize: '0.9rem', fontWeight: 600, margin: '0 0 8px 0' }}>
+              2. Tâches effectuées & 3. Tâches en cours (Automatique)
+            </p>
+            <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', margin: 0 }}>
+              Ces sections sont directement formatées par jour (ex: Lundi 10 août) et intégrées au PDF final de manière déterministe. 
+              <strong> {pendingTasks.length}</strong> tâches en cours/restantes uniques ont été détectées.
+            </p>
           </div>
-          <div className="widget-card">
-            <div className="widget-icon bg-warning"><Calendar size={32} color="white" /></div>
-            <div className="widget-content">
-              <div className="widget-label">JOURS RENSEIGNÉS</div>
-              <div className="widget-value">{new Set(weekActivity.map(r => r.date)).size}/7</div>
-            </div>
+
+          <div>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>4. Bilan de la semaine</label>
+            <textarea className="form-control" style={{ width: '100%', minHeight: '120px' }} placeholder="Synthèse des activités, résultats, difficultés, corrections, avancées..." value={summary} onChange={e => setSummary(e.target.value)} disabled={isReadOnly} />
+          </div>
+
+          <div>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>5. Objectifs de la semaine suivante (Proposés depuis les tâches restantes)</label>
+            <textarea className="form-control" style={{ width: '100%', minHeight: '100px' }} value={nextWeekObjectives} onChange={e => setNextWeekObjectives(e.target.value)} disabled={isReadOnly} />
+          </div>
+
+          <div>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Conclusion</label>
+            <textarea className="form-control" style={{ width: '100%', minHeight: '80px' }} placeholder="Conclusion cohérente du bilan..." value={conclusion} onChange={e => setConclusion(e.target.value)} disabled={isReadOnly} />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
+            <button className="btn btn-outline" onClick={handlePreview} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Eye size={18} /> Aperçu
+            </button>
+            {!isReadOnly ? (
+              <>
+                <button className="btn btn-outline" onClick={handleSave} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Save size={18} /> Sauvegarder Brouillon
+                </button>
+                <button className="btn btn-primary" onClick={handleValidateAndDownload} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <CheckCircle2 size={18} /> Valider le rapport et PDF
+                </button>
+              </>
+            ) : (
+              <button className="btn btn-primary" onClick={handleValidateAndDownload} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CheckCircle2 size={18} /> Télécharger le PDF
+              </button>
+            )}
           </div>
         </div>
-      </div>
+      )}
 
       <ReportPdfPreview preview={preview} onClose={() => setPreview(null)} />
     </div>

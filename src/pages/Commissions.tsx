@@ -89,7 +89,7 @@ export function Commissions() {
         </div>
 
         <div className="table-responsive">
-<table className="data-table">
+<table className="data-table responsive-table">
           <thead>
             <tr>
               <th>Client</th>
@@ -106,18 +106,18 @@ export function Commissions() {
           <tbody>
             {filteredCommissions.map(c => (
               <tr key={c.id}>
-                <td>{getClientName(c.clientId || '')}</td>
-                <td>{getUserName(c.commercialId || '')}</td>
-                <td>{c.serviceId ? getServiceName(c.serviceId) : '-'}</td>
-                <td>{c.totalHt.toLocaleString('fr-FR')} FCFA</td>
-                <td>{c.costTotal.toLocaleString('fr-FR')} FCFA</td>
-                <td>{c.marginAmount.toLocaleString('fr-FR')} FCFA ({c.marginPercent}%)</td>
-                <td><strong>{c.commissionAmount.toLocaleString('fr-FR')} FCFA</strong>
+                <td data-label="Client">{getClientName(c.clientId || '')}</td>
+                <td data-label="Commercial">{getUserName(c.commercialId || '')}</td>
+                <td data-label="Service">{c.serviceId ? getServiceName(c.serviceId) : '-'}</td>
+                <td data-label="Total HT">{c.totalHt.toLocaleString('fr-FR')} FCFA</td>
+                <td data-label="Coût">{c.costTotal.toLocaleString('fr-FR')} FCFA</td>
+                <td data-label="Marge">{c.marginAmount.toLocaleString('fr-FR')} FCFA ({c.marginPercent}%)</td>
+                <td data-label="Commission"><strong>{c.commissionAmount.toLocaleString('fr-FR')} FCFA</strong>
                   {c.paidAmount ? <div style={{ fontSize: '0.8rem', color: 'var(--color-success)' }}>Payé : {c.paidAmount.toLocaleString('fr-FR')} FCFA</div> : null}</td>
-                <td>
+                <td data-label="Statut">
                   <span className={`badge-status ${getBadgeColor(c.status)}`}>{c.status}</span>
                 </td>
-                <td>
+                <td data-label="Actions">
                   {c.status === 'En attente' && (
                     <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => updateCommissionStatus(c.id, 'Validée')} title="Valider">
                       Valider

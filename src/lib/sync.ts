@@ -12,6 +12,8 @@ export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT'
                              'INSERT_PROSPECT_FOLLOW_UP' | 'UPDATE_PROSPECT_FOLLOW_UP' | 'DELETE_PROSPECT_FOLLOW_UP' |
                              'INSERT_ACTIVITY_REPORT' | 'UPDATE_ACTIVITY_REPORT' | 'DELETE_ACTIVITY_REPORT' |
                              'INSERT_WEEKLY_REPORT' | 'UPDATE_WEEKLY_REPORT' |
+                             'INSERT_V2_DAILY_REPORT' | 'UPDATE_V2_DAILY_REPORT' |
+                             'INSERT_V2_WEEKLY_REPORT' | 'UPDATE_V2_WEEKLY_REPORT' |
                              'INSERT_CATEGORY' | 'DELETE_CATEGORY' |
                              'UPDATE_SETTINGS' | 'UPDATE_PROFILE' | 'DELETE_PROFILE' |
                              'INSERT_PRESTATION' | 'UPDATE_PRESTATION' | 'DELETE_PRESTATION' |
@@ -490,7 +492,7 @@ export const processSyncQueue = async () => {
           success = !error;
           break;
         }
-        case 'INSERT_ACTIVITY_REPORT': {
+        case 'INSERT_ACTIVITY_REPORT': { // @deprecated V1
           const { error } = await supabase.from('activity_reports').insert([{
             id: action.payload.id,
             author_id: action.payload.authorId,
@@ -505,7 +507,7 @@ export const processSyncQueue = async () => {
           success = !error;
           break;
         }
-        case 'UPDATE_ACTIVITY_REPORT': {
+        case 'UPDATE_ACTIVITY_REPORT': { // @deprecated V1
           const { error } = await supabase.from('activity_reports').update({
             role: action.payload.role,
             type: action.payload.type,
@@ -519,12 +521,12 @@ export const processSyncQueue = async () => {
           success = !error;
           break;
         }
-        case 'DELETE_ACTIVITY_REPORT': {
+        case 'DELETE_ACTIVITY_REPORT': { // @deprecated V1
           const { error } = await supabase.from('activity_reports').delete().eq('id', action.payload.id);
           success = !error;
           break;
         }
-        case 'INSERT_WEEKLY_REPORT': {
+        case 'INSERT_WEEKLY_REPORT': { // @deprecated V1
           const { error } = await supabase.from('weekly_reports').insert([{
             id: action.payload.id,
             author_id: action.payload.authorId,
@@ -538,7 +540,7 @@ export const processSyncQueue = async () => {
           success = !error;
           break;
         }
-        case 'UPDATE_WEEKLY_REPORT': {
+        case 'UPDATE_WEEKLY_REPORT': { // @deprecated V1 - Always needed for markWeeklyReportRead by managers on old reports
           const { sent_at, status, ...rest } = action.payload;
           const mapped: any = {};
           if (rest.sections !== undefined) mapped.sections = rest.sections;
@@ -547,6 +549,49 @@ export const processSyncQueue = async () => {
           if (sent_at !== undefined) mapped.sent_at = sent_at;
           const { error } = await supabase.from('weekly_reports').update(mapped).eq('id', action.payload.id);
           if (error) console.error('[Sync] UPDATE_WEEKLY_REPORT échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'INSERT_V2_DAILY_REPORT': {
+          const { error } = await supabase.from('v2_daily_reports').insert([{
+            id: action.payload.id, author_id: action.payload.authorId, date: action.payload.date, project: action.payload.project,
+            objectives: action.payload.objectives, tasks: action.payload.tasks, results: action.payload.results,
+            difficulties: action.payload.difficulties, observations: action.payload.observations, status: action.payload.status
+          }]);
+          if (error) console.error('[Sync] INSERT_V2_DAILY_REPORT échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'UPDATE_V2_DAILY_REPORT': {
+          const { error } = await supabase.from('v2_daily_reports').update({
+            date: action.payload.date, project: action.payload.project,
+            objectives: action.payload.objectives, tasks: action.payload.tasks, results: action.payload.results,
+            difficulties: action.payload.difficulties, observations: action.payload.observations, status: action.payload.status,
+            updated_at: action.payload.updatedAt || new Date().toISOString()
+          }).eq('id', action.payload.id);
+          if (error) console.error('[Sync] UPDATE_V2_DAILY_REPORT échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'INSERT_V2_WEEKLY_REPORT': {
+          const { error } = await supabase.from('v2_weekly_reports').insert([{
+            id: action.payload.id, author_id: action.payload.authorId, week_start: action.payload.weekStart, project: action.payload.project,
+            daily_report_ids: action.payload.dailyReportIds, weekly_objectives: action.payload.weeklyObjectives,
+            tasks_by_day: action.payload.tasksByDay, pending_tasks: action.payload.pendingTasks, summary: action.payload.summary,
+            next_week_objectives: action.payload.nextWeekObjectives, conclusion: action.payload.conclusion, status: action.payload.status
+          }]);
+          if (error) console.error('[Sync] INSERT_V2_WEEKLY_REPORT échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'UPDATE_V2_WEEKLY_REPORT': {
+          const { error } = await supabase.from('v2_weekly_reports').update({
+            project: action.payload.project, daily_report_ids: action.payload.dailyReportIds, weekly_objectives: action.payload.weeklyObjectives,
+            tasks_by_day: action.payload.tasksByDay, pending_tasks: action.payload.pendingTasks, summary: action.payload.summary,
+            next_week_objectives: action.payload.nextWeekObjectives, conclusion: action.payload.conclusion, status: action.payload.status,
+            updated_at: action.payload.updatedAt || new Date().toISOString()
+          }).eq('id', action.payload.id);
+          if (error) console.error('[Sync] UPDATE_V2_WEEKLY_REPORT échoué :', error.message);
           success = !error;
           break;
         }

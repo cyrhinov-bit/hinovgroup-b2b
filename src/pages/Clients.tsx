@@ -87,7 +87,7 @@ export function Clients() {
               <option value="">Aucun commercial</option>
               {commercials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Annuler</button>
               <button type="submit" className="btn btn-primary">Enregistrer</button>
             </div>
@@ -161,7 +161,7 @@ export function Clients() {
                 {commercials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-            <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setEditingClient(null)}>Annuler</button>
               <button type="submit" className="btn btn-primary">Sauvegarder les modifications</button>
             </div>
@@ -171,7 +171,7 @@ export function Clients() {
 
       <div className="card">
         <div className="table-responsive">
-<table className="data-table">
+<table className="data-table responsive-table">
           <thead>
             <tr>
               <th>Entreprise</th>
@@ -186,13 +186,13 @@ export function Clients() {
           <tbody>
             {clients.map(client => (
               <tr key={client.id}>
-                <td><strong>{client.name || '-'}</strong></td>
-                <td>{client.contact}</td>
-                <td>{client.email}</td>
-                <td>{client.phone}</td>
-                <td>{users.find(u => u.id === client.commercialId)?.name || '-'}</td>
-                <td><span className={`badge-status ${client.status === 'Actif' ? 'bg-success' : 'bg-error'}`}>{client.status || 'Actif'}</span></td>
-                <td>
+                <td data-label="Entreprise"><strong>{client.name || '-'}</strong></td>
+                <td data-label="Responsable">{client.contact}</td>
+                <td data-label="Email">{client.email}</td>
+                <td data-label="Téléphone">{client.phone}</td>
+                <td data-label="Commercial">{users.find(u => u.id === client.commercialId)?.name || '-'}</td>
+                <td data-label="Statut"><span className={`badge-status ${client.status === 'Actif' ? 'bg-success' : 'bg-error'}`}>{client.status || 'Actif'}</span></td>
+                <td data-label="Actions">
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button className="icon-button" style={{ color: 'var(--color-primary)' }} title="Modifier le client" onClick={() => startEdit(client)}>
                       <Edit2 size={16} />

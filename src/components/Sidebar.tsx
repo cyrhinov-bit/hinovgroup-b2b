@@ -30,6 +30,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Rapport hebdo', icon: Calendar, path: '/rapport-hebdo', roles: ['Responsable'] },
     { label: 'Rapport de prospection', icon: FileText, path: '/rapport-prospection', roles: ['Responsable'] },
     { label: 'Documents', icon: Folder, path: '/documents', roles: ['Directeur', 'Responsable'] },
+    { label: 'Historique Rapports', icon: FileText, path: '/mes-rapports', roles: ['Responsable', 'Directeur'] },
     { label: 'Utilisateurs', icon: Shield, path: '/utilisateurs', roles: ['Directeur', 'SuperAdmin'] as any },
     { label: 'Rapports', icon: PieChart, path: '/rapports', roles: ['Directeur', 'Responsable'] },
     { label: 'Paramètres', icon: Settings, path: '/parametres', roles: ['Directeur'] },
@@ -41,6 +42,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Rapport d\'activité', icon: FileText, path: '/commercial/rapport-activite', roles: ['Commercial'] },
     { label: 'Rapport hebdo', icon: Calendar, path: '/commercial/rapport-hebdo', roles: ['Commercial'] },
     { label: 'Rapport de prospection', icon: FileText, path: '/commercial/rapport-prospection', roles: ['Commercial'] },
+    { label: 'Historique Rapports', icon: FileText, path: '/commercial/mes-rapports', roles: ['Commercial'] },
   ];
 
   // POS nav items

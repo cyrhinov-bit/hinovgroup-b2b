@@ -114,7 +114,7 @@ export function Utilisateurs() {
               </select>
             </div>
 
-            <div style={{ gridColumn: 'span 2' }}>
+            <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Service</label>
               <select className="table-input" value={newUser.serviceId || ''} onChange={e => setNewUser({ ...newUser, serviceId: e.target.value })}>
                 <option value="">Sélectionner un service (Optionnel)</option>
@@ -122,7 +122,7 @@ export function Utilisateurs() {
               </select>
             </div>
 
-            <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Annuler</button>
               <button type="submit" className="btn btn-primary">Enregistrer</button>
             </div>
@@ -152,7 +152,7 @@ export function Utilisateurs() {
               </select>
             </div>
 
-            <div style={{ gridColumn: 'span 2' }}>
+            <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Service associé</label>
               <select className="table-input" value={editForm.serviceId} onChange={e => setEditForm({ ...editForm, serviceId: e.target.value })}>
                 <option value="">Sélectionner un service (Optionnel)</option>
@@ -160,7 +160,7 @@ export function Utilisateurs() {
               </select>
             </div>
 
-            <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setEditingUser(null)}>Annuler</button>
               <button type="submit" className="btn btn-primary">Sauvegarder les modifications</button>
             </div>
@@ -170,7 +170,7 @@ export function Utilisateurs() {
 
       <div className="card">
         <div className="table-responsive">
-<table className="data-table">
+<table className="data-table responsive-table">
           <thead>
             <tr>
               <th>Nom</th>
@@ -186,10 +186,10 @@ export function Utilisateurs() {
           <tbody>
             {users.map(u => (
               <tr key={u.id} style={{ opacity: u.active !== false ? 1 : 0.6 }}>
-                <td><strong>{u.name}</strong></td>
-                <td>{u.email}</td>
-                <td><span className="badge-status" style={{ backgroundColor: getRoleColor(u.role) }}>{u.role}</span></td>
-                <td>
+                <td data-label="Nom"><strong>{u.name}</strong></td>
+                <td data-label="Email">{u.email}</td>
+                <td data-label="Rôle"><span className="badge-status" style={{ backgroundColor: getRoleColor(u.role) }}>{u.role}</span></td>
+                <td data-label="Statut">
                   {u.active !== false ? (
                     <span className="badge-status bg-success" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                       <CheckCircle size={12} /> Actif
@@ -200,10 +200,10 @@ export function Utilisateurs() {
                     </span>
                   )}
                 </td>
-                <td>{getServiceName(u.serviceId)}</td>
-                {currentUser?.role === 'SuperAdmin' && <td>{u.pin || 'N/A'}</td>}
-                <td>{u.lastLogin}</td>
-                <td>
+                <td data-label="Service">{getServiceName(u.serviceId)}</td>
+                {currentUser?.role === 'SuperAdmin' && <td data-label="Code PIN">{u.pin || 'N/A'}</td>}
+                <td data-label="Dernière connexion">{u.lastLogin}</td>
+                <td data-label="Actions">
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button className="icon-button" style={{ color: 'var(--color-primary)' }} title="Modifier" onClick={() => startEdit(u)}>
                       <Edit2 size={16} />

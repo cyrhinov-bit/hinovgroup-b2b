@@ -12,6 +12,8 @@ export const db = {
   prospectFollowUps: localforage.createInstance({ name: 'hinov', storeName: 'prospectFollowUps' }),
   activityReports: localforage.createInstance({ name: 'hinov', storeName: 'activityReports' }),
   weeklyReports: localforage.createInstance({ name: 'hinov', storeName: 'weeklyReports' }),
+  v2DailyReports: localforage.createInstance({ name: 'hinov', storeName: 'v2DailyReports' }),
+  v2WeeklyReports: localforage.createInstance({ name: 'hinov', storeName: 'v2WeeklyReports' }),
   categories: localforage.createInstance({ name: 'hinov', storeName: 'categories' }),
   services: localforage.createInstance({ name: 'hinov', storeName: 'services' }),
   prestations: localforage.createInstance({ name: 'hinov', storeName: 'prestations' }),

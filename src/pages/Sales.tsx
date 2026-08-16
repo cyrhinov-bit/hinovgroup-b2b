@@ -71,7 +71,7 @@ export function Sales() {
         </div>
 
         <div className="table-responsive">
-<table className="data-table">
+<table className="data-table responsive-table">
           <thead>
             <tr>
               <th>N° Vente</th>
@@ -87,11 +87,11 @@ export function Sales() {
           <tbody>
             {filteredSales.map(s => (
               <tr key={s.id}>
-                <td>{s.saleNumber}</td>
-                <td>{getClientName(s.clientId)}</td>
-                <td>{s.serviceId ? getServiceName(s.serviceId) : '-'}</td>
-                <td>{s.subtotal.toLocaleString('fr-FR')} FCFA</td>
-                <td>
+                <td data-label="N° Vente">{s.saleNumber}</td>
+                <td data-label="Client">{getClientName(s.clientId)}</td>
+                <td data-label="Service">{s.serviceId ? getServiceName(s.serviceId) : '-'}</td>
+                <td data-label="Montant">{s.subtotal.toLocaleString('fr-FR')} FCFA</td>
+                <td data-label="Paiement">
                   {s.status === 'Payée' ? (
                     <span className="badge-status bg-success">{s.subtotal.toLocaleString('fr-FR')} FCFA</span>
                   ) : (
@@ -101,11 +101,11 @@ export function Sales() {
                     </span>
                   )}
                 </td>
-                <td>
+                <td data-label="Statut">
                   <span className={`badge-status ${getBadgeColor(s.status)}`}>{s.status}</span>
                 </td>
-                <td>{s.date}</td>
-                <td>
+                <td data-label="Date">{s.date}</td>
+                <td data-label="Actions">
                   <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => setEditingSale(s)} title="Modifier coûts de revient">
                     <Edit2 size={18} />
                   </button>

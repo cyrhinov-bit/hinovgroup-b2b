@@ -81,7 +81,7 @@ export function Services() {
               value={newService.members || ''}
               onChange={e => setNewService({ ...newService, members: Number(e.target.value) })}
             />
-            <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Annuler</button>
               <button type="submit" className="btn btn-primary">Enregistrer</button>
             </div>
@@ -113,7 +113,7 @@ export function Services() {
                 onChange={e => setEditForm({ ...editForm, members: Number(e.target.value) })}
               />
             </div>
-            <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setEditingService(null)}>Annuler</button>
               <button type="submit" className="btn btn-primary">Sauvegarder les modifications</button>
             </div>
@@ -123,7 +123,7 @@ export function Services() {
 
       <div className="card">
         <div className="table-responsive">
-<table className="data-table">
+<table className="data-table responsive-table">
           <thead>
             <tr>
               <th>Service</th>
@@ -137,10 +137,10 @@ export function Services() {
               const managerName = users.find(u => u.serviceId === s.id && u.role === 'Responsable')?.name || 'Non assigné';
               return (
                 <tr key={s.id}>
-                  <td><strong>{s.name}</strong></td>
-                  <td>{managerName}</td>
-                  <td>{s.members || 1}</td>
-                  <td>
+                  <td data-label="Service"><strong>{s.name}</strong></td>
+                  <td data-label="Responsable">{managerName}</td>
+                  <td data-label="Membres">{s.members || 1}</td>
+                  <td data-label="Actions">
                     <div style={{ display: 'flex', gap: '6px' }}>
                       <button className="icon-button" style={{ color: 'var(--color-primary)' }} title="Modifier le service" onClick={() => startEdit(s)}>
                         <Edit2 size={16} />

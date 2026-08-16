@@ -10,6 +10,7 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
   const { posWorkspace, setPosWorkspace, updateMyProfile } = useAppContext();
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');
@@ -20,6 +21,7 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   // Fermer le menu si clic en dehors
@@ -27,6 +29,9 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setShowProfileMenu(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setShowNotifications(false);
       }
     };
     document.addEventListener('mousedown', handler);
@@ -121,10 +126,49 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
         </div>
 
         <div className="topbar-right">
-          <button className="icon-button notification-btn">
-            <Bell />
-            <span className="badge">7</span>
-          </button>
+          <div className="profile-wrapper" ref={notifRef} style={{ marginRight: '16px' }}>
+            <button className="icon-button notification-btn" onClick={() => setShowNotifications(p => !p)}>
+              <Bell />
+              <span className="badge">3</span>
+            </button>
+
+            {showNotifications && (
+              <div className="profile-dropdown" style={{ right: '-10px', minWidth: '320px', padding: '0' }}>
+                <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 'bold' }}>Notifications</span>
+                  <span className="badge-status bg-primary" style={{ padding: '2px 8px', fontSize: '0.7rem' }}>3 nouvelles</span>
+                </div>
+                <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+                  <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border)', cursor: 'pointer' }} onClick={() => setShowNotifications(false)}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Nouveau prospect assigné</span>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--color-primary)' }}>Il y a 5 min</span>
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Un nouveau prospect a été assigné à votre équipe.</div>
+                  </div>
+                  <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border)', cursor: 'pointer' }} onClick={() => setShowNotifications(false)}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Objectif atteint</span>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--color-primary)' }}>Il y a 2h</span>
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Félicitations, vous avez atteint votre objectif de ventes mensuel !</div>
+                  </div>
+                  <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border)', cursor: 'pointer' }} onClick={() => setShowNotifications(false)}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Mise à jour système</span>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--color-primary)' }}>Hier</span>
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>L'application a été mise à jour avec de nouvelles fonctionnalités.</div>
+                  </div>
+                </div>
+                <div style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid var(--color-border)' }}>
+                  <button className="btn btn-outline" style={{ width: '100%', fontSize: '0.85rem' }} onClick={() => setShowNotifications(false)}>
+                    Tout marquer comme lu
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Avatar profil */}
           <div className="profile-wrapper" ref={menuRef}>

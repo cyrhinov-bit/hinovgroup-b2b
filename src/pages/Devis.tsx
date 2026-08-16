@@ -102,7 +102,7 @@ export function Devis() {
         </div>
 
         <div className="table-responsive">
-<table className="data-table">
+<table className="data-table responsive-table">
           <thead>
             <tr>
               <th>N° Devis</th>
@@ -117,11 +117,11 @@ export function Devis() {
           <tbody>
             {filteredQuotes.map(q => (
               <tr key={q.id}>
-                <td>{q.quoteNumber}</td>
-                <td>{getClientName(q.clientId)}</td>
-                <td>{q.subject}</td>
-                <td>{q.subtotal.toLocaleString('fr-FR')} FCFA</td>
-                <td>
+                <td data-label="N° Devis">{q.quoteNumber}</td>
+                <td data-label="Client">{getClientName(q.clientId)}</td>
+                <td data-label="Sujet">{q.subject}</td>
+                <td data-label="Montant HT">{q.subtotal.toLocaleString('fr-FR')} FCFA</td>
+                <td data-label="Statut">
                   <span className={`badge-status ${getBadgeColor(q.status)}`}>{q.status}</span>
                   {q.clientComment && (
                     <span title={`Commentaire : ${q.clientComment}`}>
@@ -129,8 +129,8 @@ export function Devis() {
                     </span>
                   )}
                 </td>
-                <td>{q.date}</td>
-                <td>
+                <td data-label="Date d'émission">{q.date}</td>
+                <td data-label="Actions">
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', position: 'relative' }}>
                     {/* Actions principales toujours visibles */}
                     <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => navigate(`/devis/nouveau?editId=${q.id}`)} title="Modifier">

@@ -70,7 +70,7 @@ export function Documents() {
 
       <div className="card">
         <div className="table-responsive">
-<table className="data-table">
+<table className="data-table responsive-table">
           <thead>
             <tr>
               <th>Nom du fichier</th>
@@ -83,11 +83,11 @@ export function Documents() {
           <tbody>
             {crmDocuments.map(doc => (
               <tr key={doc.id}>
-                <td><FileText size={16} style={{ verticalAlign: 'middle', marginRight: '8px' }} /> {doc.name}</td>
-                <td>{doc.type}</td>
-                <td>{new Date(doc.createdAt).toLocaleDateString('fr-FR')}</td>
-                <td>{formatSize(doc.sizeBytes)}</td>
-                <td>
+                <td data-label="Nom du fichier"><FileText size={16} style={{ verticalAlign: 'middle', marginRight: '8px' }} /> {doc.name}</td>
+                <td data-label="Type">{doc.type}</td>
+                <td data-label="Date d'ajout">{new Date(doc.createdAt).toLocaleDateString('fr-FR')}</td>
+                <td data-label="Taille">{formatSize(doc.sizeBytes)}</td>
+                <td data-label="Actions">
                   <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => handleDownload(doc)} title="Télécharger">
                     <Download size={16} />
                   </button>

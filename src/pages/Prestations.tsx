@@ -91,7 +91,7 @@ export function Prestations() {
               <option value="Forfait">Forfait</option>
               <option value="Unité">Unité</option>
             </select>
-            <div style={{ gridColumn: 'span 3', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button type="button" className="btn btn-secondary" onClick={handleCancel}>Annuler</button>
               <button type="submit" className="btn btn-primary">{editingId ? 'Mettre à jour' : 'Enregistrer'}</button>
             </div>
@@ -101,7 +101,7 @@ export function Prestations() {
 
       <div className="card">
         <div className="table-responsive">
-<table className="data-table">
+<table className="data-table responsive-table">
           <thead>
             <tr>
               <th>Code</th>
@@ -116,13 +116,13 @@ export function Prestations() {
           <tbody>
             {prestations.map(p => (
               <tr key={p.id}>
-                <td>{p.code}</td>
-                <td>{p.name}</td>
-                <td>{getServiceName(p.serviceId)}</td>
-                <td>{p.price.toLocaleString('fr-FR')} FCFA</td>
-                <td>{(p.costPrice || 0).toLocaleString('fr-FR')} FCFA</td>
-                <td>{p.unit}</td>
-                <td>
+                <td data-label="Code">{p.code}</td>
+                <td data-label="Nom de la prestation">{p.name}</td>
+                <td data-label="Service associé">{getServiceName(p.serviceId)}</td>
+                <td data-label="Prix Unitaire (HT)">{p.price.toLocaleString('fr-FR')} FCFA</td>
+                <td data-label="Coût de revient">{(p.costPrice || 0).toLocaleString('fr-FR')} FCFA</td>
+                <td data-label="Unité">{p.unit}</td>
+                <td data-label="Actions">
                   <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => handleEdit(p)}><Edit2 size={16} /></button>
                   <button
                     className="icon-button text-error"

@@ -120,7 +120,7 @@ export function ProspectDetail() {
         <ArrowLeft size={16} style={{ marginRight: '8px' }} /> Retour aux prospects
       </button>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      <div className="page-header">
         <div>
           <h2>{prospect.name}</h2>
           <p style={{ color: 'var(--color-text-muted)' }}>{prospect.prospectNumber} - {prospect.company || 'Pas de société'}</p>
@@ -132,7 +132,7 @@ export function ProspectDetail() {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+      <div className="dashboard-grid">
         <div className="card" style={{ padding: '24px' }}>
           <h3>Informations</h3>
           <div style={{ display: 'grid', gap: '12px', marginTop: '16px' }}>
@@ -188,7 +188,7 @@ export function ProspectDetail() {
               </button>
             </div>
             {showActivityForm && (
-              <form onSubmit={handleAddActivity} style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
+              <form onSubmit={handleAddActivity} className="responsive-flex-actions" style={{ marginTop: '12px' }}>
                 <select className="table-input" value={newActivity.type} onChange={e => setNewActivity({...newActivity, type: e.target.value as ActivityType})}>
                   <option value="Appel">Appel</option>
                   <option value="Email">Email</option>
@@ -197,7 +197,7 @@ export function ProspectDetail() {
                   <option value="Démonstration">Démonstration</option>
                   <option value="Compte rendu">Compte rendu</option>
                 </select>
-                <input className="table-input" placeholder="Description" value={newActivity.description} onChange={e => setNewActivity({...newActivity, description: e.target.value})} />
+                <input className="table-input" placeholder="Description" value={newActivity.description} onChange={e => setNewActivity({...newActivity, description: e.target.value})} style={{ flex: 1, minWidth: '150px' }} />
                 <button type="submit" className="btn btn-primary">OK</button>
               </form>
             )}
@@ -222,9 +222,9 @@ export function ProspectDetail() {
               </button>
             </div>
             {showFollowUpForm && (
-              <form onSubmit={handleAddFollowUp} style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <form onSubmit={handleAddFollowUp} className="responsive-form-grid" style={{ marginTop: '12px', gap: '8px' }}>
                 {followUpError && (
-                  <div style={{ gridColumn: 'span 2', color: 'var(--color-error)', fontSize: '0.9rem', marginBottom: '4px' }}>
+                  <div style={{ gridColumn: '1 / -1', color: 'var(--color-error)', fontSize: '0.9rem', marginBottom: '4px' }}>
                     {followUpError}
                   </div>
                 )}
@@ -237,7 +237,7 @@ export function ProspectDetail() {
                   <option value="Urgente">Urgente</option>
                 </select>
                 <input className="table-input" placeholder="Observation" value={newFollowUp.observation} onChange={e => setNewFollowUp({...newFollowUp, observation: e.target.value})} />
-                <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
                   <button type="submit" className="btn btn-primary">Planifier</button>
                 </div>
               </form>

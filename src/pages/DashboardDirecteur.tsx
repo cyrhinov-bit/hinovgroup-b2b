@@ -102,7 +102,7 @@ export function DashboardDirecteur() {
       <div className="card">
         <h3>Activité récente</h3>
         <div className="table-responsive">
-<table className="data-table">
+<table className="data-table responsive-table">
           <thead>
             <tr>
               <th>Client</th>
@@ -115,11 +115,11 @@ export function DashboardDirecteur() {
           <tbody>
             {recentQuotes.map(q => (
               <tr key={q.id}>
-                <td>{getClientName(q.clientId)}</td>
-                <td>{q.subject}</td>
-                <td>{q.subtotal.toLocaleString('fr-FR')} FCFA</td>
-                <td><span className={`badge-status ${getBadgeColor(q.status)}`}>{q.status}</span></td>
-                <td>{q.date}</td>
+                <td data-label="Client">{getClientName(q.clientId)}</td>
+                <td data-label="Sujet">{q.subject}</td>
+                <td data-label="Montant">{q.subtotal.toLocaleString('fr-FR')} FCFA</td>
+                <td data-label="Statut"><span className={`badge-status ${getBadgeColor(q.status)}`}>{q.status}</span></td>
+                <td data-label="Date">{q.date}</td>
               </tr>
             ))}
             {recentQuotes.length === 0 && (
@@ -137,7 +137,7 @@ export function DashboardDirecteur() {
         </p>
         {overdueInstallments.length > 0 && (
           <div className="table-responsive">
-<table className="data-table">
+<table className="data-table responsive-table">
             <thead>
               <tr>
                 <th>Client</th>
@@ -150,11 +150,11 @@ export function DashboardDirecteur() {
             <tbody>
               {overdueInstallments.map(i => (
                 <tr key={i.id}>
-                  <td>{getClientName(sales.find(s => s.id === i.saleId)?.clientId || '')}</td>
-                  <td>{getSaleNumber(i.saleId)}</td>
-                  <td>{new Date(i.dueDate + 'T00:00:00').toLocaleDateString('fr-FR')}</td>
-                  <td><span className="badge-status bg-error">{daysLate(i.dueDate)} j</span></td>
-                  <td>{Math.max(0, i.amount - i.paidAmount).toLocaleString('fr-FR')} FCFA</td>
+                  <td data-label="Client">{getClientName(sales.find(s => s.id === i.saleId)?.clientId || '')}</td>
+                  <td data-label="Vente">{getSaleNumber(i.saleId)}</td>
+                  <td data-label="Échéance le">{new Date(i.dueDate + 'T00:00:00').toLocaleDateString('fr-FR')}</td>
+                  <td data-label="Retard"><span className="badge-status bg-error">{daysLate(i.dueDate)} j</span></td>
+                  <td data-label="Restant">{Math.max(0, i.amount - i.paidAmount).toLocaleString('fr-FR')} FCFA</td>
                 </tr>
               ))}
             </tbody>

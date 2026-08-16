@@ -46,6 +46,8 @@
   --color-success-strong: #166534;
   --color-warning-strong: #c2410c;
   --color-error-strong: #991b1b;
+  --color-info-strong: #0e7490;
+  --color-secondary-strong: #9a5a14;
 }
 
 * {
@@ -323,11 +325,61 @@ a:hover {
 }
 
 .badge-status {
-  padding: 4px 12px;
-  border-radius: 12px;
+  padding: 6px 14px;
+  border-radius: 20px;
   font-size: 0.75rem;
-  font-weight: 600;
-  color: white;
+  font-weight: 700;
   display: inline-block;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.badge-status.bg-success { background-color: var(--color-success-tint) !important; color: var(--color-success-strong) !important; }
+.badge-status.bg-error { background-color: var(--color-error-tint) !important; color: var(--color-error-strong) !important; }
+.badge-status.bg-warning { background-color: var(--color-warning-tint) !important; color: var(--color-warning-strong) !important; }
+.badge-status.bg-primary { background-color: var(--color-primary-tint) !important; color: var(--color-primary-strong) !important; }
+.badge-status.bg-info { background-color: var(--color-info-tint) !important; color: var(--color-info-strong) !important; }
+.badge-status.bg-secondary { background-color: var(--color-secondary-tint) !important; color: var(--color-secondary-strong) !important; }
+
+
+@media (max-width: 768px) {
+  .table-responsive {
+    overflow-x: visible !important;
+  }
+  .table-responsive table {
+    min-width: 0 !important;
+  }
+  .responsive-table, .responsive-table tbody, .responsive-table tr, .responsive-table td {
+    display: block;
+    width: 100%;
+  }
+  .responsive-table thead {
+    display: none;
+  }
+  .responsive-table tr {
+    margin-bottom: var(--spacing-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    padding: var(--spacing-3);
+  }
+  .responsive-table td {
+    border: none !important;
+    padding: var(--spacing-1) 0 !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    text-align: right !important;
+  }
+  .responsive-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    text-align: left;
+    margin-right: var(--spacing-3);
+  }
 }
 

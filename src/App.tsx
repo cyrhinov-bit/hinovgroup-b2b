@@ -23,6 +23,7 @@ import { Documents } from './pages/Documents';
 import { MonRapportActivite } from './pages/MonRapportActivite';
 import { MonRapportHebdo } from './pages/MonRapportHebdo';
 import { MonRapportProspection } from './pages/MonRapportProspection';
+import { ReportsHistory } from './features/reports/presentation/pages/ReportsHistory';
 import { Utilisateurs } from './pages/Utilisateurs';
 import { Rapports } from './pages/Rapports';
 import { Parametres } from './pages/Parametres';
@@ -166,6 +167,8 @@ function App() {
                     <Route path="rapport-activite" element={<MonRapportActivite />} />
                     <Route path="rapport-hebdo" element={<MonRapportHebdo />} />
                     <Route path="rapport-prospection" element={<MonRapportProspection />} />
+                    
+                    <Route path="mes-rapports" element={<ReportsHistory />} />
                     <Route path="parametres" element={<Parametres />} />
 
                     {/* Commercial routes */}
@@ -177,6 +180,8 @@ function App() {
                     <Route path="commercial/rapport-activite" element={<MonRapportActivite />} />
                     <Route path="commercial/rapport-hebdo" element={<MonRapportHebdo />} />
                     <Route path="commercial/rapport-prospection" element={<MonRapportProspection />} />
+                    
+                    <Route path="commercial/mes-rapports" element={<ReportsHistory />} />
 
                     {/* POS routes */}
                     <Route path="pos" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><DashboardPos /></Suspense>} />
