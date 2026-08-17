@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Search, Trash2, Plus, Minus, Clock } from 'lucide-react';
+import { Search, Trash2, Plus, Minus, Clock, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { barcodeScannerService } from '../../features/products/services/BarcodeScannerService';
 import ProductImage from '../../features/products/images/ProductImage';
@@ -15,6 +16,7 @@ import { platform } from '../../platform';
 interface CartItem { id: string; productId: string; name: string; reference: string; unitPrice: number; quantity: number; discountType: 'none' | 'percent' | 'amount'; discountPercent: number; discountAmount: number; total: number; }
 
 export default function PosTerminal() {
+  const navigate = useNavigate();
   const { posProducts, posSettings, posCashSessions, addPosTransaction, addPosCashSession, suspendedCarts, addSuspendedCart, removeSuspendedCart, settings: crmSettings } = useAppContext();
   const { currentUser } = useAuth();
   const [search, setSearch] = useState('');
@@ -345,8 +347,11 @@ export default function PosTerminal() {
       <div className="pos-terminal-container" style={{ display: 'flex', height: 'calc(100vh - 120px)', gap: '16px', padding: '0 24px 24px' }}>
         {/* Left: Product catalog */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'white', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border)' }}>
-          <div style={{ position: 'relative' }}>
+        <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border)', display: 'flex', gap: '12px' }}>
+          <button onClick={() => navigate('/pos')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer', color: 'var(--color-text)' }} title="Retour au tableau de bord">
+            <ArrowLeft size={18} />
+          </button>
+          <div style={{ position: 'relative', flex: 1 }}>
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
             <input 
               autoFocus 

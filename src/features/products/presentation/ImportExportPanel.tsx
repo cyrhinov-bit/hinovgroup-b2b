@@ -74,8 +74,12 @@ export default function ImportExportPanel() {
         importAnalysis.items,
         async (product: PosProduct, mode: 'create' | 'update') => {
           if (mode === 'create') {
-            await addPosProduct(product);
-            await addPosStockEntry(stockService.createStockEntryForImport(product));
+            const initialQuantity = product.quantity || 0;
+            // On initialise le produit à 0, la quantité sera apportée par l'entrée de stock
+            await addPosProduct({ ...product, quantity: 0 });
+            if (initialQuantity > 0) {
+              await addPosStockEntry(stockService.createStockEntryForImport({ ...product, quantity: initialQuantity }));
+            }
           } else {
             await updatePosProduct(product.id, product);
           }

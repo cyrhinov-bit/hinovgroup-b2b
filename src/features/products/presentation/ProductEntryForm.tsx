@@ -13,6 +13,7 @@ interface ProductFormData {
   purchasePrice: number | '';
   quantity: number | '';
   sellingPrice: number | '';
+  family: 'Livre' | 'Fourniture';
 }
 
 interface AutoCalculations {
@@ -39,6 +40,7 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
     purchasePrice: initialProduct?.purchasePrice || 0,
     quantity: initialProduct?.quantity || 0,
     sellingPrice: initialProduct?.sellingPrice || 0,
+    family: initialProduct?.family || 'Fourniture',
   });
   const [calc, setCalc] = useState<AutoCalculations>({
     totalPurchase: 0,
@@ -94,6 +96,7 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
         purchasePrice: Number(formData.purchasePrice) || 0,
         sellingPrice: Number(formData.sellingPrice) || 0,
         quantity: Number(formData.quantity) || 0,
+        family: formData.family,
       });
 
       if (imageDataUri) {
@@ -104,6 +107,8 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
     } else {
       // Create mode
       const id = crypto.randomUUID();
+
+      const initialQuantity = Number(formData.quantity) || 0;
 
       const newProduct: PosProduct = {
         id,
@@ -116,10 +121,11 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
         supplierId: '',
         purchasePrice: Number(formData.purchasePrice) || 0,
         sellingPrice: Number(formData.sellingPrice) || 0,
-        quantity: Number(formData.quantity) || 0,
+        quantity: 0, // Initialisé à 0, la quantité sera ajustée par l'entrée de stock
         minStock: 0,
         imageUrl: '',
         isActive: true,
+        family: formData.family,
       };
 
       await addPosProduct(newProduct);
@@ -128,11 +134,14 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
         await setProductImage(newProduct, imageDataUri);
       }
 
-      const stockEntry = stockService.createStockEntryForManualAdd({
-        ...newProduct,
-        id: crypto.randomUUID()
-      });
-      await addPosStockEntry(stockEntry);
+      if (initialQuantity > 0) {
+        // Crée l'entrée de stock avec la quantité initiale sans écraser l'ID du produit
+        const stockEntry = stockService.createStockEntryForManualAdd({
+          ...newProduct,
+          quantity: initialQuantity
+        });
+        await addPosStockEntry(stockEntry);
+      }
 
       if (resetAfter) {
         setFormData({
@@ -143,6 +152,7 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
           purchasePrice: 0,
           quantity: 0,
           sellingPrice: 0,
+          family: 'Fourniture',
         });
         setCalc({ totalPurchase: 0, totalSelling: 0, margin: 0, stockValue: 0 });
         setScanResult(null);
@@ -195,6 +205,20 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
                 value={formData.reference}
                 onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
               />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
+                Famille *
+              </label>
+              <select
+                className="table-input"
+                value={formData.family}
+                onChange={(e) => setFormData({ ...formData, family: e.target.value as 'Livre' | 'Fourniture' })}
+                required
+              >
+                <option value="Livre">Livre</option>
+                <option value="Fourniture">Fourniture</option>
+              </select>
             </div>
           </div>
 
@@ -370,6 +394,7 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
                     purchasePrice: 0,
                     quantity: 0,
                     sellingPrice: 0,
+                    family: 'Fourniture',
                   });
                   setCalc({ totalPurchase: 0, totalSelling: 0, margin: 0, stockValue: 0 });
                 }

@@ -20,7 +20,18 @@ const mergeData = <T extends { id: string }>(oldData: T[] | null | undefined, ne
   return Array.from(map.values());
 };
 
-export interface User { id: string; name: string; email: string; role: 'SuperAdmin' | 'Directeur' | 'Responsable' | 'Commercial' | 'Gerant' | 'Caissier'; serviceId?: string; pin: string; lastLogin: string; active: boolean; photo?: string; posReturnsEnabled?: boolean;
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: 'Directeur' | 'Responsable' | 'Commercial' | 'Caissier' | 'Gerant' | 'SuperAdmin';
+  posRole?: 'Directeur' | 'Gerant' | 'Caissier' | null;
+  serviceId?: string;
+  pin: string;
+  lastLogin?: string;
+  active?: boolean;
+  photo?: string;
+  posReturnsEnabled?: boolean;
   posCatalogueEnabled?: boolean;
   posSupplyEnabled?: boolean;
   posInventoryEnabled?: boolean;
@@ -88,11 +99,22 @@ export interface CrmDocument {
   createdAt: string;
 }
 
+export interface AppNotification {
+  id: string;
+  user_id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  is_read: boolean;
+  link?: string;
+  created_at: string;
+}
+
 export interface PosSettings { libraryName: string; address: string; phone: string; email: string; currency: string; ticketMessage: string; printerType: string; }
 export interface PosWorkspace { active: boolean; }
 
 interface AppState {
-  users: User[]; clients: Client[]; quotes: Quote[]; sales: Sale[]; commissions: Commission[]; installments: Installment[]; prospects: Prospect[]; prospectActivities: ProspectActivity[]; prospectFollowUps: ProspectFollowUp[]; categories: Category[]; settings: AppSettings; services: Service[]; prestations: Prestation[]; loading: boolean; activityReports: ActivityReport[]; weeklyReports: WeeklyReport[]; crmDocuments: CrmDocument[]; v2DailyReports: V2DailyReport[]; v2WeeklyReports: V2WeeklyReport[];
+  users: User[]; clients: Client[]; quotes: Quote[]; sales: Sale[]; commissions: Commission[]; installments: Installment[]; prospects: Prospect[]; prospectActivities: ProspectActivity[]; prospectFollowUps: ProspectFollowUp[]; categories: Category[]; settings: AppSettings; services: Service[]; prestations: Prestation[]; loading: boolean; activityReports: ActivityReport[]; weeklyReports: WeeklyReport[]; crmDocuments: CrmDocument[]; v2DailyReports: V2DailyReport[]; v2WeeklyReports: V2WeeklyReport[]; notifications: AppNotification[];
   // POS
   posCategories: PosCategory[]; posBrands: PosBrand[]; posSuppliers: PosSupplier[]; posProducts: PosProduct[];
   posStockEntries: PosStockEntry[]; posInventories: PosInventory[]; posCashSessions: PosCashSession[];
@@ -133,6 +155,8 @@ interface AppState {
   saveWeeklyReport: (report: WeeklyReport) => Promise<void>;
   markWeeklyReportSent: (id: string) => Promise<void>;
   markWeeklyReportRead: (id: string) => Promise<void>;
+  markNotificationAsRead: (id: string) => Promise<void>;
+  markAllNotificationsAsRead: () => Promise<void>;
   saveV2DailyReport: (report: V2DailyReport) => Promise<void>;
   saveV2WeeklyReport: (report: V2WeeklyReport) => Promise<void>;
   updateMyProfile: (data: Partial<Pick<User, 'photo' | 'name'>>) => Promise<void>;
@@ -143,7 +167,7 @@ interface AppState {
   deleteCategory: (id: string) => Promise<void>;
   updateSettings: (settings: AppSettings) => Promise<void>;
   addUser: (user: User) => Promise<void>;
-  updateUser: (id: string, data: Pick<User, 'name' | 'role' | 'serviceId' | 'posReturnsEnabled' | 'posCatalogueEnabled' | 'posSupplyEnabled' | 'posInventoryEnabled' | 'posStockEnabled'>) => Promise<void>;
+  updateUser: (id: string, data: Pick<User, 'name' | 'role' | 'posRole' | 'serviceId' | 'posReturnsEnabled' | 'posCatalogueEnabled' | 'posSupplyEnabled' | 'posInventoryEnabled' | 'posStockEnabled'>) => Promise<void>;
   toggleUserStatus: (id: string) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   addPrestation: (prestation: Prestation) => Promise<void>;
@@ -220,6 +244,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [weeklyReports, setWeeklyReports] = useState<WeeklyReport[]>([]);
   const [v2DailyReports, setV2DailyReports] = useState<V2DailyReport[]>([]);
   const [v2WeeklyReports, setV2WeeklyReports] = useState<V2WeeklyReport[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [crmDocuments, setCrmDocuments] = useState<CrmDocument[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -264,6 +289,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const cachedV2DailyReports = await db.v2DailyReports.getItem<V2DailyReport[]>('data');
       const cachedV2WeeklyReports = await db.v2WeeklyReports.getItem<V2WeeklyReport[]>('data');
       const cachedCrmDocuments = await db.documents.getItem<CrmDocument[]>('data');
+      const cachedNotifications = await db.notifications.getItem<AppNotification[]>('data');
       const cachedCategories = await db.categories.getItem<Category[]>('data');
       const cachedServices = await db.services.getItem<Service[]>('data');
       const cachedPrestations = await db.prestations.getItem<Prestation[]>('data');
@@ -297,6 +323,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (cachedWeeklyReports) setWeeklyReports(cachedWeeklyReports);
       if (cachedV2DailyReports) setV2DailyReports(cachedV2DailyReports);
       if (cachedV2WeeklyReports) setV2WeeklyReports(cachedV2WeeklyReports);
+      if (cachedNotifications) setNotifications(cachedNotifications);
       if (cachedCrmDocuments) setCrmDocuments(cachedCrmDocuments);
       if (cachedCategories) setCategories(cachedCategories);
       if (cachedServices) setServices(cachedServices);
@@ -305,7 +332,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (cachedPosCategories) setPosCategories(cachedPosCategories);
       if (cachedPosBrands) setPosBrands(cachedPosBrands);
       if (cachedPosSuppliers) setPosSuppliers(cachedPosSuppliers);
-      if (cachedPosProducts) setPosProducts(cachedPosProducts);
+      if (cachedPosProducts) setPosProducts(prev => prev.length > 0 ? prev : cachedPosProducts);
       if (cachedPosStockEntries) setPosStockEntries(cachedPosStockEntries);
       if (cachedPosStockMovements) setPosStockMovements(cachedPosStockMovements);
       if (cachedPosInventories) setPosInventories(cachedPosInventories);
@@ -367,7 +394,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           posCategoriesData, posBrandsData, posSuppliersData,
           posProductsData, posStockEntriesData, posStockMovementsData, posInventoriesData,
           posCashSessionsData, posTransactionsData, posPaymentsData,
-          posDiscountsData, posSettingsData, crmDocumentsData
+          posDiscountsData, posSettingsData, crmDocumentsData, notificationsData
         ] = await Promise.all([
           safeFetch(() => supabase.from('profiles').select('*')),
           safeFetch(() => supabase.from('clients').select('*')),
@@ -399,6 +426,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           safeFetch(() => supabase.from('pos_discounts').select('*')),
           safeFetch(() => supabase.from('pos_settings').select('*').single()),
           safeFetch(() => supabase.from('crm_documents').select('*')),
+          safeFetch(() => supabase.from('notifications').select('*')),
         ]);
 
         if (profilesData && profilesData.length > 0) {
@@ -417,6 +445,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             posSupplyEnabled: p.pos_supply_enabled === true,
             posInventoryEnabled: p.pos_inventory_enabled === true,
             posStockEnabled: p.pos_stock_enabled === true,
+            posRole: p.pos_role || null
           }));
           const mergedUsers = mergeData(cachedUsers, parsedUsers);
           setUsers(mergedUsers); await db.profiles.setItem('data', mergedUsers);
@@ -432,8 +461,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             uploaderId: d.uploader_id,
             createdAt: d.created_at
           }));
-          const merged = mergeData(cachedCrmDocuments, parsedCrmDocuments);
-          setCrmDocuments(merged); await db.documents.setItem('data', merged);
+          const mergedCrmDocuments = mergeData(cachedCrmDocuments, parsedCrmDocuments);
+          setCrmDocuments(mergedCrmDocuments); await db.documents.setItem('data', mergedCrmDocuments);
+        }
+
+        if (notificationsData && notificationsData.length > 0) {
+          const mergedNotifications = mergeData(cachedNotifications, notificationsData);
+          setNotifications(mergedNotifications); await db.notifications.setItem('data', mergedNotifications);
         }
 
         if (clientsData && clientsData.length > 0) {
@@ -593,8 +627,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             minStock: p.min_stock, imageUrl: p.image_url, description: p.description,
             status: p.status || 'Active', isActive: p.is_active !== false, unit: p.unit, createdAt: p.created_at, updatedAt: p.updated_at
           }));
-          const merged = mergeData(cachedPosProducts, parsed);
-          setPosProducts(merged); await db.posProducts.setItem('data', merged);
+          setPosProducts(prev => {
+            const merged = mergeData(prev, parsed);
+            void db.posProducts.setItem('data', merged);
+            return merged;
+          });
         }
         if (posStockEntriesData && posStockEntriesData.length > 0) {
           const parsed = posStockEntriesData.map((e: any) => ({
@@ -1801,6 +1838,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           pin: user.pin,
           name: user.name,
           role: user.role,
+          posRole: user.posRole || null,
           serviceId: user.serviceId || null,
           posReturnsEnabled: user.posReturnsEnabled,
           posCatalogueEnabled: user.posCatalogueEnabled
@@ -1826,14 +1864,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       lastLogin: 'Jamais',
       active: true,
       posReturnsEnabled: user.posReturnsEnabled,
-      posCatalogueEnabled: user.posCatalogueEnabled
+      posCatalogueEnabled: user.posCatalogueEnabled,
+      posRole: user.posRole || null
     };
     const newUsers = [...users, newUser];
     setUsers(newUsers);
     await db.profiles.setItem('data', newUsers);
   };
 
-  const updateUser = async (id: string, data: Pick<User, 'name' | 'role' | 'serviceId' | 'posReturnsEnabled' | 'posCatalogueEnabled' | 'posSupplyEnabled' | 'posInventoryEnabled' | 'posStockEnabled'>) => {
+  const updateUser = async (id: string, data: Pick<User, 'name' | 'role' | 'posRole' | 'serviceId' | 'posReturnsEnabled' | 'posCatalogueEnabled' | 'posSupplyEnabled' | 'posInventoryEnabled' | 'posStockEnabled'>) => {
     const newUsers = users.map(u => u.id === id ? { ...u, ...data } : u);
     setUsers(newUsers);
     await db.profiles.setItem('data', newUsers);
@@ -1908,6 +1947,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('DELETE_DOCUMENT', { id, filePath: doc.filePath });
   };
 
+  const markNotificationAsRead = async (id: string) => {
+    const target = notifications.find(n => n.id === id);
+    if (!target || target.is_read) return;
+    const newNotifications = notifications.map(n => n.id === id ? { ...n, is_read: true } : n);
+    setNotifications(newNotifications);
+    await db.notifications.setItem('data', newNotifications);
+    await queueSyncAction('MARK_NOTIFICATION_READ', { id });
+  };
+
+  const markAllNotificationsAsRead = async () => {
+    if (!currentUser) return;
+    let changed = false;
+    const newNotifications = notifications.map(n => {
+      if (n.user_id === currentUser.id && !n.is_read) {
+        changed = true;
+        return { ...n, is_read: true };
+      }
+      return n;
+    });
+    if (!changed) return;
+    setNotifications(newNotifications);
+    await db.notifications.setItem('data', newNotifications);
+    await queueSyncAction('MARK_ALL_NOTIFICATIONS_READ', { user_id: currentUser.id });
+  };
+
   const downloadCrmDocument = async (doc: CrmDocument) => {
     let blob = await db.documentFiles.getItem<Blob>(doc.id);
     if (!blob) {
@@ -1935,7 +1999,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AppContext.Provider value={{ users, clients, quotes, sales, commissions, installments, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, crmDocuments, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, saveV2DailyReport, saveV2WeeklyReport, updateMyProfile, addCrmDocument, deleteCrmDocument, downloadCrmDocument, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData }}>
+    <AppContext.Provider value={{ users, clients, quotes, sales, commissions, installments, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, updateMyProfile, addCrmDocument, deleteCrmDocument, downloadCrmDocument, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData }}>
       {children}
     </AppContext.Provider>
   );

@@ -7,7 +7,7 @@ import './Topbar.css';
 
 export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
   const { currentUser, logout, updatePin } = useAuth();
-  const { posWorkspace, setPosWorkspace, updateMyProfile } = useAppContext();
+  const { posWorkspace, setPosWorkspace, updateMyProfile, notifications, markNotificationAsRead, markAllNotificationsAsRead } = useAppContext();
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -105,7 +105,7 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
             <Menu />
           </button>
           <span className="brand-name">{posWorkspace.active ? 'HINOV POS' : 'HINOV BUSINESS SUITE'}</span>
-          {currentUser?.role === 'Directeur' && (
+          {(currentUser?.role === 'Directeur' || currentUser?.posRole != null) && (
             <button
               onClick={() => {
                 const newActive = !posWorkspace.active;
@@ -123,51 +123,71 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
               {posWorkspace.active ? 'Retour CRM' : 'Ouvrir POS'}
             </button>
           )}
+
+          {currentUser?.role === 'SuperAdmin' && (
+            <button
+              onClick={() => {
+                const isComm = location.pathname.startsWith('/commercial');
+                navigate(isComm ? '/utilisateurs' : '/commercial');
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px',
+                marginLeft: '12px', borderRadius: '6px', border: '1px solid var(--color-border)',
+                backgroundColor: location.pathname.startsWith('/commercial') ? '#2196F3' : 'var(--color-primary)',
+                color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: 500
+              }}
+            >
+              <ArrowLeftRight size={14} />
+              {location.pathname.startsWith('/commercial') ? 'Retour Admin' : 'Ouvrir Espace Commercial'}
+            </button>
+          )}
         </div>
 
         <div className="topbar-right">
           <div className="profile-wrapper" ref={notifRef} style={{ marginRight: '16px' }}>
             <button className="icon-button notification-btn" onClick={() => setShowNotifications(p => !p)}>
               <Bell />
-              <span className="badge">3</span>
+              {(() => {
+                const unreadCount = notifications.filter(n => n.user_id === currentUser?.id && !n.is_read).length;
+                return unreadCount > 0 ? <span className="badge">{unreadCount}</span> : null;
+              })()}
             </button>
 
-            {showNotifications && (
+            {showNotifications && (() => {
+              const userNotifications = notifications.filter(n => n.user_id === currentUser?.id).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+              const unreadCount = userNotifications.filter(n => !n.is_read).length;
+
+              return (
               <div className="profile-dropdown" style={{ right: '-10px', minWidth: '320px', padding: '0' }}>
                 <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: 'bold' }}>Notifications</span>
-                  <span className="badge-status bg-primary" style={{ padding: '2px 8px', fontSize: '0.7rem' }}>3 nouvelles</span>
+                  <span className="badge-status bg-primary" style={{ padding: '2px 8px', fontSize: '0.7rem' }}>{unreadCount} {unreadCount > 1 ? 'nouvelles' : 'nouvelle'}</span>
                 </div>
                 <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
-                  <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border)', cursor: 'pointer' }} onClick={() => setShowNotifications(false)}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Nouveau prospect assigné</span>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--color-primary)' }}>Il y a 5 min</span>
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Un nouveau prospect a été assigné à votre équipe.</div>
-                  </div>
-                  <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border)', cursor: 'pointer' }} onClick={() => setShowNotifications(false)}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Objectif atteint</span>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--color-primary)' }}>Il y a 2h</span>
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Félicitations, vous avez atteint votre objectif de ventes mensuel !</div>
-                  </div>
-                  <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border)', cursor: 'pointer' }} onClick={() => setShowNotifications(false)}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Mise à jour système</span>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--color-primary)' }}>Hier</span>
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>L'application a été mise à jour avec de nouvelles fonctionnalités.</div>
-                  </div>
+                  {userNotifications.length === 0 ? (
+                    <div style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Aucune notification.</div>
+                  ) : (
+                    userNotifications.map(n => (
+                      <div key={n.id} style={{ padding: '16px', borderBottom: '1px solid var(--color-border)', cursor: 'pointer', backgroundColor: n.is_read ? 'transparent' : 'var(--color-surface)' }} onClick={() => { markNotificationAsRead(n.id); if (n.link) navigate(n.link); setShowNotifications(false); }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: n.type === 'error' ? 'var(--color-danger)' : n.type === 'success' ? 'var(--color-success)' : 'inherit' }}>{n.title}</span>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--color-primary)' }}>{new Date(n.created_at).toLocaleDateString()}</span>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{n.message}</div>
+                      </div>
+                    ))
+                  )}
                 </div>
-                <div style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid var(--color-border)' }}>
-                  <button className="btn btn-outline" style={{ width: '100%', fontSize: '0.85rem' }} onClick={() => setShowNotifications(false)}>
-                    Tout marquer comme lu
-                  </button>
-                </div>
+                {unreadCount > 0 && (
+                  <div style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid var(--color-border)' }}>
+                    <button className="btn btn-outline" style={{ width: '100%', fontSize: '0.85rem' }} onClick={() => { markAllNotificationsAsRead(); setShowNotifications(false); }}>
+                      Tout marquer comme lu
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
+              );
+            })()}
           </div>
 
           {/* Avatar profil */}

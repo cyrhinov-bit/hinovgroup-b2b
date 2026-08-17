@@ -43,30 +43,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const fetchUserProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-      
-    if (data && !error) {
-      setCurrentUser({
-        id: data.id,
-        name: data.name,
-        email: data.email,
-        role: data.role as User['role'],
-        serviceId: data.service_id,
-        pin: data.pin,
-        lastLogin: data.last_login,
-        active: data.active !== false,
-        photo: data.photo || undefined,
-        posReturnsEnabled: data.pos_returns_enabled === true,
-        posCatalogueEnabled: data.pos_catalogue_enabled === true,
-        posSupplyEnabled: data.pos_supply_enabled === true,
-        posInventoryEnabled: data.pos_inventory_enabled === true,
-        posStockEnabled: data.pos_stock_enabled === true
-      });
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+        
+      if (data && !error) {
+        setCurrentUser({
+          id: data.id,
+          name: data.name,
+          email: data.email,
+          role: data.role as User['role'],
+          serviceId: data.service_id,
+          pin: data.pin,
+          lastLogin: data.last_login,
+          active: data.active !== false,
+          photo: data.photo || undefined,
+          posReturnsEnabled: data.pos_returns_enabled === true,
+          posCatalogueEnabled: data.pos_catalogue_enabled === true,
+          posSupplyEnabled: data.pos_supply_enabled === true,
+          posInventoryEnabled: data.pos_inventory_enabled === true,
+          posStockEnabled: data.pos_stock_enabled === true,
+          posRole: data.pos_role || null
+        });
+        setLoading(false);
+        return;
+      }
+    } catch (err) {
+      console.warn('Erreur réseau lors de la récupération du profil, tentative de chargement depuis le cache...');
     }
+
+    // Fallback: Read from local cache if offline or error
+    try {
+      const { db } = await import('../lib/db');
+      const cachedUsers = await db.profiles.getItem<User[]>('data');
+      if (cachedUsers) {
+        const cachedUser = cachedUsers.find(u => u.id === userId);
+        if (cachedUser) {
+          setCurrentUser(cachedUser);
+        }
+      }
+    } catch (cacheErr) {
+      console.error('Erreur lors de la lecture du cache utilisateur', cacheErr);
+    }
+    
     setLoading(false);
   };
 

@@ -3,6 +3,7 @@ import { Home, Users, Briefcase, FileText, Folder, Shield, PieChart, Settings, U
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAppContext } from '../context/AppContext';
+import { InstallButton } from './InstallButton';
 import './Sidebar.css';
 
 export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; setMobileOpen?: (val: boolean) => void }) {
@@ -35,14 +36,14 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Rapports', icon: PieChart, path: '/rapports', roles: ['Directeur', 'Responsable'] },
     { label: 'Paramètres', icon: Settings, path: '/parametres', roles: ['Directeur'] },
     // Commercial routes
-    { label: 'Dashboard', icon: Home, path: '/commercial', roles: ['Commercial'] },
-    { label: 'Prospects', icon: Target, path: '/commercial/prospects', roles: ['Commercial'] },
-    { label: 'Clients Apportés', icon: Users, path: '/commercial/clients', roles: ['Commercial'] },
-    { label: 'Mes Commissions', icon: Coins, path: '/commercial/commissions', roles: ['Commercial'] },
-    { label: 'Rapport d\'activité', icon: FileText, path: '/commercial/rapport-activite', roles: ['Commercial'] },
-    { label: 'Rapport hebdo', icon: Calendar, path: '/commercial/rapport-hebdo', roles: ['Commercial'] },
-    { label: 'Rapport de prospection', icon: FileText, path: '/commercial/rapport-prospection', roles: ['Commercial'] },
-    { label: 'Historique Rapports', icon: FileText, path: '/commercial/mes-rapports', roles: ['Commercial'] },
+    { label: 'Dashboard', icon: Home, path: '/commercial', roles: ['Commercial', 'SuperAdmin'] as any },
+    { label: 'Prospects', icon: Target, path: '/commercial/prospects', roles: ['Commercial', 'SuperAdmin'] as any },
+    { label: 'Clients Apportés', icon: Users, path: '/commercial/clients', roles: ['Commercial', 'SuperAdmin'] as any },
+    { label: 'Mes Commissions', icon: Coins, path: '/commercial/commissions', roles: ['Commercial', 'SuperAdmin'] as any },
+    { label: 'Rapport d\'activité', icon: FileText, path: '/commercial/rapport-activite', roles: ['Commercial', 'SuperAdmin'] as any },
+    { label: 'Rapport hebdo', icon: Calendar, path: '/commercial/rapport-hebdo', roles: ['Commercial', 'SuperAdmin'] as any },
+    { label: 'Rapport de prospection', icon: FileText, path: '/commercial/rapport-prospection', roles: ['Commercial', 'SuperAdmin'] as any },
+    { label: 'Historique Rapports', icon: FileText, path: '/commercial/mes-rapports', roles: ['Commercial', 'SuperAdmin'] as any },
   ];
 
   // POS nav items
@@ -77,9 +78,19 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
   // Filtrer les éléments selon le rôle de l'utilisateur connecté et ses permissions
   const visibleNavItems = navItems.filter(item => {
     if (!currentUser) return false;
-    if (!item.roles.includes(currentUser.role as any)) return false;
+    const effectiveRole = (isPos && currentUser.posRole) ? currentUser.posRole : currentUser.role;
+    
+    if (!item.roles.includes(effectiveRole as any)) return false;
 
-    if (isPos && currentUser.role === 'Caissier') {
+    // Isoler la vue SuperAdmin entre Admin et Commercial
+    if (currentUser.role === 'SuperAdmin') {
+      const isCommercialSpace = location.pathname.startsWith('/commercial');
+      const isCommercialRoute = item.path.startsWith('/commercial');
+      if (isCommercialSpace && !isCommercialRoute) return false;
+      if (!isCommercialSpace && isCommercialRoute) return false;
+    }
+
+    if (isPos && effectiveRole === 'Caissier') {
       if (item.label === 'Catalogue' && !currentUser.posCatalogueEnabled) return false;
       if (item.label === 'Retours' && !currentUser.posReturnsEnabled) return false;
       if (item.label === 'Approvisionnement' && !currentUser.posSupplyEnabled) return false;
@@ -121,7 +132,8 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
         </ul>
       </nav>
 
-      <div style={{ padding: '16px', marginTop: 'auto', borderTop: '1px solid var(--color-border)' }}>
+      <div style={{ padding: '16px', marginTop: 'auto', borderTop: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <InstallButton />
         <button 
           onClick={handleLogout}
           style={{ 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Save, FileText, Trash2, Percent } from 'lucide-react';
+import { Plus, Save, FileText, Trash2, Percent, ArrowLeft } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -121,7 +121,12 @@ export function QuoteCreation() {
   return (
     <div className="quote-creation">
       <div className="page-header">
-        <h2>{sourceQuote ? `Modifier le devis ${sourceQuote.quoteNumber}` : 'Créer un nouveau devis'}</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <button className="btn btn-outline" onClick={() => navigate(-1)} style={{ padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Retour">
+            <ArrowLeft size={18} />
+          </button>
+          <h2>{sourceQuote ? `Modifier le devis ${sourceQuote.quoteNumber}` : 'Créer un nouveau devis'}</h2>
+        </div>
       </div>
 
       <div className="card form-card">

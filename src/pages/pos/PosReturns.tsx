@@ -2,8 +2,8 @@ import { useEffect, useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
-import { useLocation } from 'react-router-dom';
-import { Search, Plus, RotateCcw, Eye, X, XCircle, Trash2, ArrowLeftRight, CheckCircle2, ShieldAlert, Banknote, ListRestart } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Search, Plus, RotateCcw, Eye, X, XCircle, Trash2, ArrowLeftRight, CheckCircle2, ShieldAlert, Banknote, ListRestart, ArrowLeft } from 'lucide-react';
 import type { ExchangeLine } from '../../context/AppContext';
 
 interface ReturnLine {
@@ -22,6 +22,7 @@ export default function PosReturns() {
   const openSession = posCashSessions.find(s => s.status === 'Ouverte' && s.cashierId === currentUser?.id);
   const { confirm } = useConfirm();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<string>('Tous');
@@ -307,14 +308,19 @@ export default function PosReturns() {
       
       {/* HEADER */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <RotateCcw size={24} color="var(--color-primary)" />
-            Retours & Échanges
-          </h1>
-          <p style={{ color: 'var(--color-text-muted)', marginTop: '4px', fontSize: '14px' }}>
-            Gérez les retours clients, remboursements et échanges de produits.
-          </p>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
+          <button onClick={() => navigate('/pos')} style={{ marginTop: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer', color: 'var(--color-text)' }} title="Retour au tableau de bord">
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h1 style={{ fontSize: '24px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+              <RotateCcw size={24} color="var(--color-primary)" />
+              Retours & Échanges
+            </h1>
+            <p style={{ color: 'var(--color-text-muted)', marginTop: '4px', fontSize: '14px' }}>
+              Gérez les retours clients, remboursements et échanges de produits.
+            </p>
+          </div>
         </div>
         {canHandleReturns && (
           <button onClick={() => setShowForm(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: 'var(--color-primary)', color: 'white', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer', fontWeight: 500, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>

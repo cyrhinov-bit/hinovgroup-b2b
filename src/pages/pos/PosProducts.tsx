@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Package, Upload, Camera, FileSpreadsheet, Search, Images, Edit } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Package, Upload, Camera, FileSpreadsheet, Search, Images, Edit, ArrowLeft } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import ProductEntryForm from '../../features/products/presentation/ProductEntryForm';
 import ImportExportPanel from '../../features/products/presentation/ImportExportPanel';
@@ -12,6 +12,7 @@ import { useAppContext } from '../../context/AppContext';
 import { useProductImages } from '../../features/products/images/ProductImagesContext';
 
 export default function PosProducts() {
+  const navigate = useNavigate();
   const { posProducts } = useAppContext();
   const { setProductImage } = useProductImages();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -44,13 +45,19 @@ export default function PosProducts() {
   return (
     <div style={{ padding: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 700 }}>Produits</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button onClick={() => navigate('/pos')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer', color: 'var(--color-text)' }} title="Retour">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>Produits</h1>
+        </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => {
                 setActiveTab(tab.id);
+                setSearch('');
                 if (tab.id !== 'new') {
                   setInitialBarcode('');
                   setEditingProduct(null);

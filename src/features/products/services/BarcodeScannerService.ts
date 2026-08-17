@@ -32,13 +32,8 @@ export class BarcodeScannerService {
 
     cleaned = cleaned.split('').map(char => azertyMap[char] || char).join('');
 
-    const numericOnly = cleaned.replace(/[^0-9]/g, '');
-    if (numericOnly.length > 0) {
-      cleaned = numericOnly;
-    } else {
-      cleaned = cleaned.replace(/[^\x20-\x7E]/g, '');
-    }
-    return cleaned;
+    // Remove any non-printable characters but keep alphanumeric
+    return cleaned.replace(/[^\x20-\x7E]/g, '');
   }
 
   startKeyboardListener(): void {
@@ -46,7 +41,7 @@ export class BarcodeScannerService {
 
     this.keydownListener = (e: KeyboardEvent) => {
       const now = Date.now();
-      if (now - this.lastInputTime > 50) {
+      if (now - this.lastInputTime > 250) {
         this.scanBuffer = [];
         this.isScanning = true;
       }

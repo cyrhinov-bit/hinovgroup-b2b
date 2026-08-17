@@ -34,7 +34,8 @@ export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT'
                               'INSERT_PRODUCT_COMPLETION' | 'UPDATE_PRODUCT_COMPLETION' | 'DELETE_PRODUCT_COMPLETION' |
                               'INSERT_IMPORT_SESSION' | 'UPDATE_IMPORT_SESSION' | 'DELETE_IMPORT_SESSION' |
                               'INSERT_IMPORT_ERROR' |
-                              'INSERT_DOCUMENT' | 'DELETE_DOCUMENT';
+                              'INSERT_DOCUMENT' | 'DELETE_DOCUMENT' |
+                              'MARK_NOTIFICATION_READ' | 'MARK_ALL_NOTIFICATIONS_READ';
 
 export interface SyncAction {
   id: string;
@@ -595,6 +596,18 @@ export const processSyncQueue = async () => {
           success = !error;
           break;
         }
+        case 'MARK_NOTIFICATION_READ': {
+          const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', action.payload.id);
+          if (error) console.error('[Sync] MARK_NOTIFICATION_READ échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'MARK_ALL_NOTIFICATIONS_READ': {
+          const { error } = await supabase.from('notifications').update({ is_read: true }).eq('user_id', action.payload.user_id).eq('is_read', false);
+          if (error) console.error('[Sync] MARK_ALL_NOTIFICATIONS_READ échoué :', error.message);
+          success = !error;
+          break;
+        }
         case 'INSERT_PRESTATION': {
           const { error } = await supabase.from('prestations').insert([{
             id: action.payload.id, code: action.payload.code, name: action.payload.name, description: action.payload.description, price: action.payload.price, service_id: action.payload.serviceId, unit: action.payload.unit, cost_price: action.payload.costPrice || 0
@@ -692,8 +705,9 @@ export const processSyncQueue = async () => {
             barcode: action.payload.barcode === '' ? null : action.payload.barcode,
             isbn: action.payload.isbn === '' ? null : action.payload.isbn, 
             name: action.payload.name, family: action.payload.family,
-            category_id: action.payload.categoryId, brand_id: action.payload.brandId,
-            supplier_id: action.payload.supplierId, purchase_price: action.payload.purchasePrice,
+            category_id: action.payload.categoryId === '' ? null : action.payload.categoryId,
+            brand_id: action.payload.brandId === '' ? null : action.payload.brandId,
+            supplier_id: action.payload.supplierId === '' ? null : action.payload.supplierId, purchase_price: action.payload.purchasePrice,
             selling_price: action.payload.sellingPrice, quantity: action.payload.quantity,
             min_stock: action.payload.minStock, image_url: action.payload.imageUrl,
             unit: action.payload.unit, is_active: action.payload.isActive !== false,
@@ -711,9 +725,9 @@ export const processSyncQueue = async () => {
           if (data.isbn !== undefined) mapped.isbn = data.isbn === '' ? null : data.isbn;
           if (data.name !== undefined) mapped.name = data.name;
           if (data.family !== undefined) mapped.family = data.family;
-          if (data.categoryId !== undefined) mapped.category_id = data.categoryId;
-          if (data.brandId !== undefined) mapped.brand_id = data.brandId;
-          if (data.supplierId !== undefined) mapped.supplier_id = data.supplierId;
+          if (data.categoryId !== undefined) mapped.category_id = data.categoryId === '' ? null : data.categoryId;
+          if (data.brandId !== undefined) mapped.brand_id = data.brandId === '' ? null : data.brandId;
+          if (data.supplierId !== undefined) mapped.supplier_id = data.supplierId === '' ? null : data.supplierId;
           if (data.purchasePrice !== undefined) mapped.purchase_price = data.purchasePrice;
           if (data.sellingPrice !== undefined) mapped.selling_price = data.sellingPrice;
           if (data.quantity !== undefined) mapped.quantity = data.quantity;

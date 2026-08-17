@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { buildAppConfig, getPlatformLabel } from '@/shared';
 import { Toaster } from 'react-hot-toast';
@@ -118,7 +118,11 @@ type Role = 'SuperAdmin' | 'Directeur' | 'Responsable' | 'Commercial' | 'Gerant'
 function RequireRole({ roles, children }: { roles: Role[]; children: ReactNode }) {
   const { currentUser } = useAuth();
   if (!currentUser) return <Navigate to="/login" replace />;
-  if (!roles.includes(currentUser.role as Role)) return <Navigate to="/pos" replace />;
+  
+  const hasRole = roles.includes(currentUser.role as Role);
+  const hasPosRole = currentUser.posRole ? roles.includes(currentUser.posRole as Role) : false;
+  
+  if (!hasRole && !hasPosRole) return <Navigate to="/pos" replace />;
   return <>{children}</>;
 }
 
@@ -129,7 +133,7 @@ function App() {
         <ProductImagesProvider>
         <ConfirmProvider>
           <QueryClientProvider client={queryClient}>
-            <BrowserRouter>
+            <HashRouter>
               <Toaster position="top-center" />
               <Routes>
                 <Route path="/login" element={<Login />} />
@@ -209,7 +213,7 @@ function App() {
                   </Route>
                 </Route>
               </Routes>
-            </BrowserRouter>
+            </HashRouter>
           </QueryClientProvider>
         </ConfirmProvider>
         </ProductImagesProvider>

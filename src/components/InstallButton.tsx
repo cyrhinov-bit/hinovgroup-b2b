@@ -11,9 +11,10 @@ export function InstallButton() {
     const isIos = () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
     const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches;
     const isIosStandalone = (window.navigator as any).standalone === true;
+    const isElectron = window.navigator.userAgent.toLowerCase().includes('electron');
 
-    // Déjà installée — on n'affiche pas le bouton
-    if (isStandalone || isIosStandalone) {
+    // Déjà installée ou sur Electron (app bureau) — on n'affiche pas le bouton
+    if (isStandalone || isIosStandalone || isElectron) {
       setInstallState('installed');
       return;
     }

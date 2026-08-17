@@ -1,7 +1,7 @@
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
-import { Search, RotateCcw, XCircle } from 'lucide-react';
+import { Search, RotateCcw, XCircle, ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
@@ -51,7 +51,12 @@ export default function PosTransactions() {
 
   return (
     <div style={{ padding: '24px' }}>
-      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>Historique des Ventes</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+        <button onClick={() => navigate('/pos')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer', color: 'var(--color-text)' }} title="Retour au tableau de bord">
+          <ArrowLeft size={20} />
+        </button>
+        <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>Historique des Ventes</h1>
+      </div>
       <div style={{ marginBottom: '16px', position: 'relative' }}>
         <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
         <input autoFocus style={{ width: '100%', padding: '10px 12px 10px 36px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '14px', outline: 'none' }} placeholder="Rechercher par numéro ou date..." value={search} onChange={e => setSearch(e.target.value)} />

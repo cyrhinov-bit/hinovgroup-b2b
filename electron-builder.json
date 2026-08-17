@@ -24,11 +24,9 @@
     "deleteAppDataOnUninstall": false
   },
   "mac": {
-    "target": ["dmg", "pkg"],
-    "icon": "build/icons/icon.icns"
+    "target": ["dmg", "pkg"]
   },
   "linux": {
-    "target": ["AppImage", "deb"],
-    "icon": "build/icons"
+    "target": ["AppImage", "deb"]
   }
 }

@@ -57,7 +57,7 @@ export class WindowManager {
       show: false,
       autoHideMenuBar: true,
       backgroundColor: '#ffffff',
-      icon: path.join(app.getAppPath(), 'electron/assets/icons/icon.png'),
+      icon: path.join(app.getAppPath(), 'dist/pwa-512x512.png'),
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,

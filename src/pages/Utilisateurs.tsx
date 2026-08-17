@@ -12,8 +12,8 @@ export function Utilisateurs() {
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
-  const [newUser, setNewUser] = useState({ name: '', email: '', role: 'Responsable', serviceId: '', pin: '' });
-  const [editForm, setEditForm] = useState({ name: '', role: 'Responsable' as User['role'], serviceId: '' });
+  const [newUser, setNewUser] = useState({ name: '', email: '', role: 'Responsable', posRole: '', serviceId: '', pin: '' });
+  const [editForm, setEditForm] = useState({ name: '', role: 'Responsable' as User['role'], posRole: '' as User['posRole'] | '', serviceId: '' });
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,18 +26,19 @@ export function Utilisateurs() {
       name: newUser.name,
       email: newUser.email,
       role: newUser.role as User['role'],
+      posRole: newUser.posRole ? (newUser.posRole as User['posRole']) : null,
       serviceId: newUser.serviceId,
       pin: newUser.pin,
       lastLogin: 'Jamais',
       active: true,
     });
     setShowForm(false);
-    setNewUser({ name: '', email: '', role: 'Responsable', serviceId: '', pin: '' });
+    setNewUser({ name: '', email: '', role: 'Responsable', posRole: '', serviceId: '', pin: '' });
   };
 
   const startEdit = (u: User) => {
     setEditingUser(u);
-    setEditForm({ name: u.name, role: u.role, serviceId: u.serviceId || '' });
+    setEditForm({ name: u.name, role: u.role, posRole: u.posRole || '', serviceId: u.serviceId || '' });
   };
 
   const handleSaveEdit = (e: React.FormEvent) => {
@@ -46,6 +47,7 @@ export function Utilisateurs() {
     updateUser(editingUser.id, {
       name: editForm.name,
       role: editForm.role,
+      posRole: editForm.posRole ? (editForm.posRole as User['posRole']) : null,
       serviceId: editForm.serviceId,
     });
     setEditingUser(null);
@@ -114,6 +116,18 @@ export function Utilisateurs() {
               </select>
             </div>
 
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Rôle POS secondaire (Optionnel)</label>
+              <select className="table-input" value={newUser.posRole} onChange={e => setNewUser({ ...newUser, posRole: e.target.value })}>
+                <option value="">Aucun</option>
+                <option value="Caissier">Caissier</option>
+                <option value="Gerant">Gérant</option>
+                {currentUser?.role === 'SuperAdmin' && (
+                  <option value="Directeur">Directeur</option>
+                )}
+              </select>
+            </div>
+
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Service</label>
               <select className="table-input" value={newUser.serviceId || ''} onChange={e => setNewUser({ ...newUser, serviceId: e.target.value })}>
@@ -146,6 +160,18 @@ export function Utilisateurs() {
                 <option value="Gerant">Gérant</option>
                 <option value="Commercial">Commercial</option>
                 <option value="Responsable">Responsable</option>
+                {currentUser?.role === 'SuperAdmin' && (
+                  <option value="Directeur">Directeur</option>
+                )}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Rôle POS secondaire (Optionnel)</label>
+              <select className="table-input" value={editForm.posRole || ''} onChange={e => setEditForm({ ...editForm, posRole: e.target.value as any })}>
+                <option value="">Aucun</option>
+                <option value="Caissier">Caissier</option>
+                <option value="Gerant">Gérant</option>
                 {currentUser?.role === 'SuperAdmin' && (
                   <option value="Directeur">Directeur</option>
                 )}

@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import type { PosInventory as IPosInventory } from '../../context/AppContext';
-import { Plus, Eye, X, Search } from 'lucide-react';
+import { Plus, Eye, X, Search, Trash2, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { todayLocalKey } from '../../lib/dates';
 
 export default function PosInventory() {
-  const { posProducts, posInventories, addPosInventory } = useAppContext();
+  const navigate = useNavigate();
+  const { posProducts, posInventories, addPosInventory, deletePosInventory } = useAppContext();
   const [showForm, setShowForm] = useState(false);
   const [viewingInventory, setViewingInventory] = useState<IPosInventory | null>(null);
   const [productSearch, setProductSearch] = useState('');
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; inventoryId: string | null }>({ isOpen: false, inventoryId: null });
   const [form, setForm] = useState({ notes: '', lines: posProducts.map(p => ({ id: uuidv4(), productId: p.id, expectedQty: p.quantity, countedQty: p.quantity, difference: 0 })) });
 
   const updateLine = (id: string, field: string, value: any) => {
@@ -36,12 +39,27 @@ export default function PosInventory() {
     setForm({ notes: '', lines: posProducts.map(p => ({ id: uuidv4(), productId: p.id, expectedQty: p.quantity, countedQty: p.quantity, difference: 0 })) });
   };
 
+  const confirmDelete = async () => {
+    if (deleteModal.inventoryId) {
+      await deletePosInventory(deleteModal.inventoryId);
+      setDeleteModal({ isOpen: false, inventoryId: null });
+      if (viewingInventory?.id === deleteModal.inventoryId) {
+        setViewingInventory(null);
+      }
+    }
+  };
+
   const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontSize: '13px', outline: 'none' };
 
   return (
     <div style={{ padding: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 700 }}>Inventaire</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button onClick={() => navigate('/pos')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer', color: 'var(--color-text)' }} title="Retour au tableau de bord">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>Inventaire</h1>
+        </div>
         <button onClick={() => { setViewingInventory(null); setShowForm(true); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 }}>
           <Plus size={16} /> Nouvel inventaire
         </button>
@@ -194,8 +212,9 @@ export default function PosInventory() {
           </div>
         </div>
       )}
-      <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <div className="table-responsive">
+      {!showForm && (
+        <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div className="table-responsive">
 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
@@ -214,13 +233,22 @@ export default function PosInventory() {
                 <td style={{ padding: '12px 16px' }}><span style={{ padding: '4px 10px', borderRadius: 'var(--radius-lg)', fontSize: '12px', fontWeight: 500, background: inv.status === 'Terminé' ? 'var(--color-success-tint)' : 'var(--color-warning-tint)', color: inv.status === 'Terminé' ? 'var(--color-success)' : 'var(--color-warning)' }}>{inv.status}</span></td>
                 <td style={{ padding: '12px 16px', fontSize: '14px', color: 'var(--color-text-muted)' }}>{inv.notes}</td>
                 <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                  <button 
-                    onClick={() => { setShowForm(false); setViewingInventory(inv); }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}
-                    title="Voir les détails"
-                  >
-                    <Eye size={18} />
-                  </button>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                    <button 
+                      onClick={() => { setShowForm(false); setViewingInventory(inv); }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}
+                      title="Voir les détails"
+                    >
+                      <Eye size={18} />
+                    </button>
+                    <button 
+                      onClick={() => setDeleteModal({ isOpen: true, inventoryId: inv.id })}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)' }}
+                      title="Supprimer"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -229,6 +257,22 @@ export default function PosInventory() {
         </table>
 </div>
       </div>
+      )}
+
+      {deleteModal.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', padding: '24px', borderRadius: 'var(--radius-lg)', maxWidth: '400px', width: '100%' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>Confirmer la suppression</h3>
+            <p style={{ fontSize: '14px', marginBottom: '24px', color: 'var(--color-text-muted)' }}>
+              Êtes-vous sûr de vouloir supprimer cet inventaire ? Cette action est irréversible.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button onClick={() => setDeleteModal({ isOpen: false, inventoryId: null })} style={{ padding: '8px 16px', background: 'var(--color-surface-alt)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 }}>Annuler</button>
+              <button onClick={confirmDelete} style={{ padding: '8px 16px', background: 'var(--color-error)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 }}>Supprimer</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
