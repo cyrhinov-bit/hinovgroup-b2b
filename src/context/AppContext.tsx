@@ -1880,6 +1880,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       id, 
       name: data.name, 
       role: data.role, 
+      pos_role: data.posRole || null,
       service_id: data.serviceId || null,
       pos_returns_enabled: data.posReturnsEnabled,
       pos_catalogue_enabled: data.posCatalogueEnabled,

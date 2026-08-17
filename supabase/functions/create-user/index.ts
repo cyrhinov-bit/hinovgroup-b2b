@@ -45,6 +45,7 @@ serve(async (req: Request) => {
       pin: string;
       name: string;
       role: string;
+      posRole?: string;
       serviceId?: string;
       posReturnsEnabled?: boolean;
       posCatalogueEnabled?: boolean;
@@ -53,7 +54,7 @@ serve(async (req: Request) => {
       posStockEnabled?: boolean;
     }
 
-    const { email, pin, name, role, serviceId, posReturnsEnabled, posCatalogueEnabled, posSupplyEnabled, posInventoryEnabled, posStockEnabled } = await req.json() as CreateUserPayload
+    const { email, pin, name, role, posRole, serviceId, posReturnsEnabled, posCatalogueEnabled, posSupplyEnabled, posInventoryEnabled, posStockEnabled } = await req.json() as CreateUserPayload
 
     // Autorisations
     if (role === 'SuperAdmin') throw new Error('Impossible de créer un SuperAdmin')
@@ -87,6 +88,7 @@ serve(async (req: Request) => {
         name,
         role,
         pin,
+        pos_role: posRole || null,
         service_id: serviceId || null,
         active: true,
         pos_returns_enabled: posReturnsEnabled === true,
@@ -103,7 +105,7 @@ serve(async (req: Request) => {
     }
 
     return new Response(
-      JSON.stringify({ id: newUserId, name, email, role, serviceId, posReturnsEnabled, posCatalogueEnabled, posSupplyEnabled, posInventoryEnabled, posStockEnabled }),
+      JSON.stringify({ id: newUserId, name, email, role, posRole, serviceId, posReturnsEnabled, posCatalogueEnabled, posSupplyEnabled, posInventoryEnabled, posStockEnabled }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error: any) {
