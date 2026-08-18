@@ -331,7 +331,6 @@ export class ExcelImportService {
     const {
       headers,
       rows,
-      sheet,
     } = await this.parseFile(file, sheetName);
 
     return {

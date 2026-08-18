@@ -876,21 +876,6 @@ export const processSyncQueue = async () => {
           let p_stock_entry = null;
           let p_stock_entry_lines = null;
 
-          if (lines && lines.length > 0) {
-            const stockEntryId = uuidv4();
-            p_stock_entry = {
-              id: stockEntryId, reference: `VENTE-${txData.transactionNumber}`, date: txData.date.split('T')[0],
-              total_amount: txData.total, status: 'Validé', notes: 'VENTE', created_by: txData.cashierId
-            };
-            
-            p_stock_entry_lines = lines
-              .filter((l: any) => l.productId)
-              .map((l: any) => ({
-                id: uuidv4(), entry_id: stockEntryId, product_id: l.productId,
-                quantity: -l.quantity, purchase_price: l.unitPrice, total: -(l.quantity * l.unitPrice)
-              }));
-          }
-
           const { error } = await supabase.rpc('process_pos_transaction', {
             p_transaction, p_lines, p_payments, p_stock_entry, p_stock_entry_lines
           });
@@ -1107,6 +1092,23 @@ export const processSyncQueue = async () => {
           await db.syncErrors.setItem('errors', errors);
         } catch(err) {
           console.error('Impossible de sauvegarder dans syncErrors', err);
+        }
+
+        // Notifier l'utilisateur pour les actions critiques (transactions, sessions de caisse)
+        const criticalActions: SyncActionType[] = [
+          'INSERT_POS_TRANSACTION', 'INSERT_POS_CASH_SESSION', 'UPDATE_POS_CASH_SESSION'
+        ];
+        if (criticalActions.includes(action.type)) {
+          const labels: Partial<Record<SyncActionType, string>> = {
+            'INSERT_POS_TRANSACTION': '⚠️ Une transaction de caisse n\'a pas pu être synchronisée avec le serveur. Consultez la page Erreurs de Sync.',
+            'INSERT_POS_CASH_SESSION': '⚠️ L\'ouverture de session caisse n\'a pas pu être synchronisée.',
+            'UPDATE_POS_CASH_SESSION': '⚠️ La fermeture de session caisse n\'a pas pu être synchronisée.',
+          };
+          const message = labels[action.type] || `⚠️ Échec de synchronisation : ${action.type}`;
+          // Dispatche un CustomEvent que l'AppContext peut écouter pour afficher un toast
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('sync-critical-error', { detail: { message, action } }));
+          }
         }
       }
     } catch (e) {

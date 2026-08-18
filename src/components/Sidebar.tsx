@@ -33,7 +33,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Documents', icon: Folder, path: '/documents', roles: ['Directeur', 'Responsable'] },
     { label: 'Historique Rapports', icon: FileText, path: '/mes-rapports', roles: ['Responsable', 'Directeur'] },
     { label: 'Utilisateurs', icon: Shield, path: '/utilisateurs', roles: ['Directeur', 'SuperAdmin'] as any },
-    { label: 'Rapports', icon: PieChart, path: '/rapports', roles: ['Directeur', 'Responsable'] },
+    { label: 'Rapports', icon: PieChart, path: '/rapports', roles: ['Directeur'] },
     { label: 'Paramètres', icon: Settings, path: '/parametres', roles: ['Directeur'] },
     // Commercial routes
     { label: 'Dashboard', icon: Home, path: '/commercial', roles: ['Commercial', 'SuperAdmin'] as any },
@@ -43,6 +43,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Rapport d\'activité', icon: FileText, path: '/commercial/rapport-activite', roles: ['Commercial', 'SuperAdmin'] as any },
     { label: 'Rapport hebdo', icon: Calendar, path: '/commercial/rapport-hebdo', roles: ['Commercial', 'SuperAdmin'] as any },
     { label: 'Rapport de prospection', icon: FileText, path: '/commercial/rapport-prospection', roles: ['Commercial', 'SuperAdmin'] as any },
+    { label: 'Documents', icon: Folder, path: '/commercial/documents', roles: ['Commercial', 'SuperAdmin'] as any },
     { label: 'Historique Rapports', icon: FileText, path: '/commercial/mes-rapports', roles: ['Commercial', 'SuperAdmin'] as any },
   ];
 

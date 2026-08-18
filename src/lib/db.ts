@@ -42,5 +42,6 @@ export const db = {
   // CRM Documents
   documents: localforage.createInstance({ name: 'hinov', storeName: 'documents' }),
   documentFiles: localforage.createInstance({ name: 'hinov', storeName: 'documentFiles' }),
+  crmFolders: localforage.createInstance({ name: 'hinov', storeName: 'crmFolders' }),
   notifications: localforage.createInstance({ name: 'hinov', storeName: 'notifications' }),
 };

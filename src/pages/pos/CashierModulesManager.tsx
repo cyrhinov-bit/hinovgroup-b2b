@@ -8,7 +8,7 @@ export default function CashierModulesManager() {
   const { currentUser } = useAuth();
   const [search, setSearch] = useState('');
 
-  const cashiers = users.filter(u => u.role === 'Caissier' && u.active);
+  const cashiers = users.filter(u => (u.role === 'Caissier' || u.posRole === 'Caissier') && u.active !== false);
   const filteredCashiers = cashiers.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
 
   const togglePermission = async (
@@ -31,10 +31,10 @@ export default function CashierModulesManager() {
     });
   };
 
-  if (currentUser?.role !== 'Directeur' && currentUser?.role !== 'Gerant') {
+  if (currentUser?.role !== 'Directeur' && currentUser?.role !== 'Gerant' && currentUser?.role !== 'Responsable') {
     return (
       <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-error)' }}>
-        Accès refusé. Seul un Gérant ou un Directeur peut gérer les modules des caissiers.
+        Accès refusé. Seul un Gérant, un Directeur ou un Responsable peut gérer les modules des caissiers.
       </div>
     );
   }

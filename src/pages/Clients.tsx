@@ -17,6 +17,20 @@ export function Clients() {
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Check if client already exists
+    const existingClient = clients.find(c => {
+      const emailMatch = newClient.email && c.email && c.email.toLowerCase() === newClient.email.toLowerCase();
+      const phoneMatch = newClient.phone && c.phone && c.phone === newClient.phone;
+      const nameMatch = newClient.name && c.name && c.name.toLowerCase() === newClient.name.toLowerCase();
+      return emailMatch || phoneMatch || nameMatch;
+    });
+
+    if (existingClient) {
+      alert("Un client avec ce nom d'entreprise, email ou téléphone existe déjà.");
+      return;
+    }
+
     if (newClient.name || newClient.contact) {
       addClient({
         id: Date.now().toString(),
@@ -52,6 +66,21 @@ export function Clients() {
   const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingClient) return;
+
+    // Check if another client already exists with these details
+    const existingClient = clients.find(c => {
+      if (c.id === editingClient.id) return false;
+      const emailMatch = editForm.email && c.email && c.email.toLowerCase() === editForm.email.toLowerCase();
+      const phoneMatch = editForm.phone && c.phone && c.phone === editForm.phone;
+      const nameMatch = editForm.name && c.name && c.name.toLowerCase() === editForm.name.toLowerCase();
+      return emailMatch || phoneMatch || nameMatch;
+    });
+
+    if (existingClient) {
+      alert("Un autre client utilise déjà ce nom d'entreprise, email ou téléphone.");
+      return;
+    }
+
     updateClient(editingClient.id, {
       ...editingClient,
       name: editForm.name || '',

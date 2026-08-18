@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calendar, Save, Eye, FileText, CheckCircle2 } from 'lucide-react';
+import { Save, Eye, CheckCircle2 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import type { V2Task, V2DailyReport } from '../context/AppContext';
+import type { V2Task } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { generateV2WeeklyReportPdf, buildV2WeeklyReportPdf } from '../features/reports/services/ReportPdfService';
 import toast from 'react-hot-toast';

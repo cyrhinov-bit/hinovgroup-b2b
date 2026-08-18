@@ -1,17 +1,29 @@
-import { useState } from 'react';
-import { Plus, Save, FileText, Trash2, Percent, ArrowLeft } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Save, FileText, Trash2, Percent, ArrowLeft, TrendingUp } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import type { QuoteLine } from '../context/AppContext';
+import { generateQuotePdf } from '../lib/pdfUtils';
 import './QuoteCreation.css';
 
 export function QuoteCreation() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const editId = searchParams.get('editId');
-  const { clients, prestations, addQuote, updateQuote, services, quotes } = useAppContext();
+  const { clients, prestations, addQuote, updateQuote, services, quotes, settings } = useAppContext();
   const { currentUser } = useAuth();
+
+  // Load draft from localStorage if present
+  const draftKey = 'quoteCreationDraft';
+  const loadDraft = () => {
+    try {
+      const data = localStorage.getItem(draftKey);
+      return data ? JSON.parse(data) : null;
+    } catch {
+      return null;
+    }
+  };
 
   const sourceQuote = editId ? quotes.find(q => q.id === editId) : null;
 
@@ -32,12 +44,60 @@ export function QuoteCreation() {
     })) || []
   );
 
+  // costPrice per line — UI only, never persisted into Quote or PDF
+  const [lineCosts, setLineCosts] = useState<number[]>(
+    sourceQuote?.lines.map(l => {
+      const prestation = prestations.find(p => p.id === l.prestationId);
+      return prestation?.costPrice || 0;
+    }) || []
+  );
+
+  // Draft state persistence
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  useEffect(() => {
+    if (!draftLoaded && !editId) {
+      const draft = loadDraft();
+      if (draft) {
+        setClientId(draft.clientId || '');
+        setSubject(draft.subject || '');
+        setServiceId(draft.serviceId || '');
+        setStyle(draft.style || 'Classique');
+        setAccentColor(draft.accentColor || '#009688');
+        setDiscountPercent(draft.discountPercent ?? 0);
+        setLines(draft.lines || []);
+        setLineCosts(draft.lineCosts || []);
+      }
+      setDraftLoaded(true);
+    }
+  }, [draftLoaded]);
+
+  // Save draft on any change
+  useEffect(() => {
+    if (draftLoaded) {
+      const draft = {
+        clientId,
+        subject,
+        serviceId,
+        style,
+        accentColor,
+        discountPercent,
+        lines,
+        lineCosts
+      };
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(draft));
+      } catch {}
+    }
+  }, [clientId, subject, serviceId, style, accentColor, discountPercent, lines, lineCosts, draftLoaded]);
+
   const handleAddLine = () => {
     setLines([...lines, { prestationId: '', description: '', quantity: 1, unitPrice: 0, discountPercent: 0, total: 0 }]);
+    setLineCosts([...lineCosts, 0]);
   };
 
   const handleRemoveLine = (index: number) => {
     setLines(lines.filter((_, i) => i !== index));
+    setLineCosts(lineCosts.filter((_, i) => i !== index));
   };
 
   const updateLine = (index: number, field: keyof QuoteLine, value: any) => {
@@ -52,6 +112,10 @@ export function QuoteCreation() {
       if (prestation) {
         line.description = prestation.name;
         line.unitPrice = prestation.price;
+        // Auto-fill cost price from catalogue (UI-only)
+        const newCosts = [...lineCosts];
+        newCosts[index] = prestation.costPrice || 0;
+        setLineCosts(newCosts);
       }
     }
 
@@ -62,18 +126,22 @@ export function QuoteCreation() {
     setLines(newLines);
   };
 
-  const availablePrestations = currentUser?.role === 'Directeur'
+  const availablePrestations = (currentUser?.role === 'Directeur' || currentUser?.role === 'SuperAdmin')
     ? (serviceId ? prestations.filter(p => p.serviceId === serviceId) : prestations)
-    : prestations.filter(p => p.serviceId === currentUser?.serviceId);
+    : (currentUser?.serviceId ? prestations.filter(p => p.serviceId === currentUser.serviceId) : prestations);
 
   // Calculations
   const grossSubtotal = lines.reduce((acc, line) => acc + line.total, 0);
   const discountAmount = Math.round((grossSubtotal * (discountPercent || 0)) / 100);
   const netSubtotal = Math.max(0, grossSubtotal - discountAmount);
-
   const total = netSubtotal;
 
-  const handleSave = (status: 'Brouillon' | 'Envoyé', preview: boolean = false) => {
+  // Margin calculations (UI-only, never in PDF)
+  const totalCost = lines.reduce((acc, line, idx) => acc + (lineCosts[idx] || 0) * line.quantity, 0);
+  const globalMargin = total - totalCost;
+  const getMarginColor = (margin: number) => margin >= 0 ? 'var(--color-success)' : 'var(--color-error)';
+
+  const handleSave = async (status: 'Brouillon' | 'Envoyé', preview: boolean = false) => {
     if (!clientId) {
       alert("Veuillez sélectionner un client");
       return;
@@ -105,16 +173,24 @@ export function QuoteCreation() {
       accentColor
     };
 
-    if (sourceQuote) {
-      updateQuote(sourceQuote.id, quoteData);
-    } else {
-      addQuote(quoteData);
-    }
+    try {
+      if (sourceQuote) {
+        await updateQuote(sourceQuote.id, quoteData);
+      } else {
+        await addQuote(quoteData);
+      }
 
-    if (preview) {
-      navigate(`/portail-client/${sourceQuote?.id || newId}`);
-    } else {
+      if (preview) {
+        const client = clients.find(c => c.id === clientId);
+        const pdfBlob = generateQuotePdf(quoteData, client, settings);
+        const pdfUrl = URL.createObjectURL(pdfBlob);
+        window.open(pdfUrl, '_blank');
+      }
+      localStorage.removeItem(draftKey);
       navigate('/devis');
+    } catch (err) {
+      console.error('Erreur lors de la sauvegarde du devis:', err);
+      alert('Une erreur est survenue lors de la sauvegarde du devis.');
     }
   };
 
@@ -159,62 +235,100 @@ export function QuoteCreation() {
         <section className="form-section">
           <h3>Prestations</h3>
           <div className="table-responsive">
-<table className="prestations-table">
-            <thead>
-              <tr>
-                <th>Service (Catalogue)</th>
-                <th>Description</th>
-                <th style={{ width: '90px' }}>Qté</th>
-                <th style={{ width: '130px' }}>Prix Unitaire</th>
-                <th style={{ width: '100px' }}>Remise (%)</th>
-                <th style={{ width: '140px' }}>Total Net</th>
-                <th style={{ width: '40px' }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((line, idx) => (
-                <tr key={idx}>
-                  <td>
-                    <select className="table-input" value={line.prestationId} onChange={e => updateLine(idx, 'prestationId', e.target.value)}>
-                      <option value="">Choisir...</option>
-                      {availablePrestations.map(p => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}
-                    </select>
-                  </td>
-                  <td>
-                    <input type="text" className="table-input" value={line.description} onChange={e => updateLine(idx, 'description', e.target.value)} />
-                  </td>
-                  <td>
-                    <input type="number" className="table-input" value={line.quantity} min="1" onChange={e => updateLine(idx, 'quantity', Number(e.target.value))} />
-                  </td>
-                  <td>
-                    <input type="number" className="table-input" value={line.unitPrice} step="0.01" onChange={e => updateLine(idx, 'unitPrice', Number(e.target.value))} />
-                  </td>
-                  <td>
-                    <input type="number" className="table-input" value={line.discountPercent || ''} min="0" max="100" placeholder="0%" onChange={e => updateLine(idx, 'discountPercent', Math.min(100, Math.max(0, Number(e.target.value))))} />
-                  </td>
-                  <td>
-                    <strong>{line.total.toLocaleString('fr-FR')} FCFA</strong>
-                    {line.discountPercent && line.discountPercent > 0 ? (
-                      <div style={{ fontSize: '0.75rem', color: 'var(--color-secondary)' }}>(-{line.discountPercent}%)</div>
-                    ) : null}
-                  </td>
-                  <td>
-                    <button className="icon-button text-error" onClick={() => handleRemoveLine(idx)}><Trash2 size={16} /></button>
-                  </td>
-                </tr>
-              ))}
-              {lines.length === 0 && (
+            <table className="prestations-table">
+              <thead>
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '16px', color: 'var(--color-text-muted)' }}>Aucune ligne. Cliquez sur "Ajouter une ligne" pour commencer.</td>
+                  <th>Service (Catalogue)</th>
+                  <th>Description</th>
+                  <th style={{ width: '90px' }}>Qté</th>
+                  <th style={{ width: '130px' }}>Prix Unitaire</th>
+                  <th style={{ width: '100px' }}>Remise (%)</th>
+                  <th style={{ width: '140px' }}>Total Net</th>
+                  <th style={{ width: '130px', background: 'color-mix(in srgb, var(--color-success) 8%, var(--color-surface))' }} title="Colonne interne — non visible sur le devis PDF">Marge 🔒</th>
+                  <th style={{ width: '40px' }}></th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-</div>
+              </thead>
+              <tbody>
+                {lines.map((line, idx) => {
+                  const costPrice = lineCosts[idx] || 0;
+                  const lineCostTotal = costPrice * line.quantity;
+                  const lineMargin = line.total - lineCostTotal;
+                  return (
+                    <tr key={idx}>
+                      <td>
+                        <select className="table-input" value={line.prestationId} onChange={e => updateLine(idx, 'prestationId', e.target.value)}>
+                          <option value="">{availablePrestations.length === 0 ? 'Aucune prestation disponible...' : 'Choisir...'}</option>
+                          {availablePrestations.map(p => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <input type="text" className="table-input" value={line.description} onChange={e => updateLine(idx, 'description', e.target.value)} />
+                      </td>
+                      <td>
+                        <input type="number" className="table-input" value={line.quantity} min="1" onChange={e => updateLine(idx, 'quantity', Number(e.target.value))} />
+                      </td>
+                      <td>
+                        <input type="number" className="table-input" value={line.unitPrice} step="0.01" onChange={e => updateLine(idx, 'unitPrice', Number(e.target.value))} />
+                      </td>
+                      <td>
+                        <input type="number" className="table-input" value={line.discountPercent || ''} min="0" max="100" placeholder="0%" onChange={e => updateLine(idx, 'discountPercent', Math.min(100, Math.max(0, Number(e.target.value))))} />
+                      </td>
+                      <td>
+                        <strong>{line.total.toLocaleString('fr-FR')} FCFA</strong>
+                        {line.discountPercent && line.discountPercent > 0 ? (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-secondary)' }}>(-{line.discountPercent}%)</div>
+                        ) : null}
+                      </td>
+                      <td style={{ background: 'color-mix(in srgb, var(--color-success) 8%, var(--color-surface))', verticalAlign: 'top', paddingTop: '8px' }}>
+                        <input
+                          type="number"
+                          className="table-input"
+                          placeholder="Prix d'achat unit."
+                          min="0"
+                          step="0.01"
+                          value={lineCosts[idx] || ''}
+                          onChange={e => {
+                            const newCosts = [...lineCosts];
+                            newCosts[idx] = Math.max(0, Number(e.target.value));
+                            setLineCosts(newCosts);
+                          }}
+                          style={{ marginBottom: '4px', fontSize: '0.82rem' }}
+                          title="Prix d'achat unitaire (usage interne uniquement)"
+                        />
+                        {costPrice > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.82rem', color: getMarginColor(lineMargin) }}>
+                              Marge : {lineMargin >= 0 ? '+' : ''}{lineMargin.toLocaleString('fr-FR')} FCFA
+                            </span>
+                          </div>
+                        )}
+                      </td>
+
+                      <td>
+                        <button className="icon-button text-error" onClick={() => handleRemoveLine(idx)}><Trash2 size={16} /></button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {lines.length === 0 && (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '16px', color: 'var(--color-text-muted)' }}>Aucune ligne. Cliquez sur "Ajouter une ligne" pour commencer.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
           <button className="btn btn-outline" style={{ marginTop: '16px' }} onClick={handleAddLine}>
             <Plus size={16} style={{ marginRight: '8px' }} /> Ajouter une ligne
           </button>
+          {availablePrestations.length === 0 && (
+            <p style={{ marginTop: '12px', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+              💡 Aucune prestation dans le catalogue. Vous pouvez saisir manuellement la description et le prix, ou ajouter des prestations dans la page « Prestations ».
+            </p>
+          )}
         </section>
+
+            
 
         <section className="form-section">
           <h3>Remise & Réduction</h3>
@@ -286,13 +400,57 @@ export function QuoteCreation() {
             <span>Total</span>
             <span>{total.toLocaleString('fr-FR')} FCFA</span>
           </div>
+
+          {/* Margin summary — UI only, never in the PDF */}
+          {totalCost > 0 && (
+            <div style={{
+              marginTop: '12px',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              background: 'color-mix(in srgb, var(--color-success) 8%, var(--color-surface))',
+              border: `1px solid color-mix(in srgb, ${getMarginColor(globalMargin)} 30%, transparent)`,
+              display: 'flex', flexDirection: 'column', gap: '6px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 500, marginBottom: '2px' }}>
+                <TrendingUp size={14} />
+                Analyse de rentabilité (usage interne — non visible sur le devis)
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                <span>Prix de vente total</span>
+                <span style={{ fontWeight: 600 }}>{total.toLocaleString('fr-FR')} FCFA</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                <span>Coût d'achat total</span>
+                <span style={{ fontWeight: 600 }}>{totalCost.toLocaleString('fr-FR')} FCFA</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', borderTop: '1px solid var(--color-border)', paddingTop: '6px', marginTop: '2px' }}>
+                <span style={{ fontWeight: 600 }}>Marge globale</span>
+                <span style={{ fontWeight: 700, fontSize: '1.05rem', color: getMarginColor(globalMargin) }}>
+                  {globalMargin >= 0 ? '+' : ''}{globalMargin.toLocaleString('fr-FR')} FCFA
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="form-actions">
+          <button className="btn btn-outline" onClick={() => {
+            setClientId('');
+            setSubject('');
+            setServiceId('');
+            setStyle('Classique');
+            setAccentColor('#009688');
+            setDiscountPercent(0);
+            setLines([]);
+            setLineCosts([]);
+            localStorage.removeItem(draftKey);
+          }} style={{ marginRight: '8px' }}>
+            <Trash2 size={16} style={{ marginRight: '4px' }} /> Réinitialiser le formulaire
+          </button>
           <button className="btn btn-secondary" onClick={() => handleSave('Brouillon')}>
             <Save size={16} style={{ marginRight: '8px' }} /> Sauvegarder (Brouillon)
           </button>
-          <button className="btn btn-primary" onClick={() => handleSave('Brouillon', true)}>
+          <button className="btn btn-primary" onClick={() => handleSave('Brouillon', true)} style={{ marginLeft: '8px' }}>
             <FileText size={16} style={{ marginRight: '8px' }} /> Générer & Prévisualiser
           </button>
         </div>

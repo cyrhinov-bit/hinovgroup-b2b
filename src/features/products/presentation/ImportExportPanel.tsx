@@ -6,10 +6,8 @@ import { excelExportService } from '../services/ExcelExportService';
 import { importReportService } from '../services/ImportReportService';
 import { stockService } from '../services/StockService';
 import type { PosProduct, ImportSession, ImportReport, ImportError } from '../../../context/AppContext';
-import type { ImportAnalysis, MappedExcelProduct } from '../services/ExcelImportService';
+import type { ImportAnalysis } from '../services/ExcelImportService';
 import { parseProductsJson, analyzeJsonImport } from '../data/productJsonParser';
-import { productService } from '../services/ProductService';
-import { productRepository } from '../data/repositories/ProductRepository';
 
 export default function ImportExportPanel() {
   const { posProducts, addPosProduct, updatePosProduct, addPosStockEntry, addImportSession, updateImportSession, addImportError, importSessions } = useAppContext();

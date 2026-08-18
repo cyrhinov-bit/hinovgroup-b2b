@@ -1,12 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { Package, Search, Filter, ArrowUpRight, ArrowDownRight, Calendar, User, RefreshCw } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { v4 as uuidv4 } from 'uuid';
-import type { PosStockMovement } from '../../context/AppContext';
+
 
 export default function PosStockMovements() {
   const { 
-    posStockMovements, posProducts, posTransactions, posReturns, posStockEntries, posInventories,
+    posStockMovements, posProducts, posTransactions, posStockEntries, posInventories,
     addPosStockMovement 
   } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
@@ -89,12 +88,23 @@ export default function PosStockMovements() {
   const filteredMovements = useMemo(() => {
     return (posStockMovements || [])
       .filter(movement => {
-        const product = posProducts?.find(p => p.id === movement?.productId);
-        const searchString = `${product?.name || ''} ${product?.reference || ''} ${movement?.reference || ''}`.toLowerCase();
+        if (!movement) return false;
+        const product = posProducts?.find(p => p.id === movement.productId);
+        const searchString = `${product?.name || ''} ${product?.reference || ''} ${movement.reference || ''}`.toLowerCase();
         
         const matchesSearch = searchString.includes(searchTerm.toLowerCase());
-        const matchesType = typeFilter === 'all' || movement?.type === typeFilter;
-        const matchesDate = !dateFilter || (movement?.date && movement.date.startsWith(dateFilter));
+        const matchesType = typeFilter === 'all' || movement.type === typeFilter;
+        
+        let movementDateStr = '';
+        if (movement.date) {
+          const rawDate = movement.date as any;
+          if (rawDate instanceof Date) {
+            movementDateStr = rawDate.toISOString();
+          } else {
+            movementDateStr = String(movement.date);
+          }
+        }
+        const matchesDate = !dateFilter || movementDateStr.startsWith(dateFilter);
 
         return matchesSearch && matchesType && matchesDate;
       })

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Calendar, FileText, Phone, Mail, MapPin, Search } from 'lucide-react';
+import { FileText, Phone, Mail, MapPin, Search } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 

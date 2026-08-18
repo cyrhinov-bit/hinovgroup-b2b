@@ -1,18 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useAppContext } from '../context/AppContext';
 import './Login.css';
 import logo from '../assets/logoh.png';
 import illustration from '../assets/login_illustration_new.jpg';
 import { InstallButton } from '../components/InstallButton';
-import type { User } from '../context/AppContext';
 
 
 
 export function Login() {
   const { login, currentUser, loading } = useAuth();
-  const { setPosWorkspace } = useAppContext();
   const navigate = useNavigate();
   
   const [email, setEmail] = useState('');

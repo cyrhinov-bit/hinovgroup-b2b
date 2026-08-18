@@ -7,7 +7,6 @@ import { DashboardDirecteur } from './pages/DashboardDirecteur';
 import { DashboardResponsable } from './pages/DashboardResponsable';
 import { DashboardCommercial } from './pages/DashboardCommercial';
 import { QuoteCreation } from './pages/QuoteCreation';
-import { ClientPortal } from './pages/ClientPortal';
 
 import { Clients } from './pages/Clients';
 import { Services } from './pages/Services';
@@ -137,7 +136,6 @@ function App() {
               <Toaster position="top-center" />
               <Routes>
                 <Route path="/login" element={<Login />} />
-                <Route path="/portail-client/:id" element={<ClientPortal />} />
                 <Route path="/test" element={<TestDashboard />} />
 
                 <Route path="/diagnostics" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><DiagnosticPage /></Suspense>} />
@@ -167,7 +165,7 @@ function App() {
                     <Route path="mes-commissions" element={<CommercialCommissions />} />
                     <Route path="documents" element={<Documents />} />
                     <Route path="utilisateurs" element={<Utilisateurs />} />
-                    <Route path="rapports" element={<Rapports />} />
+                    <Route path="rapports" element={<RequireRole roles={['Directeur']}><Rapports /></RequireRole>} />
                     <Route path="rapport-activite" element={<MonRapportActivite />} />
                     <Route path="rapport-hebdo" element={<MonRapportHebdo />} />
                     <Route path="rapport-prospection" element={<MonRapportProspection />} />
@@ -185,6 +183,7 @@ function App() {
                     <Route path="commercial/rapport-hebdo" element={<MonRapportHebdo />} />
                     <Route path="commercial/rapport-prospection" element={<MonRapportProspection />} />
                     
+                    <Route path="commercial/documents" element={<Documents />} />
                     <Route path="commercial/mes-rapports" element={<ReportsHistory />} />
 
                     {/* POS routes */}

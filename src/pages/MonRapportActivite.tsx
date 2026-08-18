@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, CheckCircle2, Trash2, Send } from 'lucide-react';
+import { Save, Send } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import type { V2Task } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';

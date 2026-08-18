@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Search, Trash2, Plus, Minus, Clock, ArrowLeft } from 'lucide-react';
@@ -95,7 +95,7 @@ export default function PosTerminal() {
     };
   }, [posProducts]);
 
-  const updateCartQty = (id: string, delta: number) => {
+  const updateCartQty = useCallback((id: string, delta: number) => {
     setCart(prev => prev.map(c => {
       if (c.id !== id) return c;
       const newQty = Math.max(1, c.quantity + delta);
@@ -103,7 +103,17 @@ export default function PosTerminal() {
       const lineAmount = c.discountType === 'amount' ? c.discountAmount : 0;
       return { ...c, quantity: newQty, total: newQty * c.unitPrice * (1 - lineDiscount) - lineAmount };
     }));
-  };
+  }, []);
+
+  const setExactCartQty = useCallback((id: string, qty: number) => {
+    setCart(prev => prev.map(c => {
+      if (c.id !== id) return c;
+      const newQty = Math.max(1, qty || 1);
+      const lineDiscount = c.discountType === 'percent' ? c.discountPercent / 100 : 0;
+      const lineAmount = c.discountType === 'amount' ? c.discountAmount : 0;
+      return { ...c, quantity: newQty, total: newQty * c.unitPrice * (1 - lineDiscount) - lineAmount };
+    }));
+  }, []);
 
   const updateCartDiscountType = (id: string, type: 'none' | 'percent' | 'amount') => {
     setCart(prev => prev.map(c => {
@@ -329,7 +339,7 @@ export default function PosTerminal() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cart, selectedCartIndex, showPayment, showPreviewModal, showOpenModal, showSuspendModal, showSuspendedList, initialFund, openSession, currentUser, cashAmount, mobileAmount, paymentMethod, discountType, discountValue]);
+  }, [cart, selectedCartIndex, showPayment, showPreviewModal, showOpenModal, showSuspendModal, showSuspendedList, initialFund, openSession, currentUser, cashAmount, mobileAmount, paymentMethod, discountType, discountValue, updateCartQty]);
 
   useEffect(() => {
     if (selectedCartIndex >= cart.length && cart.length > 0) {
@@ -361,6 +371,7 @@ export default function PosTerminal() {
               onChange={e => setSearch(e.target.value)} 
               onKeyDown={e => { 
                 if (e.key === 'Enter') {
+                  if (barcodeScannerService.isScannerActive()) return;
                   const query = search.trim();
                   if (query) {
                     if (filteredProducts.length === 1) {
@@ -415,7 +426,7 @@ export default function PosTerminal() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                   <button onClick={() => updateCartQty(item.id, -1)} style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-surface-alt)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Minus size={12} /></button>
-                  <span style={{ fontSize: '14px', fontWeight: 500, minWidth: '24px', textAlign: 'center' }}>{item.quantity}</span>
+                  <input type="number" min="1" value={item.quantity} onChange={(e) => setExactCartQty(item.id, parseInt(e.target.value) || 1)} style={{ width: '48px', height: '28px', textAlign: 'center', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '0 4px', fontSize: '14px', fontWeight: 500 }} />
                   <button onClick={() => updateCartQty(item.id, 1)} style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-surface-alt)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={12} /></button>
                   <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginLeft: '4px' }}>x {item.unitPrice.toLocaleString()} FCFA</span>
                   <span style={{ fontSize: '14px', fontWeight: 600, marginLeft: 'auto' }}>{item.total.toLocaleString()} FCFA</span>

@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import type { User, V2DailyReport, V2WeeklyReport, V2Task, AppSettings } from '../../../context/AppContext';
+import type { User, V2WeeklyReport, AppSettings } from '../../../context/AppContext';
 
 export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | null | undefined, settings?: AppSettings): jsPDF {
   const doc = new jsPDF();

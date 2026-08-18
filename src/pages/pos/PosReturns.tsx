@@ -48,7 +48,7 @@ export default function PosReturns() {
   const [productSearch, setProductSearch] = useState('');
 
   const role = currentUser?.role;
-  const canHandleReturns = role === 'Directeur' || role === 'Gerant' || (role === 'Caissier' && currentUser?.posReturnsEnabled);
+  const canHandleReturns = role === 'Directeur' || role === 'Gerant' || role === 'Responsable' || (role === 'Caissier' && currentUser?.posReturnsEnabled);
 
   const filteredReturns = useMemo(() => {
     return posReturns.filter(r => {

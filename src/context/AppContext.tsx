@@ -5,6 +5,7 @@ import { useAuth } from './AuthContext';
 import { db } from '../lib/db';
 import { queueSyncAction, processSyncQueue } from '../lib/sync';
 import { v4 as uuidv4 } from 'uuid';
+import toast from 'react-hot-toast';
 import { isProductComplete } from '../features/products/services/ProductService';
 import type { ProductPersistence } from '../features/products/data/repositories/ProductRepository';
 import { productService } from '../features/products/services/ProductService';
@@ -41,7 +42,7 @@ export interface Client { id: string; name: string; email: string; phone: string
 export interface Service { id: string; name: string; description: string; members?: number; }
 export interface Category { id: string; serviceId: string; name: string; }
 export interface Prestation { id: string; code: string; name: string; description: string; price: number; serviceId: string; unit?: string; costPrice?: number; }
-export interface QuoteLine { id: string; prestationId: string; description: string; quantity: number; unitPrice: number; total: number; discountPercent?: number; }
+export interface QuoteLine { id: string; prestationId: string; description: string; quantity: number; unitPrice: number; total: number; discountPercent?: number; costPrice?: number; }
 export interface Quote { id: string; quoteNumber: string; clientId: string; commercialId: string; serviceId?: string; subject: string; lines: QuoteLine[]; subtotal: number; total: number; status: 'Brouillon' | 'Envoyé' | 'Accepté' | 'Refusé' | 'Révision'; date: string; style?: 'Classique' | 'Moderne' | 'Minimaliste'; accentColor?: string; discountPercent?: number; discountAmount?: number; clientComment?: string; }
 export interface SaleLine { id: string; description: string; quantity: number; unitPrice: number; costPrice?: number; total: number; }
 export interface Sale { id: string; saleNumber: string; quoteId?: string; clientId: string; serviceId?: string; lines: SaleLine[]; subtotal: number; total: number; status: 'Enregistrée' | 'Payée' | 'Annulée'; date: string; notes?: string; }
@@ -89,6 +90,14 @@ export interface ImportReport { session: ImportSession; productsCreated: number;
 export interface ProductCompletionFilters { noFamily: boolean; noCategory: boolean; noBrand: boolean; noSupplier: boolean; noImage: boolean; noBarcode: boolean; noIsbn: boolean; minStockExceeded: boolean; }
 
 // CRM Documents
+export interface CrmFolder {
+  id: string;
+  name: string;
+  ownerId: string;
+  parentId?: string;
+  createdAt: string;
+}
+
 export interface CrmDocument {
   id: string;
   name: string;
@@ -96,6 +105,7 @@ export interface CrmDocument {
   sizeBytes: number;
   filePath: string;
   uploaderId?: string;
+  folderId?: string;
   createdAt: string;
 }
 
@@ -114,7 +124,7 @@ export interface PosSettings { libraryName: string; address: string; phone: stri
 export interface PosWorkspace { active: boolean; }
 
 interface AppState {
-  users: User[]; clients: Client[]; quotes: Quote[]; sales: Sale[]; commissions: Commission[]; installments: Installment[]; prospects: Prospect[]; prospectActivities: ProspectActivity[]; prospectFollowUps: ProspectFollowUp[]; categories: Category[]; settings: AppSettings; services: Service[]; prestations: Prestation[]; loading: boolean; activityReports: ActivityReport[]; weeklyReports: WeeklyReport[]; crmDocuments: CrmDocument[]; v2DailyReports: V2DailyReport[]; v2WeeklyReports: V2WeeklyReport[]; notifications: AppNotification[];
+  users: User[]; clients: Client[]; quotes: Quote[]; sales: Sale[]; commissions: Commission[]; installments: Installment[]; prospects: Prospect[]; prospectActivities: ProspectActivity[]; prospectFollowUps: ProspectFollowUp[]; categories: Category[]; settings: AppSettings; services: Service[]; prestations: Prestation[]; loading: boolean; activityReports: ActivityReport[]; weeklyReports: WeeklyReport[]; crmDocuments: CrmDocument[]; crmFolders: CrmFolder[]; v2DailyReports: V2DailyReport[]; v2WeeklyReports: V2WeeklyReport[]; notifications: AppNotification[];
   // POS
   posCategories: PosCategory[]; posBrands: PosBrand[]; posSuppliers: PosSupplier[]; posProducts: PosProduct[];
   posStockEntries: PosStockEntry[]; posInventories: PosInventory[]; posCashSessions: PosCashSession[];
@@ -160,9 +170,12 @@ interface AppState {
   saveV2DailyReport: (report: V2DailyReport) => Promise<void>;
   saveV2WeeklyReport: (report: V2WeeklyReport) => Promise<void>;
   updateMyProfile: (data: Partial<Pick<User, 'photo' | 'name'>>) => Promise<void>;
-  addCrmDocument: (file: File, uploaderId?: string) => Promise<void>;
+  addCrmDocument: (file: File, uploaderId?: string, folderId?: string) => Promise<void>;
   deleteCrmDocument: (id: string) => Promise<void>;
-  downloadCrmDocument: (doc: CrmDocument) => Promise<void>;
+  downloadCrmDocument: (doc: CrmDocument) => void;
+  addCrmFolder: (name: string, ownerId: string, parentId?: string) => Promise<void>;
+  updateCrmFolder: (id: string, data: Partial<CrmFolder>) => Promise<void>;
+  deleteCrmFolder: (id: string) => Promise<void>;
   addCategory: (category: Category) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
   updateSettings: (settings: AppSettings) => Promise<void>;
@@ -246,6 +259,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [v2WeeklyReports, setV2WeeklyReports] = useState<V2WeeklyReport[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [crmDocuments, setCrmDocuments] = useState<CrmDocument[]>([]);
+  const [crmFolders, setCrmFolders] = useState<CrmFolder[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [prestations, setPrestations] = useState<Prestation[]>([]);
@@ -289,6 +303,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const cachedV2DailyReports = await db.v2DailyReports.getItem<V2DailyReport[]>('data');
       const cachedV2WeeklyReports = await db.v2WeeklyReports.getItem<V2WeeklyReport[]>('data');
       const cachedCrmDocuments = await db.documents.getItem<CrmDocument[]>('data');
+      const cachedCrmFolders = await db.crmFolders.getItem<CrmFolder[]>('data');
       const cachedNotifications = await db.notifications.getItem<AppNotification[]>('data');
       const cachedCategories = await db.categories.getItem<Category[]>('data');
       const cachedServices = await db.services.getItem<Service[]>('data');
@@ -323,8 +338,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (cachedWeeklyReports) setWeeklyReports(cachedWeeklyReports);
       if (cachedV2DailyReports) setV2DailyReports(cachedV2DailyReports);
       if (cachedV2WeeklyReports) setV2WeeklyReports(cachedV2WeeklyReports);
-      if (cachedNotifications) setNotifications(cachedNotifications);
       if (cachedCrmDocuments) setCrmDocuments(cachedCrmDocuments);
+      if (cachedCrmFolders) setCrmFolders(cachedCrmFolders);
+      if (cachedNotifications) setNotifications(cachedNotifications);
       if (cachedCategories) setCategories(cachedCategories);
       if (cachedServices) setServices(cachedServices);
       if (cachedPrestations) setPrestations(cachedPrestations);
@@ -333,7 +349,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (cachedPosBrands) setPosBrands(cachedPosBrands);
       if (cachedPosSuppliers) setPosSuppliers(cachedPosSuppliers);
       if (cachedPosProducts) setPosProducts(prev => prev.length > 0 ? prev : cachedPosProducts);
-      if (cachedPosStockEntries) setPosStockEntries(cachedPosStockEntries);
+      if (cachedPosStockEntries) setPosStockEntries(cachedPosStockEntries.filter(e => e.notes !== 'VENTE' && !e.reference?.startsWith('VENTE-')));
       if (cachedPosStockMovements) setPosStockMovements(cachedPosStockMovements);
       if (cachedPosInventories) setPosInventories(cachedPosInventories);
       if (cachedPosCashSessions) setPosCashSessions(cachedPosCashSessions);
@@ -394,7 +410,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           posCategoriesData, posBrandsData, posSuppliersData,
           posProductsData, posStockEntriesData, posStockMovementsData, posInventoriesData,
           posCashSessionsData, posTransactionsData, posPaymentsData,
-          posDiscountsData, posSettingsData, crmDocumentsData, notificationsData
+          posDiscountsData, posSettingsData, crmDocumentsData, crmFoldersData, notificationsData,
+          posReturnsData
         ] = await Promise.all([
           safeFetch(() => supabase.from('profiles').select('*')),
           safeFetch(() => supabase.from('clients').select('*')),
@@ -426,7 +443,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           safeFetch(() => supabase.from('pos_discounts').select('*')),
           safeFetch(() => supabase.from('pos_settings').select('*').single()),
           safeFetch(() => supabase.from('crm_documents').select('*')),
+          safeFetch(() => supabase.from('crm_folders').select('*')),
           safeFetch(() => supabase.from('notifications').select('*')),
+          safeFetch(() => supabase.from('pos_returns').select('*, pos_return_lines(*)')),
         ]);
 
         if (profilesData && profilesData.length > 0) {
@@ -459,10 +478,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
             sizeBytes: d.size_bytes,
             filePath: d.file_path,
             uploaderId: d.uploader_id,
+            folderId: d.folder_id,
             createdAt: d.created_at
           }));
           const mergedCrmDocuments = mergeData(cachedCrmDocuments, parsedCrmDocuments);
           setCrmDocuments(mergedCrmDocuments); await db.documents.setItem('data', mergedCrmDocuments);
+        }
+
+        if (crmFoldersData && crmFoldersData.length > 0) {
+          const mergedFolders = mergeData(cachedCrmFolders, crmFoldersData);
+          setCrmFolders(mergedFolders); await db.crmFolders.setItem('data', mergedFolders);
         }
 
         if (notificationsData && notificationsData.length > 0) {
@@ -634,14 +659,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
           });
         }
         if (posStockEntriesData && posStockEntriesData.length > 0) {
-          const parsed = posStockEntriesData.map((e: any) => ({
-            id: e.id, reference: e.reference, supplierId: e.supplier_id, date: e.date,
-            totalAmount: e.total_amount, status: e.status, notes: e.notes, createdBy: e.created_by,
-            lines: (e.pos_stock_entry_lines || []).map((l: any) => ({
-              id: l.id, productId: l.product_id, quantity: l.quantity, purchasePrice: l.purchase_price, total: l.total
-            }))
-          }));
-          const merged = mergeData(cachedPosStockEntries, parsed);
+          const parsed = posStockEntriesData
+            .filter((e: any) => e.notes !== 'VENTE' && !e.reference?.startsWith('VENTE-'))
+            .map((e: any) => ({
+              id: e.id, reference: e.reference, supplierId: e.supplier_id, date: e.date,
+              totalAmount: e.total_amount, status: e.status, notes: e.notes, createdBy: e.created_by,
+              lines: (e.pos_stock_entry_lines || []).map((l: any) => ({
+                id: l.id, productId: l.product_id, quantity: l.quantity, purchasePrice: l.purchase_price, total: l.total
+              }))
+            }));
+          const filteredCached = (cachedPosStockEntries || []).filter(e => e.notes !== 'VENTE' && !e.reference?.startsWith('VENTE-'));
+          const merged = mergeData(filteredCached, parsed);
           setPosStockEntries(merged); await db.posStockEntries.setItem('data', merged);
         }
         if (posStockMovementsData && posStockMovementsData.length > 0) {
@@ -702,6 +730,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setPosSettingsState(parsed); await db.posSettings.setItem('data', parsed);
         }
         
+        if (posReturnsData && posReturnsData.length > 0) {
+          const parsed: PosReturn[] = posReturnsData.map((r: any) => ({
+            id: r.id,
+            returnNumber: r.return_number,
+            transactionId: r.transaction_id || undefined,
+            date: r.date,
+            type: r.type,
+            totalRefund: r.total_refund,
+            totalExchange: r.total_exchange || 0,
+            status: r.status,
+            notes: r.notes || '',
+            createdBy: r.created_by || undefined,
+            lines: (r.pos_return_lines || []).map((l: any) => ({
+              id: l.id,
+              productId: l.product_id || undefined,
+              description: l.description,
+              quantity: l.quantity,
+              unitPrice: l.unit_price,
+              total: l.total,
+              reason: l.reason || ''
+            })),
+            exchangeLines: []
+          }));
+          const merged = mergeData(cachedPosReturns || [], parsed);
+          setPosReturns(merged); await db.posReturns.setItem('data', merged);
+        }
+
         // Update last sync time for next delta fetch
         await db.syncMetadata.setItem('lastSyncTime', syncTimestamp);
       }
@@ -728,6 +783,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
       supabase.removeChannel(channel);
     };
   }, [currentUser, refreshData]);
+
+  // Auto-retry: relance la sync queue toutes les 5 minutes si des actions sont en attente
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (!navigator.onLine) return;
+      const queue = await db.syncQueue.getItem<any[]>('queue');
+      if (queue && queue.length > 0) {
+        console.log(`[AutoSync] ${queue.length} action(s) en attente. Tentative de synchronisation...`);
+        processSyncQueue();
+      }
+    }, 5 * 60 * 1000); // toutes les 5 minutes
+    return () => clearInterval(interval);
+  }, []);
+
+  // Écoute les erreurs critiques de synchronisation et les affiche comme toast
+  useEffect(() => {
+    const handleSyncCriticalError = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { message: string };
+      toast.error(detail.message, {
+        duration: 8000,
+        style: {
+          background: '#FEF2F2',
+          color: '#991B1B',
+          border: '1px solid #FCA5A5',
+          fontSize: '13px',
+          maxWidth: '420px'
+        }
+      });
+    };
+    window.addEventListener('sync-critical-error', handleSyncCriticalError);
+    return () => window.removeEventListener('sync-critical-error', handleSyncCriticalError);
+  }, []);
 
   // MUTATIONS (Offline First)
   const addClient = async (client: Client) => {
@@ -1161,10 +1248,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('DELETE_PROSPECT_FOLLOW_UP', { id });
   };
 
-  /**
-   * @deprecated Ancien module de rapports journaliers (V1).
-   * Remplacé par `saveV2DailyReport`. Ne plus utiliser pour les nouveaux enregistrements.
-   */
   const upsertActivityReport = async (report: ActivityReport) => {
     const reportId = isUuid(report.id) ? report.id : uuidv4();
     const existing = activityReports.find(r => r.id === reportId);
@@ -1177,9 +1260,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction(existing ? 'UPDATE_ACTIVITY_REPORT' : 'INSERT_ACTIVITY_REPORT', newReport);
   };
 
-  /**
-   * @deprecated Ancien module de rapports journaliers (V1).
-   */
   const deleteActivityReport = async (id: string) => {
     const newReports = activityReports.filter(r => r.id !== id);
     setActivityReports(newReports);
@@ -1187,10 +1267,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('DELETE_ACTIVITY_REPORT', { id });
   };
 
-  /**
-   * @deprecated Ancien module de rapports hebdomadaires (V1).
-   * Remplacé par `saveV2WeeklyReport`.
-   */
   const saveWeeklyReport = async (report: WeeklyReport) => {
     const reportId = isUuid(report.id) ? report.id : uuidv4();
     const existing = weeklyReports.find(r => r.id === reportId);
@@ -1203,9 +1279,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction(existing ? 'UPDATE_WEEKLY_REPORT' : 'INSERT_WEEKLY_REPORT', newReport);
   };
 
-  /**
-   * @deprecated Ancien module de rapports hebdomadaires (V1).
-   */
   const markWeeklyReportSent = async (id: string) => {
     const newReports = weeklyReports.map(r => r.id === id ? { ...r, status: 'Envoyé' as const, sentAt: new Date().toISOString() } : r);
     const target = newReports.find(r => r.id === id);
@@ -1214,9 +1287,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (target) await queueSyncAction('UPDATE_WEEKLY_REPORT', { id, status: 'Envoyé', sent_at: target.sentAt });
   };
 
-  /**
-   * @deprecated Maintenu uniquement pour marquer comme lu les archives de l'ancien module (V1).
-   */
   const markWeeklyReportRead = async (id: string) => {
     const newReports = weeklyReports.map(r => r.id === id ? { ...r, status: 'Relu' as const } : r);
     const target = newReports.find(r => r.id === id);
@@ -1920,17 +1990,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSuspendedCarts(prev => [...prev, cart]);
   }, []);
 
-  const addCrmDocument = async (file: File, uploaderId?: string) => {
+  const addCrmDocument = async (file: File, uploaderId?: string, folderId?: string) => {
     const id = uuidv4();
-    const type = file.type || 'Fichier Inconnu';
-    const sizeBytes = file.size;
-    const createdAt = new Date().toISOString();
-    const filePath = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-
     const newDoc: CrmDocument = {
-      id, name: file.name, type, sizeBytes, filePath, uploaderId, createdAt
+      id,
+      name: file.name,
+      type: file.type || 'Inconnu',
+      sizeBytes: file.size,
+      filePath: `local-fake-path/${file.name}`,
+      uploaderId,
+      folderId,
+      createdAt: new Date().toISOString()
     };
-
     const newDocs = [newDoc, ...crmDocuments];
     setCrmDocuments(newDocs);
     await db.documents.setItem('data', newDocs);
@@ -1946,6 +2017,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.documents.setItem('data', newDocs);
     await db.documentFiles.removeItem(id);
     await queueSyncAction('DELETE_DOCUMENT', { id, filePath: doc.filePath });
+  };
+
+  const addCrmFolder = async (name: string, ownerId: string, parentId?: string) => {
+    const newFolder: CrmFolder = {
+      id: uuidv4(),
+      name,
+      ownerId,
+      parentId,
+      createdAt: new Date().toISOString()
+    };
+    const newFolders = [...crmFolders, newFolder];
+    setCrmFolders(newFolders);
+    await db.crmFolders.setItem('data', newFolders);
+  };
+
+  const updateCrmFolder = async (id: string, data: Partial<CrmFolder>) => {
+    const newFolders = crmFolders.map(f => f.id === id ? { ...f, ...data } : f);
+    setCrmFolders(newFolders);
+    await db.crmFolders.setItem('data', newFolders);
+  };
+
+  const deleteCrmFolder = async (id: string) => {
+    const newFolders = crmFolders.filter(f => f.id !== id);
+    setCrmFolders(newFolders);
+    await db.crmFolders.setItem('data', newFolders);
+    
+    const updatedDocs = crmDocuments.map(d => d.folderId === id ? { ...d, folderId: undefined } : d);
+    setCrmDocuments(updatedDocs);
+    await db.documents.setItem('data', updatedDocs);
   };
 
   const markNotificationAsRead = async (id: string) => {
@@ -2000,7 +2100,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AppContext.Provider value={{ users, clients, quotes, sales, commissions, installments, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, updateMyProfile, addCrmDocument, deleteCrmDocument, downloadCrmDocument, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData }}>
+    <AppContext.Provider value={{ users, clients, quotes, sales, commissions, installments, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, updateMyProfile, addCrmDocument, deleteCrmDocument, downloadCrmDocument, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData }}>
       {children}
     </AppContext.Provider>
   );

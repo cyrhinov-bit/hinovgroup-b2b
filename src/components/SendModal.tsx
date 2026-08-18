@@ -19,8 +19,8 @@ export function SendModal({ quote, client, settings, isOpen, onClose, onSent }: 
 
   const emailInfo = generateEmailContent(quote, client, settings);
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(emailInfo.portalUrl);
+  const handleCopyMessage = () => {
+    navigator.clipboard.writeText(emailInfo.body);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     onSent();
@@ -44,7 +44,7 @@ export function SendModal({ quote, client, settings, isOpen, onClose, onSent }: 
           </div>
           <div>
             <h3>Transmission du Devis N° {quote.quoteNumber}</h3>
-            <p>Destinataire : <strong>{client?.name || client?.contact || 'Client'}</strong> ({client?.email || 'Pas d\'email'})</p>
+            <p>Destinataire : <strong>{client?.name || client?.contact || 'Client'}</strong> ({client?.email || "Pas d'email"})</p>
           </div>
         </div>
 
@@ -54,7 +54,7 @@ export function SendModal({ quote, client, settings, isOpen, onClose, onSent }: 
               <Mail size={18} color="var(--color-primary)" />
               <div>
                 <strong>Envoyer via logiciel e-mail local</strong>
-                <p>Ouvre votre logiciel de messagerie (Outlook, Mail, Gmail...) avec le texte et lien pré-remplis.</p>
+                <p>Ouvre votre logiciel de messagerie (Outlook, Mail, Gmail...) avec le texte pré-rempli.</p>
               </div>
             </div>
             <button className="btn btn-primary" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleOpenMailClient}>
@@ -66,12 +66,12 @@ export function SendModal({ quote, client, settings, isOpen, onClose, onSent }: 
             <div className="option-title">
               <Copy size={18} color="var(--color-secondary)" />
               <div>
-                <strong>Copier le lien direct du portail client</strong>
-                <p>Partagez ce lien sécurisé par SMS ou dans votre propre application de messagerie.</p>
+                <strong>Copier le message</strong>
+                <p>Copiez le texte du message pour le coller dans n'importe quelle application de messagerie.</p>
               </div>
             </div>
-            <button className={`btn ${copied ? 'btn-success' : 'btn-outline'}`} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleCopyLink}>
-              {copied ? <><Check size={16} /> Copié !</> : <><Copy size={16} /> Copier le lien</>}
+            <button className={`btn ${copied ? 'btn-success' : 'btn-outline'}`} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleCopyMessage}>
+              {copied ? <><Check size={16} /> Copié !</> : <><Copy size={16} /> Copier</>}
             </button>
           </div>
         </div>

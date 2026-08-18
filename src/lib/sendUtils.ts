@@ -2,7 +2,6 @@ import type { Client, AppSettings, Quote } from '../context/AppContext';
 
 export interface SendOption {
   type: 'email' | 'whatsapp';
-  portalUrl: string;
   clientName: string;
   clientEmail?: string;
   clientPhone?: string;
@@ -35,21 +34,17 @@ export function formatWhatsAppPhone(phone: string): string {
 export function generateEmailContent(quote: Quote, client?: Client, settings?: AppSettings) {
   const company = settings?.companyName || 'Notre Entreprise';
   const clientName = client?.contact || client?.name || 'Client';
-  const baseUrl = settings?.siteUrl?.trim() ? settings.siteUrl.replace(/\/$/, '') : window.location.origin;
-  const portalUrl = `${baseUrl}/portail-client/${quote.id}`;
-  
+
   const emailSubject = `Devis N° ${quote.quoteNumber} - ${quote.subject || company}`;
   const emailBody = `Bonjour ${clientName},\n\n` +
-    `Veuillez trouver ci-joint le lien sécurisé pour consulter et valider votre devis N° ${quote.quoteNumber} (Montant : ${quote.total.toLocaleString('fr-FR')} FCFA) :\n\n` +
-    `${portalUrl}\n\n` +
-    `N'hésitez pas à nous contacter si vous avez des questions.\n\n` +
+    `Veuillez trouver ci-joint votre devis N° ${quote.quoteNumber} d'un montant de ${quote.total.toLocaleString('fr-FR')} FCFA.\n\n` +
+    `N'hésitez pas à nous contacter pour toute question.\n\n` +
     `Cordialement,\n` +
     `${company}`;
 
   return {
     subject: emailSubject,
     body: emailBody,
-    portalUrl,
     mailto: `mailto:${encodeURIComponent(client?.email || '')}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`
   };
 }
@@ -62,11 +57,10 @@ export function generateWhatsAppLink(quote: Quote, client?: Client, settings?: A
     return { link: '', error: "Ce client n'a pas de numéro de téléphone enregistré." };
   }
 
+  const company = settings?.companyName || 'Notre Entreprise';
   const clientName = client?.contact || client?.name || 'Client';
-  const baseUrl = settings?.siteUrl?.trim() ? settings.siteUrl.replace(/\/$/, '') : window.location.origin;
-  const portalUrl = `${baseUrl}/portail-client/${quote.id}`;
-  
-  const message = `Bonjour ${clientName},\n\nVoici le lien sécurisé vers votre devis N° ${quote.quoteNumber} (Montant : ${quote.total.toLocaleString('fr-FR')} FCFA) :\n${portalUrl}\n\nMerci de votre confiance.`;
+
+  const message = `Bonjour ${clientName},\n\nVeuillez trouver ci-joint votre devis N° ${quote.quoteNumber} d'un montant de ${quote.total.toLocaleString('fr-FR')} FCFA.\n\nMerci de votre confiance.\n\n${company}`;
   
   const phoneFormatted = formatWhatsAppPhone(client.phone);
   const waLink = `https://wa.me/${phoneFormatted}?text=${encodeURIComponent(message)}`;

@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Plus, FileText, Download, Send, MessageCircle, CheckCircle2, Edit2, Trash2, MoreVertical } from 'lucide-react';
+import { Plus, Download, Send, MessageCircle, CheckCircle2, Edit2, Trash2, MoreVertical } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
 import { generateWhatsAppLink } from '../lib/sendUtils';
-import { generateQuotePdf } from '../lib/pdfUtils';
+import { generateQuotePdf, downloadBlob } from '../lib/pdfUtils';
 import { SendModal } from '../components/SendModal';
 import { SaleModal } from '../components/SaleModal';
 import type { Quote } from '../context/AppContext';
@@ -138,7 +138,8 @@ export function Devis() {
                     </button>
                     <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => {
                       const client = clients.find(c => c.id === q.clientId);
-                      generateQuotePdf(q, client, settings);
+                      const blob = generateQuotePdf(q, client, settings);
+                      downloadBlob(blob, `Devis_${q.quoteNumber}.pdf`);
                     }} title="Télécharger PDF">
                       <Download size={18} />
                     </button>
@@ -169,11 +170,8 @@ export function Devis() {
                         <button className="dropdown-item" onClick={() => { handleSendWhatsapp(q); setActiveMenuId(null); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', border: 'none', background: 'none', width: '100%', textAlign: 'left', cursor: 'pointer', fontSize: '13px' }}>
                           <MessageCircle size={14} color="#25D366" /> Envoyer par WhatsApp
                         </button>
-                        <button className="dropdown-item" onClick={() => { navigate(`/portail-client/${q.id}`); setActiveMenuId(null); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', border: 'none', background: 'none', width: '100%', textAlign: 'left', cursor: 'pointer', fontSize: '13px' }}>
-                          <FileText size={14} color="var(--color-primary)" /> Voir le portail
-                        </button>
-                        {q.status === 'Accepté' && (
-                          hasSale(q.id) ? (
+
+                        {hasSale(q.id) ? (
                             <div style={{ padding: '8px 16px', fontSize: '13px', color: 'var(--color-success)', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <CheckCircle2 size={14} /> Vente conclue
                             </div>
@@ -181,8 +179,7 @@ export function Devis() {
                             <button className="dropdown-item" onClick={() => { setActiveSaleQuote(q); setActiveMenuId(null); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', border: 'none', background: 'none', width: '100%', textAlign: 'left', cursor: 'pointer', fontSize: '13px', color: 'var(--color-success)' }}>
                               <CheckCircle2 size={14} /> Conclure la vente
                             </button>
-                          )
-                        )}
+                          )}
                         <hr style={{ margin: '4px 0', border: 'none', borderTop: '1px solid var(--color-border)' }} />
                         <button className="dropdown-item" onClick={() => {
                           setActiveMenuId(null);

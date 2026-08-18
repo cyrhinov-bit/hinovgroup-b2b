@@ -595,166 +595,375 @@ export function generateDailyReportPdf(
   downloadBlob(blob, `Rapport_Journalier_${report.date}.pdf`);
 }
 
-export function generateQuotePdf(quote: Quote, client: Client | undefined, settings: AppSettings) {
+function parseHexColor(hex: string): [number, number, number] {
+  const clean = (hex || '#009688').replace('#', '');
+  const full = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean;
+  const num = parseInt(full, 16);
+  if (isNaN(num)) return [0, 150, 136];
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+}
+
+function mixWithWhite(rgb: [number, number, number], ratio: number): [number, number, number] {
+  return rgb.map(c => Math.round(c + (255 - c) * ratio)) as [number, number, number];
+}
+
+function formatAmount(n: number): string {
+  return Math.round(n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' FCFA';
+}
+
+function formatDateFr(d: string): string {
+  if (!d) return '';
+  const parts = d.split('-');
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return d;
+}
+
+function drawAutoText(doc: jsPDF, text: string, x: number, y: number, maxWidth: number, baseSize: number, align: 'left' | 'right' = 'right') {
+  let size = baseSize;
+  doc.setFontSize(size);
+  while (size > 5 && doc.getTextWidth(text) > maxWidth) {
+    size -= 0.5;
+    doc.setFontSize(size);
+  }
+  doc.text(text, x, y, { align });
+}
+
+export function generateQuotePdf(quote: Quote, client: Client | undefined, settings: AppSettings): Blob {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
-  const margin = 15;
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 16;
   const contentW = pageW - margin * 2;
-  let y = margin;
+  const style = quote.style || 'Classique';
+  const accent = parseHexColor(quote.accentColor || '#009688');
+  const accentLight = mixWithWhite(accent, 0.9);
+  const accentSoft = mixWithWhite(accent, 0.7);
+  const dark: [number, number, number] = [30, 34, 42];
+  const muted: [number, number, number] = [110, 120, 130];
+  const neutralLight: [number, number, number] = [245, 247, 249];
+  const neutralBorder: [number, number, number] = [220, 224, 228];
+  const isModerne = style === 'Moderne';
+  const isMinimaliste = style === 'Minimaliste';
+  const companyName = settings.companyName || 'Entreprise';
+  const validity = `Ce devis est valable pour une durée de ${settings.defaultValidity || 30} jours.`;
+  const dateFr = formatDateFr(quote.date);
+  let y = 0;
 
-  // Header
-  y = drawHeader(doc, settings, margin, y);
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100);
-  doc.text(settings.companyAddress || '', margin, y);
-  y += 5;
-  doc.text(`RCCM: ${settings.companySiret || ''}`, margin, y);
-  y += 10;
+  // ============================ HEADER ============================
+  if (isModerne) {
+    doc.setFillColor(...accent);
+    doc.rect(0, 0, pageW, 44, 'F');
+    doc.setFillColor(...mixWithWhite(accent, 0.15));
+    doc.rect(0, 44, pageW, 1.5, 'F');
 
-  // Title
-  doc.setFontSize(20);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0);
-  doc.text('DEVIS', margin, y);
-  y += 8;
-
-  // Quote number & date
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`N° ${quote.quoteNumber}`, margin, y);
-  doc.text(`Date: ${quote.date}`, pageW - margin, y, { align: 'right' });
-  y += 10;
-
-  // Client info box
-  doc.setFillColor(245, 245, 245);
-  doc.roundedRect(pageW - margin - 70, y - 5, 70, 28, 2, 2, 'F');
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0);
-  doc.text('Client:', pageW - margin - 65, y + 1);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(60);
-  const clientLines = [
-    client?.name || 'Inconnu',
-    client?.contact || '',
-    client?.email || '',
-    client?.company || '',
-  ].filter(Boolean);
-  clientLines.forEach((line, i) => {
-    doc.text(line, pageW - margin - 65, y + 7 + i * 5);
-  });
-  y += 15;
-
-  // Subject
-  if (quote.subject) {
-    doc.setFontSize(10);
+    doc.setTextColor(255, 255, 255);
+    if (settings.headerLogoBase64) {
+      try { doc.addImage(settings.headerLogoBase64, 'PNG', margin, 8, 36, 14); } catch { /* logo invalide */ }
+    }
+    const logoOffset = settings.headerLogoBase64 ? margin + 40 : margin;
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(0);
-    doc.text(`Objet: ${quote.subject}`, margin, y);
-    y += 10;
+    doc.setFontSize(18);
+    doc.text(companyName, logoOffset, 18);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(226, 240, 245);
+    doc.text(settings.companyAddress || '', logoOffset, 25);
+    if (settings.companySiret) doc.text(`RCCM : ${settings.companySiret}`, logoOffset, 30);
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(22);
+    doc.text('DEVIS', pageW - margin, 18, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(`N° ${quote.quoteNumber}`, pageW - margin, 26, { align: 'right' });
+    doc.text(`Date : ${dateFr}`, pageW - margin, 31, { align: 'right' });
+    doc.setFontSize(8);
+    doc.setTextColor(226, 240, 245);
+    doc.text(validity, pageW - margin, 38, { align: 'right' });
+    y = 56;
+  } else {
+    // En-tête pleine largeur avec bandeau coloré
+    if (!isMinimaliste) {
+      doc.setFillColor(...accent);
+      doc.rect(0, 0, pageW, 38, 'F');
+      doc.setFillColor(...mixWithWhite(accent, 0.3));
+      doc.rect(0, 38, pageW, 1, 'F');
+    }
+    y = isMinimaliste ? margin : 8;
+    if (settings.headerLogoBase64) {
+      try { doc.addImage(settings.headerLogoBase64, 'PNG', margin, y, 36, 14); } catch { /* logo invalide */ }
+      const logoOffset = margin + 40;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.setTextColor(isMinimaliste ? dark[0] : 255, isMinimaliste ? dark[1] : 255, isMinimaliste ? dark[2] : 255);
+      doc.text(companyName, logoOffset, y + 8);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(isMinimaliste ? muted[0] : 226, isMinimaliste ? muted[1] : 240, isMinimaliste ? muted[2] : 245);
+      doc.text(settings.companyAddress || '', logoOffset, y + 13);
+      if (settings.companySiret) doc.text(`RCCM : ${settings.companySiret}`, logoOffset, y + 18);
+    } else {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.setTextColor(isMinimaliste ? dark[0] : 255, isMinimaliste ? dark[1] : 255, isMinimaliste ? dark[2] : 255);
+      doc.text(companyName.toUpperCase(), margin, y + 8);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(isMinimaliste ? muted[0] : 226, isMinimaliste ? muted[1] : 240, isMinimaliste ? muted[2] : 245);
+      doc.text(settings.companyAddress || '', margin, y + 13);
+      if (settings.companySiret) doc.text(`RCCM : ${settings.companySiret}`, margin, y + 18);
+    }
+
+    // Titre DEVIS à droite
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(24);
+    doc.setTextColor(isMinimaliste ? dark[0] : 255, isMinimaliste ? dark[1] : 255, isMinimaliste ? dark[2] : 255);
+    doc.text('DEVIS', pageW - margin, y + 8, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(isMinimaliste ? muted[0] : 226, isMinimaliste ? muted[1] : 240, isMinimaliste ? muted[2] : 245);
+    doc.text(`N° ${quote.quoteNumber}`, pageW - margin, y + 15, { align: 'right' });
+    doc.text(`Date : ${dateFr}`, pageW - margin, y + 20, { align: 'right' });
+    doc.setFontSize(8);
+    doc.text(validity, pageW - margin, y + 25, { align: 'right' });
+    y = isMinimaliste ? y + 30 : 48;
   }
 
-  // Table header
-  const colWidths = [contentW * 0.40, contentW * 0.10, contentW * 0.18, contentW * 0.14, contentW * 0.18];
-  const headers = ['Description', 'Qté', 'Prix Unitaire', 'Remise', 'Total'];
-  doc.setFillColor(230, 230, 230);
-  doc.rect(margin, y, contentW, 8, 'F');
-  doc.setFontSize(8);
+  // ====================== CLIENT + OBJET ======================
+  const cardW = 78;
+  const cardH = 26;
+  const cardX = margin;
+  const cardY = y;
+  if (!isMinimaliste) {
+    doc.setFillColor(...(isModerne ? accentLight : neutralLight));
+    doc.roundedRect(cardX, cardY, cardW, cardH, 2, 2, 'F');
+    doc.setDrawColor(...(isModerne ? accentSoft : neutralBorder));
+    doc.setLineWidth(0.3);
+    doc.roundedRect(cardX, cardY, cardW, cardH, 2, 2, 'S');
+  }
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0);
-  let x = margin;
-  headers.forEach((h, i) => {
-    doc.text(h, x + 2, y + 5.5);
-    x += colWidths[i];
-  });
-  y += 8;
-
-  // Table rows
+  doc.setFontSize(9);
+  doc.setTextColor(...(isMinimaliste ? dark : accent));
+  doc.text('CLIENT', cardX + 5, cardY + 6);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  quote.lines.forEach((line) => {
-    doc.setDrawColor(220);
-    doc.line(margin, y, pageW - margin, y);
-    y += 2;
-    x = margin;
+  doc.setFontSize(9);
+  doc.setTextColor(...dark);
+  const clientLines = [
+    client?.company || client?.name || 'Inconnu',
+    // Only show contact if it differs from name/company
+    client?.contact && client.contact !== client.name && client.contact !== client.company ? `Contact : ${client.contact}` : '',
+    client?.phone || '',
+    client?.email || '',
+  ].filter(Boolean);
+  clientLines.slice(0, 3).forEach((line, i) => {
+    doc.text(line, cardX + 5, cardY + 12 + i * 4.5);
+  });
+
+  const objX = cardX + cardW + 10;
+  const objW = pageW - margin - objX;
+  if (quote.subject) {
+    if (!isMinimaliste) {
+      doc.setFillColor(...(isModerne ? accentLight : neutralLight));
+      doc.roundedRect(objX, cardY, objW, cardH, 2, 2, 'F');
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(...(isMinimaliste ? dark : accent));
+    doc.text('OBJET', objX + 5, cardY + 6);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...dark);
+    const subjectLines = doc.splitTextToSize(quote.subject, objW - 10) as string[];
+    subjectLines.slice(0, 3).forEach((line, i) => {
+      doc.text(line, objX + 5, cardY + 12 + i * 4.5);
+    });
+  }
+  y += cardH + 10;
+
+  // ====================== TABLEAU ======================
+  const colWidths = [contentW * 0.42, contentW * 0.09, contentW * 0.16, contentW * 0.11, contentW * 0.22];
+  const headers = ['DESCRIPTION', 'QTÉ', 'PRIX UNITAIRE', 'REMISE', 'TOTAL'];
+  const tableX = margin;
+
+  const drawTableHeader = () => {
+    if (isModerne) {
+      doc.setFillColor(...accent);
+      doc.rect(tableX, y, contentW, 9, 'F');
+      doc.setTextColor(255, 255, 255);
+    } else if (isMinimaliste) {
+      doc.setFillColor(...dark);
+      doc.rect(tableX, y, contentW, 9, 'F');
+      doc.setTextColor(255, 255, 255);
+    } else {
+      doc.setFillColor(...neutralLight);
+      doc.rect(tableX, y, contentW, 9, 'F');
+      doc.setTextColor(...accent);
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    let hx = tableX;
+    headers.forEach((h, i) => {
+      if (i === 0) {
+        doc.text(h, hx + 2, y + 6);
+      } else {
+        doc.text(h, hx + colWidths[i] - 2, y + 6, { align: 'right' });
+      }
+      hx += colWidths[i];
+    });
+    y += 9;
+  };
+
+  drawTableHeader();
+
+  quote.lines.forEach((line, idx) => {
+    if (y > pageH - 36) {
+      doc.addPage();
+      y = margin;
+      drawTableHeader();
+    }
+    const rowH = 8;
+    if (isModerne && idx % 2 === 1) {
+      doc.setFillColor(...accentLight);
+      doc.rect(tableX, y, contentW, rowH, 'F');
+    }
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...dark);
+    const descLines = doc.splitTextToSize(line.description || '-', colWidths[0] - 4) as string[];
+    let cx = tableX;
+    doc.text(descLines[0], cx + 2, y + 5.5);
+    cx += colWidths[0];
     const cells = [
-      line.description,
-      String(line.quantity),
-      `${line.unitPrice.toLocaleString('fr-FR')} FCFA`,
-      line.discountPercent && line.discountPercent > 0 ? `-${line.discountPercent}%` : '-',
-      `${line.total.toLocaleString('fr-FR')} FCFA`,
+      String(line.quantity || 0),
+      formatAmount(line.unitPrice || 0),
+      line.discountPercent && line.discountPercent > 0 ? `-${line.discountPercent}%` : '—',
+      formatAmount(line.total || 0),
     ];
     cells.forEach((cell, i) => {
-      doc.text(cell, x + 2, y + 4);
-      x += colWidths[i];
+      const colIdx = i + 1; // cells[0]=Qté→colWidths[1], cells[1]=Prix→colWidths[2], etc.
+      cx += colWidths[colIdx];
+      drawAutoText(doc, cell, cx - 2, y + 5.5, colWidths[colIdx] - 4, 8);
     });
-    y += 8;
+    y += rowH;
+    if (!isModerne) {
+      doc.setDrawColor(isMinimaliste ? 230 : 235);
+      doc.setLineWidth(0.2);
+      doc.line(tableX, y, pageW - margin, y);
+    }
   });
 
-  // Separator
-  y += 2;
-  doc.setDrawColor(200);
-  doc.line(margin, y, pageW - margin, y);
-  y += 6;
+  y += 4;
 
-  // Totals
-  const totalsX = pageW - margin - 60;
-  doc.setFontSize(9);
-  if (quote.discountPercent && quote.discountPercent > 0) {
+  // ====================== TOTAUX ======================
+  const grossSubtotal = (quote.subtotal || 0) + (quote.discountAmount || 0);
+  const totalsW = 62;
+  const totalsX = pageW - margin - totalsW;
+  const totalRows = [
+    { label: 'Montant brut', value: formatAmount(grossSubtotal) },
+    ...(quote.discountPercent && quote.discountPercent > 0
+      ? [{ label: `Remise (${quote.discountPercent}%)`, value: `-${formatAmount(quote.discountAmount || 0)}` }]
+      : []),
+  ];
+
+  if (!isMinimaliste) {
+    doc.setFillColor(...(isModerne ? accentLight : neutralLight));
+    const boxH = totalRows.length * 7 + 13;
+    doc.roundedRect(totalsX, y - 3, totalsW, boxH, 2, 2, 'F');
+  }
+
+  totalRows.forEach((r) => {
     doc.setFont('helvetica', 'normal');
-    doc.text(`Remise (${quote.discountPercent}%)`, totalsX, y);
-    doc.text(`-${quote.discountAmount?.toLocaleString('fr-FR') || '0'} FCFA`, pageW - margin, y, { align: 'right' });
+    doc.setFontSize(9);
+    doc.setTextColor(...muted);
+    doc.text(r.label, totalsX + 5, y + 2);
+    doc.setTextColor(...dark);
+    doc.text(r.value, pageW - margin - 5, y + 2, { align: 'right' });
     y += 6;
-    doc.text('Sous-total Net', totalsX, y);
-    doc.text(`${quote.subtotal.toLocaleString('fr-FR')} FCFA`, pageW - margin, y, { align: 'right' });
-    y += 6;
+  });
+  y += 1;
+
+  if (isModerne) {
+    doc.setFillColor(...accent);
+    doc.roundedRect(totalsX, y - 3, totalsW, 10, 2, 2, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('TOTAL', totalsX + 5, y + 3);
+    doc.text(formatAmount(quote.total || 0), pageW - margin - 5, y + 3, { align: 'right' });
+    y += 10;
   } else {
-    doc.setFont('helvetica', 'normal');
-    doc.text('Sous-total', totalsX, y);
-    doc.text(`${quote.subtotal.toLocaleString('fr-FR')} FCFA`, pageW - margin, y, { align: 'right' });
-    y += 6;
+    doc.setDrawColor(isMinimaliste ? 0 : accent[0], isMinimaliste ? 0 : accent[1], isMinimaliste ? 0 : accent[2]);
+    doc.setLineWidth(0.6);
+    doc.line(totalsX, y, pageW - margin, y);
+    y += 4;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...dark);
+    doc.text('TOTAL', totalsX + 5, y);
+    doc.text(formatAmount(quote.total || 0), pageW - margin - 5, y, { align: 'right' });
+    y += 8;
   }
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('Total', totalsX, y);
-  doc.text(`${quote.total.toLocaleString('fr-FR')} FCFA`, pageW - margin, y, { align: 'right' });
-  y += 12;
-
-  // Conditions
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0);
-  doc.text('Conditions Générales:', margin, y);
-  y += 5;
+  // ====================== CONDITIONS ======================
+  y += 6;
+  if (y > pageH - 45) {
+    doc.addPage();
+    y = margin + 6;
+  }
+  if (!isMinimaliste) {
+    doc.setFillColor(...neutralLight);
+    doc.rect(margin, y, contentW, 8, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(...accent);
+    doc.text('CONDITIONS GÉNÉRALES', margin + 5, y + 5.5);
+    y += 8 + 5;
+  } else {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(...dark);
+    doc.text('CONDITIONS GÉNÉRALES', margin, y);
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.3);
+    doc.line(margin, y + 2, pageW - margin, y + 2);
+    y += 8;
+  }
+  const terms = settings.defaultTerms ? `${validity}\n${settings.defaultTerms}` : validity;
+  const termLines = doc.splitTextToSize(terms, contentW) as string[];
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100);
-  const validity = `Ce devis est valable pour une durée de ${settings.defaultValidity || 30} jours.`;
-  doc.text(validity, margin, y);
-  y += 5;
-  if (settings.defaultTerms) {
-    const termLines = doc.splitTextToSize(settings.defaultTerms, contentW);
-    doc.text(termLines, margin, y);
-  }
+  doc.setFontSize(8);
+  doc.setTextColor(...muted);
+  y += 2;
+  doc.text(termLines, margin, y);
+  y += termLines.length * 4 + 4;
 
-  // Signatures
-  y = Math.max(y + 20, 240);
-  doc.setFontSize(9);
+  // ====================== SIGNATURES ======================
+  y += 6;
+  if (y > pageH - 30) y = pageH - 30;
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0);
+  doc.setFontSize(8.5);
+  doc.setTextColor(...dark);
   doc.text('Signature du prestataire', margin, y);
-  doc.text('Signature du client', pageW - margin - 50, y);
-  y += 3;
-  doc.setDrawColor(180);
-  doc.setLineDashPattern([2, 2], 0);
-  doc.line(margin, y + 15, margin + 50, y + 15);
-  doc.line(pageW - margin - 50, y + 15, pageW - margin, y + 15);
+  doc.text('Signature du client', pageW - margin, y, { align: 'right' });
+  doc.setDrawColor(...muted);
+  doc.setLineWidth(0.3);
+  doc.setLineDashPattern([1.5, 1.5], 0);
+  doc.line(margin, y + 10, margin + 52, y + 10);
+  doc.line(pageW - margin - 52, y + 10, pageW - margin, y + 10);
   doc.setLineDashPattern([], 0);
 
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(...muted);
+  doc.text(
+    `Document généré le ${new Date().toLocaleDateString('fr-FR')} — ${companyName}${settings.companySiret ? ` — RCCM : ${settings.companySiret}` : ''}`,
+    pageW / 2,
+    pageH - 8,
+    { align: 'center' }
+  );
+
   const blob = doc.output('blob');
-  downloadBlob(blob, `Devis_${quote.quoteNumber}.pdf`);
+  return blob;
 }
 
 export function generateSalePdf(sale: Sale, client: Client | undefined, settings: AppSettings) {

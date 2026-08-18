@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { AlertTriangle, Package, TrendingDown, Search } from 'lucide-react';
+import ProductImage from '../../features/products/images/ProductImage';
 
 export default function PosStock() {
   const { posProducts } = useAppContext();
@@ -84,6 +85,7 @@ export default function PosStock() {
 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Produit</th>
                 <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Référence</th>
                 <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Stock</th>
                 <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Prix d'achat</th>
@@ -98,7 +100,18 @@ export default function PosStock() {
                 const sellingRowValue = (p.sellingPrice || 0) * (p.quantity || 0);
                 return (
                   <tr key={p.id} style={{ borderBottom: '1px solid var(--color-surface-alt)' }}>
-                    <td style={{ padding: '10px 12px', fontSize: '14px', fontFamily: 'monospace' }}>{p.reference}</td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <ProductImage product={p} size={36} />
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: 500 }}>{p.name}</div>
+                          <span style={{ fontSize: '12px', color: p.family === 'Livre' ? 'var(--color-primary)' : 'var(--color-success)' }}>
+                            {p.family}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ padding: '10px 12px', fontSize: '14px', fontFamily: 'monospace', color: 'var(--color-text-muted)' }}>{p.reference}</td>
                     <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', fontWeight: 500, color: p.quantity <= p.minStock ? 'var(--color-error)' : 'inherit' }}>{p.quantity}</td>
                     <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right' }}>{p.purchasePrice ? p.purchasePrice.toLocaleString() + ' FCFA' : '-'}</td>
                     <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', fontWeight: 600 }}>{rowValue.toLocaleString()} FCFA</td>
@@ -109,7 +122,7 @@ export default function PosStock() {
               })}
               {filteredProducts.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Aucun produit trouvé</td>
+                  <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Aucun produit trouvé</td>
                 </tr>
               )}
             </tbody>
