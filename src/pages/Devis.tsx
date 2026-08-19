@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
-import { generateWhatsAppLink } from '../lib/sendUtils';
 import { generateQuotePdf, downloadBlob } from '../lib/pdfUtils';
 import { SendModal } from '../components/SendModal';
 import { SaleModal } from '../components/SaleModal';
@@ -19,13 +18,6 @@ export function Devis() {
   const [statusFilter, setStatusFilter] = useState('');
   const [activeSendQuote, setActiveSendQuote] = useState<Quote | null>(null);
   const [activeSaleQuote, setActiveSaleQuote] = useState<Quote | null>(null);
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const closeMenu = () => setActiveMenuId(null);
-    document.addEventListener('click', closeMenu);
-    return () => document.removeEventListener('click', closeMenu);
-  }, []);
 
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Inconnu';
 
@@ -54,17 +46,6 @@ export function Devis() {
 
   const handleSend = (q: Quote) => {
     setActiveSendQuote(q);
-  };
-
-  const handleSendWhatsapp = (q: Quote) => {
-    const client = clients.find(c => c.id === q.clientId);
-    const { link, error } = generateWhatsAppLink(q, client, settings);
-    if (error) {
-      alert(error);
-      return;
-    }
-    updateQuoteStatus(q.id, 'Envoyé');
-    window.open(link, '_blank');
   };
 
   return (
@@ -131,8 +112,7 @@ export function Devis() {
                 </td>
                 <td data-label="Date d'émission">{q.date}</td>
                 <td data-label="Actions">
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', position: 'relative' }}>
-                    {/* Actions principales toujours visibles */}
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => navigate(`/devis/nouveau?editId=${q.id}`)} title="Modifier">
                       <Edit2 size={18} />
                     </button>
@@ -143,58 +123,31 @@ export function Devis() {
                     }} title="Télécharger PDF">
                       <Download size={18} />
                     </button>
-
-                    {/* Menu déroulant pour les autres actions */}
-                    <button 
-                      className="icon-button" 
-                      style={{ color: 'var(--color-text)' }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMenuId(activeMenuId === q.id ? null : q.id);
-                      }} 
-                      title="Plus d'actions"
-                    >
-                      <MoreVertical size={18} />
+                    <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => handleSend(q)} title="Envoyer le devis">
+                      <Send size={18} />
                     </button>
-
-                    {activeMenuId === q.id && (
-                      <div style={{
-                        position: 'absolute', right: '0', top: '100%', zIndex: 10,
-                        background: 'white', border: '1px solid var(--color-border)',
-                        borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                        padding: '8px 0', minWidth: '180px', display: 'flex', flexDirection: 'column'
-                      }}>
-                        <button className="dropdown-item" onClick={() => { handleSend(q); setActiveMenuId(null); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', border: 'none', background: 'none', width: '100%', textAlign: 'left', cursor: 'pointer', fontSize: '13px' }}>
-                          <Send size={14} color="var(--color-primary)" /> Envoyer par E-mail
-                        </button>
-                        <button className="dropdown-item" onClick={() => { handleSendWhatsapp(q); setActiveMenuId(null); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', border: 'none', background: 'none', width: '100%', textAlign: 'left', cursor: 'pointer', fontSize: '13px' }}>
-                          <MessageCircle size={14} color="#25D366" /> Envoyer par WhatsApp
-                        </button>
-
-                        {hasSale(q.id) ? (
-                            <div style={{ padding: '8px 16px', fontSize: '13px', color: 'var(--color-success)', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <CheckCircle2 size={14} /> Vente conclue
-                            </div>
-                          ) : (
-                            <button className="dropdown-item" onClick={() => { setActiveSaleQuote(q); setActiveMenuId(null); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', border: 'none', background: 'none', width: '100%', textAlign: 'left', cursor: 'pointer', fontSize: '13px', color: 'var(--color-success)' }}>
-                              <CheckCircle2 size={14} /> Conclure la vente
-                            </button>
-                          )}
-                        <hr style={{ margin: '4px 0', border: 'none', borderTop: '1px solid var(--color-border)' }} />
-                        <button className="dropdown-item" onClick={() => {
-                          setActiveMenuId(null);
-                          confirm({
-                            title: 'Supprimer le devis',
-                            message: `Voulez-vous vraiment supprimer le devis "${q.quoteNumber}" ? Cette action est irréversible.`,
-                            confirmLabel: 'Supprimer',
-                            variant: 'danger',
-                            onConfirm: () => deleteQuote(q.id)
-                          });
-                        }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', border: 'none', background: 'none', width: '100%', textAlign: 'left', cursor: 'pointer', fontSize: '13px', color: 'var(--color-error)' }}>
-                          <Trash2 size={14} /> Supprimer
-                        </button>
+                    
+                    {hasSale(q.id) ? (
+                      <div title="Vente conclue" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', color: 'var(--color-success)' }}>
+                        <CheckCircle2 size={18} />
                       </div>
+                    ) : (
+                      <button className="icon-button" style={{ color: 'var(--color-success)' }} onClick={() => setActiveSaleQuote(q)} title="Conclure la vente">
+                        <CheckCircle2 size={18} />
+                      </button>
                     )}
+
+                    <button className="icon-button" style={{ color: 'var(--color-error)' }} onClick={() => {
+                      confirm({
+                        title: 'Supprimer le devis',
+                        message: `Voulez-vous vraiment supprimer le devis "${q.quoteNumber}" ? Cette action est irréversible.`,
+                        confirmLabel: 'Supprimer',
+                        variant: 'danger',
+                        onConfirm: () => deleteQuote(q.id)
+                      });
+                    }} title="Supprimer">
+                      <Trash2 size={18} />
+                    </button>
                   </div>
                 </td>
               </tr>

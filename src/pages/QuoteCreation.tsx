@@ -91,8 +91,21 @@ export function QuoteCreation() {
   }, [clientId, subject, serviceId, style, accentColor, discountPercent, lines, lineCosts, draftLoaded]);
 
   const handleAddLine = () => {
-    setLines([...lines, { prestationId: '', description: '', quantity: 1, unitPrice: 0, discountPercent: 0, total: 0 }]);
+    setLines([...lines, { prestationId: '', description: '', quantity: '' as any, unitPrice: '' as any, discountPercent: 0, total: 0 }]);
     setLineCosts([...lineCosts, 0]);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const tr = e.currentTarget.closest('tr');
+      if (!tr) return;
+      const inputs = Array.from(tr.querySelectorAll('input, select'));
+      const index = inputs.indexOf(e.currentTarget);
+      if (index > -1 && index < inputs.length - 1) {
+        (inputs[index + 1] as HTMLElement).focus();
+      }
+    }
   };
 
   const handleRemoveLine = (index: number) => {
@@ -119,7 +132,9 @@ export function QuoteCreation() {
       }
     }
 
-    const rawTotal = line.quantity * line.unitPrice;
+    const q = Number(line.quantity) || 0;
+    const p = Number(line.unitPrice) || 0;
+    const rawTotal = q * p;
     const lineDiscount = Math.round((rawTotal * (line.discountPercent || 0)) / 100);
     line.total = Math.max(0, rawTotal - lineDiscount);
     newLines[index] = line;
@@ -256,22 +271,22 @@ export function QuoteCreation() {
                   return (
                     <tr key={idx}>
                       <td>
-                        <select className="table-input" value={line.prestationId} onChange={e => updateLine(idx, 'prestationId', e.target.value)}>
+                        <select className="table-input" value={line.prestationId} onChange={e => updateLine(idx, 'prestationId', e.target.value)} onKeyDown={handleKeyDown}>
                           <option value="">{availablePrestations.length === 0 ? 'Aucune prestation disponible...' : 'Choisir...'}</option>
                           {availablePrestations.map(p => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}
                         </select>
                       </td>
                       <td>
-                        <input type="text" className="table-input" value={line.description} onChange={e => updateLine(idx, 'description', e.target.value)} />
+                        <input type="text" className="table-input" value={line.description} onChange={e => updateLine(idx, 'description', e.target.value)} onKeyDown={handleKeyDown} />
                       </td>
                       <td>
-                        <input type="number" className="table-input" value={line.quantity} min="1" onChange={e => updateLine(idx, 'quantity', Number(e.target.value))} />
+                        <input type="number" className="table-input" value={line.quantity} min="1" onChange={e => updateLine(idx, 'quantity', e.target.value === '' ? '' : Number(e.target.value))} onKeyDown={handleKeyDown} />
                       </td>
                       <td>
-                        <input type="number" className="table-input" value={line.unitPrice} step="0.01" onChange={e => updateLine(idx, 'unitPrice', Number(e.target.value))} />
+                        <input type="number" className="table-input" value={line.unitPrice} step="0.01" onChange={e => updateLine(idx, 'unitPrice', e.target.value === '' ? '' : Number(e.target.value))} onKeyDown={handleKeyDown} />
                       </td>
                       <td>
-                        <input type="number" className="table-input" value={line.discountPercent || ''} min="0" max="100" placeholder="0%" onChange={e => updateLine(idx, 'discountPercent', Math.min(100, Math.max(0, Number(e.target.value))))} />
+                        <input type="number" className="table-input" value={line.discountPercent || ''} min="0" max="100" placeholder="0%" onChange={e => updateLine(idx, 'discountPercent', Math.min(100, Math.max(0, Number(e.target.value))))} onKeyDown={handleKeyDown} />
                       </td>
                       <td>
                         <strong>{line.total.toLocaleString('fr-FR')} FCFA</strong>
@@ -292,6 +307,7 @@ export function QuoteCreation() {
                             newCosts[idx] = Math.max(0, Number(e.target.value));
                             setLineCosts(newCosts);
                           }}
+                          onKeyDown={handleKeyDown}
                           style={{ marginBottom: '4px', fontSize: '0.82rem' }}
                           title="Prix d'achat unitaire (usage interne uniquement)"
                         />
@@ -325,6 +341,37 @@ export function QuoteCreation() {
             <p style={{ marginTop: '12px', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
               💡 Aucune prestation dans le catalogue. Vous pouvez saisir manuellement la description et le prix, ou ajouter des prestations dans la page « Prestations ».
             </p>
+          )}
+
+          {/* Margin summary — UI only, never in the PDF */}
+          {totalCost > 0 && (
+            <div style={{
+              marginTop: '16px',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              background: 'color-mix(in srgb, var(--color-success) 8%, var(--color-surface))',
+              border: `1px solid color-mix(in srgb, ${getMarginColor(globalMargin)} 30%, transparent)`,
+              display: 'flex', flexDirection: 'column', gap: '6px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 500, marginBottom: '2px' }}>
+                <TrendingUp size={14} />
+                Analyse de rentabilité (usage interne — non visible sur le devis)
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                <span>Prix de vente total</span>
+                <span style={{ fontWeight: 600 }}>{total.toLocaleString('fr-FR')} FCFA</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                <span>Coût d'achat total</span>
+                <span style={{ fontWeight: 600 }}>{totalCost.toLocaleString('fr-FR')} FCFA</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', borderTop: '1px solid var(--color-border)', paddingTop: '6px', marginTop: '2px' }}>
+                <span style={{ fontWeight: 600 }}>Marge globale</span>
+                <span style={{ fontWeight: 700, fontSize: '1.05rem', color: getMarginColor(globalMargin) }}>
+                  {globalMargin >= 0 ? '+' : ''}{globalMargin.toLocaleString('fr-FR')} FCFA
+                </span>
+              </div>
+            </div>
           )}
         </section>
 
@@ -401,36 +448,6 @@ export function QuoteCreation() {
             <span>{total.toLocaleString('fr-FR')} FCFA</span>
           </div>
 
-          {/* Margin summary — UI only, never in the PDF */}
-          {totalCost > 0 && (
-            <div style={{
-              marginTop: '12px',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              background: 'color-mix(in srgb, var(--color-success) 8%, var(--color-surface))',
-              border: `1px solid color-mix(in srgb, ${getMarginColor(globalMargin)} 30%, transparent)`,
-              display: 'flex', flexDirection: 'column', gap: '6px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 500, marginBottom: '2px' }}>
-                <TrendingUp size={14} />
-                Analyse de rentabilité (usage interne — non visible sur le devis)
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                <span>Prix de vente total</span>
-                <span style={{ fontWeight: 600 }}>{total.toLocaleString('fr-FR')} FCFA</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                <span>Coût d'achat total</span>
-                <span style={{ fontWeight: 600 }}>{totalCost.toLocaleString('fr-FR')} FCFA</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', borderTop: '1px solid var(--color-border)', paddingTop: '6px', marginTop: '2px' }}>
-                <span style={{ fontWeight: 600 }}>Marge globale</span>
-                <span style={{ fontWeight: 700, fontSize: '1.05rem', color: getMarginColor(globalMargin) }}>
-                  {globalMargin >= 0 ? '+' : ''}{globalMargin.toLocaleString('fr-FR')} FCFA
-                </span>
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="form-actions">

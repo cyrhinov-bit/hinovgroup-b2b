@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Send, Mail, Copy, Check, ExternalLink, X } from 'lucide-react';
+import { Send, Mail, Copy, Check, ExternalLink, X, MessageCircle } from 'lucide-react';
 import type { Quote, Client, AppSettings } from '../context/AppContext';
-import { generateEmailContent } from '../lib/sendUtils';
+import { generateEmailContent, generateWhatsAppLink } from '../lib/sendUtils';
 import './SendModal.css';
 
 interface SendModalProps {
@@ -31,6 +31,16 @@ export function SendModal({ quote, client, settings, isOpen, onClose, onSent }: 
     onSent();
   };
 
+  const handleSendWhatsapp = () => {
+    const { link, error } = generateWhatsAppLink(quote, client, settings);
+    if (error) {
+      alert(error);
+      return;
+    }
+    window.open(link, '_blank');
+    onSent();
+  };
+
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="send-modal card">
@@ -49,6 +59,19 @@ export function SendModal({ quote, client, settings, isOpen, onClose, onSent }: 
         </div>
 
         <div className="send-modal-body">
+          <div className="send-option-card">
+            <div className="option-title">
+              <MessageCircle size={18} color="#25D366" />
+              <div>
+                <strong>Envoyer par WhatsApp</strong>
+                <p>Ouvrir WhatsApp avec un message pré-rempli contenant le lien du devis.</p>
+              </div>
+            </div>
+            <button className="btn btn-outline" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px', borderColor: '#25D366', color: '#25D366' }} onClick={handleSendWhatsapp}>
+              <ExternalLink size={16} /> WhatsApp
+            </button>
+          </div>
+
           <div className="send-option-card">
             <div className="option-title">
               <Mail size={18} color="var(--color-primary)" />
