@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import type { PosCategory, PosBrand, PosSupplier, PosProduct } from '../../../context/AppContext';
 import { Barcode, Isbn, ProductReference } from '../domain/value-objects/ValueObjects';
 import { productRepository, type ProductPersistence } from '../data/repositories/ProductRepository';
@@ -257,7 +258,7 @@ export class ProductService {
     if (isbn && !Isbn.isValid(isbn)) throw new Error('INVALID_ISBN');
 
     const newProduct: PosProduct = {
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       reference: ref,
       name: toCleanString(data.name) || ref,
       barcode: barcode || undefined,
@@ -398,7 +399,7 @@ export class ProductService {
     const barcode = entry.barcode || undefined;
     const isbn = entry.isbn || undefined;
     return {
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       reference: ref,
       name: toCleanString(entry.name || '') || ref,
       barcode,
@@ -422,7 +423,7 @@ export class ProductService {
   // === STOCK ===
   calculateStockMovement(product: PosProduct, type: StockMovement['type'], quantity: number): StockMovement {
     return {
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       productId: product.id,
       type,
       quantity,

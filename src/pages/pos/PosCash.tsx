@@ -41,8 +41,8 @@ export default function PosCash() {
 
   const handleOpen = async () => {
     const fund = Number(initialFund);
-    if (!fund || fund <= 0) {
-      alert('Le fonds de caisse doit être supérieur à 0.');
+    if (isNaN(fund) || fund < 0 || initialFund === '') {
+      alert('Le fonds de caisse doit être supérieur ou égal à 0.');
       return;
     }
     await addPosCashSession({

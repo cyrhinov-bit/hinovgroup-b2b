@@ -171,7 +171,7 @@ export default function PosTerminal() {
       alert(`Stock insuffisant pour : ${outOfStock.map(c => c.name).join(', ')}`);
       return;
     }
-    const txNumber = `VTE-${Date.now().toString(36).toUpperCase()}`;
+    const txNumber = `hnv${Date.now()}`;
 
     const payments: any[] = [];
     if (paymentMethod === 'Mixte') {
@@ -562,6 +562,7 @@ export default function PosTerminal() {
             <Button 
               variant="success" 
               onClick={async () => {
+                if (initialFund === '') return;
                 const fund = Number(initialFund);
                 if (!isNaN(fund)) {
                   await addPosCashSession({ id: uuidv4(), cashierId: currentUser?.id, openedAt: new Date().toISOString(), initialFund: fund, status: 'Ouverte' });
@@ -585,6 +586,7 @@ export default function PosTerminal() {
             onKeyDown={async e => {
               if (e.key === 'Enter') {
                 e.preventDefault();
+                if (initialFund === '') return;
                 const fund = Number(initialFund);
                 if (!isNaN(fund)) {
                   await addPosCashSession({ id: uuidv4(), cashierId: currentUser?.id, openedAt: new Date().toISOString(), initialFund: fund, status: 'Ouverte' });

@@ -3,6 +3,7 @@ import { useAppContext } from '../../../context/AppContext';
 import { Save, X, Plus, Upload } from 'lucide-react';
 import { stockService } from '../services/StockService';
 import { useProductImages } from '../images/ProductImagesContext';
+import { v4 as uuidv4 } from 'uuid';
 import type { PosProduct } from '../../../context/AppContext';
 
 interface ProductFormData {
@@ -106,7 +107,7 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
       if (onCancel) onCancel(); // Return to catalog
     } else {
       // Create mode
-      const id = crypto.randomUUID();
+      const id = uuidv4();
 
       const initialQuantity = Number(formData.quantity) || 0;
 
@@ -322,8 +323,9 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
                 type="number"
                 className="table-input"
                 placeholder="0"
+                min="0"
                 value={formData.quantity}
-                onChange={(e) => setFormData({ ...formData, quantity: e.target.value === '' ? '' : parseInt(e.target.value) })}
+                onChange={(e) => setFormData({ ...formData, quantity: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value)) })}
                 required
               />
             </div>
