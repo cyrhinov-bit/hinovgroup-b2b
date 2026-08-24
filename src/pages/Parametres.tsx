@@ -118,8 +118,17 @@ export function Parametres() {
                 variant: 'danger',
                 onConfirm: async () => {
                   const { db } = await import('../lib/db');
+                  const queue = (await db.syncQueue.getItem('queue')) as any[] || [];
+                  if (queue.length > 0) {
+                    alert(`Attention : ${queue.length} élément(s) en attente de synchronisation. Veuillez patienter ou vous connecter à internet avant de vider le cache, sous peine de perdre ces données.`);
+                    return;
+                  }
+                  
+                  const protectedKeys = ['syncQueue', 'syncErrors', 'syncMetadata'];
                   for (const key of Object.keys(db)) {
-                    await (db as any)[key].clear();
+                    if (!protectedKeys.includes(key)) {
+                      await (db as any)[key].clear();
+                    }
                   }
                   window.location.reload();
                 }
