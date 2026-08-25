@@ -1445,7 +1445,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addPosProduct = async (product: PosProduct) => {
-    const newProduct = { ...product, id: product.id || uuidv4() };
+    const safeProduct = { ...product };
+    if (safeProduct.quantity !== undefined) {
+      safeProduct.quantity = Math.max(0, safeProduct.quantity);
+    }
+    const newProduct = { ...safeProduct, id: safeProduct.id || uuidv4() };
     setPosProducts(prev => {
       const next = [...prev, newProduct];
       void db.posProducts.setItem('data', next);
@@ -1454,6 +1458,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('INSERT_POS_PRODUCT', newProduct);
   };
   const updatePosProduct = async (id: string, data: Partial<PosProduct>) => {
+    if (data.quantity !== undefined) {
+      data.quantity = Math.max(0, data.quantity);
+    }
     const oldProduct = posProducts.find(p => p.id === id);
     if (oldProduct && data.quantity !== undefined && data.quantity !== oldProduct.quantity) {
       await addPosStockMovement({
@@ -1542,7 +1549,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('INSERT_POS_STOCK_ENTRY', newEntry);
 
     if (newEntry.status === 'Validé') {
-      await adjustProductStock(newEntry.lines.map(l => ({ productId: l.productId, quantity: l.quantity })), false, { type: 'Approvisionnement', reference: newEntry.reference, createdBy: newEntry.createdBy });
+      await adjustProductStock(newEntry.lines.map(l => ({ productId: l.productId, quantity: l.quantity })), true, { type: 'Approvisionnement', reference: newEntry.reference, createdBy: newEntry.createdBy });
     }
   };
 
@@ -1555,10 +1562,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     if (oldEntry && oldEntry.status !== 'Validé' && data.status === 'Validé') {
       const entryLines = data.lines || oldEntry.lines;
-      await adjustProductStock(entryLines.map(l => ({ productId: l.productId, quantity: l.quantity })), false, { type: 'Approvisionnement', reference: oldEntry.reference, createdBy: currentUser?.name });
+      await adjustProductStock(entryLines.map(l => ({ productId: l.productId, quantity: l.quantity })), true, { type: 'Approvisionnement', reference: oldEntry.reference, createdBy: currentUser?.name });
     } else if (oldEntry && oldEntry.status === 'Validé' && data.status === 'Annulé') {
       const entryLines = data.lines || oldEntry.lines;
-      await adjustProductStock(entryLines.map(l => ({ productId: l.productId, quantity: -l.quantity })), false, { type: 'Approvisionnement', reference: oldEntry.reference, createdBy: currentUser?.name, notes: 'Annulation' });
+      await adjustProductStock(entryLines.map(l => ({ productId: l.productId, quantity: -l.quantity })), true, { type: 'Approvisionnement', reference: oldEntry.reference, createdBy: currentUser?.name, notes: 'Annulation' });
     }
   };
   const deletePosStockEntry = async (id: string) => {
@@ -1779,11 +1786,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('INSERT_POS_RETURN', newReturn);
     
     // Restore product quantities for returned items (stock + qty)
-    await adjustProductStock(newReturn.lines.map(l => ({ productId: l.productId, quantity: l.quantity })), false);
+    await adjustProductStock(newReturn.lines.map(l => ({ productId: l.productId, quantity: l.quantity })), true);
     
     // Deduct product quantities for exchanged items (stock - qty)
     if (newReturn.exchangeLines && newReturn.exchangeLines.length > 0) {
-      await adjustProductStock(newReturn.exchangeLines.map(l => ({ productId: l.productId, quantity: -l.quantity })), false);
+      await adjustProductStock(newReturn.exchangeLines.map(l => ({ productId: l.productId, quantity: -l.quantity })), true);
     }
 
     // Marquer la transaction 'Retournée' ou 'Retour partiel'
@@ -1809,11 +1816,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Inverser les stocks si la transaction n'est pas complètement annulée par ailleurs
     if (!tx || tx.status !== 'Annulée') {
       // Les articles retournés repartent (stock -)
-      await adjustProductStock(ret.lines.map(l => ({ productId: l.productId, quantity: -l.quantity })), false);
+      await adjustProductStock(ret.lines.map(l => ({ productId: l.productId, quantity: -l.quantity })), true);
       
       // Les articles échangés reviennent (stock +)
       if (ret.exchangeLines && ret.exchangeLines.length > 0) {
-        await adjustProductStock(ret.exchangeLines.map(l => ({ productId: l.productId, quantity: l.quantity })), false);
+        await adjustProductStock(ret.exchangeLines.map(l => ({ productId: l.productId, quantity: l.quantity })), true);
       }
     }
 

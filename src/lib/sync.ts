@@ -74,7 +74,7 @@ export const processSyncQueue = async () => {
   const currentQueue: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
   if (currentQueue.length === 0) return;
 
-  const remainingQueue = [...currentQueue];
+  const processedIds = new Set<string>();
 
   for (const action of currentQueue) {
     try {
@@ -1079,10 +1079,8 @@ export const processSyncQueue = async () => {
 
       // Qu'il y ait succès ou échec logique (rejet de la DB), on retire l'action pour éviter le syndrome de la Poison Pill.
       // Les vraies pannes réseau (fetch failed) lèveront une exception et tomberont dans le catch.
-      const index = remainingQueue.findIndex(a => a.id === action.id);
-      if (index !== -1) {
-        remainingQueue.splice(index, 1);
-      }
+      // Marquer l'action comme traitée (pour la retirer de la file)
+      processedIds.add(action.id);
       
       if (!success) {
         console.warn(`[Sync] Action ${action.type} ignorée suite à un rejet du serveur (erreur logique). Sauvegardée dans syncErrors.`);
@@ -1117,8 +1115,10 @@ export const processSyncQueue = async () => {
     }
   }
 
-  // Sauvegarder la file d'attente restante
-  await db.syncQueue.setItem('queue', remainingQueue);
+  // Sauvegarder la file d'attente restante sans écraser les nouvelles actions
+  const latestQueue: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
+  const nextQueue = latestQueue.filter(a => !processedIds.has(a.id));
+  await db.syncQueue.setItem('queue', nextQueue);
   } finally {
     syncLock = false;
   }
