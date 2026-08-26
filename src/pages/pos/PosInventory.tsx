@@ -60,7 +60,11 @@ export default function PosInventory() {
           </button>
           <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>Inventaire</h1>
         </div>
-        <button onClick={() => { setViewingInventory(null); setShowForm(true); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 }}>
+        <button onClick={() => { 
+          setViewingInventory(null); 
+          setForm({ notes: '', lines: posProducts.map(p => ({ id: uuidv4(), productId: p.id, expectedQty: p.quantity, countedQty: p.quantity, difference: 0 })) });
+          setShowForm(true); 
+        }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 }}>
           <Plus size={16} /> Nouvel inventaire
         </button>
       </div>

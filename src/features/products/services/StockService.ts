@@ -1,10 +1,10 @@
 import type { PosProduct, PosStockEntry, PosStockEntryLine } from '../../../context/AppContext';
 import { v4 as uuidv4 } from 'uuid';
+import { todayLocalKey } from '../../../lib/dates';
 import type { StockMovement } from './ProductService';
 
 export class StockService {
   createStockEntryForImport(product: PosProduct): PosStockEntry {
-    const timestamp = new Date().toISOString();
     const line: PosStockEntryLine = {
       id: uuidv4(),
       productId: product.id,
@@ -16,7 +16,7 @@ export class StockService {
     const entry: PosStockEntry = {
       id: uuidv4(),
       reference: `APV-${Date.now()}`,
-      date: timestamp,
+      date: todayLocalKey(),
       totalAmount: line.total,
       status: 'Validé',
       notes: 'Création automatique via import Excel',
@@ -28,7 +28,6 @@ export class StockService {
   }
 
   createStockEntryForManualAdd(product: PosProduct): PosStockEntry {
-    const timestamp = new Date().toISOString();
     const line: PosStockEntryLine = {
       id: uuidv4(),
       productId: product.id,
@@ -40,7 +39,7 @@ export class StockService {
     const entry: PosStockEntry = {
       id: uuidv4(),
       reference: `APV-${Date.now()}`,
-      date: timestamp,
+      date: todayLocalKey(),
       totalAmount: line.total,
       status: 'Validé',
       notes: 'Ajout manuel',

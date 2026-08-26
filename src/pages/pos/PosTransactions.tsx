@@ -1,14 +1,15 @@
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
-import { Search, RotateCcw, XCircle, ArrowLeft } from 'lucide-react';
+import { Search, RotateCcw, XCircle, ArrowLeft, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
 import type { PosTransaction } from '../../context/AppContext';
 
 export default function PosTransactions() {
-  const { posTransactions, posCashSessions, voidPosTransaction } = useAppContext();
+  const { posTransactions, posCashSessions, voidPosTransaction, clearPosSalesHistory } = useAppContext();
   const { currentUser } = useAuth();
   const { confirm } = useConfirm();
   const [search, setSearch] = useState('');
@@ -49,13 +50,32 @@ export default function PosTransactions() {
     });
   };
 
+  const handleClearHistory = () => {
+    confirm({
+      title: "Supprimer l'historique des ventes",
+      message: "Êtes-vous sûr de vouloir supprimer définitivement toutes les transactions de vente, les lignes associées, les paiements et l'historique des retours ?",
+      variant: 'danger',
+      confirmLabel: "Supprimer tout l'historique",
+      onConfirm: async () => {
+        await clearPosSalesHistory();
+      },
+    });
+  };
+
   return (
     <div style={{ padding: '24px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-        <button onClick={() => navigate('/pos')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer', color: 'var(--color-text)' }} title="Retour au tableau de bord">
-          <ArrowLeft size={20} />
-        </button>
-        <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>Historique des Ventes</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button onClick={() => navigate('/pos')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer', color: 'var(--color-text)' }} title="Retour au tableau de bord">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>Historique des Ventes</h1>
+        </div>
+        {(role === 'Directeur' || role === 'Gerant') && posTransactions.length > 0 && (
+          <Button variant="danger" icon={<Trash2 size={16} />} onClick={handleClearHistory}>
+            Vider l'historique des ventes
+          </Button>
+        )}
       </div>
       <div style={{ marginBottom: '16px', position: 'relative' }}>
         <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />

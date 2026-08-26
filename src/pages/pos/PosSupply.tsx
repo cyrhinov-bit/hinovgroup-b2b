@@ -44,6 +44,7 @@ function SearchableSelect({ options, value, onChange, placeholder, style }: { op
               onChange={e => setSearch(e.target.value)}
               placeholder="Rechercher..."
             />
+
           </div>
           <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
             {filteredOptions.length > 0 ? filteredOptions.map(o => (
@@ -97,17 +98,11 @@ export default function PosSupply() {
       notes: form.notes, createdBy: undefined, lines: form.lines.filter(l => l.productId)
     };
     await addPosStockEntry(entry);
-    // Update product quantities (cumul correct si un produit apparaît sur plusieurs lignes)
-    const finalQty = new Map<string, number>();
-    const finalPrice = new Map<string, number>();
     for (const line of entry.lines) {
       const product = posProducts.find(p => p.id === line.productId);
-      if (!product) continue;
-      finalQty.set(line.productId, (finalQty.get(line.productId) || product.quantity) + line.quantity);
-      finalPrice.set(line.productId, line.purchasePrice);
-    }
-    for (const [productId, quantity] of finalQty) {
-      await updatePosProduct(productId, { quantity, purchasePrice: finalPrice.get(productId) });
+      if (product && line.purchasePrice > 0 && line.purchasePrice !== product.purchasePrice) {
+        await updatePosProduct(line.productId, { purchasePrice: line.purchasePrice });
+      }
     }
     setShowForm(false);
     setForm({ supplierId: '', notes: '', lines: [{ id: uuidv4(), productId: '', quantity: 1, purchasePrice: 0, total: 0 }] });
@@ -140,11 +135,11 @@ export default function PosSupply() {
             <div><div style={{ fontSize: '13px', marginBottom: '4px', fontWeight: 500 }}>Notes</div><input style={inputStyle} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></div>
           </div>
           <div className="table-responsive">
-<table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '12px' }}>
-            <thead><tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}><th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Produit</th><th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', width: '100px' }}>Qté</th><th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', width: '120px' }}>Prix achat</th><th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', width: '120px' }}>Total</th><th style={{ padding: '8px', width: '40px' }}></th></tr></thead>
-            <tbody>
-              {form.lines.map(line => (
-                <tr key={line.id} style={{ borderBottom: '1px solid var(--color-surface-alt)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '12px' }}>
+              <thead><tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}><th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Produit</th><th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', width: '100px' }}>Qté</th><th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', width: '120px' }}>Prix achat</th><th style={{ padding: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', width: '120px' }}>Total</th><th style={{ padding: '8px', width: '40px' }}></th></tr></thead>
+              <tbody>
+                {form.lines.map(line => (
+                  <tr key={line.id} style={{ borderBottom: '1px solid var(--color-surface-alt)' }}>
                   <td style={{ padding: '8px' }}>
                     <SearchableSelect 
                       style={inputStyle} 

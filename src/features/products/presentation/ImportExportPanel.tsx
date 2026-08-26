@@ -10,7 +10,7 @@ import type { ImportAnalysis } from '../services/ExcelImportService';
 import { parseProductsJson, analyzeJsonImport } from '../data/productJsonParser';
 
 export default function ImportExportPanel() {
-  const { posProducts, addPosProduct, updatePosProduct, addPosStockEntry, addImportSession, updateImportSession, addImportError, importSessions } = useAppContext();
+  const { posProducts, addPosProduct, updatePosProduct, addPosStockMovement, addImportSession, updateImportSession, addImportError, importSessions } = useAppContext();
   const [isImporting, setIsImporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [importAnalysis, setImportAnalysis] = useState<ImportAnalysis | null>(null);
@@ -73,10 +73,15 @@ export default function ImportExportPanel() {
         async (product: PosProduct, mode: 'create' | 'update') => {
           if (mode === 'create') {
             const initialQuantity = product.quantity || 0;
-            // On initialise le produit à 0, la quantité sera apportée par l'entrée de stock
-            await addPosProduct({ ...product, quantity: 0 });
+            await addPosProduct({ ...product, quantity: initialQuantity });
             if (initialQuantity > 0) {
-              await addPosStockEntry(stockService.createStockEntryForImport({ ...product, quantity: initialQuantity }));
+              await addPosStockMovement({
+                productId: product.id,
+                type: 'Ajustement Manuel',
+                quantity: initialQuantity,
+                reference: `IMPORT-${product.reference}`,
+                notes: 'Import catalogue'
+              });
             }
           } else {
             await updatePosProduct(product.id, product);

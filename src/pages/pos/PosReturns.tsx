@@ -1,9 +1,11 @@
 import { useEffect, useState, useMemo } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Search, Plus, RotateCcw, Eye, X, XCircle, Trash2, ArrowLeftRight, CheckCircle2, ShieldAlert, Banknote, ListRestart, ArrowLeft } from 'lucide-react';
+import { todayLocalKey, toLocalDayKey } from '../../lib/dates';
 import type { ExchangeLine } from '../../context/AppContext';
 
 interface ReturnLine {
@@ -19,7 +21,8 @@ interface ReturnLine {
 export default function PosReturns() {
   const { posReturns, posTransactions, addPosReturn, cancelPosReturn, posProducts, posCashSessions } = useAppContext();
   const { currentUser } = useAuth();
-  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && s.cashierId === currentUser?.id);
+  const today = todayLocalKey();
+  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today && (s.cashierId === currentUser?.id || !s.cashierId));
   const { confirm } = useConfirm();
   const location = useLocation();
   const navigate = useNavigate();
@@ -259,23 +262,31 @@ export default function PosReturns() {
     }
 
     const returnNumber = `RET-${Date.now().toString(36).toUpperCase()}`;
+    const returnId = uuidv4();
+    const totalRefund = difference < 0 ? Math.abs(difference) : 0;
+
+    if (totalRefund > 0 && !openSession) {
+      if (!window.confirm("Attention: Aucune session de caisse n'est ouverte pour votre compte pour imputer ce remboursement d'espèces. Voulez-vous continuer ?")) {
+        return;
+      }
+    }
     
     await addPosReturn({
-      id: '',
+      id: returnId,
       returnNumber,
       transactionId: selectedTxId,
       sessionId: openSession?.id,
       date: new Date().toISOString(),
       type: returnType,
-      totalRefund: difference < 0 ? Math.abs(difference) : 0,
+      totalRefund,
       totalExchange: returnType === 'Retour avec échange' ? totalExchangeAmount : 0,
       amountToPay: difference > 0 ? difference : 0,
       status: 'Traité',
       // RÈGLE 14: Les lignes sauvegardées utilisent le prix historique stocké dans returnLines
-      lines: validLines.map(l => ({ id: '', ...l })),
-      exchangeLines: returnType === 'Retour avec échange' ? exchangeLines.map(l => ({ ...l, id: '' })) : undefined,
+      lines: validLines.map(l => ({ id: uuidv4(), ...l })),
+      exchangeLines: returnType === 'Retour avec échange' ? exchangeLines.map(l => ({ ...l, id: uuidv4() })) : undefined,
       notes,
-      createdBy: currentUser?.name
+      createdBy: currentUser?.id || currentUser?.name
     });
 
     handleCloseForm();

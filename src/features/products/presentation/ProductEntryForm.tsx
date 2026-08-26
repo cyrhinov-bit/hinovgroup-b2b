@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAppContext } from '../../../context/AppContext';
+import { useAuth } from '../../../context/AuthContext';
 import { Save, X, Plus, Upload } from 'lucide-react';
-import { stockService } from '../services/StockService';
 import { useProductImages } from '../images/ProductImagesContext';
 import { v4 as uuidv4 } from 'uuid';
 import type { PosProduct } from '../../../context/AppContext';
@@ -31,7 +31,8 @@ interface ProductEntryFormProps {
 }
 
 export default function ProductEntryForm({ initialBarcode, initialProduct, onCancel }: ProductEntryFormProps = {}) {
-  const { posProducts, addPosProduct, updatePosProduct, addPosStockEntry } = useAppContext();
+  const { posProducts, addPosProduct, updatePosProduct, addPosStockMovement } = useAppContext();
+  const { currentUser } = useAuth();
   const { setProductImage } = useProductImages();
   const [formData, setFormData] = useState<ProductFormData>({
     reference: initialProduct?.reference || '',
@@ -122,8 +123,8 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
         supplierId: '',
         purchasePrice: Number(formData.purchasePrice) || 0,
         sellingPrice: Number(formData.sellingPrice) || 0,
-        quantity: 0, // Initialisé à 0, la quantité sera ajustée par l'entrée de stock
-        minStock: 0,
+        quantity: initialQuantity,
+        minStock: 10,
         imageUrl: '',
         isActive: true,
         family: formData.family,
@@ -136,12 +137,14 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
       }
 
       if (initialQuantity > 0) {
-        // Crée l'entrée de stock avec la quantité initiale sans écraser l'ID du produit
-        const stockEntry = stockService.createStockEntryForManualAdd({
-          ...newProduct,
-          quantity: initialQuantity
+        await addPosStockMovement({
+          productId: id,
+          type: 'Ajustement Manuel',
+          quantity: initialQuantity,
+          reference: `INIT-${reference}`,
+          createdBy: currentUser?.name || 'Utilisateur',
+          notes: 'Stock initial à la création du produit'
         });
-        await addPosStockEntry(stockEntry);
       }
 
       if (resetAfter) {
@@ -214,7 +217,15 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
               <select
                 className="table-input"
                 value={formData.family}
-                onChange={(e) => setFormData({ ...formData, family: e.target.value as 'Livre' | 'Fourniture' })}
+                onChange={(e) => {
+                  const newFamily = e.target.value as 'Livre' | 'Fourniture';
+                  if (newFamily === 'Livre' && formData.sellingPrice !== '') {
+                    const sp = Number(formData.sellingPrice) || 0;
+                    setFormData({ ...formData, family: newFamily, purchasePrice: Math.round(sp * 0.75) });
+                  } else {
+                    setFormData({ ...formData, family: newFamily });
+                  }
+                }}
                 required
               >
                 <option value="Livre">Livre</option>
@@ -301,8 +312,13 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
-                Prix d'achat unitaire *
+              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
+                <span>Prix d'achat unitaire *</span>
+                {formData.family === 'Livre' && (
+                  <span style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 500 }}>
+                    (Auto: 75% du prix de vente)
+                  </span>
+                )}
               </label>
               <input
                 type="number"
@@ -340,7 +356,31 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
                 className="table-input"
                 placeholder="0 FCFA"
                 value={formData.sellingPrice}
-                onChange={(e) => setFormData({ ...formData, sellingPrice: e.target.value === '' ? '' : parseFloat(e.target.value) })}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '') {
+                    setFormData({
+                      ...formData,
+                      sellingPrice: '',
+                      purchasePrice: formData.family === 'Livre' ? '' : formData.purchasePrice
+                    });
+                  } else {
+                    const sp = parseFloat(val);
+                    const validSp = isNaN(sp) ? 0 : sp;
+                    if (formData.family === 'Livre') {
+                      setFormData({
+                        ...formData,
+                        sellingPrice: val as any,
+                        purchasePrice: Math.round(validSp * 0.75)
+                      });
+                    } else {
+                      setFormData({
+                        ...formData,
+                        sellingPrice: val as any
+                      });
+                    }
+                  }
+                }}
                 required
               />
             </div>

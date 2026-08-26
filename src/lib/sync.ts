@@ -2,6 +2,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from './db';
 import { supabase } from './supabase';
 
+const isUuid = (value?: string) => !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
 export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT' | 
                              'INSERT_QUOTE' | 'UPDATE_QUOTE' | 'DELETE_QUOTE' |
                              'INSERT_SALE' | 'UPDATE_SALE' | 'DELETE_SALE' |
@@ -26,7 +28,7 @@ export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT'
                              'INSERT_POS_STOCK_MOVEMENT' |
                              'INSERT_POS_INVENTORY' | 'UPDATE_POS_INVENTORY' | 'DELETE_POS_INVENTORY' |
                              'INSERT_POS_CASH_SESSION' | 'UPDATE_POS_CASH_SESSION' |
-                             'INSERT_POS_TRANSACTION' | 'UPDATE_POS_TRANSACTION' |
+                             'INSERT_POS_TRANSACTION' | 'UPDATE_POS_TRANSACTION' | 'CLEAR_POS_SALES_HISTORY' |
                              'INSERT_POS_PAYMENT' |
                               'INSERT_POS_DISCOUNT' | 'UPDATE_POS_DISCOUNT' | 'DELETE_POS_DISCOUNT' |
                               'UPDATE_POS_SETTINGS' |
@@ -701,16 +703,22 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_POS_PRODUCT': {
           const { error } = await supabase.from('pos_products').insert([{
-            id: action.payload.id, reference: action.payload.reference, 
-            barcode: action.payload.barcode === '' ? null : action.payload.barcode,
-            isbn: action.payload.isbn === '' ? null : action.payload.isbn, 
-            name: action.payload.name, family: action.payload.family,
-            category_id: action.payload.categoryId === '' ? null : action.payload.categoryId,
-            brand_id: action.payload.brandId === '' ? null : action.payload.brandId,
-            supplier_id: action.payload.supplierId === '' ? null : action.payload.supplierId, purchase_price: action.payload.purchasePrice,
-            selling_price: action.payload.sellingPrice, quantity: action.payload.quantity,
-            min_stock: action.payload.minStock, image_url: action.payload.imageUrl,
-            unit: action.payload.unit, is_active: action.payload.isActive !== false,
+            id: action.payload.id,
+            reference: action.payload.reference, 
+            barcode: action.payload.barcode ? action.payload.barcode : null,
+            isbn: action.payload.isbn ? action.payload.isbn : null, 
+            name: action.payload.name,
+            family: action.payload.family,
+            category_id: isUuid(action.payload.categoryId) ? action.payload.categoryId : null,
+            brand_id: isUuid(action.payload.brandId) ? action.payload.brandId : null,
+            supplier_id: isUuid(action.payload.supplierId) ? action.payload.supplierId : null,
+            purchase_price: action.payload.purchasePrice ?? 0,
+            selling_price: action.payload.sellingPrice ?? 0,
+            quantity: action.payload.quantity ?? 0,
+            min_stock: action.payload.minStock ?? 0,
+            image_url: action.payload.imageUrl || null,
+            unit: action.payload.unit || null,
+            is_active: action.payload.isActive !== false,
             updated_at: action.payload.updatedAt || new Date().toISOString()
           }]);
           if (error) console.error('[Sync] INSERT_POS_PRODUCT échoué :', error);
@@ -721,19 +729,19 @@ export const processSyncQueue = async () => {
           const { id, ...data } = action.payload;
           const mapped: any = {};
           if (data.reference !== undefined) mapped.reference = data.reference;
-          if (data.barcode !== undefined) mapped.barcode = data.barcode === '' ? null : data.barcode;
-          if (data.isbn !== undefined) mapped.isbn = data.isbn === '' ? null : data.isbn;
+          if (data.barcode !== undefined) mapped.barcode = data.barcode ? data.barcode : null;
+          if (data.isbn !== undefined) mapped.isbn = data.isbn ? data.isbn : null;
           if (data.name !== undefined) mapped.name = data.name;
           if (data.family !== undefined) mapped.family = data.family;
-          if (data.categoryId !== undefined) mapped.category_id = data.categoryId === '' ? null : data.categoryId;
-          if (data.brandId !== undefined) mapped.brand_id = data.brandId === '' ? null : data.brandId;
-          if (data.supplierId !== undefined) mapped.supplier_id = data.supplierId === '' ? null : data.supplierId;
+          if (data.categoryId !== undefined) mapped.category_id = isUuid(data.categoryId) ? data.categoryId : null;
+          if (data.brandId !== undefined) mapped.brand_id = isUuid(data.brandId) ? data.brandId : null;
+          if (data.supplierId !== undefined) mapped.supplier_id = isUuid(data.supplierId) ? data.supplierId : null;
           if (data.purchasePrice !== undefined) mapped.purchase_price = data.purchasePrice;
           if (data.sellingPrice !== undefined) mapped.selling_price = data.sellingPrice;
-          if (data.quantity !== undefined) mapped.quantity = data.quantity;
+          if (data.quantity !== undefined) mapped.quantity = Math.max(0, data.quantity);
           if (data.minStock !== undefined) mapped.min_stock = data.minStock;
-          if (data.imageUrl !== undefined) mapped.image_url = data.imageUrl;
-          if (data.unit !== undefined) mapped.unit = data.unit;
+          if (data.imageUrl !== undefined) mapped.image_url = data.imageUrl || null;
+          if (data.unit !== undefined) mapped.unit = data.unit || null;
           if (data.isActive !== undefined) mapped.is_active = data.isActive;
           const { error } = await supabase.from('pos_products').update(mapped).eq('id', id);
           if (error) console.error('[Sync] UPDATE_POS_PRODUCT échoué :', error);
@@ -742,8 +750,13 @@ export const processSyncQueue = async () => {
         }
         case 'DELETE_POS_PRODUCT': {
           const { error } = await supabase.from('pos_products').delete().eq('id', action.payload.id);
-          if (error) console.error('[Sync] DELETE_POS_PRODUCT échoué :', error);
-          success = !error;
+          if (error) {
+            console.warn('[Sync] DELETE_POS_PRODUCT impossible (contrainte FK), passage en is_active=false :', error.message);
+            const { error: updateError } = await supabase.from('pos_products').update({ is_active: false }).eq('id', action.payload.id);
+            success = !updateError;
+          } else {
+            success = true;
+          }
           break;
         }
         case 'INSERT_POS_STOCK_MOVEMENT': {
@@ -752,10 +765,10 @@ export const processSyncQueue = async () => {
             product_id: action.payload.productId,
             type: action.payload.type,
             quantity: action.payload.quantity,
-            reference: action.payload.reference,
-            date: action.payload.date,
-            created_by: action.payload.createdBy,
-            notes: action.payload.notes
+            reference: action.payload.reference || null,
+            date: action.payload.date || new Date().toISOString(),
+            created_by: action.payload.createdBy || null,
+            notes: action.payload.notes || null
           }]);
           if (error) console.error('[Sync] INSERT_POS_STOCK_MOVEMENT échoué :', error);
           success = !error;
@@ -764,9 +777,14 @@ export const processSyncQueue = async () => {
         case 'INSERT_POS_STOCK_ENTRY': {
           const { lines, ...entryData } = action.payload;
           const { error } = await supabase.from('pos_stock_entries').insert([{
-            id: entryData.id, reference: entryData.reference, supplier_id: entryData.supplierId,
-            date: entryData.date, total_amount: entryData.totalAmount, status: entryData.status,
-            notes: entryData.notes, created_by: entryData.createdBy
+            id: entryData.id,
+            reference: entryData.reference,
+            supplier_id: isUuid(entryData.supplierId) ? entryData.supplierId : null,
+            date: entryData.date,
+            total_amount: entryData.totalAmount ?? 0,
+            status: entryData.status,
+            notes: entryData.notes || null,
+            created_by: isUuid(entryData.createdBy) ? entryData.createdBy : null
           }]);
           if (!error && lines && lines.length > 0) {
             const linesData = lines.map((l: any) => ({
@@ -806,11 +824,12 @@ export const processSyncQueue = async () => {
           const { lines, ...invData } = action.payload;
           const { error } = await supabase.from('pos_inventories').insert([{
             id: invData.id, reference: invData.reference, date: invData.date,
-            status: invData.status, notes: invData.notes, created_by: invData.createdBy
+            status: invData.status, notes: invData.notes,
+            created_by: isUuid(invData.createdBy) ? invData.createdBy : null
           }]);
           if (!error && lines && lines.length > 0) {
             const linesData = lines.map((l: any) => ({
-              id: l.id, inventory_id: invData.id, product_id: l.productId,
+              id: l.id || uuidv4(), inventory_id: invData.id, product_id: isUuid(l.productId) ? l.productId : null,
               expected_qty: l.expectedQty, counted_qty: l.countedQty, difference: l.difference
             }));
             await supabase.from('pos_inventory_lines').insert(linesData);
@@ -891,6 +910,15 @@ export const processSyncQueue = async () => {
           success = !error;
           break;
         }
+        case 'CLEAR_POS_SALES_HISTORY': {
+          await supabase.from('pos_return_lines').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          await supabase.from('pos_returns').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          await supabase.from('pos_payments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          await supabase.from('pos_transaction_lines').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          await supabase.from('pos_transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          success = true;
+          break;
+        }
         case 'INSERT_POS_PAYMENT': {
           const { error } = await supabase.from('pos_payments').insert([{
             id: action.payload.id, transaction_id: action.payload.transactionId,
@@ -938,21 +966,49 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_POS_RETURN': {
-          const { lines, ...returnData } = action.payload;
+          const { lines, exchangeLines, ...returnData } = action.payload;
           const { error } = await supabase.from('pos_returns').insert([{
             id: returnData.id, return_number: returnData.returnNumber,
-            transaction_id: returnData.transactionId || null, date: returnData.date,
-            type: returnData.type, total_refund: returnData.totalRefund,
-            total_exchange: returnData.totalExchange, status: returnData.status,
-            notes: returnData.notes || null, created_by: returnData.createdBy || null
+            transaction_id: isUuid(returnData.transactionId) ? returnData.transactionId : null,
+            date: returnData.date,
+            type: returnData.type, total_refund: returnData.totalRefund ?? 0,
+            total_exchange: returnData.totalExchange ?? 0, status: returnData.status,
+            notes: returnData.notes || null,
+            created_by: isUuid(returnData.createdBy) ? returnData.createdBy : null
           }]);
-          if (!error && lines && lines.length > 0) {
-            const linesData = lines.map((l: any) => ({
-              id: l.id, return_id: returnData.id, product_id: l.productId || null,
-              description: l.description, quantity: l.quantity, unit_price: l.unitPrice,
-              total: l.total, reason: l.reason
-            }));
-            await supabase.from('pos_return_lines').insert(linesData);
+          if (!error) {
+            const allLinesData: any[] = [];
+            if (lines && lines.length > 0) {
+              lines.forEach((l: any) => {
+                allLinesData.push({
+                  id: l.id || uuidv4(),
+                  return_id: returnData.id,
+                  product_id: isUuid(l.productId) ? l.productId : null,
+                  description: l.description,
+                  quantity: l.quantity,
+                  unit_price: l.unitPrice,
+                  total: l.total,
+                  reason: l.reason || 'Retour'
+                });
+              });
+            }
+            if (exchangeLines && exchangeLines.length > 0) {
+              exchangeLines.forEach((l: any) => {
+                allLinesData.push({
+                  id: l.id || uuidv4(),
+                  return_id: returnData.id,
+                  product_id: isUuid(l.productId) ? l.productId : null,
+                  description: l.description,
+                  quantity: l.quantity,
+                  unit_price: l.unitPrice,
+                  total: l.total,
+                  reason: 'Échange'
+                });
+              });
+            }
+            if (allLinesData.length > 0) {
+              await supabase.from('pos_return_lines').insert(allLinesData);
+            }
           }
           success = !error;
           break;

@@ -222,6 +222,7 @@ interface AppState {
   addPosTransaction: (tx: PosTransaction) => Promise<void>;
   updatePosTransaction: (id: string, data: Partial<PosTransaction>) => Promise<void>;
   voidPosTransaction: (id: string) => Promise<void>;
+  clearPosSalesHistory: () => Promise<void>;
   addPosDiscount: (discount: PosDiscount) => Promise<void>;
   updatePosDiscount: (id: string, data: Partial<PosDiscount>) => Promise<void>;
   deletePosDiscount: (id: string) => Promise<void>;
@@ -381,11 +382,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const syncTimestamp = new Date().toISOString();
 
         // Chaque table est récupérée isolément : l'échec d'une table ne bloque plus le reste du refresh
-        const safeFetch = async (queryFn: () => any): Promise<any> => {
+        const safeFetch = async (queryFn: () => any, allowDelta: boolean = false): Promise<any> => {
           try {
             let query = queryFn();
-            if (lastSyncTime) {
-               // Only apply delta if lastSyncTime exists
+            if (allowDelta && lastSyncTime) {
+               // Only apply delta if explicitly allowed and lastSyncTime exists
                query = query.gt('updated_at', lastSyncTime);
             }
             const { data, error } = await query;
@@ -645,18 +646,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setPosSuppliers(merged); await db.posSuppliers.setItem('data', merged);
         }
         if (posProductsData && posProductsData.length > 0) {
-          const parsed = posProductsData.map((p: any) => ({
-            id: p.id, reference: p.reference, barcode: p.barcode, isbn: p.isbn, name: p.name,
-            family: p.family, categoryId: p.category_id, brandId: p.brand_id, supplierId: p.supplier_id,
-            purchasePrice: p.purchase_price, sellingPrice: p.selling_price, quantity: p.quantity,
-            minStock: p.min_stock, imageUrl: p.image_url, description: p.description,
-            status: p.status || 'Active', isActive: p.is_active !== false, unit: p.unit, createdAt: p.created_at, updatedAt: p.updated_at
-          }));
-          setPosProducts(prev => {
-            const merged = mergeData(prev, parsed);
-            void db.posProducts.setItem('data', merged);
-            return merged;
+          const parsed = posProductsData.map((p: any) => {
+            let purchasePrice = p.purchase_price;
+            if (p.family === 'Livre' && (!purchasePrice || purchasePrice === 0) && p.selling_price > 0) {
+              purchasePrice = Math.round(p.selling_price * 0.75);
+            }
+            return {
+              id: p.id, reference: p.reference, barcode: p.barcode, isbn: p.isbn, name: p.name,
+              family: p.family, categoryId: p.category_id, brandId: p.brand_id, supplierId: p.supplier_id,
+              purchasePrice: purchasePrice ?? 0, sellingPrice: p.selling_price ?? 0, quantity: p.quantity ?? 0,
+              minStock: (p.min_stock !== null && p.min_stock !== undefined && p.min_stock > 0) ? p.min_stock : 10, imageUrl: p.image_url, description: p.description,
+              status: p.status || 'Active', isActive: p.is_active !== false, unit: p.unit, createdAt: p.created_at, updatedAt: p.updated_at
+            };
           });
+          setPosProducts(parsed);
+          await db.posProducts.setItem('data', parsed);
         }
         if (posStockEntriesData && posStockEntriesData.length > 0) {
           const parsed = posStockEntriesData
@@ -1703,21 +1707,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    let finalProducts: PosProduct[] = [];
+    const updatedQtyMap = new Map<string, number>();
     setPosProducts(prev => {
-      finalProducts = prev.map(p => {
+      const next = prev.map(p => {
         const delta = map.get(p.id);
-        return delta ? { ...p, quantity: Math.max(0, p.quantity + delta) } : p;
+        if (delta !== undefined) {
+          const newQty = Math.max(0, p.quantity + delta);
+          updatedQtyMap.set(p.id, newQty);
+          return { ...p, quantity: newQty };
+        }
+        return p;
       });
-      void db.posProducts.setItem('data', finalProducts);
-      return finalProducts;
+      void db.posProducts.setItem('data', next);
+      return next;
     });
 
     if (pushSync) {
-      for (const [pid] of map) {
-        const product = finalProducts.find(p => p.id === pid);
-        if (product) {
-          await queueSyncAction('UPDATE_POS_PRODUCT', { id: pid, quantity: product.quantity });
+      for (const [pid, delta] of map) {
+        const currentProd = posProducts.find(p => p.id === pid);
+        const fallbackQty = currentProd ? Math.max(0, currentProd.quantity + delta) : undefined;
+        const newQty = updatedQtyMap.get(pid) ?? fallbackQty;
+        if (newQty !== undefined) {
+          await queueSyncAction('UPDATE_POS_PRODUCT', { id: pid, quantity: newQty });
         }
       }
     }
@@ -1793,6 +1804,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await adjustProductStock(deltas, true, { type: 'Retour', reference: tx.transactionNumber, createdBy: currentUser?.name, notes: 'Annulation' });
   };
 
+  const clearPosSalesHistory = async () => {
+    setPosTransactions([]);
+    setPosPayments([]);
+    setPosReturns([]);
+    await db.posTransactions.clear();
+    await db.posPayments.clear();
+    await db.posReturns.clear();
+    await queueSyncAction('CLEAR_POS_SALES_HISTORY', {});
+  };
+
   const addPosDiscount = async (discount: PosDiscount) => {
     const newDiscount = { ...discount, id: discount.id || uuidv4() };
     setPosDiscounts(prev => {
@@ -1839,12 +1860,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     await queueSyncAction('INSERT_POS_RETURN', newReturn);
     
-    // Restore product quantities for returned items (stock + qty)
-    await adjustProductStock(newReturn.lines.map(l => ({ productId: l.productId, quantity: l.quantity })), true);
+    // Restore product quantities for returned items (stock + qty) with movement tracking
+    await adjustProductStock(
+      newReturn.lines.map(l => ({ productId: l.productId, quantity: l.quantity })), 
+      true, 
+      { type: 'Retour', reference: newReturn.returnNumber, createdBy: currentUser?.name || newReturn.createdBy, notes: 'Retour marchandise' }
+    );
     
-    // Deduct product quantities for exchanged items (stock - qty)
+    // Deduct product quantities for exchanged items (stock - qty) with movement tracking
     if (newReturn.exchangeLines && newReturn.exchangeLines.length > 0) {
-      await adjustProductStock(newReturn.exchangeLines.map(l => ({ productId: l.productId, quantity: -l.quantity })), true);
+      await adjustProductStock(
+        newReturn.exchangeLines.map(l => ({ productId: l.productId, quantity: -l.quantity })), 
+        true, 
+        { type: 'Vente', reference: newReturn.returnNumber, createdBy: currentUser?.name || newReturn.createdBy, notes: 'Échange marchandise' }
+      );
     }
 
     // Marquer la transaction 'Retournée' ou 'Retour partiel'
@@ -1872,11 +1901,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Inverser les stocks si la transaction n'est pas complètement annulée par ailleurs
     if (!tx || tx.status !== 'Annulée') {
       // Les articles retournés repartent (stock -)
-      await adjustProductStock(ret.lines.map(l => ({ productId: l.productId, quantity: -l.quantity })), true);
+      await adjustProductStock(
+        ret.lines.map(l => ({ productId: l.productId, quantity: -l.quantity })), 
+        true,
+        { type: 'Ajustement Manuel', reference: ret.returnNumber, createdBy: currentUser?.name, notes: 'Annulation retour (déduction)' }
+      );
       
       // Les articles échangés reviennent (stock +)
       if (ret.exchangeLines && ret.exchangeLines.length > 0) {
-        await adjustProductStock(ret.exchangeLines.map(l => ({ productId: l.productId, quantity: l.quantity })), true);
+        await adjustProductStock(
+          ret.exchangeLines.map(l => ({ productId: l.productId, quantity: l.quantity })), 
+          true,
+          { type: 'Ajustement Manuel', reference: ret.returnNumber, createdBy: currentUser?.name, notes: 'Annulation retour (réintégration échange)' }
+        );
       }
     }
 
@@ -2171,7 +2208,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AppContext.Provider value={{ users, clients, quotes, sales, commissions, installments, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, updateMyProfile, addCrmDocument, deleteCrmDocument, downloadCrmDocument, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData }}>
+    <AppContext.Provider value={{ users, clients, quotes, sales, commissions, installments, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, updateMyProfile, addCrmDocument, deleteCrmDocument, downloadCrmDocument, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData }}>
       {children}
     </AppContext.Provider>
   );

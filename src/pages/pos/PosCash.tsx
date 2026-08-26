@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Wallet, Plus } from 'lucide-react';
+import { Wallet, Plus, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Badge } from '../../components/ui/Badge';
+import { todayLocalKey, toLocalDayKey } from '../../lib/dates';
 
 export default function PosCash() {
   const { posCashSessions, posTransactions, posReturns, addPosCashSession, updatePosCashSession } = useAppContext();
@@ -16,7 +17,9 @@ export default function PosCash() {
   const [showClose, setShowClose] = useState(false);
   const [finalAmount, setFinalAmount] = useState('');
 
-  const openSession = posCashSessions.find(s => s.status === 'Ouverte');
+  const today = todayLocalKey();
+  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today);
+  const staleOpenSessions = posCashSessions.filter(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) < today);
   const closedSessions = posCashSessions
     .filter(s => s.status === 'Fermée')
     .sort((a, b) => b.openedAt.localeCompare(a.openedAt));
@@ -38,6 +41,17 @@ export default function PosCash() {
   const sessionSales = openSession ? validTx.filter(t => t.sessionId === openSession.id).reduce((s, t) => s + cashOfTransaction(t), 0) : 0;
   const expectedAmount = openSession ? openSession.initialFund + sessionSales - sessionReturns : 0;
   const diffPreview = Number(finalAmount || 0) - expectedAmount;
+
+  const handleCloseStale = async (staleSession: typeof posCashSessions[number]) => {
+    const expected = sessionExpected(staleSession);
+    await updatePosCashSession(staleSession.id, {
+      closedAt: new Date().toISOString(),
+      finalAmount: expected,
+      expectedAmount: expected,
+      difference: 0,
+      status: 'Fermée',
+    });
+  };
 
   const handleOpen = async () => {
     const fund = Number(initialFund);
@@ -106,6 +120,34 @@ export default function PosCash() {
   return (
     <div style={{ padding: '24px' }}>
       <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>Gestion de caisse</h1>
+
+      {/* Alerte sessions antérieures non fermées */}
+      {staleOpenSessions.length > 0 && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 'var(--radius-lg)', padding: '16px 20px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ background: '#fef3c7', borderRadius: '8px', padding: '8px' }}>
+                <AlertTriangle size={20} color="#d97706" />
+              </div>
+              <div>
+                <div style={{ fontSize: '15px', fontWeight: 600, color: '#92400e' }}>
+                  {staleOpenSessions.length} session(s) de caisse d'un jour antérieur non clôturée(s)
+                </div>
+                <div style={{ fontSize: '13px', color: '#b45309', marginTop: '2px' }}>
+                  Des sessions précédentes (ex: {formatDate(staleOpenSessions[0].openedAt)}) sont restées ouvertes. Clôturez-les pour utiliser exclusivement la caisse d'aujourd'hui.
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {staleOpenSessions.map(s => (
+                <Button key={s.id} variant="warning" onClick={() => handleCloseStale(s)} style={{ fontSize: '13px' }}>
+                  Clôturer session du {new Date(s.openedAt).toLocaleDateString('fr-FR')}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Session en cours */}
       <div style={{ ...cardStyle, marginBottom: '24px' }}>

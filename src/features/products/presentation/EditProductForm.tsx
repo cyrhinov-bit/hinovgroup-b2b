@@ -110,11 +110,18 @@ export default function EditProductForm({ product, categories, brands, suppliers
       </div>
 
       <div>
-        <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>Prix d'achat</label>
+        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
+          <span>Prix d'achat</span>
+          {formData.family === 'Livre' && (
+            <span style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 500 }}>
+              (Auto: 75% du prix de vente)
+            </span>
+          )}
+        </label>
         <input
           type="number"
           className="table-input"
-          value={formData.purchasePrice || 0}
+          value={formData.purchasePrice ?? 0}
           onChange={e => setFormData({ ...formData, purchasePrice: parseFloat(e.target.value) || 0 })}
         />
       </div>
@@ -124,8 +131,19 @@ export default function EditProductForm({ product, categories, brands, suppliers
         <input
           type="number"
           className="table-input"
-          value={formData.sellingPrice || 0}
-          onChange={e => setFormData({ ...formData, sellingPrice: parseFloat(e.target.value) || 0 })}
+          value={formData.sellingPrice ?? 0}
+          onChange={e => {
+            const sp = parseFloat(e.target.value) || 0;
+            if (formData.family === 'Livre') {
+              setFormData({
+                ...formData,
+                sellingPrice: sp,
+                purchasePrice: Math.round(sp * 0.75)
+              });
+            } else {
+              setFormData({ ...formData, sellingPrice: sp });
+            }
+          }}
         />
       </div>
 
@@ -134,7 +152,7 @@ export default function EditProductForm({ product, categories, brands, suppliers
         <input
           type="number"
           className="table-input"
-          value={formData.quantity || 0}
+          value={formData.quantity ?? 0}
           onChange={e => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
         />
       </div>
@@ -144,7 +162,15 @@ export default function EditProductForm({ product, categories, brands, suppliers
         <select
           className="table-input"
           value={formData.family || 'Fourniture'}
-          onChange={e => setFormData({ ...formData, family: e.target.value as 'Livre' | 'Fourniture' })}
+          onChange={e => {
+            const newFamily = e.target.value as 'Livre' | 'Fourniture';
+            if (newFamily === 'Livre' && (formData.sellingPrice || 0) > 0) {
+              const sp = formData.sellingPrice || 0;
+              setFormData({ ...formData, family: newFamily, purchasePrice: Math.round(sp * 0.75) });
+            } else {
+              setFormData({ ...formData, family: newFamily });
+            }
+          }}
         >
           <option value="Livre">Livre</option>
           <option value="Fourniture">Fourniture</option>

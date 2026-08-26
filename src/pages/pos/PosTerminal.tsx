@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Search, Trash2, Plus, Minus, Clock, ArrowLeft } from 'lucide-react';
+import { Search, Trash2, Plus, Minus, Clock, ArrowLeft, Package, Layers, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { barcodeScannerService } from '../../features/products/services/BarcodeScannerService';
@@ -12,12 +12,13 @@ import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { toast } from 'react-hot-toast';
 import { platform } from '../../platform';
+import { todayLocalKey, toLocalDayKey } from '../../lib/dates';
 
 interface CartItem { id: string; productId: string; name: string; reference: string; unitPrice: number; quantity: number; discountType: 'none' | 'percent' | 'amount'; discountPercent: number; discountAmount: number; total: number; }
 
 export default function PosTerminal() {
   const navigate = useNavigate();
-  const { posProducts, posSettings, posCashSessions, addPosTransaction, addPosCashSession, suspendedCarts, addSuspendedCart, removeSuspendedCart, settings: crmSettings } = useAppContext();
+  const { posProducts, posSettings, posCashSessions, addPosTransaction, addPosCashSession, suspendedCarts, addSuspendedCart, removeSuspendedCart, settings: crmSettings, loading, refreshData } = useAppContext();
   const { currentUser } = useAuth();
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -50,13 +51,28 @@ export default function PosTerminal() {
   const [suspendReference, setSuspendReference] = useState('');
   const [showSuspendedList, setShowSuspendedList] = useState(false);
   const [selectedCartIndex, setSelectedCartIndex] = useState(0);
-  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && s.cashierId === currentUser?.id);
+  
+  const [selectedFamily, setSelectedFamily] = useState<'all' | 'Livre' | 'Fourniture'>('all');
+  const today = todayLocalKey();
+  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today && (s.cashierId === currentUser?.id || !s.cashierId));
+
+  const isLivre = (p: typeof posProducts[0]) => (p.family && p.family.toLowerCase().startsWith('livre')) || !!(p.isbn && p.isbn.trim());
 
   const filteredProducts = posProducts.filter(p => {
-    if (p.isActive === false) return false;
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return p.name.toLowerCase().includes(q) || p.reference.toLowerCase().includes(q) || (p.barcode && p.barcode.includes(q)) || (p.isbn && p.isbn.includes(q));
+    if (p.status === 'Inactive') return false;
+    if (selectedFamily === 'Livre' && !isLivre(p)) return false;
+    if (selectedFamily === 'Fourniture' && isLivre(p)) return false;
+    if (!search || !search.trim()) return true;
+    const q = search.toLowerCase().trim();
+    const cleanQ = q.replace(/[-\s]/g, '');
+    const cleanBarcode = p.barcode ? p.barcode.replace(/[-\s]/g, '').toLowerCase() : '';
+    const cleanIsbn = p.isbn ? p.isbn.replace(/[-\s]/g, '').toLowerCase() : '';
+    return (
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.reference && p.reference.toLowerCase().includes(q)) ||
+      (cleanBarcode && cleanBarcode.includes(cleanQ)) ||
+      (cleanIsbn && cleanIsbn.includes(cleanQ))
+    );
   });
 
   const addToCart = (product: typeof posProducts[0]) => {
@@ -173,10 +189,15 @@ export default function PosTerminal() {
     }
     const txNumber = `hnv${Date.now()}`;
 
+    const changeAmount = paymentMethod === 'Espèces' || paymentMethod === 'Mixte' ? Math.max(0, receivedTotal - total) : 0;
+
     const payments: any[] = [];
     if (paymentMethod === 'Mixte') {
-      if (receivedCash > 0) payments.push({ id: uuidv4(), method: 'Espèces', amount: receivedCash });
-      if (receivedMobile > 0) payments.push({ id: uuidv4(), method: 'Mobile Money', amount: receivedMobile });
+      // Déduire la monnaie rendue de la part espèces pour que la somme des paiements égale le montant net de la vente
+      const netCash = Math.max(0, receivedCash - changeAmount);
+      const netMobile = Math.min(receivedMobile, total - netCash);
+      if (netCash > 0) payments.push({ id: uuidv4(), method: 'Espèces', amount: netCash });
+      if (netMobile > 0) payments.push({ id: uuidv4(), method: 'Mobile Money', amount: netMobile });
     } else {
       payments.push({ id: uuidv4(), method: paymentMethod, amount: total });
     }
@@ -188,8 +209,6 @@ export default function PosTerminal() {
       lines: cart.map(c => ({ id: uuidv4(), productId: c.productId, description: c.name, quantity: c.quantity, unitPrice: c.unitPrice, discountPercent: c.discountPercent, discountAmount: c.discountAmount, total: c.total })),
       payments
     };
-
-    const changeAmount = paymentMethod === 'Espèces' || paymentMethod === 'Mixte' ? Math.max(0, receivedTotal - total) : 0;
 
     await addPosTransaction(tx);
 
@@ -215,6 +234,12 @@ export default function PosTerminal() {
     setCashAmount('');
     setMobileAmount('');
 
+    if (currentUser) {
+      localStorage.removeItem(`pos_active_cart_${currentUser.id}`);
+      localStorage.removeItem(`pos_active_discount_type_${currentUser.id}`);
+      localStorage.removeItem(`pos_active_discount_value_${currentUser.id}`);
+    }
+
     if (import.meta.env.DEV) {
       setShowPreviewModal(true);
     } else {
@@ -226,10 +251,6 @@ export default function PosTerminal() {
       setCashAmount('');
       setMobileAmount('');
       setShowPayment(false);
-      
-      localStorage.removeItem('pos_active_cart');
-      localStorage.removeItem('pos_active_discount_type');
-      localStorage.removeItem('pos_active_discount_value');
 
       toast.success('Paiement validé avec succès !');
       setTimeout(async () => {
@@ -357,46 +378,187 @@ export default function PosTerminal() {
       <div className="pos-terminal-container" style={{ display: 'flex', height: 'calc(100vh - 120px)', gap: '16px', padding: '0 24px 24px' }}>
         {/* Left: Product catalog */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'white', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border)', display: 'flex', gap: '12px' }}>
-          <button onClick={() => navigate('/pos')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer', color: 'var(--color-text)' }} title="Retour au tableau de bord">
-            <ArrowLeft size={18} />
-          </button>
-          <div style={{ position: 'relative', flex: 1 }}>
-            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
-            <input 
-              autoFocus 
-              style={{ ...inputStyle, paddingLeft: '36px', fontSize: '16px' }} 
-              placeholder="Scanner code-barres ou rechercher..." 
-              value={search} 
-              onChange={e => setSearch(e.target.value)} 
-              onKeyDown={e => { 
-                if (e.key === 'Enter') {
-                  if (barcodeScannerService.isScannerActive()) return;
-                  const query = search.trim();
-                  if (query) {
-                    if (filteredProducts.length === 1) {
-                      addToCart(filteredProducts[0]);
-                      setSearch('');
-                    } else if (filteredProducts.length === 0) {
-                      toast.error(`Produit introuvable : ${query}`, { duration: 3000 });
-                      setSearch('');
+        {/* Top search & family filters */}
+        <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button onClick={() => navigate('/pos')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer', color: 'var(--color-text)' }} title="Retour au tableau de bord">
+              <ArrowLeft size={18} />
+            </button>
+            <div style={{ position: 'relative', flex: 1 }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+              <input 
+                autoFocus 
+                style={{ ...inputStyle, paddingLeft: '36px', fontSize: '16px' }} 
+                placeholder="Scanner code-barres ou rechercher par nom, réf, ISBN..." 
+                value={search} 
+                onChange={e => setSearch(e.target.value)} 
+                onKeyDown={e => { 
+                  if (e.key === 'Enter') {
+                    if (barcodeScannerService.isScannerActive()) return;
+                    const query = search.trim();
+                    if (query) {
+                      if (filteredProducts.length === 1) {
+                        addToCart(filteredProducts[0]);
+                        setSearch('');
+                      } else if (filteredProducts.length === 0) {
+                        toast.error(`Produit introuvable : ${query}`, { duration: 3000 });
+                        setSearch('');
+                      }
                     }
-                  }
-                } 
-              }} 
-            />
+                  } 
+                }} 
+              />
+              {search && (
+                <button 
+                  onClick={() => setSearch('')} 
+                  style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '13px', fontWeight: 600 }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Family selection tabs */}
+          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '2px' }}>
+            <button
+              onClick={() => setSelectedFamily('all')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 'var(--radius-full)',
+                border: '1px solid',
+                borderColor: selectedFamily === 'all' ? 'var(--color-primary)' : 'var(--color-border)',
+                background: selectedFamily === 'all' ? 'var(--color-primary)' : 'var(--color-surface-alt)',
+                color: selectedFamily === 'all' ? 'white' : 'var(--color-text)',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s'
+              }}
+            >
+              Tous ({posProducts.filter(p => p.status !== 'Inactive').length})
+            </button>
+            <button
+              onClick={() => setSelectedFamily('Livre')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 'var(--radius-full)',
+                border: '1px solid',
+                borderColor: selectedFamily === 'Livre' ? 'var(--color-primary)' : 'var(--color-border)',
+                background: selectedFamily === 'Livre' ? 'var(--color-primary)' : 'var(--color-surface-alt)',
+                color: selectedFamily === 'Livre' ? 'white' : 'var(--color-text)',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s'
+              }}
+            >
+              📚 Livres ({posProducts.filter(p => p.status !== 'Inactive' && isLivre(p)).length})
+            </button>
+            <button
+              onClick={() => setSelectedFamily('Fourniture')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 'var(--radius-full)',
+                border: '1px solid',
+                borderColor: selectedFamily === 'Fourniture' ? 'var(--color-primary)' : 'var(--color-border)',
+                background: selectedFamily === 'Fourniture' ? 'var(--color-primary)' : 'var(--color-surface-alt)',
+                color: selectedFamily === 'Fourniture' ? 'white' : 'var(--color-text)',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s'
+              }}
+            >
+              ✏️ Fournitures ({posProducts.filter(p => p.status !== 'Inactive' && !isLivre(p)).length})
+            </button>
           </div>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px', alignContent: 'start' }}>
-          {filteredProducts.slice(0, 50).map(p => (
-            <button key={p.id} onClick={() => addToCart(p)} disabled={p.quantity <= 0} style={{ padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: p.quantity <= 0 ? 'var(--color-surface-alt)' : 'white', cursor: p.quantity <= 0 ? 'not-allowed' : 'pointer', textAlign: 'left', opacity: p.quantity <= 0 ? 0.5 : 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}><ProductImage product={p} size={56} rounded /></div>
-              <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px', lineHeight: '1.2' }}>{p.name}</div>
-              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '8px' }}>{p.reference}</div>
-              <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)' }}>{p.sellingPrice.toLocaleString()} FCFA</div>
-              <div style={{ fontSize: '11px', color: p.quantity <= 0 ? 'var(--color-error)' : 'var(--color-text-muted)', marginTop: '4px' }}>Stock: {p.quantity}</div>
-            </button>
-          ))}
+
+        {/* Product grid / List */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+          {loading && posProducts.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--color-text-muted)' }}>
+              <RefreshCw size={28} style={{ animation: 'spin 1s linear infinite', margin: '0 auto 12px', display: 'block', color: 'var(--color-primary)' }} />
+              <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text)' }}>Chargement des produits...</div>
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--color-text-muted)' }}>
+              <div style={{ background: 'var(--color-surface-alt)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <Package size={32} color="var(--color-text-muted)" />
+              </div>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-text)', marginBottom: '6px' }}>
+                {search ? `Aucun produit pour « ${search} »` : 'Aucun produit disponible'}
+              </div>
+              <div style={{ fontSize: '13px', marginBottom: '16px' }}>
+                {search ? 'Vérifiez l\'orthographe ou scannez le code-barres / ISBN de l\'article.' : 'Le catalogue est actuellement vide ou tous les articles sont inactifs.'}
+              </div>
+              {search ? (
+                <Button variant="secondary" onClick={() => setSearch('')}>
+                  Réinitialiser la recherche
+                </Button>
+              ) : (
+                <Button variant="secondary" icon={<RefreshCw size={14} />} onClick={() => refreshData()}>
+                  Actualiser le catalogue
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px', alignContent: 'start' }}>
+              {filteredProducts.map(p => {
+                const isOutOfStock = p.quantity <= 0;
+                const isLowStock = p.quantity > 0 && p.quantity <= (p.minStock || 10);
+                return (
+                  <button 
+                    key={p.id} 
+                    onClick={() => addToCart(p)} 
+                    disabled={isOutOfStock} 
+                    style={{ 
+                      padding: '12px', 
+                      borderRadius: 'var(--radius-md)', 
+                      border: '1px solid var(--color-border)', 
+                      background: isOutOfStock ? 'var(--color-surface-alt)' : 'white', 
+                      cursor: isOutOfStock ? 'not-allowed' : 'pointer', 
+                      textAlign: 'left', 
+                      opacity: isOutOfStock ? 0.6 : 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      position: 'relative',
+                      transition: 'transform 0.1s, box-shadow 0.1s'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px', position: 'relative' }}>
+                      <ProductImage product={p} size={56} rounded />
+                      {p.family && (
+                        <span style={{ position: 'absolute', top: 0, right: 0, fontSize: '10px', background: p.family === 'Livre' ? 'var(--color-primary-tint)' : 'var(--color-success-tint)', color: p.family === 'Livre' ? 'var(--color-primary)' : 'var(--color-success)', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                          {p.family}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '2px', lineHeight: '1.25', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', minHeight: '32px' }}>
+                      {p.name}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '6px', fontFamily: 'monospace' }}>
+                      {p.reference}
+                    </div>
+                    <div style={{ marginTop: 'auto' }}>
+                      <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-primary)' }}>
+                        {p.sellingPrice.toLocaleString()} FCFA
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px', fontSize: '11px' }}>
+                        <span style={{ 
+                          fontWeight: 600,
+                          color: isOutOfStock ? 'var(--color-error)' : isLowStock ? 'var(--color-warning-strong)' : 'var(--color-success)'
+                        }}>
+                          {isOutOfStock ? 'Rupture' : `Stock: ${p.quantity}`}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
