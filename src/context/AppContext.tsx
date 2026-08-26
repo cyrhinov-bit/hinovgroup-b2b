@@ -1386,61 +1386,79 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // === POS CRUD ===
   const addPosCategory = async (cat: PosCategory) => {
     const newCat = { ...cat, id: cat.id || uuidv4() };
-    const newList = [...posCategories, newCat];
-    setPosCategories(newList);
-    await db.posCategories.setItem('data', newList);
+    setPosCategories(prev => {
+      const next = [...prev, newCat];
+      void db.posCategories.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('INSERT_POS_CATEGORY', newCat);
   };
   const updatePosCategory = async (id: string, data: Partial<PosCategory>) => {
-    const newList = posCategories.map(c => c.id === id ? { ...c, ...data } : c);
-    setPosCategories(newList);
-    await db.posCategories.setItem('data', newList);
+    setPosCategories(prev => {
+      const next = prev.map(c => c.id === id ? { ...c, ...data } : c);
+      void db.posCategories.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('UPDATE_POS_CATEGORY', { id, ...data });
   };
   const deletePosCategory = async (id: string) => {
-    const newList = posCategories.filter(c => c.id !== id);
-    setPosCategories(newList);
-    await db.posCategories.setItem('data', newList);
+    setPosCategories(prev => {
+      const next = prev.filter(c => c.id !== id);
+      void db.posCategories.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('DELETE_POS_CATEGORY', { id });
   };
 
   const addPosBrand = async (brand: PosBrand) => {
     const newBrand = { ...brand, id: brand.id || uuidv4() };
-    const newList = [...posBrands, newBrand];
-    setPosBrands(newList);
-    await db.posBrands.setItem('data', newList);
+    setPosBrands(prev => {
+      const next = [...prev, newBrand];
+      void db.posBrands.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('INSERT_POS_BRAND', newBrand);
   };
   const updatePosBrand = async (id: string, data: Partial<PosBrand>) => {
-    const newList = posBrands.map(b => b.id === id ? { ...b, ...data } : b);
-    setPosBrands(newList);
-    await db.posBrands.setItem('data', newList);
+    setPosBrands(prev => {
+      const next = prev.map(b => b.id === id ? { ...b, ...data } : b);
+      void db.posBrands.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('UPDATE_POS_BRAND', { id, ...data });
   };
   const deletePosBrand = async (id: string) => {
-    const newList = posBrands.filter(b => b.id !== id);
-    setPosBrands(newList);
-    await db.posBrands.setItem('data', newList);
+    setPosBrands(prev => {
+      const next = prev.filter(b => b.id !== id);
+      void db.posBrands.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('DELETE_POS_BRAND', { id });
   };
 
   const addPosSupplier = async (supplier: PosSupplier) => {
     const newSupplier = { ...supplier, id: supplier.id || uuidv4() };
-    const newList = [...posSuppliers, newSupplier];
-    setPosSuppliers(newList);
-    await db.posSuppliers.setItem('data', newList);
+    setPosSuppliers(prev => {
+      const next = [...prev, newSupplier];
+      void db.posSuppliers.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('INSERT_POS_SUPPLIER', newSupplier);
   };
   const updatePosSupplier = async (id: string, data: Partial<PosSupplier>) => {
-    const newList = posSuppliers.map(s => s.id === id ? { ...s, ...data } : s);
-    setPosSuppliers(newList);
-    await db.posSuppliers.setItem('data', newList);
+    setPosSuppliers(prev => {
+      const next = prev.map(s => s.id === id ? { ...s, ...data } : s);
+      void db.posSuppliers.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('UPDATE_POS_SUPPLIER', { id, ...data });
   };
   const deletePosSupplier = async (id: string) => {
-    const newList = posSuppliers.filter(s => s.id !== id);
-    setPosSuppliers(newList);
-    await db.posSuppliers.setItem('data', newList);
+    setPosSuppliers(prev => {
+      const next = prev.filter(s => s.id !== id);
+      void db.posSuppliers.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('DELETE_POS_SUPPLIER', { id });
   };
 
@@ -1479,9 +1497,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('UPDATE_POS_PRODUCT', { id, ...data });
   };
   const deletePosProduct = async (id: string) => {
-    const newList = posProducts.filter(p => p.id !== id);
-    setPosProducts(newList);
-    await db.posProducts.setItem('data', newList);
+    setPosProducts(prev => {
+      const next = prev.filter(p => p.id !== id);
+      void db.posProducts.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('DELETE_POS_PRODUCT', { id });
   };
 
@@ -1543,9 +1563,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addPosStockEntry = async (entry: PosStockEntry) => {
     const newEntry = { ...entry, id: entry.id || uuidv4(), lines: entry.lines.map(l => ({ ...l, id: l.id || uuidv4() })) };
-    const newList = [...posStockEntries, newEntry];
-    setPosStockEntries(newList);
-    await db.posStockEntries.setItem('data', newList);
+    setPosStockEntries(prev => {
+      const next = [...prev, newEntry];
+      void db.posStockEntries.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('INSERT_POS_STOCK_ENTRY', newEntry);
 
     if (newEntry.status === 'Validé') {
@@ -1555,9 +1577,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updatePosStockEntry = async (id: string, data: Partial<PosStockEntry>) => {
     const oldEntry = posStockEntries.find(e => e.id === id);
-    const newList = posStockEntries.map(e => e.id === id ? { ...e, ...data } : e);
-    setPosStockEntries(newList);
-    await db.posStockEntries.setItem('data', newList);
+    setPosStockEntries(prev => {
+      const next = prev.map(e => e.id === id ? { ...e, ...data } : e);
+      void db.posStockEntries.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('UPDATE_POS_STOCK_ENTRY', { id, ...data });
 
     if (oldEntry && oldEntry.status !== 'Validé' && data.status === 'Validé') {
@@ -1569,17 +1593,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
   const deletePosStockEntry = async (id: string) => {
-    const newList = posStockEntries.filter(e => e.id !== id);
-    setPosStockEntries(newList);
-    await db.posStockEntries.setItem('data', newList);
+    setPosStockEntries(prev => {
+      const next = prev.filter(e => e.id !== id);
+      void db.posStockEntries.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('DELETE_POS_STOCK_ENTRY', { id });
   };
 
   const addPosInventory = async (inventory: PosInventory) => {
     const newInv = { ...inventory, id: inventory.id || uuidv4(), lines: inventory.lines.map(l => ({ ...l, id: l.id || uuidv4() })) };
-    const newList = [...posInventories, newInv];
-    setPosInventories(newList);
-    await db.posInventories.setItem('data', newList);
+    setPosInventories(prev => {
+      const next = [...prev, newInv];
+      void db.posInventories.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('INSERT_POS_INVENTORY', newInv);
 
     if (newInv.status === 'Terminé') {
@@ -1589,9 +1617,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updatePosInventory = async (id: string, data: Partial<PosInventory>) => {
     const oldInv = posInventories.find(i => i.id === id);
-    const newList = posInventories.map(i => i.id === id ? { ...i, ...data } : i);
-    setPosInventories(newList);
-    await db.posInventories.setItem('data', newList);
+    setPosInventories(prev => {
+      const next = prev.map(i => i.id === id ? { ...i, ...data } : i);
+      void db.posInventories.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('UPDATE_POS_INVENTORY', { id, ...data });
 
     if (oldInv && oldInv.status !== 'Terminé' && data.status === 'Terminé') {
@@ -1600,9 +1630,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
   const deletePosInventory = async (id: string) => {
-    const newList = posInventories.filter(i => i.id !== id);
-    setPosInventories(newList);
-    await db.posInventories.setItem('data', newList);
+    setPosInventories(prev => {
+      const next = prev.filter(i => i.id !== id);
+      void db.posInventories.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('DELETE_POS_INVENTORY', { id });
   };
 
@@ -1612,15 +1644,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     const newSession = { ...session, id: session.id || uuidv4() };
-    const newList = [...posCashSessions, newSession];
-    setPosCashSessions(newList);
-    await db.posCashSessions.setItem('data', newList);
+    setPosCashSessions(prev => {
+      const next = [...prev, newSession];
+      void db.posCashSessions.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('INSERT_POS_CASH_SESSION', newSession);
   };
   const updatePosCashSession = async (id: string, data: Partial<PosCashSession>) => {
-    const newList = posCashSessions.map(s => s.id === id ? { ...s, ...data } : s);
-    setPosCashSessions(newList);
-    await db.posCashSessions.setItem('data', newList);
+    setPosCashSessions(prev => {
+      const next = prev.map(s => s.id === id ? { ...s, ...data } : s);
+      void db.posCashSessions.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('UPDATE_POS_CASH_SESSION', { id, ...data });
   };
 
@@ -1630,9 +1666,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       id: uuidv4(),
       date: new Date().toISOString()
     };
-    const newList = [...posStockMovements, newMovement];
-    setPosStockMovements(newList);
-    await db.posStockMovements.setItem('data', newList);
+    setPosStockMovements(prev => {
+      const next = [...prev, newMovement];
+      void db.posStockMovements.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('INSERT_POS_STOCK_MOVEMENT', newMovement);
   };
 
@@ -1713,9 +1751,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addPosTransaction = async (tx: PosTransaction) => {
     const newTx = { ...tx, id: tx.id || uuidv4(), lines: tx.lines.map(l => ({ ...l, id: l.id || uuidv4() })), payments: tx.payments.map(p => ({ ...p, id: p.id || uuidv4() })) };
-    const newList = [...posTransactions, newTx];
-    setPosTransactions(newList);
-    await db.posTransactions.setItem('data', newList);
+    setPosTransactions(prev => {
+      const next = [...prev, newTx];
+      void db.posTransactions.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('INSERT_POS_TRANSACTION', newTx);
     // Alimenter le registre local des paiements (répartition Finance à jour immédiatement)
     const newPayments = [...posPayments, ...newTx.payments.map(p => ({ ...p, transactionId: newTx.id }))];
@@ -1725,9 +1765,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await adjustProductStock(newTx.lines.map(l => ({ productId: l.productId, quantity: -l.quantity })), false, { type: 'Vente', reference: newTx.transactionNumber, createdBy: currentUser?.name });
   };
   const updatePosTransaction = async (id: string, data: Partial<PosTransaction>) => {
-    const newList = posTransactions.map(t => t.id === id ? { ...t, ...data } : t);
-    setPosTransactions(newList);
-    await db.posTransactions.setItem('data', newList);
+    setPosTransactions(prev => {
+      const next = prev.map(t => t.id === id ? { ...t, ...data } : t);
+      void db.posTransactions.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('UPDATE_POS_TRANSACTION', { id, ...data });
   };
 
@@ -1753,21 +1795,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addPosDiscount = async (discount: PosDiscount) => {
     const newDiscount = { ...discount, id: discount.id || uuidv4() };
-    const newList = [...posDiscounts, newDiscount];
-    setPosDiscounts(newList);
-    await db.posDiscounts.setItem('data', newList);
+    setPosDiscounts(prev => {
+      const next = [...prev, newDiscount];
+      void db.posDiscounts.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('INSERT_POS_DISCOUNT', newDiscount);
   };
   const updatePosDiscount = async (id: string, data: Partial<PosDiscount>) => {
-    const newList = posDiscounts.map(d => d.id === id ? { ...d, ...data } : d);
-    setPosDiscounts(newList);
-    await db.posDiscounts.setItem('data', newList);
+    setPosDiscounts(prev => {
+      const next = prev.map(d => d.id === id ? { ...d, ...data } : d);
+      void db.posDiscounts.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('UPDATE_POS_DISCOUNT', { id, ...data });
   };
   const deletePosDiscount = async (id: string) => {
-    const newList = posDiscounts.filter(d => d.id !== id);
-    setPosDiscounts(newList);
-    await db.posDiscounts.setItem('data', newList);
+    setPosDiscounts(prev => {
+      const next = prev.filter(d => d.id !== id);
+      void db.posDiscounts.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('DELETE_POS_DISCOUNT', { id });
   };
 
@@ -1784,9 +1832,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       lines: ret.lines.map(l => ({ ...l, id: l.id || uuidv4() })),
       exchangeLines: ret.exchangeLines?.map(l => ({ ...l, id: l.id || uuidv4() }))
     };
-    const newList = [...posReturns, newReturn];
-    setPosReturns(newList);
-    await db.posReturns.setItem('data', newList);
+    setPosReturns(prev => {
+      const next = [...prev, newReturn];
+      void db.posReturns.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('INSERT_POS_RETURN', newReturn);
     
     // Restore product quantities for returned items (stock + qty)
@@ -1803,9 +1853,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
   const updatePosReturn = async (id: string, data: Partial<PosReturn>) => {
-    const newList = posReturns.map(r => r.id === id ? { ...r, ...data } : r);
-    setPosReturns(newList);
-    await db.posReturns.setItem('data', newList);
+    setPosReturns(prev => {
+      const next = prev.map(r => r.id === id ? { ...r, ...data } : r);
+      void db.posReturns.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('UPDATE_POS_RETURN', { id, ...data });
   };
 
@@ -1836,21 +1888,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Product Module CRUD
   const addProductCompletion = async (completion: ProductCompletion) => {
     const newCompletion = { ...completion, id: completion.id || uuidv4() };
-    const newList = [...productCompletions, newCompletion];
-    setProductCompletions(newList);
-    await db.productCompletions.setItem('data', newList);
+    setProductCompletions(prev => {
+      const next = [...prev, newCompletion];
+      void db.productCompletions.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('INSERT_PRODUCT_COMPLETION', newCompletion);
   };
   const updateProductCompletion = async (id: string, data: Partial<ProductCompletion>) => {
-    const newList = productCompletions.map(c => c.id === id ? { ...c, ...data } : c);
-    setProductCompletions(newList);
-    await db.productCompletions.setItem('data', newList);
+    setProductCompletions(prev => {
+      const next = prev.map(c => c.id === id ? { ...c, ...data } : c);
+      void db.productCompletions.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('UPDATE_PRODUCT_COMPLETION', { id, ...data });
   };
   const deleteProductCompletion = async (id: string) => {
-    const newList = productCompletions.filter(c => c.id !== id);
-    setProductCompletions(newList);
-    await db.productCompletions.setItem('data', newList);
+    setProductCompletions(prev => {
+      const next = prev.filter(c => c.id !== id);
+      void db.productCompletions.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('DELETE_PRODUCT_COMPLETION', { id });
   };
 
@@ -1871,9 +1929,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('UPDATE_IMPORT_SESSION', { id, ...data });
   };
   const deleteImportSession = async (id: string) => {
-    const newList = importSessions.filter(s => s.id !== id);
-    setImportSessions(newList);
-    await db.importSessions.setItem('data', newList);
+    setImportSessions(prev => {
+      const next = prev.filter(s => s.id !== id);
+      void db.importSessions.setItem('data', next);
+      return next;
+    });
     await queueSyncAction('DELETE_IMPORT_SESSION', { id });
   };
 
