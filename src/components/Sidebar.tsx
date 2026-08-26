@@ -27,11 +27,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Ventes', icon: Receipt, path: '/ventes', roles: ['Directeur', 'Responsable'] },
     { label: 'Commissions', icon: Coins, path: '/commissions', roles: ['Directeur', 'Responsable'] },
     { label: 'Mes Commissions', icon: Coins, path: '/mes-commissions', roles: ['Responsable'] },
-    { label: 'Rapport d\'activité', icon: FileText, path: '/rapport-activite', roles: ['Responsable'] },
-    { label: 'Rapport hebdo', icon: Calendar, path: '/rapport-hebdo', roles: ['Responsable'] },
-    { label: 'Rapport de prospection', icon: FileText, path: '/rapport-prospection', roles: ['Responsable'] },
     { label: 'Documents', icon: Folder, path: '/documents', roles: ['Directeur', 'Responsable'] },
-    { label: 'Historique Rapports', icon: FileText, path: '/mes-rapports', roles: ['Responsable', 'Directeur'] },
     { label: 'Utilisateurs', icon: Shield, path: '/utilisateurs', roles: ['Directeur', 'SuperAdmin'] as any },
     { label: 'Rapports', icon: PieChart, path: '/rapports', roles: ['Directeur'] },
     { label: 'Paramètres', icon: Settings, path: '/parametres', roles: ['Directeur'] },
@@ -40,11 +36,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Prospects', icon: Target, path: '/commercial/prospects', roles: ['Commercial', 'SuperAdmin'] as any },
     { label: 'Clients Apportés', icon: Users, path: '/commercial/clients', roles: ['Commercial', 'SuperAdmin'] as any },
     { label: 'Mes Commissions', icon: Coins, path: '/commercial/commissions', roles: ['Commercial', 'SuperAdmin'] as any },
-    { label: 'Rapport d\'activité', icon: FileText, path: '/commercial/rapport-activite', roles: ['Commercial', 'SuperAdmin'] as any },
-    { label: 'Rapport hebdo', icon: Calendar, path: '/commercial/rapport-hebdo', roles: ['Commercial', 'SuperAdmin'] as any },
-    { label: 'Rapport de prospection', icon: FileText, path: '/commercial/rapport-prospection', roles: ['Commercial', 'SuperAdmin'] as any },
     { label: 'Documents', icon: Folder, path: '/commercial/documents', roles: ['Commercial', 'SuperAdmin'] as any },
-    { label: 'Historique Rapports', icon: FileText, path: '/commercial/mes-rapports', roles: ['Commercial', 'SuperAdmin'] as any },
   ];
 
   // POS nav items

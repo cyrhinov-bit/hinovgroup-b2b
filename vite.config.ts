@@ -23,6 +23,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,png,svg,ico,webmanifest}'],
         cleanupOutdatedCaches: true,
         navigateFallback: 'index.html',
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
       },
       includeAssets: ['logoh.png', 'pwa-192x192.png', 'pwa-512x512.png'],
       manifest: {

@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { Save, Upload } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
 
 export function Parametres() {
   const { settings, updateSettings } = useAppContext();
+  const { currentUser } = useAuth();
   const { confirm } = useConfirm();
   const [localSettings, setLocalSettings] = useState(settings);
+  const [geminiKey, setGeminiKey] = useState(() => currentUser ? (localStorage.getItem(`gemini_key_${currentUser.id}`) || '') : '');
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -26,6 +29,9 @@ export function Parametres() {
       confirmLabel: 'Enregistrer',
       variant: 'info',
       onConfirm: async () => {
+        if (currentUser) {
+          localStorage.setItem(`gemini_key_${currentUser.id}`, geminiKey);
+        }
         await updateSettings(localSettings);
       }
     });
@@ -103,6 +109,23 @@ export function Parametres() {
               <label>Mentions légales par défaut</label>
               <textarea className="table-input" rows={4} value={localSettings.defaultTerms} onChange={e => setLocalSettings({...localSettings, defaultTerms: e.target.value})} />
             </div>
+          </div>
+        </section>
+
+        <section style={{ marginBottom: '32px' }}>
+          <h3 style={{ color: 'var(--color-primary)', borderBottom: '1px solid var(--color-border)', paddingBottom: '8px', marginBottom: '16px' }}>Paramètres IA (Personnel)</h3>
+          <div className="form-group">
+            <label>Clé API Gemini Personnelle</label>
+            <input 
+              type="password" 
+              className="table-input" 
+              placeholder="Ex: AIzaSy..." 
+              value={geminiKey} 
+              onChange={e => setGeminiKey(e.target.value)} 
+            />
+            <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+              Cette clé est stockée localement sur votre appareil. Elle sera utilisée pour générer vos rapports d'activités, ce qui permet à chaque utilisateur de gérer sa propre consommation.
+            </p>
           </div>
         </section>
 

@@ -1665,15 +1665,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    const updatedProducts = posProducts.map(p => {
-      const delta = map.get(p.id);
-      return delta ? { ...p, quantity: Math.max(0, p.quantity + delta) } : p;
+    let finalProducts: PosProduct[] = [];
+    setPosProducts(prev => {
+      finalProducts = prev.map(p => {
+        const delta = map.get(p.id);
+        return delta ? { ...p, quantity: Math.max(0, p.quantity + delta) } : p;
+      });
+      void db.posProducts.setItem('data', finalProducts);
+      return finalProducts;
     });
-    setPosProducts(updatedProducts);
-    await db.posProducts.setItem('data', updatedProducts);
+
     if (pushSync) {
       for (const [pid] of map) {
-        const product = updatedProducts.find(p => p.id === pid);
+        const product = finalProducts.find(p => p.id === pid);
         if (product) {
           await queueSyncAction('UPDATE_POS_PRODUCT', { id: pid, quantity: product.quantity });
         }

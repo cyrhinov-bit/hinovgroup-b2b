@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Package, Upload, Camera, FileSpreadsheet, Search, Images, Edit, ArrowLeft } from 'lucide-react';
+import { Package, Upload, Camera, FileSpreadsheet, Search, Images, Edit, ArrowLeft, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import ProductEntryForm from '../../features/products/presentation/ProductEntryForm';
 import ImportExportPanel from '../../features/products/presentation/ImportExportPanel';
@@ -10,11 +10,13 @@ import ProductImageGallery from '../../features/products/images/ProductImageGall
 import ProductImage from '../../features/products/images/ProductImage';
 import { useAppContext } from '../../context/AppContext';
 import { useProductImages } from '../../features/products/images/ProductImagesContext';
+import { useConfirm } from '../../components/ConfirmModal';
 
 export default function PosProducts() {
   const navigate = useNavigate();
-  const { posProducts } = useAppContext();
+  const { posProducts, deletePosProduct } = useAppContext();
   const { setProductImage } = useProductImages();
+  const { confirm } = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'catalog';
   const setActiveTab = (tab: string) => setSearchParams({ tab });
@@ -177,7 +179,7 @@ export default function PosProducts() {
                     <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right' }}>{product.purchasePrice.toLocaleString()} FCFA</td>
                     <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right', fontWeight: 600 }}>{product.sellingPrice.toLocaleString()} FCFA</td>
                     <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right' }}>{product.quantity}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                       <button
                         onClick={() => {
                           setEditingProduct(product);
@@ -187,6 +189,32 @@ export default function PosProducts() {
                         title="Modifier"
                       >
                         <Edit size={16} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          confirm({
+                            title: 'Supprimer le produit',
+                            message: `Êtes-vous sûr de vouloir supprimer le produit "${product.name || product.reference}" ? Cette action est irréversible.`,
+                            confirmLabel: 'Supprimer',
+                            cancelLabel: 'Annuler',
+                            variant: 'danger',
+                            onConfirm: async () => {
+                              try {
+                                if (deletePosProduct) {
+                                  await deletePosProduct(product.id);
+                                  toast.success('Produit supprimé avec succès');
+                                }
+                              } catch (error) {
+                                console.error(error);
+                                toast.error('Erreur lors de la suppression du produit');
+                              }
+                            }
+                          });
+                        }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)' }}
+                        title="Supprimer"
+                      >
+                        <Trash2 size={16} />
                       </button>
                     </td>
                   </tr>

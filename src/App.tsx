@@ -19,15 +19,14 @@ import { ProspectDetail } from './pages/ProspectDetail';
 import { CommercialClients } from './pages/CommercialClients';
 import { CommercialCommissions } from './pages/CommercialCommissions';
 import { Documents } from './pages/Documents';
-import { MonRapportActivite } from './pages/MonRapportActivite';
-import { MonRapportHebdo } from './pages/MonRapportHebdo';
-import { MonRapportProspection } from './pages/MonRapportProspection';
 import { ReportsHistory } from './features/reports/presentation/pages/ReportsHistory';
 import { Utilisateurs } from './pages/Utilisateurs';
 import { Rapports } from './pages/Rapports';
 import { Parametres } from './pages/Parametres';
 import { Login } from './pages/Login';
 import TestDashboard from './pages/TestDashboard';
+
+// AI Weekly Reports (Deleted)
 
 // POS Pages (lazy loaded)
 import { lazy, Suspense } from 'react';
@@ -166,10 +165,8 @@ function App() {
                     <Route path="documents" element={<Documents />} />
                     <Route path="utilisateurs" element={<Utilisateurs />} />
                     <Route path="rapports" element={<RequireRole roles={['Directeur']}><Rapports /></RequireRole>} />
-                    <Route path="rapport-activite" element={<MonRapportActivite />} />
-                    <Route path="rapport-hebdo" element={<MonRapportHebdo />} />
-                    <Route path="rapport-prospection" element={<MonRapportProspection />} />
                     
+                    {/* New AI Weekly Reports Module (Deleted) */}
                     <Route path="mes-rapports" element={<ReportsHistory />} />
                     <Route path="parametres" element={<Parametres />} />
 
@@ -179,9 +176,6 @@ function App() {
                     <Route path="commercial/prospects/:id" element={<ProspectDetail />} />
                     <Route path="commercial/clients" element={<CommercialClients />} />
                     <Route path="commercial/commissions" element={<CommercialCommissions />} />
-                    <Route path="commercial/rapport-activite" element={<MonRapportActivite />} />
-                    <Route path="commercial/rapport-hebdo" element={<MonRapportHebdo />} />
-                    <Route path="commercial/rapport-prospection" element={<MonRapportProspection />} />
                     
                     <Route path="commercial/documents" element={<Documents />} />
                     <Route path="commercial/mes-rapports" element={<ReportsHistory />} />
