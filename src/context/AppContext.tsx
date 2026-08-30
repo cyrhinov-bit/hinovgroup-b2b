@@ -648,12 +648,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       // 2. Fetch from Supabase (if online) and update Cache
-      if (navigator.onLine && currentUser) {
-        // Process any pending offline mutations before fetching to avoid overwriting local changes with stale data
-        await processSyncQueue();
+      if (navigator.onLine) {
+        if (currentUser) {
+          // Process any pending offline mutations before fetching to avoid overwriting local changes with stale data
+          await processSyncQueue();
 
-        const lastSyncTime = await db.syncMetadata.getItem<string>('lastSyncTime');
-        const syncTimestamp = new Date().toISOString();
+          const lastSyncTime = await db.syncMetadata.getItem<string>('lastSyncTime');
+          const syncTimestamp = new Date().toISOString();
 
         // Chaque table est récupérée isolément : l'échec d'une table ne bloque plus le reste du refresh
         const safeFetch = async (queryFn: () => any, allowDelta: boolean = false): Promise<any> => {
@@ -1221,8 +1222,84 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setPosReturns(merged); await db.posReturns.setItem('data', merged);
         }
 
-        // Update last sync time for next delta fetch
-        await db.syncMetadata.setItem('lastSyncTime', syncTimestamp);
+          // Update last sync time for next delta fetch
+          await db.syncMetadata.setItem('lastSyncTime', syncTimestamp);
+        } else {
+          // Visiteur public non connecté (Catalogue en ligne)
+          try {
+            const [posProductsData, posCategoriesData, posBrandsData, posSettingsData, profilesData] = await Promise.all([
+              supabase.from('pos_products').select('*'),
+              supabase.from('pos_categories').select('*'),
+              supabase.from('pos_brands').select('*'),
+              supabase.from('pos_settings').select('*').maybeSingle(),
+              supabase.from('profiles').select('*'),
+            ]);
+
+            if (posProductsData.data && posProductsData.data.length > 0) {
+              const parsed = posProductsData.data.map((p: any) => {
+                let purchasePrice = p.purchase_price;
+                if (p.family === 'Livre' && (!purchasePrice || purchasePrice === 0) && p.selling_price > 0) {
+                  purchasePrice = Math.round(p.selling_price * 0.75);
+                }
+                return {
+                  id: p.id, reference: p.reference, barcode: p.barcode, isbn: p.isbn, name: p.name,
+                  family: p.family, categoryId: p.category_id, brandId: p.brand_id, supplierId: p.supplier_id,
+                  purchasePrice: purchasePrice ?? 0, sellingPrice: p.selling_price ?? 0, quantity: p.quantity ?? 0,
+                  minStock: (p.min_stock !== null && p.min_stock !== undefined && p.min_stock > 0) ? p.min_stock : 10, imageUrl: p.image_url, description: p.description,
+                  status: p.status || 'Active', isActive: p.is_active !== false, unit: p.unit, createdAt: p.created_at, updatedAt: p.updated_at
+                };
+              });
+              setPosProducts(parsed);
+              await db.posProducts.setItem('data', parsed);
+            }
+
+            if (posCategoriesData.data && posCategoriesData.data.length > 0) {
+              const parsed = posCategoriesData.data.map((c: any) => ({ id: c.id, name: c.name, family: c.family || 'Fourniture' }));
+              setPosCategories(parsed);
+              await db.posCategories.setItem('data', parsed);
+            }
+
+            if (posBrandsData.data && posBrandsData.data.length > 0) {
+              const parsed = posBrandsData.data.map((b: any) => ({ id: b.id, name: b.name }));
+              setPosBrands(parsed);
+              await db.posBrands.setItem('data', parsed);
+            }
+
+            if (posSettingsData.data) {
+              const ps = posSettingsData.data;
+              const mapped = {
+                libraryName: ps.library_name || 'Hinov Group',
+                address: ps.address || '',
+                phone: ps.phone || '',
+                email: ps.email || '',
+                currency: ps.currency || 'FCFA',
+                ticketMessage: ps.ticket_message || '',
+                printerType: ps.printer_type || 'Thermique 80mm',
+                whatsappOrderPhone: ps.whatsapp_order_phone || '',
+                catalogBannerText: ps.catalog_banner_text || '',
+                themeColor: ps.theme_color || ''
+              };
+              setPosSettingsState(mapped);
+              await db.posSettings.setItem('data', mapped);
+            }
+
+            if (profilesData.data && profilesData.data.length > 0) {
+              const parsed: User[] = profilesData.data.map((p: any) => ({
+                id: p.id,
+                name: p.name || p.full_name || '',
+                email: p.email || '',
+                role: p.role as User['role'],
+                serviceId: p.service_id,
+                pin: p.pin || '',
+                active: p.active !== false,
+                photo: p.photo || undefined,
+              }));
+              setUsers(parsed);
+            }
+          } catch (err) {
+            console.error('[PublicSync] Erreur chargement public:', err);
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching data:', error);
