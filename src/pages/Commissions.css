@@ -68,6 +68,34 @@
   color: #0f172a;
 }
 
+@media (max-width: 768px) {
+  .commissions-header {
+    flex-direction: column;
+    align-items: stretch;
+    margin-bottom: 16px;
+  }
+  .commissions-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .commissions-filter-bar {
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .commissions-filter-bar .table-input {
+    width: 100%;
+    min-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .commissions-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+}
+
 @media print {
   .sidebar, .navbar, .commissions-header button, .commissions-filter-bar, .icon-button, .btn {
     display: none !important;

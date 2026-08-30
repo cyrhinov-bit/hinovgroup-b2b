@@ -83,3 +83,32 @@
   vertical-align: middle;
 }
 
+/* ─── Mobile Optimizations for Documents ─────────────────────────────────── */
+@media (max-width: 768px) {
+  .doc-manager-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .doc-manager-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+    gap: 4px;
+    margin-bottom: 14px;
+  }
+  .doc-tab-btn {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
+  .doc-search-bar {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .doc-search-bar input,
+  .doc-search-bar select {
+    width: 100%;
+  }
+}
+

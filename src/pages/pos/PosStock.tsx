@@ -23,9 +23,9 @@ export default function PosStock() {
   const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 14px', paddingLeft: '36px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '14px', outline: 'none' };
 
   return (
-    <div style={{ padding: '24px' }}>
-      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>Gestion du Stock</h1>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+    <div className="pos-page">
+      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '20px' }}>Gestion du Stock</h1>
+      <div className="pos-kpi-grid">
         <div style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ background: 'var(--color-success-tint)', borderRadius: 'var(--radius-md)', padding: '10px' }}><Package size={24} color="var(--color-success)" /></div>

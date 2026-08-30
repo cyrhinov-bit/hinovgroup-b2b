@@ -206,7 +206,7 @@ export function ProspectDetail() {
       )}
 
       <div className="dashboard-grid">
-        <div className="card" style={{ padding: '24px' }}>
+        <div className="card">
           <h3>Informations</h3>
           <div style={{ display: 'grid', gap: '12px', marginTop: '16px' }}>
             <div><strong>Type:</strong> {prospect.type}</div>
@@ -253,7 +253,7 @@ export function ProspectDetail() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          <div className="card" style={{ padding: '24px' }}>
+          <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3>Activités</h3>
               <button className="btn btn-outline" onClick={() => setShowActivityForm(!showActivityForm)}>
@@ -287,7 +287,7 @@ export function ProspectDetail() {
             </div>
           </div>
 
-          <div className="card" style={{ padding: '24px' }}>
+          <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3>Relances</h3>
               <button className="btn btn-outline" onClick={() => setShowFollowUpForm(!showFollowUpForm)}>

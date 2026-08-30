@@ -112,45 +112,43 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
           <span className="brand-name">{posWorkspace.active ? 'HINOV POS' : 'HINOV BUSINESS SUITE'}</span>
           {(currentUser?.role === 'Directeur' || currentUser?.posRole != null) && (
             <button
+              className="topbar-switch-btn"
               onClick={() => {
                 const newActive = !posWorkspace.active;
                 setPosWorkspace({ active: newActive });
                 navigate(newActive ? '/pos' : '/');
               }}
               style={{
-                display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px',
-                marginLeft: '12px', borderRadius: '6px', border: '1px solid var(--color-border)',
                 backgroundColor: posWorkspace.active ? 'var(--color-success)' : 'var(--color-primary)',
-                color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: 500
               }}
             >
               <ArrowLeftRight size={14} />
-              {posWorkspace.active ? 'Retour CRM' : 'Ouvrir POS'}
+              <span className="topbar-btn-text">{posWorkspace.active ? 'Retour CRM' : 'Ouvrir POS'}</span>
+              <span className="topbar-btn-text-mobile">{posWorkspace.active ? 'CRM' : 'POS'}</span>
             </button>
           )}
 
           {currentUser?.role === 'SuperAdmin' && (
             <button
+              className="topbar-switch-btn"
               onClick={() => {
                 const isComm = location.pathname.startsWith('/commercial');
                 navigate(isComm ? '/utilisateurs' : '/commercial');
               }}
               style={{
-                display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px',
-                marginLeft: '12px', borderRadius: '6px', border: '1px solid var(--color-border)',
                 backgroundColor: location.pathname.startsWith('/commercial') ? '#2196F3' : 'var(--color-primary)',
-                color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: 500
               }}
             >
               <ArrowLeftRight size={14} />
-              {location.pathname.startsWith('/commercial') ? 'Retour Admin' : 'Ouvrir Espace Commercial'}
+              <span className="topbar-btn-text">{location.pathname.startsWith('/commercial') ? 'Retour Admin' : 'Ouvrir Commercial'}</span>
+              <span className="topbar-btn-text-mobile">{location.pathname.startsWith('/commercial') ? 'Admin' : 'Commercial'}</span>
             </button>
           )}
 
           {/* Badge Pôle / Service mis en avant pour les Responsables */}
           {currentUser?.role === 'Responsable' && serviceName && (
             <div className="topbar-service-badge" title={`Responsable du pôle ${serviceName}`}>
-              <Building2 size={15} />
+              <Building2 size={15} style={{ flexShrink: 0 }} />
               <span className="topbar-service-label">Pôle :</span>
               <span className="topbar-service-name">{serviceName}</span>
             </div>
@@ -172,7 +170,7 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
               const unreadCount = userNotifications.filter(n => !n.is_read).length;
 
               return (
-              <div className="profile-dropdown" style={{ right: '-10px', minWidth: '320px', padding: '0' }}>
+              <div className="profile-dropdown notifications-dropdown" style={{ padding: '0' }}>
                 <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: 'bold' }}>Notifications</span>
                   <span className="badge-status bg-primary" style={{ padding: '2px 8px', fontSize: '0.7rem' }}>{unreadCount} {unreadCount > 1 ? 'nouvelles' : 'nouvelle'}</span>

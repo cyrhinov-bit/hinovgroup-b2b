@@ -116,6 +116,19 @@ a:hover {
 
 .page-wrapper {
   padding: var(--spacing-4);
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  .page-wrapper {
+    padding: 12px 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-wrapper {
+    padding: 8px 6px;
+  }
 }
 
 /* Material Cards */
@@ -124,6 +137,13 @@ a:hover {
   border-radius: var(--radius);
   box-shadow: var(--shadow-1);
   padding: var(--spacing-4);
+}
+
+@media (max-width: 768px) {
+  .card {
+    padding: 14px 12px;
+    border-radius: var(--radius-md);
+  }
 }
 
 /* Styles d'impression pour Ticket de caisse */
@@ -160,9 +180,10 @@ a:hover {
   .sidebar-overlay {
     display: block;
     position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.5);
-    z-index: 99;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(2px);
+    z-index: 999;
   }
 }
 
@@ -190,10 +211,13 @@ a:hover {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   margin-top: var(--spacing-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
 }
 .table-responsive table {
   margin-top: 0;
-  min-width: 600px;
+  min-width: 620px;
 }
 
 
@@ -221,13 +245,28 @@ a:hover {
   gap: var(--spacing-3);
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
-.responsive-flex-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-3);
-  align-items: center;
+.pos-page {
+  padding: 20px;
+  width: 100%;
+  box-sizing: border-box;
 }
+
+.pos-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
 @media (max-width: 768px) {
+  .pos-page {
+    padding: 10px 6px !important;
+  }
+  .pos-kpi-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    margin-bottom: 16px !important;
+  }
   .form-grid {
     grid-template-columns: 1fr !important;
   }
@@ -344,20 +383,23 @@ a:hover {
 
 
 @media (max-width: 768px) {
+  /* Assurer que .table-responsive permet le scroll horizontal fluide sans écraser les cellules */
   .table-responsive {
-    overflow-x: visible !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    margin-bottom: var(--spacing-3);
   }
-  .table-responsive table {
-    min-width: 0 !important;
-  }
-  .responsive-table, .responsive-table tbody, .responsive-table tr, .responsive-table td {
+  
+  /* Mode cartes empilées pour les listes mobiles dédiées */
+  .stacked-card-table, .stacked-card-table tbody, .stacked-card-table tr, .stacked-card-table td {
     display: block;
     width: 100%;
   }
-  .responsive-table thead {
+  .stacked-card-table thead {
     display: none;
   }
-  .responsive-table tr {
+  .stacked-card-table tr {
     margin-bottom: var(--spacing-3);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
@@ -365,21 +407,21 @@ a:hover {
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     padding: var(--spacing-3);
   }
-  .responsive-table td {
+  .stacked-card-table td {
     border: none !important;
-    padding: var(--spacing-1) 0 !important;
+    padding: 6px 0 !important;
     display: flex !important;
     justify-content: space-between !important;
     align-items: center !important;
     text-align: right !important;
   }
-  .responsive-table td::before {
+  .stacked-card-table td::before {
     content: attr(data-label);
     font-weight: 600;
     color: var(--color-text-muted);
     font-size: 0.85rem;
     text-align: left;
-    margin-right: var(--spacing-3);
+    margin-right: var(--spacing-2);
   }
 }
 

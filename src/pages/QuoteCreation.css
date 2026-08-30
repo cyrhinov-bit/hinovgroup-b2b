@@ -96,7 +96,8 @@
 }
 
 .totals-section {
-  width: 350px;
+  width: 100%;
+  max-width: 350px;
   margin-left: auto;
   margin-bottom: var(--spacing-5);
 }
@@ -146,8 +147,8 @@
 }
 
 .btn-primary:hover {
-  background-color: #d32f2f;
-  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+  background-color: var(--color-primary-hover, #0b7a70);
+  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.3);
 }
 
 .btn-secondary {
@@ -167,4 +168,29 @@
 
 .btn-outline:hover {
   background-color: rgba(0, 188, 212, 0.05);
+}
+
+/* ─── Mobile Optimizations for Quote Creation ─────────────────────────────────── */
+@media (max-width: 768px) {
+  .form-card {
+    padding: var(--spacing-3);
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-3);
+  }
+  .totals-section {
+    max-width: 100%;
+    margin-left: 0;
+  }
+  .grand-total {
+    font-size: 1.25rem;
+  }
+  .form-actions {
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+  .form-actions .btn {
+    width: 100%;
+  }
 }

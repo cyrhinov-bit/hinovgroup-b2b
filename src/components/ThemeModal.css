@@ -208,3 +208,54 @@
   border-top: 1px solid #e2e8f0;
   background: #f8fafc;
 }
+
+@media (max-width: 640px) {
+  .theme-modal-backdrop {
+    padding: 8px;
+  }
+  .theme-modal-card {
+    max-height: 92vh;
+    border-radius: 12px;
+  }
+  .theme-modal-header {
+    padding: 12px 14px;
+  }
+  .theme-modal-title {
+    font-size: 0.95rem;
+  }
+  .theme-modal-body {
+    padding: 14px 12px;
+    gap: 14px;
+  }
+  .theme-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .theme-swatch-item {
+    padding: 8px 6px;
+  }
+  .theme-circle {
+    width: 28px;
+    height: 28px;
+  }
+  .theme-swatch-name {
+    font-size: 0.75rem;
+  }
+  .theme-swatch-mood {
+    font-size: 0.65rem;
+  }
+  .theme-cat-pills {
+    gap: 4px;
+  }
+  .theme-cat-pill {
+    padding: 4px 8px;
+    font-size: 0.7rem;
+  }
+  .theme-modal-footer {
+    padding: 10px 12px;
+  }
+  .theme-modal-footer .btn {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+  }
+}

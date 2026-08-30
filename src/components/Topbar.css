@@ -482,21 +482,117 @@
   justify-content: flex-end;
 }
 
+/* ─── Topbar Switch Buttons ─────────────────────────────────── */
+.topbar-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  margin-left: 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: white;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.topbar-btn-text {
+  display: inline;
+}
+
+.topbar-btn-text-mobile {
+  display: none;
+}
+
 .menu-toggle {
   display: none;
 }
+
 @media (max-width: 768px) {
+  .topbar {
+    padding: 0 10px;
+    height: 58px;
+  }
   .menu-toggle {
     display: flex;
   }
   .brand-name {
     display: none;
   }
+  .topbar-btn-text {
+    display: none;
+  }
+  .topbar-btn-text-mobile {
+    display: inline;
+  }
+  .topbar-switch-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+    margin-left: 6px;
+    gap: 4px;
+  }
+  .topbar-service-badge {
+    padding: 4px 10px;
+    margin-left: 6px;
+    font-size: 0.75rem;
+    max-width: 150px;
+  }
+  .topbar-service-label {
+    display: none;
+  }
+  .topbar-service-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 110px;
+  }
+  .profile-dropdown {
+    right: 4px !important;
+    left: auto !important;
+    width: 290px !important;
+    max-width: 92vw !important;
+  }
+  .notifications-dropdown {
+    right: -20px !important;
+    width: 310px !important;
+    max-width: 90vw !important;
+  }
   .search-bar {
     margin-right: var(--spacing-2);
-    width: 150px;
+    width: 140px;
   }
   .search-bar input {
     width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .topbar {
+    padding: 0 6px;
+  }
+  .topbar-left, .topbar-right {
+    gap: 4px;
+  }
+  .topbar-service-badge {
+    max-width: 120px;
+    padding: 3px 6px;
+    margin-left: 4px;
+  }
+  .topbar-service-name {
+    max-width: 80px;
+    font-size: 0.72rem;
+  }
+  .avatar-btn {
+    width: 34px;
+    height: 34px;
+  }
+  .notifications-dropdown {
+    right: -40px !important;
+    width: 280px !important;
+    max-width: 88vw !important;
   }
 }

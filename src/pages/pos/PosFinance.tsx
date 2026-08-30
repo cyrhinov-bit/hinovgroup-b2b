@@ -126,8 +126,8 @@ export default function PosFinance() {
   const formatDate = (d: string) => new Date(d).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' });
 
   return (
-    <div style={{ padding: '24px' }}>
-      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>Finance POS</h1>
+    <div className="pos-page">
+      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '20px' }}>Finance POS</h1>
 
       {/* Period filter */}
       <div style={{ ...cardStyle, marginBottom: '24px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -139,7 +139,7 @@ export default function PosFinance() {
             backgroundColor: period === p ? 'var(--color-primary)' : 'white',
             color: period === p ? 'white' : 'var(--color-text)',
           }}>
-            {p === 'today' ? "Aujourd'hui" : p === '7days' ? '7 jours' : p === '30days' ? '30 jours' : 'Personnalisé'}
+            {p === 'today' ? "Aujourd'hui" : p === '7days' ? '7 derniers jours' : p === '30days' ? '30 derniers jours' : 'Personnalisé'}
           </button>
         ))}
         {period === 'custom' && (
@@ -153,7 +153,7 @@ export default function PosFinance() {
       </div>
 
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+      <div className="pos-kpi-grid">
         <div style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ background: 'var(--color-success-tint)', borderRadius: 'var(--radius-md)', padding: '10px' }}><TrendingUp size={22} color="var(--color-success)" /></div>

@@ -23,8 +23,8 @@ export default function PosSettings() {
   const labelStyle: React.CSSProperties = { fontSize: '13px', fontWeight: 500, color: 'var(--color-text)', marginBottom: '4px' };
 
   return (
-    <div style={{ padding: '24px', maxWidth: '640px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+    <div className="pos-page" style={{ maxWidth: '640px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 700 }}>Paramètres POS</h1>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button 

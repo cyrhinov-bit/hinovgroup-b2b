@@ -118,8 +118,8 @@ export default function PosCash() {
   };
 
   return (
-    <div style={{ padding: '24px' }}>
-      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>Gestion de caisse</h1>
+    <div className="pos-page">
+      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '20px' }}>Gestion de caisse</h1>
 
       {/* Alerte sessions antérieures non fermées */}
       {staleOpenSessions.length > 0 && (

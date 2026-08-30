@@ -23,9 +23,9 @@ export default function DashboardPos() {
   const staleOpenSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) < today);
 
   return (
-    <div style={{ padding: '24px' }}>
-      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>Dashboard POS</h1>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+    <div className="pos-page">
+      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '20px' }}>Dashboard POS</h1>
+      <div className="pos-kpi-grid">
         <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ background: 'var(--color-primary-tint)', borderRadius: 'var(--radius-md)', padding: '10px' }}><Package size={24} color="var(--color-primary)" /></div>

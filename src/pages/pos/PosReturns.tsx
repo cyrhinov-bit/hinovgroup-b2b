@@ -315,7 +315,7 @@ export default function PosReturns() {
   });
 
   return (
-    <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
+    <div className="pos-page" style={{ maxWidth: '1200px', margin: '0 auto' }}>
       
       {/* HEADER */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
