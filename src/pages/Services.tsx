@@ -10,8 +10,8 @@ export function Services() {
   const [showForm, setShowForm] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
 
-  const [newService, setNewService] = useState<Partial<Service>>({});
-  const [editForm, setEditForm] = useState<{ name: string; members: number; description: string }>({ name: '', members: 1, description: '' });
+  const [newService, setNewService] = useState<Partial<Service>>({ commissionRate: 10 });
+  const [editForm, setEditForm] = useState<{ name: string; members: number; description: string; commissionRate?: number }>({ name: '', members: 1, description: '', commissionRate: 10 });
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,10 +20,11 @@ export function Services() {
         id: Date.now().toString(),
         name: newService.name,
         members: newService.members || 1,
-        description: newService.description || ''
+        description: newService.description || '',
+        commissionRate: newService.commissionRate !== undefined ? Number(newService.commissionRate) : 10
       });
       setShowForm(false);
-      setNewService({});
+      setNewService({ commissionRate: 10 });
     }
   };
 
@@ -32,7 +33,8 @@ export function Services() {
     setEditForm({
       name: service.name,
       members: service.members || 1,
-      description: service.description || ''
+      description: service.description || '',
+      commissionRate: service.commissionRate !== undefined ? service.commissionRate : 10
     });
     setShowForm(false);
   };
@@ -81,6 +83,16 @@ export function Services() {
               value={newService.members || ''}
               onChange={e => setNewService({ ...newService, members: Number(e.target.value) })}
             />
+            <input
+              className="table-input"
+              type="number"
+              placeholder="Taux commission par défaut (%)"
+              min="0"
+              max="100"
+              step="0.5"
+              value={newService.commissionRate !== undefined ? newService.commissionRate : ''}
+              onChange={e => setNewService({ ...newService, commissionRate: Number(e.target.value) })}
+            />
             <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Annuler</button>
               <button type="submit" className="btn btn-primary">Enregistrer</button>
@@ -113,6 +125,19 @@ export function Services() {
                 onChange={e => setEditForm({ ...editForm, members: Number(e.target.value) })}
               />
             </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Taux de commission (%)</label>
+              <input
+                className="table-input"
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                value={editForm.commissionRate !== undefined ? editForm.commissionRate : 10}
+                required
+                onChange={e => setEditForm({ ...editForm, commissionRate: Number(e.target.value) })}
+              />
+            </div>
             <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setEditingService(null)}>Annuler</button>
               <button type="submit" className="btn btn-primary">Sauvegarder les modifications</button>
@@ -129,6 +154,7 @@ export function Services() {
               <th>Service</th>
               <th>Responsable</th>
               <th>Membres d'équipe</th>
+              <th>Taux Commission</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -140,6 +166,11 @@ export function Services() {
                   <td data-label="Service"><strong>{s.name}</strong></td>
                   <td data-label="Responsable">{managerName}</td>
                   <td data-label="Membres">{s.members || 1}</td>
+                  <td data-label="Taux Commission">
+                    <span className="badge-status bg-info" style={{ fontWeight: 600 }}>
+                      {s.commissionRate !== undefined && s.commissionRate !== null ? `${s.commissionRate}%` : 'Défaut (10%)'}
+                    </span>
+                  </td>
                   <td data-label="Actions">
                     <div style={{ display: 'flex', gap: '6px' }}>
                       <button className="icon-button" style={{ color: 'var(--color-primary)' }} title="Modifier le service" onClick={() => startEdit(s)}>
@@ -155,7 +186,7 @@ export function Services() {
             })}
             {services.length === 0 && (
               <tr>
-                <td colSpan={4} style={{ textAlign: 'center', padding: '24px' }}>Aucun service trouvé.</td>
+                <td colSpan={5} style={{ textAlign: 'center', padding: '24px' }}>Aucun service trouvé.</td>
               </tr>
             )}
           </tbody>

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { isValidPin, normalizeEmail } from '@/shared';
 import { supabase } from '../lib/supabase';
 import type { User } from './AppContext';
+import { getUserThemeColor, applyTheme } from '../lib/theme';
 
 interface AuthState {
   currentUser: User | null;
@@ -18,6 +19,12 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Appliquer automatiquement le thème de l'utilisateur connecté
+  useEffect(() => {
+    const userColor = getUserThemeColor(currentUser?.id);
+    applyTheme(userColor);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     // Check active sessions and sets the user

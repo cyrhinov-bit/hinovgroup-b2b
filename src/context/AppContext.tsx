@@ -25,7 +25,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'Directeur' | 'Responsable' | 'Commercial' | 'Caissier' | 'Gerant' | 'SuperAdmin';
+  role: 'Directeur' | 'Directeur adjoint' | 'Responsable' | 'Commercial' | 'Caissier' | 'Gerant' | 'SuperAdmin';
   posRole?: 'Directeur' | 'Gerant' | 'Caissier' | null;
   serviceId?: string;
   pin: string;
@@ -38,17 +38,184 @@ export interface User {
   posInventoryEnabled?: boolean;
   posStockEnabled?: boolean;
 }
-export interface Client { id: string; name: string; email: string; phone: string; contact: string; company: string; address: string; status?: string; commercialId?: string; createdAt?: string; }
-export interface Service { id: string; name: string; description: string; members?: number; }
+export type AffaireStatus = 'PROSPECTION' | 'QUALIFIEE' | 'PROPOSITION' | 'NEGOCIATION' | 'GAGNEE' | 'EN_COURS' | 'CLOTUREE' | 'PERDUE' | 'ANNULEE';
+export interface Affaire {
+  id: string;
+  reference: string;
+  title: string;
+  clientId: string;
+  serviceId: string;
+  commercialId: string;
+  description?: string;
+  status: AffaireStatus;
+  estimatedAmountHt: number;
+  probability: number;
+  source?: string;
+  startDatePlanned?: string;
+  endDatePlanned?: string;
+  endDateReal?: string;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+export interface Client { id: string; name: string; email: string; phone: string; contact: string; company: string; address: string; status?: string; commercialId?: string; serviceId?: string; createdAt?: string; }
+export interface Service { id: string; name: string; description: string; members?: number; managerId?: string; commissionRate?: number; }
 export interface Category { id: string; serviceId: string; name: string; }
 export interface Prestation { id: string; code: string; name: string; description: string; price: number; serviceId: string; unit?: string; costPrice?: number; }
 export interface QuoteLine { id: string; prestationId: string; description: string; quantity: number; unitPrice: number; total: number; discountPercent?: number; costPrice?: number; }
-export interface Quote { id: string; quoteNumber: string; clientId: string; commercialId: string; serviceId?: string; subject: string; lines: QuoteLine[]; subtotal: number; total: number; status: 'Brouillon' | 'Envoyé' | 'Accepté' | 'Refusé' | 'Révision'; date: string; style?: 'Classique' | 'Moderne' | 'Minimaliste'; accentColor?: string; discountPercent?: number; discountAmount?: number; clientComment?: string; }
+export interface Quote { id: string; quoteNumber: string; clientId: string; commercialId: string; serviceId?: string; affaireId?: string; subject: string; lines: QuoteLine[]; subtotal: number; total: number; status: 'Brouillon' | 'Envoyé' | 'Accepté' | 'Refusé' | 'Révision'; date: string; style?: 'Classique' | 'Moderne' | 'Minimaliste'; accentColor?: string; discountPercent?: number; discountAmount?: number; clientComment?: string; }
 export interface SaleLine { id: string; description: string; quantity: number; unitPrice: number; costPrice?: number; total: number; }
-export interface Sale { id: string; saleNumber: string; quoteId?: string; clientId: string; serviceId?: string; lines: SaleLine[]; subtotal: number; total: number; status: 'Enregistrée' | 'Payée' | 'Annulée'; date: string; notes?: string; }
+export interface Sale { id: string; saleNumber: string; quoteId?: string; affaireId?: string; clientId: string; serviceId?: string; commercialId?: string; dueDate?: string; lines: SaleLine[]; subtotal: number; total: number; status: 'Enregistrée' | 'Payée' | 'Annulée'; date: string; notes?: string; }
 export interface Installment { id: string; saleId: string; amount: number; dueDate: string; paidAmount: number; status: 'En attente' | 'Payée'; paidAt?: string; }
 export type InstallmentInput = { id?: string; amount: number; dueDate: string };
-export interface Commission { id: string; saleId?: string; clientId?: string; commercialId?: string; serviceId?: string; totalHt: number; costTotal: number; marginAmount: number; marginPercent: number; commissionPercent: number; commissionAmount: number; paidAmount?: number; status: 'En attente' | 'Validée' | 'Payée'; createdAt: string; }
+
+export type PaymentType = 'ENCAISSEMENT' | 'REMBOURSEMENT';
+export type PaymentMethod = 'Virement Bancaire' | 'Chèque' | 'Espèces' | 'Mobile Money' | 'Traite';
+export interface FacturePaiement {
+  id: string;
+  paymentNumber: string;
+  paymentType: PaymentType;
+  venteId: string;
+  echeanceId?: string;
+  clientId: string;
+  paymentDate: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  reference?: string;
+  proofDocumentId?: string;
+  notes?: string;
+  status: 'VALIDE' | 'REJETE' | 'ANNULE';
+  recordedBy?: string;
+  createdAt?: string;
+}
+
+export type CostType = 'DIRECT' | 'INDIRECT';
+export type CostCategory = 
+  | 'SOUS_TRAITANCE' 
+  | 'ACHAT_MATERIEL' 
+  | 'TRANSPORT' 
+  | 'LOGICIEL_LICENCE' 
+  | 'HONORAIRES' 
+  | 'LOYER_CHARGES' 
+  | 'TELECOM' 
+  | 'AUTRE';
+
+export interface Cout {
+  id: string;
+  reference: string;
+  costType: CostType;
+  category: CostCategory;
+  amountHt: number;
+  vatRate: number;
+  vatAmount: number;
+  amountTtc: number;
+  date: string;
+  affaireId?: string;
+  serviceId: string;
+  supplierName?: string;
+  invoiceRef?: string;
+  description: string;
+  proofDocumentId?: string;
+  status: 'ENGAGE' | 'VALIDE' | 'PAYE' | 'ANNULE';
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type PeriodType = 'MENSUEL' | 'TRIMESTRIEL' | 'ANNUEL';
+
+export interface ScoringRule {
+  id: string;
+  serviceId?: string;
+  role: string;
+  weightMargin: number;
+  weightRevenue: number;
+  weightVolume: number;
+  weightConversion: number;
+  isActive: boolean;
+}
+
+export interface Objectif {
+  id: string;
+  profileId: string;
+  serviceId: string;
+  periodType: PeriodType;
+  startDate: string;
+  endDate: string;
+  targetRevenueHt: number;
+  targetMarginHt: number;
+  targetDealsCount: number;
+  targetNewClients: number;
+  status: 'EN_COURS' | 'ATTEINT' | 'NON_ATTEINT' | 'ANNULE';
+  createdBy?: string;
+  createdAt?: string;
+}
+
+export interface Classement {
+  id: string;
+  profileId: string;
+  serviceId: string;
+  periodType: PeriodType;
+  periodKey: string;
+  score: number;
+  rank: number;
+  revenueAchievedHt: number;
+  marginAchievedHt: number;
+  dealsWonCount: number;
+  conversionRate: number;
+  updatedAt?: string;
+}
+
+export type PrimeType = 'PERFORMANCE' | 'CHALLENGE' | 'EXCEPTIONNELLE';
+export type PrimeStatus = 'PROPOSEE' | 'VALIDEE' | 'PAYEE' | 'REJETEE';
+
+export interface Prime {
+  id: string;
+  reference: string;
+  profileId: string;
+  serviceId: string;
+  periodKey: string;
+  primeType: PrimeType;
+  amount: number;
+  status: PrimeStatus;
+  calculatedBy?: string;
+  validatedBy?: string;
+  justification?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PrimeAuditLog {
+  id: string;
+  primeId: string;
+  action: 'CREATION' | 'MODIFICATION' | 'VALIDATION' | 'REJET' | 'PAIEMENT';
+  actorId: string;
+  actorRole: string;
+  previousState?: any;
+  newState?: any;
+  comment?: string;
+  createdAt?: string;
+}
+
+export interface Commission {
+  id: string;
+  saleId?: string;
+  affaireId?: string;
+  clientId?: string;
+  commercialId?: string;
+  serviceId?: string;
+  totalHt: number;
+  costTotal: number;
+  marginAmount: number;
+  marginPercent: number;
+  commissionPercent: number;
+  commissionAmount: number;
+  paidAmount?: number;
+  eligibleAmount?: number;
+  notes?: string;
+  status: 'En attente' | 'Validée' | 'Payée' | 'Annulée';
+  createdAt: string;
+}
 export interface Prospect { id: string; prospectNumber: string; commercialId: string; serviceId?: string; categoryId?: string; type: 'Entreprise' | 'Particulier'; name: string; company?: string; phone?: string; email?: string; address?: string; city?: string; source?: string; interestLevel: 'Faible' | 'Moyen' | 'Élevé' | 'Très élevé'; budget: number; need?: string; comments?: string; status: 'Nouveau' | 'Premier contact' | 'Besoin identifié' | 'Rendez-vous' | 'Offre en préparation' | 'Négociation' | 'À convertir' | 'Converti' | 'Perdu'; responsibleId?: string; createdAt: string; updatedAt: string; }
 export interface ProspectActivity { id: string; prospectId: string; type: 'Appel' | 'Email' | 'Visite' | 'Réunion' | 'Démonstration' | 'Compte rendu' | 'Autre'; description?: string; date: string; createdBy?: string; }
 export interface ProspectFollowUp { id: string; prospectId: string; date: string; time?: string; priority: 'Basse' | 'Moyenne' | 'Haute' | 'Urgente'; observation?: string; status: 'En attente' | 'Terminée' | 'Annulée'; }
@@ -58,9 +225,53 @@ export interface ActivityReport { id: string; authorId: string; role: User['role
 
 export interface WeeklyReport { id: string; authorId: string; role: User['role']; weekStart: string; sections: { type: 'Activité' | 'Prospection'; content: string }[]; kpis: Record<string, number>; status: 'Brouillon' | 'Envoyé' | 'Relu'; sentAt?: string; createdAt?: string; }
 
-export interface V2Task { id: string; description: string; status: 'Effectuée' | 'En cours' | 'Restante'; }
-export interface V2DailyReport { id: string; authorId: string; date: string; project: string; objectives: string; tasks: V2Task[]; results: string; difficulties: string; observations: string; status: 'Brouillon' | 'Soumis' | 'Validé'; createdAt?: string; updatedAt?: string; }
-export interface V2WeeklyReport { id: string; authorId: string; weekStart: string; project: string; dailyReportIds: string[]; weeklyObjectives: string; tasksByDay: Record<string, V2Task[]>; pendingTasks: V2Task[]; summary: string; nextWeekObjectives: string; conclusion: string; status: 'Brouillon' | 'Validé'; createdAt?: string; updatedAt?: string; }
+export interface V2Task {
+  id: string;
+  description: string;
+  status: 'Effectuée' | 'En cours' | 'Restante' | 'Bloquée';
+  difficulty?: string;
+  affaireId?: string;
+  clientId?: string;
+  timeSpent?: string;
+}
+export interface V2DailyReport {
+  id: string;
+  authorId: string;
+  date: string;
+  project: string;
+  objectives: string;
+  tasks: V2Task[];
+  results: string;
+  difficulties: string;
+  observations: string;
+  status: 'Brouillon' | 'Soumis' | 'Validé';
+  createdAt?: string;
+  updatedAt?: string;
+}
+export interface V2WeeklyReport {
+  id: string;
+  authorId: string;
+  weekStart: string;
+  weekEnd?: string;
+  project?: string;
+  dailyReportIds?: string[];
+  weeklyObjectives: string;
+  tasksByDay: Record<string, V2Task[]>;
+  pendingTasks?: V2Task[];
+  aiSummary?: string;
+  achievements?: string;
+  difficulties?: string;
+  summary?: string;
+  nextWeekObjectives: string;
+  conclusion?: string;
+  status: 'Brouillon' | 'Soumis' | 'Validé' | 'Relu';
+  directorComment?: string;
+  submittedAt?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
 // POS Interfaces
 export interface PosCategory { id: string; name: string; family: 'Livre' | 'Fourniture'; }
 export interface PosBrand { id: string; name: string; }
@@ -95,6 +306,8 @@ export interface CrmFolder {
   name: string;
   ownerId: string;
   parentId?: string;
+  color?: string; // Hex color code e.g. '#0D9488', '#2563EB', '#7C3AED'
+  isShared?: boolean;
   createdAt: string;
 }
 
@@ -106,6 +319,10 @@ export interface CrmDocument {
   filePath: string;
   uploaderId?: string;
   folderId?: string;
+  affaireId?: string;
+  clientId?: string;
+  category?: 'Contrat / Devis signé' | 'Bon de Commande' | 'BAT / Maquette' | 'Facture / Reçu' | 'Rapport' | 'Autre';
+  isShared?: boolean;
   createdAt: string;
 }
 
@@ -124,7 +341,9 @@ export interface PosSettings { libraryName: string; address: string; phone: stri
 export interface PosWorkspace { active: boolean; }
 
 interface AppState {
-  users: User[]; clients: Client[]; quotes: Quote[]; sales: Sale[]; commissions: Commission[]; installments: Installment[]; prospects: Prospect[]; prospectActivities: ProspectActivity[]; prospectFollowUps: ProspectFollowUp[]; categories: Category[]; settings: AppSettings; services: Service[]; prestations: Prestation[]; loading: boolean; activityReports: ActivityReport[]; weeklyReports: WeeklyReport[]; crmDocuments: CrmDocument[]; crmFolders: CrmFolder[]; v2DailyReports: V2DailyReport[]; v2WeeklyReports: V2WeeklyReport[]; notifications: AppNotification[];
+  users: User[]; clients: Client[]; affaires: Affaire[]; quotes: Quote[]; sales: Sale[]; facturePaiements: FacturePaiement[]; couts: Cout[]; commissions: Commission[]; installments: Installment[];
+  scoringRules: ScoringRule[]; objectifs: Objectif[]; classements: Classement[]; primes: Prime[]; primeAuditLogs: PrimeAuditLog[];
+  prospects: Prospect[]; prospectActivities: ProspectActivity[]; prospectFollowUps: ProspectFollowUp[]; categories: Category[]; settings: AppSettings; services: Service[]; prestations: Prestation[]; loading: boolean; activityReports: ActivityReport[]; weeklyReports: WeeklyReport[]; crmDocuments: CrmDocument[]; crmFolders: CrmFolder[]; v2DailyReports: V2DailyReport[]; v2WeeklyReports: V2WeeklyReport[]; notifications: AppNotification[];
   // POS
   posCategories: PosCategory[]; posBrands: PosBrand[]; posSuppliers: PosSupplier[]; posProducts: PosProduct[];
   posStockEntries: PosStockEntry[]; posInventories: PosInventory[]; posCashSessions: PosCashSession[];
@@ -138,6 +357,22 @@ interface AppState {
   addClient: (client: Client) => Promise<void>;
   updateClient: (id: string, client: Client) => Promise<void>;
   deleteClient: (id: string) => Promise<void>;
+  addAffaire: (affaireData: Omit<Affaire, 'id' | 'reference' | 'createdAt' | 'updatedAt'> | Affaire) => Promise<Affaire>;
+  updateAffaire: (id: string, data: Partial<Affaire>) => Promise<void>;
+  updateAffaireStatus: (id: string, status: AffaireStatus) => Promise<void>;
+  deleteAffaire: (id: string) => Promise<void>;
+  recordPayment: (paymentData: Omit<FacturePaiement, 'id' | 'paymentNumber' | 'createdAt'> | FacturePaiement) => Promise<FacturePaiement>;
+  addCout: (coutData: Omit<Cout, 'id' | 'reference' | 'vatAmount' | 'amountTtc' | 'createdAt' | 'updatedAt'> | Cout) => Promise<Cout>;
+  updateCout: (id: string, data: Partial<Cout>) => Promise<void>;
+  deleteCout: (id: string) => Promise<void>;
+  addObjectif: (obj: Omit<Objectif, 'id' | 'createdAt'> | Objectif) => Promise<Objectif>;
+  updateObjectif: (id: string, data: Partial<Objectif>) => Promise<void>;
+  deleteObjectif: (id: string) => Promise<void>;
+  proposePrime: (primeData: Omit<Prime, 'id' | 'reference' | 'status' | 'createdAt' | 'updatedAt'>, comment?: string) => Promise<Prime>;
+  validatePrime: (primeId: string, comment?: string) => Promise<void>;
+  rejectPrime: (primeId: string, comment?: string) => Promise<void>;
+  payPrime: (primeId: string, comment?: string) => Promise<void>;
+  updateScoringRule: (id: string, data: Partial<ScoringRule>) => Promise<void>;
   addQuote: (quote: Quote) => Promise<void>;
   updateQuote: (id: string, quote: Quote) => Promise<void>;
   updateQuoteStatus: (id: string, status: Quote['status'], clientComment?: string) => Promise<void>;
@@ -149,12 +384,12 @@ interface AppState {
   recordInstallmentPayment: (installmentId: string, amount: number) => Promise<void>;
   saveInstallmentsForSale: (saleId: string, items: InstallmentInput[]) => Promise<void>;
   addCommission: (commission: Commission) => Promise<void>;
-  updateCommissionStatus: (id: string, status: Commission['status']) => Promise<void>;
+  updateCommissionStatus: (id: string, status: Commission['status'], paidAmount?: number, notes?: string) => Promise<void>;
   deleteCommission: (id: string) => Promise<void>;
   addProspect: (prospect: Prospect) => Promise<void>;
   updateProspect: (id: string, data: Partial<Prospect>) => Promise<void>;
   deleteProspect: (id: string) => Promise<void>;
-  convertProspect: (prospectId: string) => Promise<void>;
+  convertProspect: (prospectId: string, createAffaire?: boolean) => Promise<{ clientId: string; affaireId?: string }>;
   addProspectActivity: (activity: ProspectActivity) => Promise<void>;
   deleteProspectActivity: (id: string) => Promise<void>;
   addProspectFollowUp: (followUp: ProspectFollowUp) => Promise<void>;
@@ -169,11 +404,15 @@ interface AppState {
   markAllNotificationsAsRead: () => Promise<void>;
   saveV2DailyReport: (report: V2DailyReport) => Promise<void>;
   saveV2WeeklyReport: (report: V2WeeklyReport) => Promise<void>;
+  submitV2WeeklyReport: (id: string) => Promise<void>;
+  reviewV2WeeklyReport: (id: string, comment?: string, status?: 'Validé' | 'Relu') => Promise<void>;
+  deleteV2WeeklyReport: (id: string) => Promise<void>;
   updateMyProfile: (data: Partial<Pick<User, 'photo' | 'name'>>) => Promise<void>;
-  addCrmDocument: (file: File, uploaderId?: string, folderId?: string) => Promise<void>;
+  addCrmDocument: (file: File, options?: { uploaderId?: string; folderId?: string; affaireId?: string; clientId?: string; category?: CrmDocument['category']; isShared?: boolean } | string, folderIdParam?: string) => Promise<CrmDocument>;
   deleteCrmDocument: (id: string) => Promise<void>;
-  downloadCrmDocument: (doc: CrmDocument) => void;
-  addCrmFolder: (name: string, ownerId: string, parentId?: string) => Promise<void>;
+  downloadCrmDocument: (doc: CrmDocument) => Promise<void>;
+  getCrmDocumentBlob: (doc: CrmDocument) => Promise<Blob | null>;
+  addCrmFolder: (name: string, ownerId: string, parentId?: string, color?: string, isShared?: boolean) => Promise<CrmFolder>;
   updateCrmFolder: (id: string, data: Partial<CrmFolder>) => Promise<void>;
   deleteCrmFolder: (id: string) => Promise<void>;
   addCategory: (category: Category) => Promise<void>;
@@ -247,6 +486,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [affaires, setAffaires] = useState<Affaire[]>([]);
+  const [facturePaiements, setFacturePaiements] = useState<FacturePaiement[]>([]);
+  const [couts, setCouts] = useState<Cout[]>([]);
+  const [scoringRules, setScoringRules] = useState<ScoringRule[]>([]);
+  const [objectifs, setObjectifs] = useState<Objectif[]>([]);
+  const [classements, setClassements] = useState<Classement[]>([]);
+  const [primes, setPrimes] = useState<Prime[]>([]);
+  const [primeAuditLogs, setPrimeAuditLogs] = useState<PrimeAuditLog[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [commissions, setCommissions] = useState<Commission[]>([]);
@@ -292,6 +539,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // 1. Load from IndexedDB (Offline Cache)
       const cachedUsers = await db.profiles.getItem<User[]>('data');
       const cachedClients = await db.clients.getItem<Client[]>('data');
+      const cachedAffaires = await db.affaires.getItem<Affaire[]>('data');
+      const cachedFacturePaiements = await db.facturePaiements.getItem<FacturePaiement[]>('data');
+      const cachedCouts = await db.couts.getItem<Cout[]>('data');
+      const cachedScoringRules = await db.scoringRules.getItem<ScoringRule[]>('data');
+      const cachedObjectifs = await db.objectifs.getItem<Objectif[]>('data');
+      const cachedClassements = await db.classements.getItem<Classement[]>('data');
+      const cachedPrimes = await db.primes.getItem<Prime[]>('data');
+      const cachedPrimeAuditLogs = await db.primeAuditLogs.getItem<PrimeAuditLog[]>('data');
       const cachedQuotes = await db.quotes.getItem<Quote[]>('data');
       const cachedSales = await db.sales.getItem<Sale[]>('data');
       const cachedCommissions = await db.commissions.getItem<Commission[]>('data');
@@ -328,6 +583,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (cachedUsers) setUsers(cachedUsers);
       if (cachedClients) setClients(cachedClients);
+      if (cachedAffaires) setAffaires(cachedAffaires);
+      if (cachedFacturePaiements) setFacturePaiements(cachedFacturePaiements);
+      if (cachedCouts) setCouts(cachedCouts);
+      if (cachedScoringRules) setScoringRules(cachedScoringRules);
+      if (cachedObjectifs) setObjectifs(cachedObjectifs);
+      if (cachedClassements) setClassements(cachedClassements);
+      if (cachedPrimes) setPrimes(cachedPrimes);
+      if (cachedPrimeAuditLogs) setPrimeAuditLogs(cachedPrimeAuditLogs);
       if (cachedQuotes) setQuotes(cachedQuotes);
       if (cachedSales) setSales(cachedSales);
       if (cachedCommissions) setCommissions(cachedCommissions);
@@ -404,6 +667,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           profilesData, clientsData, servicesData,
           prestationsData, settingsData, quotesData,
           salesData, commissionsData, installmentsData,
+          affairesData, facturePaiementsData, coutsData,
+          scoringRulesData, objectifsData, classementsData, primesData, primeAuditLogsData,
           prospectsData, prospectActivitiesData,
           prospectFollowUpsData, categoriesData,
           activityReportsData, weeklyReportsData,
@@ -423,6 +688,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           safeFetch(() => supabase.from('ventes').select('*, vente_lines(*)')),
           safeFetch(() => supabase.from('commissions').select('*')),
           safeFetch(() => supabase.from('vente_echeances').select('*')),
+          safeFetch(() => supabase.from('affaires').select('*')),
+          safeFetch(() => supabase.from('facture_paiements').select('*')),
+          safeFetch(() => supabase.from('couts').select('*')),
+          safeFetch(() => supabase.from('scoring_rules').select('*')),
+          safeFetch(() => supabase.from('objectifs').select('*')),
+          safeFetch(() => supabase.from('classements').select('*')),
+          safeFetch(() => supabase.from('primes').select('*')),
+          safeFetch(() => supabase.from('prime_audit_logs').select('*')),
           safeFetch(() => supabase.from('prospects').select('*')),
           safeFetch(() => supabase.from('prospect_activities').select('*')),
           safeFetch(() => supabase.from('prospect_follow_ups').select('*')),
@@ -498,13 +771,175 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         if (clientsData && clientsData.length > 0) {
           const parsedClients = clientsData.map((c: any) => ({
-            id: c.id, name: c.name, email: c.email, phone: c.phone, contact: c.contact, company: c.company, address: c.address, status: c.status || 'Actif', commercialId: c.commercial_id, createdAt: c.created_at
+            id: c.id, name: c.name, email: c.email, phone: c.phone, contact: c.contact, company: c.company, address: c.address, status: c.status || 'Actif', commercialId: c.commercial_id, serviceId: c.service_id || undefined, createdAt: c.created_at
           }));
           const merged = mergeData(cachedClients, parsedClients);
           setClients(merged); await db.clients.setItem('data', merged);
         }
+        if (affairesData && affairesData.length > 0) {
+          const parsedAffaires = affairesData.map((a: any) => ({
+            id: a.id,
+            reference: a.reference,
+            title: a.title,
+            clientId: a.client_id,
+            serviceId: a.service_id,
+            commercialId: a.commercial_id,
+            description: a.description || undefined,
+            status: (a.status as AffaireStatus) || 'QUALIFIEE',
+            estimatedAmountHt: Number(a.estimated_amount_ht) || 0,
+            probability: a.probability !== undefined ? Number(a.probability) : 50,
+            source: a.source || undefined,
+            startDatePlanned: a.start_date_planned || undefined,
+            endDatePlanned: a.end_date_planned || undefined,
+            endDateReal: a.end_date_real || undefined,
+            notes: a.notes || undefined,
+            createdAt: a.created_at,
+            updatedAt: a.updated_at
+          }));
+          const merged = mergeData(cachedAffaires, parsedAffaires);
+          setAffaires(merged); await db.affaires.setItem('data', merged);
+        }
+        if (facturePaiementsData && facturePaiementsData.length > 0) {
+          const parsedPaiements = facturePaiementsData.map((p: any) => ({
+            id: p.id,
+            paymentNumber: p.payment_number,
+            paymentType: p.payment_type as PaymentType,
+            venteId: p.vente_id,
+            echeanceId: p.echeance_id || undefined,
+            clientId: p.client_id,
+            paymentDate: p.payment_date,
+            amount: Number(p.amount) || 0,
+            paymentMethod: p.payment_method as PaymentMethod,
+            reference: p.reference || undefined,
+            proofDocumentId: p.proof_document_id || undefined,
+            notes: p.notes || undefined,
+            status: p.status || 'VALIDE',
+            recordedBy: p.recorded_by || undefined,
+            createdAt: p.created_at
+          }));
+          const merged = mergeData(cachedFacturePaiements, parsedPaiements);
+          setFacturePaiements(merged); await db.facturePaiements.setItem('data', merged);
+        }
+        if (coutsData && coutsData.length > 0) {
+          const parsedCouts = coutsData.map((c: any) => ({
+            id: c.id,
+            reference: c.reference,
+            costType: c.cost_type as CostType,
+            category: c.category as CostCategory,
+            amountHt: Number(c.amount_ht) || 0,
+            vatRate: Number(c.vat_rate) || 0,
+            vatAmount: Number(c.vat_amount) || 0,
+            amountTtc: Number(c.amount_ttc) || 0,
+            date: c.date,
+            affaireId: c.affaire_id || undefined,
+            serviceId: c.service_id,
+            supplierName: c.supplier_name || undefined,
+            invoiceRef: c.invoice_ref || undefined,
+            description: c.description,
+            proofDocumentId: c.proof_document_id || undefined,
+            status: c.status || 'VALIDE',
+            createdBy: c.created_by || undefined,
+            createdAt: c.created_at,
+            updatedAt: c.updated_at
+          }));
+          const merged = mergeData(cachedCouts, parsedCouts);
+          setCouts(merged); await db.couts.setItem('data', merged);
+        }
+        if (scoringRulesData && scoringRulesData.length > 0) {
+          const parsedRules = scoringRulesData.map((r: any) => ({
+            id: r.id,
+            serviceId: r.service_id || undefined,
+            role: r.role,
+            weightMargin: Number(r.weight_margin) || 40,
+            weightRevenue: Number(r.weight_revenue) || 30,
+            weightVolume: Number(r.weight_volume) || 15,
+            weightConversion: Number(r.weight_conversion) || 15,
+            isActive: r.is_active !== false
+          }));
+          const merged = mergeData(cachedScoringRules, parsedRules);
+          setScoringRules(merged); await db.scoringRules.setItem('data', merged);
+        }
+        if (objectifsData && objectifsData.length > 0) {
+          const parsedObj = objectifsData.map((o: any) => ({
+            id: o.id,
+            profileId: o.profile_id,
+            serviceId: o.service_id,
+            periodType: o.period_type as PeriodType,
+            startDate: o.start_date,
+            endDate: o.end_date,
+            targetRevenueHt: Number(o.target_revenue_ht) || 0,
+            targetMarginHt: Number(o.target_margin_ht) || 0,
+            targetDealsCount: Number(o.target_deals_count) || 0,
+            targetNewClients: Number(o.target_new_clients) || 0,
+            status: o.status || 'EN_COURS',
+            createdBy: o.created_by || undefined,
+            createdAt: o.created_at
+          }));
+          const merged = mergeData(cachedObjectifs, parsedObj);
+          setObjectifs(merged); await db.objectifs.setItem('data', merged);
+        }
+        if (classementsData && classementsData.length > 0) {
+          const parsedCl = classementsData.map((c: any) => ({
+            id: c.id,
+            profileId: c.profile_id,
+            serviceId: c.service_id,
+            periodType: c.period_type as PeriodType,
+            periodKey: c.period_key,
+            score: Number(c.score) || 0,
+            rank: Number(c.rank) || 0,
+            revenueAchievedHt: Number(c.revenue_achieved_ht) || 0,
+            marginAchievedHt: Number(c.margin_achieved_ht) || 0,
+            dealsWonCount: Number(c.deals_won_count) || 0,
+            conversionRate: Number(c.conversion_rate) || 0,
+            updatedAt: c.updated_at
+          }));
+          const merged = mergeData(cachedClassements, parsedCl);
+          setClassements(merged); await db.classements.setItem('data', merged);
+        }
+        if (primesData && primesData.length > 0) {
+          const parsedPrimes = primesData.map((p: any) => ({
+            id: p.id,
+            reference: p.reference,
+            profileId: p.profile_id,
+            serviceId: p.service_id,
+            periodKey: p.period_key,
+            primeType: p.prime_type as PrimeType,
+            amount: Number(p.amount) || 0,
+            status: p.status as PrimeStatus,
+            calculatedBy: p.calculated_by || undefined,
+            validatedBy: p.validated_by || undefined,
+            justification: p.justification || undefined,
+            createdAt: p.created_at,
+            updatedAt: p.updated_at
+          }));
+          const merged = mergeData(cachedPrimes, parsedPrimes);
+          setPrimes(merged); await db.primes.setItem('data', merged);
+        }
+        if (primeAuditLogsData && primeAuditLogsData.length > 0) {
+          const parsedLogs = primeAuditLogsData.map((l: any) => ({
+            id: l.id,
+            primeId: l.prime_id,
+            action: l.action,
+            actorId: l.actor_id,
+            actorRole: l.actor_role,
+            previousState: l.previous_state,
+            newState: l.new_state,
+            comment: l.comment || undefined,
+            createdAt: l.created_at
+          }));
+          const merged = mergeData(cachedPrimeAuditLogs, parsedLogs);
+          setPrimeAuditLogs(merged); await db.primeAuditLogs.setItem('data', merged);
+        }
         if (servicesData && servicesData.length > 0) {
-          const merged = mergeData(cachedServices, (servicesData as Service[]));
+          const parsedServices = servicesData.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            description: s.description,
+            members: s.members,
+            managerId: s.manager_id || s.managerId,
+            commissionRate: s.commission_rate !== undefined && s.commission_rate !== null ? Number(s.commission_rate) : undefined
+          }));
+          const merged = mergeData(cachedServices, parsedServices);
           setServices(merged); await db.services.setItem('data', merged);
         }
         if (prestationsData && prestationsData.length > 0) {
@@ -529,16 +964,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         if (quotesData && quotesData.length > 0) {
           const parsedQuotes = quotesData.map((q: any) => ({
-            id: q.id, quoteNumber: q.quote_number, clientId: q.client_id, commercialId: q.commercial_id, serviceId: q.service_id, subject: q.subject, subtotal: q.subtotal, total: q.total, status: q.status, date: q.date, style: q.style, accentColor: q.accent_color,
+            id: q.id, quoteNumber: q.quote_number, clientId: q.client_id, commercialId: q.commercial_id, serviceId: q.service_id, affaireId: q.affaire_id || undefined, subject: q.subject, subtotal: q.subtotal, total: q.total, status: q.status, date: q.date, style: q.style, accentColor: q.accent_color,
             discountPercent: q.discount_percent || 0, discountAmount: q.discount_amount || 0, clientComment: q.client_comment,
-            lines: q.quote_lines.map((l: any) => ({ id: l.id, prestationId: l.prestation_id, description: l.description, quantity: l.quantity, unitPrice: l.unit_price, total: l.total, discountPercent: l.discount_percent || 0 }))
+            lines: (q.quote_lines || []).map((l: any) => ({ id: l.id, prestationId: l.prestation_id, description: l.description, quantity: l.quantity, unitPrice: l.unit_price, total: l.total, discountPercent: l.discount_percent || 0 }))
           }));
           const merged = mergeData(cachedQuotes, parsedQuotes);
           setQuotes(merged); await db.quotes.setItem('data', merged);
         }
         if (salesData && salesData.length > 0) {
           const parsedSales = salesData.map((s: any) => ({
-            id: s.id, saleNumber: s.sale_number, quoteId: s.quote_id, clientId: s.client_id, serviceId: s.service_id,
+            id: s.id, saleNumber: s.sale_number, quoteId: s.quote_id, affaireId: s.affaire_id || undefined, clientId: s.client_id, serviceId: s.service_id, commercialId: s.commercial_id || undefined, dueDate: s.due_date || undefined,
             subtotal: s.subtotal, total: s.total, status: s.status, date: s.date, notes: s.notes,
             lines: (s.vente_lines || []).map((l: any) => ({ id: l.id, description: l.description, quantity: l.quantity, unitPrice: l.unit_price, costPrice: l.cost_price || 0, total: l.total }))
           }));
@@ -547,9 +982,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         if (commissionsData && commissionsData.length > 0) {
           const parsedCommissions = commissionsData.map((c: any) => ({
-            id: c.id, saleId: c.vente_id, clientId: c.client_id, commercialId: c.commercial_id, serviceId: c.service_id,
-            totalHt: c.total_ht, costTotal: c.cost_total, marginAmount: c.margin_amount, marginPercent: c.margin_percent,
-            commissionPercent: c.commission_percent, commissionAmount: c.commission_amount, paidAmount: c.paid_amount || 0, status: c.status, createdAt: c.created_at
+            id: c.id,
+            saleId: c.vente_id || c.sale_id,
+            affaireId: c.affaire_id || undefined,
+            clientId: c.client_id,
+            commercialId: c.commercial_id,
+            serviceId: c.service_id,
+            totalHt: Number(c.total_ht) || 0,
+            costTotal: Number(c.cost_total) || 0,
+            marginAmount: Number(c.margin_amount) || 0,
+            marginPercent: Number(c.margin_percent) || 0,
+            commissionPercent: Number(c.commission_percent) || 0,
+            commissionAmount: Number(c.commission_amount) || 0,
+            paidAmount: Number(c.paid_amount) || 0,
+            eligibleAmount: c.eligible_amount !== undefined ? Number(c.eligible_amount) : undefined,
+            notes: c.notes || undefined,
+            status: c.status || 'En attente',
+            createdAt: c.created_at
           }));
           const merged = mergeData(cachedCommissions, parsedCommissions);
           setCommissions(merged); await db.commissions.setItem('data', merged);
@@ -843,6 +1292,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.clients.setItem('data', newClients);
     await queueSyncAction('DELETE_CLIENT', { id });
 
+    const newAffaires = affaires.filter(a => a.clientId !== id);
+    if (newAffaires.length !== affaires.length) {
+      setAffaires(newAffaires);
+      await db.affaires.setItem('data', newAffaires);
+    }
+
     const newQuotes = quotes.filter(q => q.clientId !== id);
     if (newQuotes.length !== quotes.length) {
       setQuotes(newQuotes);
@@ -867,6 +1322,332 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCommissions(newCommissions);
       await db.commissions.setItem('data', newCommissions);
     }
+  };
+
+  const addAffaire = async (affaireData: Omit<Affaire, 'id' | 'reference' | 'createdAt' | 'updatedAt'> | Affaire): Promise<Affaire> => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const seq = (affaires.length + 1).toString().padStart(4, '0');
+    const reference = 'reference' in affaireData && (affaireData as any).reference ? (affaireData as any).reference : `AFF-${year}-${seq}`;
+    const id = 'id' in affaireData && (affaireData as any).id ? (affaireData as any).id : uuidv4();
+    const newAffaire: Affaire = {
+      ...affaireData,
+      id,
+      reference,
+      createdAt: ('createdAt' in affaireData && (affaireData as any).createdAt) || now.toISOString(),
+      updatedAt: ('updatedAt' in affaireData && (affaireData as any).updatedAt) || now.toISOString()
+    };
+    const newAffaires = [...affaires, newAffaire];
+    setAffaires(newAffaires);
+    await db.affaires.setItem('data', newAffaires);
+    await queueSyncAction('INSERT_AFFAIRE', newAffaire);
+    return newAffaire;
+  };
+
+  const updateAffaire = async (id: string, data: Partial<Affaire>) => {
+    const now = new Date().toISOString();
+    const newAffaires = affaires.map(a => a.id === id ? { ...a, ...data, updatedAt: now } : a);
+    setAffaires(newAffaires);
+    await db.affaires.setItem('data', newAffaires);
+    await queueSyncAction('UPDATE_AFFAIRE', { id, ...data, updatedAt: now });
+  };
+
+  const updateAffaireStatus = async (id: string, status: AffaireStatus) => {
+    await updateAffaire(id, { status });
+  };
+
+  const deleteAffaire = async (id: string) => {
+    const newAffaires = affaires.filter(a => a.id !== id);
+    setAffaires(newAffaires);
+    await db.affaires.setItem('data', newAffaires);
+    await queueSyncAction('DELETE_AFFAIRE', { id });
+  };
+
+  const recordPayment = async (paymentData: Omit<FacturePaiement, 'id' | 'paymentNumber' | 'createdAt'> | FacturePaiement): Promise<FacturePaiement> => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const seq = (facturePaiements.length + 1).toString().padStart(4, '0');
+    const paymentNumber = ('paymentNumber' in paymentData && paymentData.paymentNumber) ? paymentData.paymentNumber : `PAY-${year}-${seq}`;
+    const id = ('id' in paymentData && paymentData.id) ? paymentData.id : uuidv4();
+    const createdAt = ('createdAt' in paymentData && paymentData.createdAt) ? paymentData.createdAt : now.toISOString();
+
+    const newPayment: FacturePaiement = {
+      ...paymentData,
+      id,
+      paymentNumber,
+      createdAt
+    };
+
+    const updatedPaiements = [newPayment, ...facturePaiements];
+    setFacturePaiements(updatedPaiements);
+    await db.facturePaiements.setItem('data', updatedPaiements);
+    await queueSyncAction('INSERT_FACTURE_PAIEMENT', newPayment);
+
+    // Calcul du statut de la vente associée en fonction des paiements réels
+    const sale = sales.find(s => s.id === newPayment.venteId);
+    if (sale) {
+      const salePayments = updatedPaiements.filter(p => p.venteId === sale.id && p.status === 'VALIDE');
+      const netPaid = salePayments.reduce((sum, p) => p.paymentType === 'ENCAISSEMENT' ? sum + p.amount : sum - p.amount, 0);
+      let newSaleStatus: Sale['status'] = sale.status;
+      if (netPaid >= sale.total) {
+        newSaleStatus = 'Payée';
+      } else if (netPaid > 0) {
+        newSaleStatus = 'Enregistrée';
+      }
+      if (newSaleStatus !== sale.status) {
+        await updateSaleStatus(sale.id, newSaleStatus);
+      }
+
+      // Synchroniser le montant déblocable de la commission liée
+      const linkedCommission = commissions.find(c => c.saleId === sale.id);
+      if (linkedCommission) {
+        const totalTtc = sale.total || 1;
+        const collectionRate = Math.max(0, Math.min(1, netPaid / totalTtc));
+        const eligibleAmount = Math.round(linkedCommission.commissionAmount * collectionRate);
+        if (eligibleAmount !== linkedCommission.eligibleAmount) {
+          const updatedComm = { ...linkedCommission, eligibleAmount };
+          const newCommissions = commissions.map(c => c.id === linkedCommission.id ? updatedComm : c);
+          setCommissions(newCommissions);
+          await db.commissions.setItem('data', newCommissions);
+          await queueSyncAction('UPDATE_COMMISSION', { id: updatedComm.id, eligibleAmount });
+        }
+      }
+    }
+
+    return newPayment;
+  };
+
+  const addCout = async (coutData: Omit<Cout, 'id' | 'reference' | 'vatAmount' | 'amountTtc' | 'createdAt' | 'updatedAt'> | Cout): Promise<Cout> => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const seq = (couts.length + 1).toString().padStart(4, '0');
+    const reference = ('reference' in coutData && coutData.reference) ? coutData.reference : `CST-${year}-${seq}`;
+    const id = ('id' in coutData && coutData.id) ? coutData.id : uuidv4();
+    const createdAt = ('createdAt' in coutData && coutData.createdAt) ? coutData.createdAt : now.toISOString();
+    const updatedAt = ('updatedAt' in coutData && coutData.updatedAt) ? coutData.updatedAt : now.toISOString();
+
+    const amountHt = coutData.amountHt;
+    const vatRate = coutData.vatRate || 0;
+    const vatAmount = ('vatAmount' in coutData && coutData.vatAmount !== undefined) ? coutData.vatAmount : Math.round(amountHt * (vatRate / 100));
+    const amountTtc = ('amountTtc' in coutData && coutData.amountTtc !== undefined) ? coutData.amountTtc : amountHt + vatAmount;
+
+    const newCout: Cout = {
+      ...coutData,
+      id,
+      reference,
+      vatRate,
+      vatAmount,
+      amountTtc,
+      createdAt,
+      updatedAt
+    };
+
+    const updatedCouts = [newCout, ...couts];
+    setCouts(updatedCouts);
+    await db.couts.setItem('data', updatedCouts);
+    await queueSyncAction('INSERT_COUT', newCout);
+    return newCout;
+  };
+
+  const updateCout = async (id: string, data: Partial<Cout>) => {
+    const existing = couts.find(c => c.id === id);
+    if (!existing) return;
+    const amountHt = data.amountHt !== undefined ? data.amountHt : existing.amountHt;
+    const vatRate = data.vatRate !== undefined ? data.vatRate : existing.vatRate;
+    const vatAmount = data.vatAmount !== undefined ? data.vatAmount : Math.round(amountHt * (vatRate / 100));
+    const amountTtc = data.amountTtc !== undefined ? data.amountTtc : amountHt + vatAmount;
+
+    const updated: Cout = {
+      ...existing,
+      ...data,
+      id,
+      amountHt,
+      vatRate,
+      vatAmount,
+      amountTtc,
+      updatedAt: new Date().toISOString()
+    };
+    const updatedCouts = couts.map(c => c.id === id ? updated : c);
+    setCouts(updatedCouts);
+    await db.couts.setItem('data', updatedCouts);
+    await queueSyncAction('UPDATE_COUT', { ...updated, id });
+  };
+
+  const deleteCout = async (id: string) => {
+    const updatedCouts = couts.filter(c => c.id !== id);
+    setCouts(updatedCouts);
+    await db.couts.setItem('data', updatedCouts);
+    await queueSyncAction('DELETE_COUT', { id });
+  };
+
+  const addObjectif = async (objData: Omit<Objectif, 'id' | 'createdAt'> | Objectif): Promise<Objectif> => {
+    const id = ('id' in objData && objData.id) ? objData.id : uuidv4();
+    const createdAt = ('createdAt' in objData && objData.createdAt) ? objData.createdAt : new Date().toISOString();
+    const newObj: Objectif = {
+      ...objData,
+      id,
+      createdAt
+    };
+    const updated = [newObj, ...objectifs];
+    setObjectifs(updated);
+    await db.objectifs.setItem('data', updated);
+    await queueSyncAction('INSERT_OBJECTIF', newObj);
+    return newObj;
+  };
+
+  const updateObjectif = async (id: string, data: Partial<Objectif>) => {
+    const updated = objectifs.map(o => o.id === id ? { ...o, ...data } : o);
+    setObjectifs(updated);
+    await db.objectifs.setItem('data', updated);
+    await queueSyncAction('UPDATE_OBJECTIF', { ...data, id });
+  };
+
+  const deleteObjectif = async (id: string) => {
+    const updated = objectifs.filter(o => o.id !== id);
+    setObjectifs(updated);
+    await db.objectifs.setItem('data', updated);
+    await queueSyncAction('DELETE_OBJECTIF', { id });
+  };
+
+  const proposePrime = async (primeData: Omit<Prime, 'id' | 'reference' | 'status' | 'createdAt' | 'updatedAt'>, comment?: string): Promise<Prime> => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const seq = (primes.length + 1).toString().padStart(4, '0');
+    const reference = `PRM-${year}-${seq}`;
+    const id = uuidv4();
+    const createdAt = now.toISOString();
+    const updatedAt = createdAt;
+
+    const newPrime: Prime = {
+      ...primeData,
+      id,
+      reference,
+      status: 'PROPOSEE',
+      createdAt,
+      updatedAt
+    };
+
+    const updatedPrimes = [newPrime, ...primes];
+    setPrimes(updatedPrimes);
+    await db.primes.setItem('data', updatedPrimes);
+    await queueSyncAction('INSERT_PRIME', newPrime);
+
+    // Immutable Audit log
+    const log: PrimeAuditLog = {
+      id: uuidv4(),
+      primeId: id,
+      action: 'CREATION',
+      actorId: currentUser?.id || 'system',
+      actorRole: currentUser?.role || 'Directeur',
+      previousState: null,
+      newState: newPrime,
+      comment: comment || primeData.justification || 'Proposition initiale de prime',
+      createdAt
+    };
+    const updatedLogs = [log, ...primeAuditLogs];
+    setPrimeAuditLogs(updatedLogs);
+    await db.primeAuditLogs.setItem('data', updatedLogs);
+    await queueSyncAction('INSERT_PRIME_AUDIT_LOG', log);
+
+    return newPrime;
+  };
+
+  const validatePrime = async (primeId: string, comment?: string) => {
+    const prime = primes.find(p => p.id === primeId);
+    if (!prime) return;
+    const previousState = { ...prime };
+    const validatedBy = currentUser?.id;
+    const updatedAt = new Date().toISOString();
+    const updated: Prime = { ...prime, status: 'VALIDEE', validatedBy, updatedAt };
+
+    const updatedPrimes = primes.map(p => p.id === primeId ? updated : p);
+    setPrimes(updatedPrimes);
+    await db.primes.setItem('data', updatedPrimes);
+    await queueSyncAction('UPDATE_PRIME_STATUS', { id: primeId, status: 'VALIDEE', validatedBy });
+
+    // Immutable Audit log
+    const log: PrimeAuditLog = {
+      id: uuidv4(),
+      primeId,
+      action: 'VALIDATION',
+      actorId: currentUser?.id || 'system',
+      actorRole: currentUser?.role || 'Directeur',
+      previousState,
+      newState: updated,
+      comment: comment || 'Validation de la prime par la Direction',
+      createdAt: updatedAt
+    };
+    const updatedLogs = [log, ...primeAuditLogs];
+    setPrimeAuditLogs(updatedLogs);
+    await db.primeAuditLogs.setItem('data', updatedLogs);
+    await queueSyncAction('INSERT_PRIME_AUDIT_LOG', log);
+  };
+
+  const rejectPrime = async (primeId: string, comment?: string) => {
+    const prime = primes.find(p => p.id === primeId);
+    if (!prime) return;
+    const previousState = { ...prime };
+    const updatedAt = new Date().toISOString();
+    const updated: Prime = { ...prime, status: 'REJETEE', updatedAt };
+
+    const updatedPrimes = primes.map(p => p.id === primeId ? updated : p);
+    setPrimes(updatedPrimes);
+    await db.primes.setItem('data', updatedPrimes);
+    await queueSyncAction('UPDATE_PRIME_STATUS', { id: primeId, status: 'REJETEE' });
+
+    // Immutable Audit log
+    const log: PrimeAuditLog = {
+      id: uuidv4(),
+      primeId,
+      action: 'REJET',
+      actorId: currentUser?.id || 'system',
+      actorRole: currentUser?.role || 'Directeur',
+      previousState,
+      newState: updated,
+      comment: comment || 'Rejet de la prime',
+      createdAt: updatedAt
+    };
+    const updatedLogs = [log, ...primeAuditLogs];
+    setPrimeAuditLogs(updatedLogs);
+    await db.primeAuditLogs.setItem('data', updatedLogs);
+    await queueSyncAction('INSERT_PRIME_AUDIT_LOG', log);
+  };
+
+  const payPrime = async (primeId: string, comment?: string) => {
+    const prime = primes.find(p => p.id === primeId);
+    if (!prime) return;
+    const previousState = { ...prime };
+    const updatedAt = new Date().toISOString();
+    const updated: Prime = { ...prime, status: 'PAYEE', updatedAt };
+
+    const updatedPrimes = primes.map(p => p.id === primeId ? updated : p);
+    setPrimes(updatedPrimes);
+    await db.primes.setItem('data', updatedPrimes);
+    await queueSyncAction('UPDATE_PRIME_STATUS', { id: primeId, status: 'PAYEE' });
+
+    // Immutable Audit log
+    const log: PrimeAuditLog = {
+      id: uuidv4(),
+      primeId,
+      action: 'PAIEMENT',
+      actorId: currentUser?.id || 'system',
+      actorRole: currentUser?.role || 'Directeur',
+      previousState,
+      newState: updated,
+      comment: comment || 'Paiement effectif de la prime',
+      createdAt: updatedAt
+    };
+    const updatedLogs = [log, ...primeAuditLogs];
+    setPrimeAuditLogs(updatedLogs);
+    await db.primeAuditLogs.setItem('data', updatedLogs);
+    await queueSyncAction('INSERT_PRIME_AUDIT_LOG', log);
+  };
+
+  const updateScoringRule = async (id: string, data: Partial<ScoringRule>) => {
+    const updated = scoringRules.map(r => r.id === id ? { ...r, ...data } : r);
+    setScoringRules(updated);
+    await db.scoringRules.setItem('data', updated);
+    await queueSyncAction('UPDATE_SCORING_RULE', { ...data, id });
   };
 
   const addQuote = async (quote: Quote) => {
@@ -913,19 +1694,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const buildCommission = (sale: Sale): Commission => {
-    const costTotal = sale.lines.reduce((sum, l) => sum + (l.costPrice || 0) * l.quantity, 0);
-    const totalHt = sale.subtotal;
-    const marginAmount = totalHt - costTotal;
+    // 1. Direct costs: Check table couts first if linked to affaire, otherwise sum of lines
+    const affaireCouts = sale.affaireId
+      ? couts.filter(c => c.affaireId === sale.affaireId && c.status !== 'ANNULE')
+      : [];
+    const directCostsFromTable = affaireCouts.reduce((sum, c) => sum + (c.amountHt || 0), 0);
+    const linesCost = (sale.lines || []).reduce((sum, l) => sum + (l.costPrice || 0) * (l.quantity || 0), 0);
+    const costTotal = directCostsFromTable > 0 ? directCostsFromTable : linesCost;
+
+    const totalHt = sale.subtotal || 0;
+    const marginAmount = Math.max(0, totalHt - costTotal);
     const marginPercent = totalHt > 0 ? Math.round((marginAmount / totalHt) * 10000) / 100 : 0;
-    const commissionPercent = settings.commissionRate !== undefined ? settings.commissionRate : 10;
+
+    // 2. Commission Rate: Check service first, then global settings, fallback 10%
+    const saleService = services.find(s => s.id === sale.serviceId);
+    const commissionPercent = (saleService?.commissionRate !== undefined && saleService?.commissionRate !== null)
+      ? saleService.commissionRate
+      : (settings.commissionRate !== undefined ? settings.commissionRate : 10);
+
     const commissionAmount = Math.round(marginAmount * commissionPercent / 100);
+
+    // 3. Commercial
     const clientCommercial = clients.find(c => c.id === sale.clientId)?.commercialId;
     const quoteCommercial = sale.quoteId ? quotes.find(q => q.id === sale.quoteId)?.commercialId : undefined;
+    const affaireCommercial = sale.affaireId ? affaires.find(a => a.id === sale.affaireId)?.commercialId : undefined;
+    const commercialId = sale.commercialId || clientCommercial || quoteCommercial || affaireCommercial || '';
+
+    // 4. Initial eligible amount based on payments
+    const payments = facturePaiements.filter(p => p.venteId === sale.id && p.status === 'VALIDE');
+    const netReceived = payments.reduce((sum, p) => p.paymentType === 'ENCAISSEMENT' ? sum + p.amount : sum - p.amount, 0);
+    const totalTtc = sale.total || 1;
+    const collectionRate = Math.max(0, Math.min(1, netReceived / totalTtc));
+    const eligibleAmount = Math.round(commissionAmount * collectionRate);
+
     return {
       id: uuidv4(),
       saleId: sale.id,
+      affaireId: sale.affaireId,
       clientId: sale.clientId,
-      commercialId: clientCommercial || quoteCommercial || '',
+      commercialId,
       serviceId: sale.serviceId,
       totalHt,
       costTotal,
@@ -934,6 +1741,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       commissionPercent,
       commissionAmount,
       paidAmount: 0,
+      eligibleAmount,
       status: 'En attente',
       createdAt: new Date().toISOString()
     };
@@ -1142,10 +1950,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('INSERT_COMMISSION', newCommission);
   };
 
-  const updateCommissionStatus = async (id: string, status: Commission['status']) => {
+  const updateCommissionStatus = async (id: string, status: Commission['status'], paidAmount?: number, notes?: string) => {
     const commission = commissions.find(c => c.id === id);
     if (!commission) return;
-    const newCommission = { ...commission, status };
+    const newPaidAmount = paidAmount !== undefined ? paidAmount : (status === 'Payée' ? commission.commissionAmount : (commission.paidAmount || 0));
+    const newCommission: Commission = {
+      ...commission,
+      status,
+      paidAmount: newPaidAmount,
+      ...(notes !== undefined && { notes })
+    };
     const newCommissions = commissions.map(c => c.id === id ? newCommission : c);
     setCommissions(newCommissions);
     await db.commissions.setItem('data', newCommissions);
@@ -1195,11 +2009,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const convertProspect = async (prospectId: string) => {
+  const convertProspect = async (prospectId: string, createAffaire: boolean = true): Promise<{ clientId: string; affaireId?: string }> => {
     const prospect = prospects.find(p => p.id === prospectId);
-    if (!prospect) return;
+    if (!prospect) return { clientId: '' };
+    const clientId = uuidv4();
     const newClient: Client = {
-      id: uuidv4(),
+      id: clientId,
       name: prospect.name,
       email: prospect.email || '',
       phone: prospect.phone || '',
@@ -1207,10 +2022,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       company: prospect.company || '',
       address: prospect.address || '',
       status: 'Actif',
-      commercialId: prospect.commercialId
+      commercialId: prospect.commercialId,
+      serviceId: prospect.serviceId
     };
     await addClient(newClient);
     await updateProspect(prospectId, { status: 'Converti' });
+
+    let affaireId: string | undefined;
+    if (createAffaire) {
+      const initialAffaire = await addAffaire({
+        title: prospect.need ? `Projet : ${prospect.need.slice(0, 60)}` : `Affaire - ${prospect.name}`,
+        clientId: clientId,
+        serviceId: prospect.serviceId || (services[0]?.id || ''),
+        commercialId: prospect.commercialId,
+        description: prospect.comments || prospect.need || '',
+        status: 'QUALIFIEE',
+        estimatedAmountHt: prospect.budget || 0,
+        probability: prospect.interestLevel === 'Très élevé' ? 80 : prospect.interestLevel === 'Élevé' ? 60 : 40,
+        source: prospect.source || 'Prospection'
+      });
+      affaireId = initialAffaire.id;
+    }
+
+    return { clientId, affaireId };
   };
 
   const addProspectActivity = async (activity: ProspectActivity) => {
@@ -1323,6 +2157,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction(existing ? 'UPDATE_V2_WEEKLY_REPORT' : 'INSERT_V2_WEEKLY_REPORT', newReport);
   };
 
+  const submitV2WeeklyReport = async (id: string) => {
+    const report = v2WeeklyReports.find(r => r.id === id);
+    if (!report) return;
+    const now = new Date().toISOString();
+    const updated: V2WeeklyReport = {
+      ...report,
+      status: 'Soumis',
+      submittedAt: now,
+      updatedAt: now
+    };
+    const newReports = v2WeeklyReports.map(r => r.id === id ? updated : r);
+    setV2WeeklyReports(newReports);
+    await db.v2WeeklyReports.setItem('data', newReports);
+    await queueSyncAction('UPDATE_V2_WEEKLY_REPORT', updated);
+  };
+
+  const reviewV2WeeklyReport = async (id: string, comment?: string, status: 'Validé' | 'Relu' = 'Validé') => {
+    const report = v2WeeklyReports.find(r => r.id === id);
+    if (!report) return;
+    const now = new Date().toISOString();
+    const updated: V2WeeklyReport = {
+      ...report,
+      status,
+      directorComment: comment !== undefined ? comment : report.directorComment,
+      reviewedAt: now,
+      reviewedBy: currentUser?.id,
+      updatedAt: now
+    };
+    const newReports = v2WeeklyReports.map(r => r.id === id ? updated : r);
+    setV2WeeklyReports(newReports);
+    await db.v2WeeklyReports.setItem('data', newReports);
+    await queueSyncAction('UPDATE_V2_WEEKLY_REPORT', updated);
+  };
+
+  const deleteV2WeeklyReport = async (id: string) => {
+    const newReports = v2WeeklyReports.filter(r => r.id !== id);
+    setV2WeeklyReports(newReports);
+    await db.v2WeeklyReports.setItem('data', newReports);
+    await queueSyncAction('DELETE_V2_WEEKLY_REPORT', { id });
+  };
+
   const addCategory = async (category: Category) => {
     const categoryId = category.id.length > 20 ? category.id : uuidv4();
     const newCategory = { ...category, id: categoryId };
@@ -1377,7 +2252,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const newServices = services.map(s => s.id === id ? { ...s, ...service } : s);
     setServices(newServices);
     await db.services.setItem('data', newServices);
-    await queueSyncAction('UPDATE_SERVICE', { id, name: service.name, description: service.description, members: service.members });
+    await queueSyncAction('UPDATE_SERVICE', { id, name: service.name, description: service.description, members: service.members, commissionRate: service.commissionRate });
   };
 
   const deleteService = async (id: string) => {
@@ -2098,23 +2973,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSuspendedCarts(prev => [...prev, cart]);
   }, []);
 
-  const addCrmDocument = async (file: File, uploaderId?: string, folderId?: string) => {
+  const addCrmDocument = async (
+    file: File,
+    optionsOrUploaderId?: { uploaderId?: string; folderId?: string; affaireId?: string; clientId?: string; category?: CrmDocument['category']; isShared?: boolean } | string,
+    folderIdParam?: string
+  ): Promise<CrmDocument> => {
     const id = uuidv4();
+    let uploaderId: string | undefined = currentUser?.id;
+    let folderId: string | undefined = undefined;
+    let affaireId: string | undefined = undefined;
+    let clientId: string | undefined = undefined;
+    let category: CrmDocument['category'] = 'Autre';
+    let isShared: boolean = false;
+
+    if (typeof optionsOrUploaderId === 'string') {
+      uploaderId = optionsOrUploaderId;
+      folderId = folderIdParam;
+    } else if (optionsOrUploaderId && typeof optionsOrUploaderId === 'object') {
+      uploaderId = optionsOrUploaderId.uploaderId || currentUser?.id;
+      folderId = optionsOrUploaderId.folderId;
+      affaireId = optionsOrUploaderId.affaireId;
+      clientId = optionsOrUploaderId.clientId;
+      category = optionsOrUploaderId.category || 'Autre';
+      isShared = !!optionsOrUploaderId.isShared;
+    }
+
     const newDoc: CrmDocument = {
       id,
       name: file.name,
-      type: file.type || 'Inconnu',
+      type: file.type || 'application/octet-stream',
       sizeBytes: file.size,
-      filePath: `local-fake-path/${file.name}`,
+      filePath: `${uploaderId || 'shared'}/${id}_${file.name}`,
       uploaderId,
       folderId,
+      affaireId,
+      clientId,
+      category,
+      isShared,
       createdAt: new Date().toISOString()
     };
+
     const newDocs = [newDoc, ...crmDocuments];
     setCrmDocuments(newDocs);
     await db.documents.setItem('data', newDocs);
     await db.documentFiles.setItem(id, file);
     await queueSyncAction('INSERT_DOCUMENT', newDoc);
+    return newDoc;
   };
 
   const deleteCrmDocument = async (id: string) => {
@@ -2127,29 +3031,69 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('DELETE_DOCUMENT', { id, filePath: doc.filePath });
   };
 
-  const addCrmFolder = async (name: string, ownerId: string, parentId?: string) => {
+  const getCrmDocumentBlob = async (doc: CrmDocument): Promise<Blob | null> => {
+    let blob = await db.documentFiles.getItem<Blob>(doc.id);
+    if (!blob) {
+      const { data, error } = await supabase.storage.from('crm_documents').download(doc.filePath);
+      if (!error && data) {
+        blob = data;
+        await db.documentFiles.setItem(doc.id, blob);
+      }
+    }
+    return blob || null;
+  };
+
+  const downloadCrmDocument = async (doc: CrmDocument) => {
+    const blob = await getCrmDocumentBlob(doc);
+    if (!blob) {
+      alert('Impossible de charger ce document.');
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = doc.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const addCrmFolder = async (
+    name: string,
+    ownerId: string,
+    parentId?: string,
+    color: string = '#0D9488',
+    isShared: boolean = false
+  ): Promise<CrmFolder> => {
     const newFolder: CrmFolder = {
       id: uuidv4(),
       name,
       ownerId,
       parentId,
+      color: color || '#0D9488',
+      isShared,
       createdAt: new Date().toISOString()
     };
     const newFolders = [...crmFolders, newFolder];
     setCrmFolders(newFolders);
     await db.crmFolders.setItem('data', newFolders);
+    await queueSyncAction('INSERT_CRM_FOLDER', newFolder);
+    return newFolder;
   };
 
   const updateCrmFolder = async (id: string, data: Partial<CrmFolder>) => {
     const newFolders = crmFolders.map(f => f.id === id ? { ...f, ...data } : f);
     setCrmFolders(newFolders);
     await db.crmFolders.setItem('data', newFolders);
+    await queueSyncAction('UPDATE_CRM_FOLDER', { id, ...data });
   };
 
   const deleteCrmFolder = async (id: string) => {
     const newFolders = crmFolders.filter(f => f.id !== id);
     setCrmFolders(newFolders);
     await db.crmFolders.setItem('data', newFolders);
+    await queueSyncAction('DELETE_CRM_FOLDER', { id });
     
     const updatedDocs = crmDocuments.map(d => d.folderId === id ? { ...d, folderId: undefined } : d);
     setCrmDocuments(updatedDocs);
@@ -2181,34 +3125,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('MARK_ALL_NOTIFICATIONS_READ', { user_id: currentUser.id });
   };
 
-  const downloadCrmDocument = async (doc: CrmDocument) => {
-    let blob = await db.documentFiles.getItem<Blob>(doc.id);
-    if (!blob) {
-      const { data, error } = await supabase.storage.from('crm_documents').download(doc.filePath);
-      if (error || !data) {
-        console.error('Download error:', error);
-        alert('Impossible de télécharger ce document.');
-        return;
-      }
-      blob = data;
-      await db.documentFiles.setItem(doc.id, blob);
-    }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = doc.name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   const removeSuspendedCart = useCallback((id: string) => {
     setSuspendedCarts(prev => prev.filter(c => c.id !== id));
   }, []);
 
   return (
-    <AppContext.Provider value={{ users, clients, quotes, sales, commissions, installments, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, updateMyProfile, addCrmDocument, deleteCrmDocument, downloadCrmDocument, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData }}>
+    <AppContext.Provider value={{ users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, reviewV2WeeklyReport, deleteV2WeeklyReport, updateMyProfile, addCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData }}>
       {children}
     </AppContext.Provider>
   );

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Download, Send, MessageCircle, CheckCircle2, Edit2, Trash2, MoreVertical } from 'lucide-react';
+import { Plus, Download, Send, MessageCircle, CheckCircle2, Edit2, Trash2, MoreVertical, Briefcase } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -12,7 +12,7 @@ import type { Quote } from '../context/AppContext';
 export function Devis() {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const { quotes, clients, settings, updateQuoteStatus, deleteQuote, sales } = useAppContext();
+  const { quotes, clients, settings, updateQuoteStatus, deleteQuote, sales, affaires } = useAppContext();
   const { confirm } = useConfirm();
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -98,7 +98,31 @@ export function Devis() {
           <tbody>
             {filteredQuotes.map(q => (
               <tr key={q.id}>
-                <td data-label="N° Devis">{q.quoteNumber}</td>
+                <td data-label="N° Devis">
+                  <div style={{ fontWeight: 600 }}>{q.quoteNumber}</div>
+                  {q.affaireId && (
+                    <div 
+                      onClick={() => navigate(`/affaires/${q.affaireId}`)}
+                      style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        gap: '4px', 
+                        fontSize: '0.72rem', 
+                        color: '#0D9488', 
+                        background: '#F0FDFA', 
+                        border: '1px solid #CCFBF1',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        marginTop: '2px',
+                        cursor: 'pointer'
+                      }}
+                      title="Voir l'affaire rattachée"
+                    >
+                      <Briefcase size={11} />
+                      <span>{affaires.find(a => a.id === q.affaireId)?.reference || 'Affaire'}</span>
+                    </div>
+                  )}
+                </td>
                 <td data-label="Client">{getClientName(q.clientId)}</td>
                 <td data-label="Sujet">{q.subject}</td>
                 <td data-label="Montant HT">{q.subtotal.toLocaleString('fr-FR')} FCFA</td>

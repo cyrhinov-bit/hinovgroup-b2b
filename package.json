@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "electron:dev": "concurrently \"npm run dev\" \"tsc -p tsconfig.electron.json -w\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
     "electron:start": "tsc -p tsconfig.electron.json && electron .",
-    "electron:build": "electron-builder --win"
+    "electron:build": "npm run build && tsc -p tsconfig.electron.json && electron-builder --win"
   },
   "dependencies": {
     "@emoji-mart/data": "^1.2.1",

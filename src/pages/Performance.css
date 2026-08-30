@@ -1,0 +1,322 @@
+.perf-page {
+  padding: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.perf-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.perf-header-titles h1 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #0F172A;
+  margin: 0;
+}
+
+.perf-header-titles p {
+  color: #64748B;
+  margin: 4px 0 0 0;
+  font-size: 0.9rem;
+}
+
+.perf-header-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* Filters & Period bar */
+.perf-filters-bar {
+  background: #ffffff;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.perf-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.perf-filter-select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #CBD5E1;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #1E293B;
+  background: #ffffff;
+  outline: none;
+}
+
+/* Tab buttons */
+.perf-tabs-bar {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 2px solid #E2E8F0;
+}
+
+.perf-tab-btn {
+  padding: 0.75rem 1.25rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #64748B;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.15s ease-in-out;
+}
+
+.perf-tab-btn:hover {
+  color: #0D9488;
+}
+
+.perf-tab-btn.active {
+  color: #0D9488;
+  border-bottom-color: #0D9488;
+  font-weight: 700;
+}
+
+/* Podium Top 3 */
+.podium-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 1.5rem;
+  margin: 1rem 0 2rem 0;
+  flex-wrap: wrap;
+}
+
+.podium-card {
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  padding: 1.5rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 280px;
+  position: relative;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.podium-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.podium-1 {
+  order: 2;
+  border: 2px solid #F59E0B;
+  background: linear-gradient(180deg, #FFFBEB 0%, #FFFFFF 100%);
+  transform: scale(1.05);
+  z-index: 2;
+}
+
+.podium-2 {
+  order: 1;
+  border: 2px solid #94A3B8;
+  background: linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%);
+}
+
+.podium-3 {
+  order: 3;
+  border: 2px solid #D97706;
+  background: linear-gradient(180deg, #FEF3C7 0%, #FFFFFF 100%);
+}
+
+.podium-rank-badge {
+  position: absolute;
+  top: -16px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1rem;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.podium-rank-1 { background: #F59E0B; }
+.podium-rank-2 { background: #94A3B8; }
+.podium-rank-3 { background: #D97706; }
+
+.podium-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #E2E8F0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #334155;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.podium-name {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #0F172A;
+  margin: 0;
+}
+
+.podium-service {
+  font-size: 0.75rem;
+  color: #64748B;
+  margin: 2px 0 0.75rem 0;
+}
+
+.podium-score-pill {
+  background: #0D9488;
+  color: #ffffff;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-weight: 800;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.podium-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  width: 100%;
+  border-top: 1px solid #E2E8F0;
+  padding-top: 0.75rem;
+  font-size: 0.78rem;
+  text-align: left;
+}
+
+.podium-stat-label {
+  color: #64748B;
+  font-size: 0.7rem;
+}
+
+.podium-stat-val {
+  font-weight: 700;
+  color: #0F172A;
+}
+
+/* Goals Grid */
+.goals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 1.25rem;
+}
+
+.goal-card {
+  background: #ffffff;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.goal-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.goal-gauge-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.goal-gauge-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.goal-progress-track {
+  height: 8px;
+  background: #E2E8F0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.goal-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.goal-progress-fill.teal { background: #0D9488; }
+.goal-progress-fill.emerald { background: #10B981; }
+.goal-progress-fill.blue { background: #3B82F6; }
+.goal-progress-fill.amber { background: #F59E0B; }
+
+/* Table styles */
+.perf-table-wrapper {
+  background: #ffffff;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  overflow-x: auto;
+}
+
+.perf-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.perf-table th {
+  background: #F8FAFC;
+  padding: 0.75rem 1rem;
+  font-weight: 700;
+  color: #475569;
+  border-bottom: 1px solid #E2E8F0;
+  white-space: nowrap;
+}
+
+.perf-table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #F1F5F9;
+  color: #1E293B;
+  vertical-align: middle;
+}
+
+.perf-table tr:hover td {
+  background: #F8FAFC;
+}
+
+.prime-status-PROPOSEE { background: #FEF3C7; color: #B45309; }
+.prime-status-VALIDEE { background: #DCFCE7; color: #15803D; }
+.prime-status-PAYEE { background: #E0E7FF; color: #4338CA; }
+.prime-status-REJETEE { background: #FEE2E2; color: #B91C1C; }
+

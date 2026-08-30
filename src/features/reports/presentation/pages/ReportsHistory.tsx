@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { Download, Calendar, FileText } from 'lucide-react';
+import { Download, Calendar, FileText, Sparkles } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAppContext } from '../../../../context/AppContext';
 import { useAuth } from '../../../../context/AuthContext';
 import { generateV2WeeklyReportPdf } from '../../services/ReportPdfService';
@@ -15,11 +16,16 @@ export const ReportsHistory: React.FC = () => {
 
   return (
     <div className="dashboard">
-      <div style={{ marginBottom: '24px' }}>
-        <h2 style={{ margin: 0 }}>Historique des Rapports (V2)</h2>
-        <p style={{ color: 'var(--color-text-muted)', marginTop: '4px', fontSize: '0.85rem' }}>
-          Consultez les rapports journaliers et hebdomadaires archivés.
-        </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Historique des Rapports</h2>
+          <p style={{ color: 'var(--color-text-muted)', marginTop: '4px', fontSize: '0.85rem' }}>
+            Consultez les rapports journaliers et hebdomadaires archivés.
+          </p>
+        </div>
+        <Link to="/mon-rapport-hebdo" className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Sparkles size={16} /> Rédiger mon Rapport Hebdo (IA)
+        </Link>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px' }}>

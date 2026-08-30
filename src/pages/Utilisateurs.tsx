@@ -70,7 +70,9 @@ export function Utilisateurs() {
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'Directeur': return 'var(--color-error)';
+      case 'Directeur adjoint': return '#7C3AED';
       case 'Responsable': return '#2196F3';
+      case 'Commercial': return '#0D9488';
       default: return 'var(--color-text-muted)';
     }
   };
@@ -110,6 +112,9 @@ export function Utilisateurs() {
                 <option value="Gerant">Gérant</option>
                 <option value="Commercial">Commercial</option>
                 <option value="Responsable">Responsable</option>
+                {['Directeur', 'SuperAdmin'].includes(currentUser?.role || '') && (
+                  <option value="Directeur adjoint">Directeur adjoint</option>
+                )}
                 {currentUser?.role === 'SuperAdmin' && (
                   <option value="Directeur">Directeur</option>
                 )}
@@ -160,6 +165,9 @@ export function Utilisateurs() {
                 <option value="Gerant">Gérant</option>
                 <option value="Commercial">Commercial</option>
                 <option value="Responsable">Responsable</option>
+                {['Directeur', 'SuperAdmin'].includes(currentUser?.role || '') && (
+                  <option value="Directeur adjoint">Directeur adjoint</option>
+                )}
                 {currentUser?.role === 'SuperAdmin' && (
                   <option value="Directeur">Directeur</option>
                 )}

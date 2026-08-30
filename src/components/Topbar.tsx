@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Menu, Bell, KeyRound, LogOut, Eye, EyeOff, CheckCircle2, XCircle, ArrowLeftRight, Camera, Trash2 } from 'lucide-react';
+import { Menu, Bell, KeyRound, LogOut, Eye, EyeOff, CheckCircle2, XCircle, ArrowLeftRight, Camera, Trash2, Palette } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useAppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
+import { ThemeModal } from './ThemeModal';
 import './Topbar.css';
 
 export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
@@ -12,6 +13,7 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
+  const [showThemeModal, setShowThemeModal] = useState(false);
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -230,6 +232,10 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
                 )}
                 <input ref={photoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoChange} />
                 <hr className="dropdown-divider" />
+                <button className="dropdown-item" onClick={() => { setShowProfileMenu(false); setShowThemeModal(true); }}>
+                  <Palette size={15} />
+                  Personnaliser mon thème
+                </button>
                 <button className="dropdown-item" onClick={openPinModal}>
                   <KeyRound size={15} />
                   Modifier le code PIN
@@ -334,6 +340,12 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
           </div>
         </div>
       )}
+
+      {/* Modal Personnalisation Thème */}
+      <ThemeModal
+        isOpen={showThemeModal}
+        onClose={() => setShowThemeModal(false)}
+      />
     </>
   );
 }

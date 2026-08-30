@@ -1,15 +1,45 @@
-import { Target, Users, TrendingUp, Coins, Calendar } from 'lucide-react';
+import { Target, Users, TrendingUp, Coins, Calendar, Trophy, Award, ArrowUpRight } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
+import { Link } from 'react-router-dom';
 import './DashboardDirecteur.css';
 
 export function DashboardCommercial() {
   const { currentUser } = useAuth();
-  const { prospects, clients, commissions, prospectFollowUps } = useAppContext();
+  const { prospects, clients, commissions, prospectFollowUps, sales, objectifs, primes } = useAppContext();
 
   const myProspects = prospects.filter(p => p.commercialId === currentUser?.id);
   const myClients = clients.filter(c => c.commercialId === currentUser?.id);
   const myCommissions = commissions.filter(c => c.commercialId === currentUser?.id);
+  const myPrimes = primes.filter(p => p.profileId === currentUser?.id);
+
+  const now = new Date();
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+  // My current objective
+  const currentGoal = objectifs.find(o => {
+    if (o.profileId !== currentUser?.id) return false;
+    const gStart = new Date(o.startDate);
+    const gEnd = new Date(o.endDate);
+    return gStart <= currentMonthEnd && gEnd >= currentMonthStart;
+  });
+
+  // Sales in current month
+  const myMonthSales = sales.filter(s => {
+    if (s.commercialId !== currentUser?.id) return false;
+    const sDate = new Date(s.date);
+    return sDate >= currentMonthStart && sDate <= currentMonthEnd;
+  });
+
+  const monthRevenueHt = myMonthSales.reduce((sum, s) => sum + (s.subtotal || 0), 0);
+  const monthMarginHt = myMonthSales.reduce((sum, s) => {
+    const sCost = (s.lines || []).reduce((lSum, l) => lSum + ((l.costPrice || 0) * (l.quantity || 0)), 0);
+    return sum + (s.subtotal - sCost);
+  }, 0);
+
+  const revGoal = currentGoal?.targetRevenueHt || 0;
+  const revPct = revGoal > 0 ? Math.min(100, Math.round((monthRevenueHt / revGoal) * 100)) : 0;
 
   const totalProspects = myProspects.length;
   const convertedProspects = myProspects.filter(p => p.status === 'Converti').length;
@@ -21,6 +51,9 @@ export function DashboardCommercial() {
   ).sort((a, b) => a.date.localeCompare(b.date));
 
   const totalCommissions = myCommissions.reduce((sum, c) => sum + c.commissionAmount, 0);
+  const totalPrimesValidees = myPrimes
+    .filter(p => ['VALIDEE', 'PAYEE'].includes(p.status))
+    .reduce((sum, p) => sum + p.amount, 0);
 
   return (
     <div className="dashboard">
@@ -65,6 +98,48 @@ export function DashboardCommercial() {
           <div className="widget-content">
             <div className="widget-label">COMMISSIONS</div>
             <div className="widget-value">{totalCommissions.toLocaleString('fr-FR')} FCFA</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Ma Performance & Objectifs */}
+      <div className="card" style={{ marginTop: '24px', padding: '1.25rem', background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Trophy size={20} color="#0D9488" />
+            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>Ma Performance du Mois</h3>
+          </div>
+          <Link to="/performance" style={{ fontSize: '0.82rem', color: '#0D9488', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}>
+            Voir le classement complet <ArrowUpRight size={14} />
+          </Link>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+          {/* Objectif CA */}
+          <div style={{ background: '#ffffff', padding: '1rem', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#64748B', marginBottom: '4px' }}>
+              <span>Objectif CA HT ({revPct}%)</span>
+              <span className="font-bold text-teal-700">{monthRevenueHt.toLocaleString('fr-FR')} / {revGoal > 0 ? revGoal.toLocaleString('fr-FR') : 'Non défini'} F</span>
+            </div>
+            <div style={{ height: '8px', background: '#E2E8F0', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{ height: '100%', background: '#0D9488', width: `${revPct}%`, borderRadius: '4px' }} />
+            </div>
+          </div>
+
+          {/* Marge réalisée */}
+          <div style={{ background: '#ffffff', padding: '1rem', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+            <div style={{ fontSize: '0.8rem', color: '#64748B', marginBottom: '4px' }}>Marge Brute HT Réalisée</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#059669' }}>
+              {monthMarginHt.toLocaleString('fr-FR')} FCFA
+            </div>
+          </div>
+
+          {/* Primes validées */}
+          <div style={{ background: '#ffffff', padding: '1rem', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+            <div style={{ fontSize: '0.8rem', color: '#64748B', marginBottom: '4px' }}>Primes & Bonus Accordés</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#4F46E5' }}>
+              {totalPrimesValidees.toLocaleString('fr-FR')} FCFA
+            </div>
           </div>
         </div>
       </div>

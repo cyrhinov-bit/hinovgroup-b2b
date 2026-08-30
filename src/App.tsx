@@ -9,20 +9,27 @@ import { DashboardCommercial } from './pages/DashboardCommercial';
 import { QuoteCreation } from './pages/QuoteCreation';
 
 import { Clients } from './pages/Clients';
+import { Affaires } from './pages/Affaires';
+import { AffaireDetail } from './pages/AffaireDetail';
 import { Services } from './pages/Services';
 import { Prestations } from './pages/Prestations';
 import { Devis } from './pages/Devis';
 import { Sales } from './pages/Sales';
+import { Couts } from './pages/Couts';
 import { Commissions } from './pages/Commissions';
+import { Performance } from './pages/Performance';
 import { Prospects } from './pages/Prospects';
 import { ProspectDetail } from './pages/ProspectDetail';
 import { CommercialClients } from './pages/CommercialClients';
 import { CommercialCommissions } from './pages/CommercialCommissions';
 import { Documents } from './pages/Documents';
 import { ReportsHistory } from './features/reports/presentation/pages/ReportsHistory';
+import { WeeklyReportEditor } from './features/reports/presentation/pages/WeeklyReportEditor';
+import { TeamReportsView } from './features/reports/presentation/pages/TeamReportsView';
 import { Utilisateurs } from './pages/Utilisateurs';
 import { Rapports } from './pages/Rapports';
 import { Parametres } from './pages/Parametres';
+import { GeminiSettings } from './pages/GeminiSettings';
 import { Login } from './pages/Login';
 import TestDashboard from './pages/TestDashboard';
 
@@ -155,19 +162,26 @@ function App() {
                     <Route index element={<RoleBasedDashboard />} />
                     
                     <Route path="clients" element={<Clients />} />
+                    <Route path="affaires" element={<Affaires />} />
+                    <Route path="affaires/:id" element={<AffaireDetail />} />
                     <Route path="services" element={<Services />} />
                     <Route path="prestations" element={<Prestations />} />
                     <Route path="devis" element={<Devis />} />
                     <Route path="devis/nouveau" element={<QuoteCreation />} />
                     <Route path="ventes" element={<Sales />} />
+                    <Route path="couts" element={<Couts />} />
                     <Route path="commissions" element={<Commissions />} />
+                    <Route path="performance" element={<Performance />} />
                     <Route path="mes-commissions" element={<CommercialCommissions />} />
+                    <Route path="mon-rapport-hebdo" element={<WeeklyReportEditor />} />
+                    <Route path="rapports-equipe" element={<TeamReportsView />} />
                     <Route path="documents" element={<Documents />} />
                     <Route path="utilisateurs" element={<Utilisateurs />} />
                     <Route path="rapports" element={<RequireRole roles={['Directeur']}><Rapports /></RequireRole>} />
                     
-                    {/* New AI Weekly Reports Module (Deleted) */}
+                    {/* New AI Weekly Reports Module */}
                     <Route path="mes-rapports" element={<ReportsHistory />} />
+                    <Route path="parametres-ia" element={<GeminiSettings />} />
                     <Route path="parametres" element={<Parametres />} />
 
                     {/* Commercial routes */}
@@ -179,6 +193,7 @@ function App() {
                     
                     <Route path="commercial/documents" element={<Documents />} />
                     <Route path="commercial/mes-rapports" element={<ReportsHistory />} />
+                    <Route path="commercial/parametres-ia" element={<GeminiSettings />} />
 
                     {/* POS routes */}
                     <Route path="pos" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><DashboardPos /></Suspense>} />

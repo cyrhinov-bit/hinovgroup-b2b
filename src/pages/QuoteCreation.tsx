@@ -11,7 +11,10 @@ export function QuoteCreation() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const editId = searchParams.get('editId');
-  const { clients, prestations, addQuote, updateQuote, services, quotes, settings } = useAppContext();
+  const affaireIdParam = searchParams.get('affaireId');
+  const clientIdParam = searchParams.get('clientId');
+  const serviceIdParam = searchParams.get('serviceId');
+  const { clients, prestations, addQuote, updateQuote, services, quotes, settings, affaires } = useAppContext();
   const { currentUser } = useAuth();
 
   // Load draft from localStorage if present
@@ -27,9 +30,10 @@ export function QuoteCreation() {
 
   const sourceQuote = editId ? quotes.find(q => q.id === editId) : null;
 
-  const [clientId, setClientId] = useState(sourceQuote?.clientId || '');
+  const [clientId, setClientId] = useState(sourceQuote?.clientId || clientIdParam || '');
+  const [affaireId, setAffaireId] = useState(sourceQuote?.affaireId || affaireIdParam || '');
   const [subject, setSubject] = useState(sourceQuote?.subject || '');
-  const [serviceId, setServiceId] = useState(sourceQuote?.serviceId || (currentUser?.role === 'Responsable' ? (currentUser?.serviceId || '') : ''));
+  const [serviceId, setServiceId] = useState(sourceQuote?.serviceId || serviceIdParam || (currentUser?.role === 'Responsable' ? (currentUser?.serviceId || '') : ''));
   const [style, setStyle] = useState<'Classique' | 'Moderne' | 'Minimaliste'>(sourceQuote?.style as any || 'Classique');
   const [accentColor, setAccentColor] = useState(sourceQuote?.accentColor || '#009688');
   const [discountPercent, setDiscountPercent] = useState<number>(sourceQuote?.discountPercent || 0);
@@ -176,6 +180,7 @@ export function QuoteCreation() {
       clientId,
       commercialId: currentUser?.id || '',
       serviceId: currentUser?.role === 'Directeur' ? serviceId : (currentUser?.serviceId || ''),
+      affaireId: affaireId || undefined,
       subject,
       lines: lines.map((l) => ({ ...l, id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString() })),
       subtotal: netSubtotal,
@@ -209,6 +214,8 @@ export function QuoteCreation() {
     }
   };
 
+  const clientAffaires = affaires.filter(a => a.clientId === clientId);
+
   return (
     <div className="quote-creation">
       <div className="page-header">
@@ -226,9 +233,26 @@ export function QuoteCreation() {
           <div className="form-grid">
             <div className="form-group">
               <label>Client *</label>
-              <select className="form-control" value={clientId} onChange={e => setClientId(e.target.value)}>
+              <select className="form-control" value={clientId} onChange={e => {
+                setClientId(e.target.value);
+                setAffaireId('');
+              }}>
                 <option value="">Sélectionner un client...</option>
                 {clients.map(c => <option key={c.id} value={c.id}>{c.name || c.contact}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Affaire rattachée (Optionnel)</label>
+              <select 
+                className="form-control" 
+                value={affaireId} 
+                onChange={e => setAffaireId(e.target.value)}
+                disabled={!clientId}
+              >
+                <option value="">-- Aucune affaire rattachée --</option>
+                {clientAffaires.map(a => (
+                  <option key={a.id} value={a.id}>{a.reference} - {a.title}</option>
+                ))}
               </select>
             </div>
             {currentUser?.role === 'Directeur' && (

@@ -1,80 +1,166 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Upload, FileText, Download, Trash2, Folder, FolderPlus, ChevronRight } from 'lucide-react';
+import { Upload, FileText, Download, Trash2, Folder, FolderPlus, ChevronRight, Eye, Edit2, Search, Filter, Share2, Briefcase, User as UserIcon, Building } from 'lucide-react';
 import { useConfirm } from '../components/ConfirmModal';
-
 import { useAppContext, type CrmDocument, type CrmFolder } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
+import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
+import './Documents.css';
+
+const FOLDER_COLORS = [
+  { name: 'Sarcelle (Défaut)', hex: '#0D9488' },
+  { name: 'Bleu Océan', hex: '#2563EB' },
+  { name: 'Indigo', hex: '#6366F1' },
+  { name: 'Violet Royal', hex: '#7C3AED' },
+  { name: 'Rose Vif', hex: '#E11D48' },
+  { name: 'Ambre / Or', hex: '#D97706' },
+  { name: 'Émeraude', hex: '#059669' },
+  { name: 'Orange Feu', hex: '#EA580C' },
+  { name: 'Ardoise', hex: '#475569' },
+];
+
+const CATEGORIES: Array<NonNullable<CrmDocument['category']>> = [
+  'Contrat / Devis signé',
+  'Bon de Commande',
+  'BAT / Maquette',
+  'Facture / Reçu',
+  'Rapport',
+  'Autre'
+];
 
 export function Documents() {
   const { confirm } = useConfirm();
-  const { crmDocuments, crmFolders, addCrmDocument, deleteCrmDocument, downloadCrmDocument, addCrmFolder, deleteCrmFolder, users } = useAppContext();
+  const { crmDocuments, crmFolders, affaires, clients, addCrmDocument, deleteCrmDocument, downloadCrmDocument, addCrmFolder, updateCrmFolder, deleteCrmFolder, users } = useAppContext();
   const { currentUser } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const [uploading, setUploading] = useState(false);
+
+  const [activeTab, setActiveTab] = useState<'MY_DOCS' | 'SHARED' | 'AFFAIRES'>('MY_DOCS');
   const [currentFolderId, setCurrentFolderId] = useState<string | undefined>(undefined);
   const [selectedUserId, setSelectedUserId] = useState<string>(currentUser?.id || '');
-  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+
+  // Modals
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+  const [newFolderColor, setNewFolderColor] = useState('#0D9488');
+  const [newFolderIsShared, setNewFolderIsShared] = useState(false);
 
-  const isAdmin = currentUser?.role === 'Directeur' || currentUser?.role === 'SuperAdmin' || currentUser?.role === 'Gerant';
-  const displayedUserId = isAdmin ? selectedUserId : currentUser?.id;
+  const [editingFolder, setEditingFolder] = useState<CrmFolder | null>(null);
+  const [editFolderName, setEditFolderName] = useState('');
+  const [editFolderColor, setEditFolderColor] = useState('#0D9488');
 
-  const userFolders = useMemo(() => crmFolders.filter(f => f.ownerId === displayedUserId), [crmFolders, displayedUserId]);
-  const userDocuments = useMemo(() => crmDocuments.filter(d => d.uploaderId === displayedUserId), [crmDocuments, displayedUserId]);
+  // Rich Upload Modal
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadCategory, setUploadCategory] = useState<CrmDocument['category']>('Autre');
+  const [uploadAffaireId, setUploadAffaireId] = useState('');
+  const [uploadClientId, setUploadClientId] = useState('');
+  const [uploadIsShared, setUploadIsShared] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
-  const currentLevelFolders = useMemo(() => userFolders.filter(f => f.parentId === currentFolderId), [userFolders, currentFolderId]);
-  const currentLevelDocuments = useMemo(() => userDocuments.filter(d => d.folderId === currentFolderId), [userDocuments, currentFolderId]);
+  // Preview Modal
+  const [previewDoc, setPreviewDoc] = useState<CrmDocument | null>(null);
 
-  const breadcrumbs: { id: string | undefined, name: string }[] = useMemo(() => {
-    const crumbs = [];
+  const isAdmin = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
+  const displayedUserId = isAdmin ? selectedUserId : (currentUser?.id || '');
+
+  // Filter folders & documents based on current tab
+  const scopedFolders = useMemo(() => {
+    if (activeTab === 'SHARED') {
+      return crmFolders.filter(f => f.isShared);
+    }
+    if (activeTab === 'AFFAIRES') {
+      return []; // Flat view for business files
+    }
+    return crmFolders.filter(f => f.ownerId === displayedUserId && !f.isShared);
+  }, [crmFolders, displayedUserId, activeTab]);
+
+  const scopedDocuments = useMemo(() => {
+    if (activeTab === 'SHARED') {
+      return crmDocuments.filter(d => d.isShared);
+    }
+    if (activeTab === 'AFFAIRES') {
+      return crmDocuments.filter(d => d.affaireId || d.clientId);
+    }
+    return crmDocuments.filter(d => d.uploaderId === displayedUserId && !d.isShared && !d.affaireId);
+  }, [crmDocuments, displayedUserId, activeTab]);
+
+  // Current level folders & files
+  const currentLevelFolders = useMemo(() => {
+    if (searchQuery.trim()) {
+      return scopedFolders.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    }
+    return scopedFolders.filter(f => f.parentId === currentFolderId);
+  }, [scopedFolders, currentFolderId, searchQuery]);
+
+  const currentLevelDocuments = useMemo(() => {
+    let docs = activeTab === 'AFFAIRES' ? scopedDocuments : scopedDocuments.filter(d => (searchQuery.trim() ? true : d.folderId === currentFolderId));
+    if (searchQuery.trim()) {
+      docs = docs.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    }
+    if (categoryFilter) {
+      docs = docs.filter(d => d.category === categoryFilter);
+    }
+    return docs;
+  }, [scopedDocuments, currentFolderId, searchQuery, categoryFilter, activeTab]);
+
+  // Breadcrumbs
+  const breadcrumbs = useMemo(() => {
+    const crumbs: { id: string | undefined; name: string; color?: string }[] = [];
     let curr = currentFolderId;
     while (curr) {
-      const f = userFolders.find(folder => folder.id === curr);
+      const f = scopedFolders.find(folder => folder.id === curr);
       if (f) {
-        crumbs.unshift({ id: f.id, name: f.name });
+        crumbs.unshift({ id: f.id, name: f.name, color: f.color });
         curr = f.parentId;
       } else {
         break;
       }
     }
-    return [{ id: undefined, name: 'Racine' }, ...crumbs];
-  }, [currentFolderId, userFolders]);
+    const rootName = activeTab === 'SHARED' ? 'Documents Partagés' : activeTab === 'AFFAIRES' ? 'Pièces Affaires & Clients' : 'Mes Documents';
+    return [{ id: undefined, name: rootName }, ...crumbs];
+  }, [currentFolderId, scopedFolders, activeTab]);
 
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      setUploading(true);
-      try {
-        await addCrmDocument(file, displayedUserId, currentFolderId);
-      } catch (err) {
-        console.error("Erreur d'upload :", err);
-        alert('Erreur lors de l\'ajout du document.');
-      } finally {
-        setUploading(false);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-      }
-    }
-  };
-
-  const handleCreateFolder = async () => {
-    if (!newFolderName.trim() || !displayedUserId) return;
-    await addCrmFolder(newFolderName.trim(), displayedUserId, currentFolderId);
+  // Folder creation
+  const handleCreateFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFolderName.trim()) return;
+    await addCrmFolder(
+      newFolderName.trim(),
+      displayedUserId || currentUser?.id || 'system',
+      currentFolderId,
+      newFolderColor,
+      activeTab === 'SHARED' || newFolderIsShared
+    );
     setShowFolderModal(false);
     setNewFolderName('');
+    setNewFolderColor('#0D9488');
+    setNewFolderIsShared(false);
   };
 
-  const handleDeleteFolder = (folder: CrmFolder) => {
-    const hasChildren = userFolders.some(f => f.parentId === folder.id) || userDocuments.some(d => d.folderId === folder.id);
+  // Folder edit
+  const startEditFolder = (folder: CrmFolder, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingFolder(folder);
+    setEditFolderName(folder.name);
+    setEditFolderColor(folder.color || '#0D9488');
+  };
+
+  const handleSaveEditFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingFolder || !editFolderName.trim()) return;
+    await updateCrmFolder(editingFolder.id, {
+      name: editFolderName.trim(),
+      color: editFolderColor
+    });
+    setEditingFolder(null);
+  };
+
+  const handleDeleteFolder = (folder: CrmFolder, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const hasChildren = crmFolders.some(f => f.parentId === folder.id) || crmDocuments.some(d => d.folderId === folder.id);
     if (hasChildren) {
-      alert("Impossible de supprimer un dossier qui n'est pas vide. Veuillez d'abord supprimer son contenu.");
+      alert("Impossible de supprimer un dossier qui n'est pas vide. Veuillez d'abord vider son contenu.");
       return;
     }
     confirm({
@@ -86,10 +172,47 @@ export function Documents() {
     });
   };
 
+  // Rich Upload submission
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setUploadFile(e.target.files[0]);
+      setShowUploadModal(true);
+    }
+  };
+
+  const handleConfirmUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadFile) return;
+
+    setIsUploading(true);
+    try {
+      await addCrmDocument(uploadFile, {
+        uploaderId: displayedUserId || currentUser?.id,
+        folderId: currentFolderId,
+        affaireId: uploadAffaireId || undefined,
+        clientId: uploadClientId || undefined,
+        category: uploadCategory,
+        isShared: activeTab === 'SHARED' || uploadIsShared
+      });
+      setShowUploadModal(false);
+      setUploadFile(null);
+      setUploadAffaireId('');
+      setUploadClientId('');
+      setUploadCategory('Autre');
+      setUploadIsShared(false);
+    } catch (err) {
+      console.error("Erreur d'upload :", err);
+      alert("Erreur lors de l'enregistrement du document.");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleDeleteDocument = (doc: CrmDocument) => {
     confirm({
       title: 'Supprimer le document',
-      message: `Voulez-vous vraiment supprimer "${doc.name}" ? Cette action est irréversible.`,
+      message: `Voulez-vous vraiment supprimer "${doc.name}" ? Cette action est définitive.`,
       confirmLabel: 'Supprimer',
       variant: 'danger',
       onConfirm: () => deleteCrmDocument(doc.id)
@@ -101,18 +224,26 @@ export function Documents() {
     return (bytes / 1024).toFixed(1) + ' KB';
   };
 
+  const getClientName = (id?: string) => clients.find(c => c.id === id)?.name;
+  const getAffaireRef = (id?: string) => affaires.find(a => a.id === id)?.reference;
+
   return (
     <div className="dashboard">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-        <h2>Gestion Documentaire</h2>
-        
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          {isAdmin && (
+      <div className="doc-manager-header">
+        <div>
+          <h2>Gestion Électronique des Documents (GED)</h2>
+          <p style={{ color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
+            Classement sécurisé, dossiers personnalisés et pièces jointes des affaires & clients
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {isAdmin && activeTab === 'MY_DOCS' && (
             <select 
-              className="input" 
+              className="table-input" 
               value={selectedUserId} 
               onChange={e => { setSelectedUserId(e.target.value); setCurrentFolderId(undefined); }}
-              style={{ minWidth: '200px' }}
+              style={{ minWidth: '190px' }}
             >
               <option value="">Sélectionner un utilisateur...</option>
               {users.map(u => (
@@ -121,85 +252,251 @@ export function Documents() {
             </select>
           )}
 
-          <button className="btn btn-secondary" onClick={() => setShowFolderModal(true)}>
-            <FolderPlus size={16} style={{ marginRight: '8px' }} /> Nouveau dossier
+          {activeTab !== 'AFFAIRES' && (
+            <button className="btn btn-secondary" onClick={() => setShowFolderModal(true)}>
+              <FolderPlus size={16} style={{ marginRight: '6px' }} /> Nouveau dossier
+            </button>
+          )}
+
+          <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+            <Upload size={16} style={{ marginRight: '6px' }} /> {isUploading ? 'Upload en cours...' : 'Ajouter un document'}
           </button>
-          
-          <button className="btn btn-primary" onClick={handleUploadClick} disabled={uploading}>
-            <Upload size={16} style={{ marginRight: '8px' }} /> {uploading ? 'Upload en cours...' : 'Uploader'}
-          </button>
-          <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileChange} />
+          <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileSelect} />
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontSize: '14px', color: 'var(--color-text-muted)' }}>
-        {breadcrumbs.map((crumb, idx) => (
-          <React.Fragment key={crumb.id || 'root'}>
-            <span 
-              onClick={() => setCurrentFolderId(crumb.id)} 
-              style={{ cursor: 'pointer', color: idx === breadcrumbs.length - 1 ? 'var(--color-text)' : 'var(--color-primary)', fontWeight: idx === breadcrumbs.length - 1 ? 600 : 400 }}
-            >
-              {crumb.name}
-            </span>
-            {idx < breadcrumbs.length - 1 && <ChevronRight size={14} />}
-          </React.Fragment>
-        ))}
+      {/* Tabs */}
+      <div className="doc-manager-tabs">
+        <button
+          className={`doc-tab-btn ${activeTab === 'MY_DOCS' ? 'active' : ''}`}
+          onClick={() => { setActiveTab('MY_DOCS'); setCurrentFolderId(undefined); }}
+        >
+          <UserIcon size={16} /> Mes Documents Personnels
+        </button>
+
+        <button
+          className={`doc-tab-btn ${activeTab === 'SHARED' ? 'active' : ''}`}
+          onClick={() => { setActiveTab('SHARED'); setCurrentFolderId(undefined); }}
+        >
+          <Share2 size={16} /> Documents Partagés Entreprise
+        </button>
+
+        <button
+          className={`doc-tab-btn ${activeTab === 'AFFAIRES' ? 'active' : ''}`}
+          onClick={() => { setActiveTab('AFFAIRES'); setCurrentFolderId(undefined); }}
+        >
+          <Briefcase size={16} /> Pièces d'Affaires & Clients
+        </button>
       </div>
 
+      {/* Search and Filters Bar */}
+      <div className="doc-search-bar">
+        <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+          <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+          <input
+            type="text"
+            className="table-input"
+            style={{ width: '100%', paddingLeft: '32px' }}
+            placeholder="Rechercher un document par mot-clé..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        <select
+          className="table-input"
+          style={{ maxWidth: '200px' }}
+          value={categoryFilter}
+          onChange={e => setCategoryFilter(e.target.value)}
+        >
+          <option value="">Toutes les catégories</option>
+          {CATEGORIES.map(cat => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Breadcrumbs Navigation */}
+      {activeTab !== 'AFFAIRES' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px', fontSize: '0.875rem', flexWrap: 'wrap' }}>
+          {breadcrumbs.map((crumb, idx) => (
+            <React.Fragment key={crumb.id || 'root'}>
+              <span
+                onClick={() => setCurrentFolderId(crumb.id)}
+                style={{
+                  cursor: 'pointer',
+                  color: idx === breadcrumbs.length - 1 ? '#0F172A' : (crumb.color || 'var(--color-primary)'),
+                  fontWeight: idx === breadcrumbs.length - 1 ? 700 : 500
+                }}
+              >
+                {crumb.name}
+              </span>
+              {idx < breadcrumbs.length - 1 && <ChevronRight size={14} color="#94A3B8" />}
+            </React.Fragment>
+          ))}
+        </div>
+      )}
+
+      {/* Main Files & Folders Table */}
       <div className="card">
         <div className="table-responsive">
           <table className="data-table responsive-table">
             <thead>
               <tr>
                 <th>Nom</th>
-                <th>Type</th>
-                <th>Date</th>
+                <th>Catégorie / Type</th>
+                <th>Rattachement</th>
+                <th>Date d'ajout</th>
                 <th>Taille</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {/* Dossiers */}
-              {currentLevelFolders.map(folder => (
-                <tr key={folder.id} style={{ cursor: 'pointer' }} onClick={() => setCurrentFolderId(folder.id)}>
-                  <td data-label="Nom" style={{ fontWeight: 500, color: 'var(--color-primary)' }}>
-                    <Folder size={16} style={{ verticalAlign: 'middle', marginRight: '8px', fill: 'var(--color-primary-tint)' }} /> 
-                    {folder.name}
-                  </td>
-                  <td data-label="Type">Dossier de fichiers</td>
-                  <td data-label="Date">{new Date(folder.createdAt).toLocaleDateString('fr-FR')}</td>
-                  <td data-label="Taille">-</td>
-                  <td data-label="Actions" onClick={e => e.stopPropagation()}>
-                    <button className="icon-button text-error" onClick={() => handleDeleteFolder(folder)} title="Supprimer le dossier">
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {/* Folders */}
+              {currentLevelFolders.map(folder => {
+                const subItemsCount = crmFolders.filter(f => f.parentId === folder.id).length + crmDocuments.filter(d => d.folderId === folder.id).length;
+                const folderColor = folder.color || '#0D9488';
 
-              {/* Fichiers */}
-              {currentLevelDocuments.map(doc => (
-                <tr key={doc.id}>
-                  <td data-label="Nom"><FileText size={16} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-text-muted)' }} /> {doc.name}</td>
-                  <td data-label="Type">{doc.type}</td>
-                  <td data-label="Date">{new Date(doc.createdAt).toLocaleDateString('fr-FR')}</td>
-                  <td data-label="Taille">{formatSize(doc.sizeBytes)}</td>
-                  <td data-label="Actions">
-                    <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => downloadCrmDocument(doc)} title="Télécharger">
-                      <Download size={16} />
-                    </button>
-                    <button className="icon-button text-error" onClick={() => handleDeleteDocument(doc)} title="Supprimer">
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              
+                return (
+                  <tr key={folder.id} style={{ cursor: 'pointer' }} onClick={() => setCurrentFolderId(folder.id)}>
+                    <td data-label="Nom" style={{ fontWeight: 600, color: '#0F172A' }}>
+                      <span
+                        className="doc-folder-icon-wrapper"
+                        style={{ backgroundColor: `${folderColor}18`, color: folderColor }}
+                      >
+                        <Folder size={18} fill={folderColor} />
+                      </span>
+                      <span>{folder.name}</span>
+                    </td>
+
+                    <td data-label="Type">
+                      <span className="badge-status bg-info" style={{ backgroundColor: `${folderColor}15`, color: folderColor }}>
+                        Dossier ({subItemsCount} éléments)
+                      </span>
+                    </td>
+
+                    <td data-label="Rattachement">
+                      {folder.isShared ? (
+                        <span className="badge-status bg-success" style={{ fontSize: '0.75rem' }}>
+                          <Share2 size={12} style={{ display: 'inline', marginRight: '3px' }} /> Partagé Entreprise
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '0.8rem', color: '#64748B' }}>Personnel</span>
+                      )}
+                    </td>
+
+                    <td data-label="Date">
+                      {new Date(folder.createdAt).toLocaleDateString('fr-FR')}
+                    </td>
+
+                    <td data-label="Taille">-</td>
+
+                    <td data-label="Actions" onClick={e => e.stopPropagation()}>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button
+                          className="icon-button"
+                          style={{ color: folderColor }}
+                          onClick={e => startEditFolder(folder, e)}
+                          title="Modifier le dossier (nom et couleur)"
+                        >
+                          <Edit2 size={15} />
+                        </button>
+
+                        <button
+                          className="icon-button text-error"
+                          onClick={e => handleDeleteFolder(folder, e)}
+                          title="Supprimer le dossier"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {/* Documents */}
+              {currentLevelDocuments.map(doc => {
+                const clientName = getClientName(doc.clientId);
+                const affaireRef = getAffaireRef(doc.affaireId);
+
+                return (
+                  <tr key={doc.id}>
+                    <td data-label="Nom">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <FileText size={18} color="#0D9488" />
+                        <span style={{ fontWeight: 600 }}>{doc.name}</span>
+                      </div>
+                    </td>
+
+                    <td data-label="Catégorie">
+                      <span className="badge-status bg-primary" style={{ fontSize: '0.78rem' }}>
+                        {doc.category || 'Autre'}
+                      </span>
+                    </td>
+
+                    <td data-label="Rattachement">
+                      <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        {affaireRef && (
+                          <span style={{ color: '#0D9488', fontWeight: 600 }}>
+                            <Briefcase size={12} style={{ display: 'inline', marginRight: '3px' }} />
+                            {affaireRef}
+                          </span>
+                        )}
+                        {clientName && (
+                          <span style={{ color: '#64748B' }}>
+                            <Building size={12} style={{ display: 'inline', marginRight: '3px' }} />
+                            {clientName}
+                          </span>
+                        )}
+                        {!affaireRef && !clientName && <span style={{ color: '#94A3B8' }}>-</span>}
+                      </div>
+                    </td>
+
+                    <td data-label="Date">
+                      {new Date(doc.createdAt).toLocaleDateString('fr-FR')}
+                    </td>
+
+                    <td data-label="Taille">
+                      {formatSize(doc.sizeBytes)}
+                    </td>
+
+                    <td data-label="Actions">
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button
+                          className="icon-button text-teal-700"
+                          onClick={() => setPreviewDoc(doc)}
+                          title="Aperçu du document"
+                        >
+                          <Eye size={16} />
+                        </button>
+
+                        <button
+                          className="icon-button text-blue-600"
+                          onClick={() => downloadCrmDocument(doc)}
+                          title="Télécharger"
+                        >
+                          <Download size={16} />
+                        </button>
+
+                        <button
+                          className="icon-button text-error"
+                          onClick={() => handleDeleteDocument(doc)}
+                          title="Supprimer"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+
               {currentLevelFolders.length === 0 && currentLevelDocuments.length === 0 && (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
-                    <Folder size={32} style={{ opacity: 0.5, marginBottom: '8px' }} />
-                    <div>Ce dossier est vide.</div>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)' }}>
+                    <Folder size={36} style={{ opacity: 0.35, marginBottom: '8px' }} />
+                    <div>Aucun document ou dossier trouvé dans cet espace.</div>
                   </td>
                 </tr>
               )}
@@ -208,28 +505,230 @@ export function Documents() {
         </div>
       </div>
 
+      {/* Modal : Nouveau Dossier avec Palette de Couleurs */}
       {showFolderModal && (
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setShowFolderModal(false)}>
-          <div className="card" style={{ maxWidth: '400px', width: '100%', margin: '0 16px' }}>
-            <h3>Nouveau dossier</h3>
-            <div className="form-group" style={{ marginTop: '16px' }}>
-              <label>Nom du dossier</label>
-              <input 
-                type="text" 
-                className="input" 
-                autoFocus
-                value={newFolderName}
-                onChange={e => setNewFolderName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleCreateFolder()}
-                placeholder="Ex: Factures, Devis, Images..."
-              />
+        <div className="commission-modal-backdrop" onClick={() => setShowFolderModal(false)}>
+          <div className="commission-modal-container" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px' }}>
+            <div className="commission-modal-header">
+              <div className="commission-modal-title">
+                <FolderPlus size={20} color={newFolderColor} />
+                <span>Nouveau dossier</span>
+              </div>
             </div>
-            <div className="modal-actions" style={{ marginTop: '24px' }}>
-              <button className="btn btn-secondary" onClick={() => setShowFolderModal(false)}>Annuler</button>
-              <button className="btn btn-primary" onClick={handleCreateFolder} disabled={!newFolderName.trim()}>Créer</button>
-            </div>
+
+            <form onSubmit={handleCreateFolder}>
+              <div className="commission-modal-body">
+                <div>
+                  <label className="report-field-label">Nom du dossier *</label>
+                  <input
+                    type="text"
+                    className="table-input"
+                    placeholder="Ex: Contrats 2026, Factures SODECI..."
+                    autoFocus
+                    required
+                    value={newFolderName}
+                    onChange={e => setNewFolderName(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="report-field-label">Couleur distinctive de l'icône</label>
+                  <div className="doc-color-palette">
+                    {FOLDER_COLORS.map(c => (
+                      <div
+                        key={c.hex}
+                        className={`doc-color-swatch ${newFolderColor === c.hex ? 'selected' : ''}`}
+                        style={{ backgroundColor: c.hex }}
+                        onClick={() => setNewFolderColor(c.hex)}
+                        title={c.name}
+                      />
+                    ))}
+                  </div>
+                  <div style={{ marginTop: '8px', fontSize: '0.8rem', color: '#64748B' }}>
+                    Couleur sélectionnée : <strong style={{ color: newFolderColor }}>{FOLDER_COLORS.find(c => c.hex === newFolderColor)?.name}</strong>
+                  </div>
+                </div>
+
+                {isAdmin && activeTab !== 'SHARED' && (
+                  <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      id="sharedCheckbox"
+                      checked={newFolderIsShared}
+                      onChange={e => setNewFolderIsShared(e.target.checked)}
+                    />
+                    <label htmlFor="sharedCheckbox" style={{ fontSize: '0.85rem', cursor: 'pointer' }}>
+                      Rendre ce dossier accessible à toute l'équipe (Partagé Entreprise)
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              <div className="commission-modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowFolderModal(false)}>
+                  Annuler
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={!newFolderName.trim()}>
+                  Créer le dossier
+                </button>
+              </div>
+            </form>
           </div>
         </div>
+      )}
+
+      {/* Modal : Modifier Dossier (Nom & Couleur) */}
+      {editingFolder && (
+        <div className="commission-modal-backdrop" onClick={() => setEditingFolder(null)}>
+          <div className="commission-modal-container" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px' }}>
+            <div className="commission-modal-header">
+              <div className="commission-modal-title">
+                <Edit2 size={20} color={editFolderColor} />
+                <span>Modifier le dossier : {editingFolder.name}</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveEditFolder}>
+              <div className="commission-modal-body">
+                <div>
+                  <label className="report-field-label">Nom du dossier *</label>
+                  <input
+                    type="text"
+                    className="table-input"
+                    required
+                    value={editFolderName}
+                    onChange={e => setEditFolderName(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="report-field-label">Couleur distinctive</label>
+                  <div className="doc-color-palette">
+                    {FOLDER_COLORS.map(c => (
+                      <div
+                        key={c.hex}
+                        className={`doc-color-swatch ${editFolderColor === c.hex ? 'selected' : ''}`}
+                        style={{ backgroundColor: c.hex }}
+                        onClick={() => setEditFolderColor(c.hex)}
+                        title={c.name}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="commission-modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setEditingFolder(null)}>
+                  Annuler
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={!editFolderName.trim()}>
+                  Sauvegarder
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal : Enrichissement Upload Document (Rattachement & Catégorie) */}
+      {showUploadModal && uploadFile && (
+        <div className="commission-modal-backdrop" onClick={() => setShowUploadModal(false)}>
+          <div className="commission-modal-container" onClick={e => e.stopPropagation()} style={{ maxWidth: '540px' }}>
+            <div className="commission-modal-header">
+              <div className="commission-modal-title">
+                <Upload size={20} color="#0D9488" />
+                <span>Enregistrer le document</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleConfirmUpload}>
+              <div className="commission-modal-body">
+                <div style={{ background: '#F8FAFC', padding: '10px 14px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{uploadFile.name}</div>
+                  <div style={{ fontSize: '0.8rem', color: '#64748B' }}>
+                    Taille : {formatSize(uploadFile.size)} • Type : {uploadFile.type || 'Fichier'}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="report-field-label">Catégorie métier *</label>
+                  <select
+                    className="table-input"
+                    value={uploadCategory}
+                    onChange={e => setUploadCategory(e.target.value as any)}
+                  >
+                    {CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="report-field-label">Rattacher à une Affaire (optionnel)</label>
+                  <select
+                    className="table-input"
+                    value={uploadAffaireId}
+                    onChange={e => {
+                      setUploadAffaireId(e.target.value);
+                      const aff = affaires.find(a => a.id === e.target.value);
+                      if (aff?.clientId) setUploadClientId(aff.clientId);
+                    }}
+                  >
+                    <option value="">Aucune affaire rattachée</option>
+                    {affaires.map(a => (
+                      <option key={a.id} value={a.id}>{a.reference} — {a.title}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="report-field-label">Rattacher à un Client (optionnel)</label>
+                  <select
+                    className="table-input"
+                    value={uploadClientId}
+                    onChange={e => setUploadClientId(e.target.value)}
+                  >
+                    <option value="">Aucun client spécifique</option>
+                    {clients.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {isAdmin && activeTab !== 'SHARED' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      id="docSharedCheckbox"
+                      checked={uploadIsShared}
+                      onChange={e => setUploadIsShared(e.target.checked)}
+                    />
+                    <label htmlFor="docSharedCheckbox" style={{ fontSize: '0.85rem', cursor: 'pointer' }}>
+                      Partager ce document avec toute l'équipe (Espace Partagé)
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              <div className="commission-modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowUploadModal(false)}>
+                  Annuler
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={isUploading}>
+                  {isUploading ? 'Enregistrement...' : 'Valider & Uploader'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Preview */}
+      {previewDoc && (
+        <DocumentPreviewModal
+          document={previewDoc}
+          onClose={() => setPreviewDoc(null)}
+        />
       )}
     </div>
   );

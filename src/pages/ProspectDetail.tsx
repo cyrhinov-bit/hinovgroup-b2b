@@ -43,6 +43,10 @@ export function ProspectDetail() {
   // 3. Amélioration UX : État d'erreur local pour le formulaire de relance
   const [followUpError, setFollowUpError] = useState<string | null>(null);
 
+  const [showConvertModal, setShowConvertModal] = useState(false);
+  const [createAffaireOnConvert, setCreateAffaireOnConvert] = useState(true);
+  const [isConverting, setIsConverting] = useState(false);
+
   if (!prospect) {
     return (
       <div className="dashboard">
@@ -99,16 +103,25 @@ export function ProspectDetail() {
     setNewFollowUp({ date: '', time: '', priority: 'Moyenne', observation: '' });
   };
 
-  const handleConvert = () => {
-    confirm({
-      title: 'Convertir en client',
-      message: `Voulez-vous convertir le prospect "${prospect.name}" en client ? Le client sera automatiquement créé et affecté au service.`,
-      confirmLabel: 'Convertir',
-      onConfirm: () => {
-        convertProspect(prospect.id);
+  const canConvert = (currentUser?.role === 'Commercial' && prospect.commercialId === currentUser.id) || 
+                     ['SuperAdmin', 'Directeur', 'Directeur adjoint'].includes(currentUser?.role || '');
+
+  const handleConfirmConvert = async () => {
+    setIsConverting(true);
+    try {
+      const res = await convertProspect(prospect.id, createAffaireOnConvert);
+      setShowConvertModal(false);
+      if (res.affaireId) {
+        navigate(`/affaires/${res.affaireId}`);
+      } else {
         navigate('/commercial/clients');
       }
-    });
+    } catch (err) {
+      console.error('Erreur lors de la conversion:', err);
+      alert('Une erreur est survenue lors de la conversion.');
+    } finally {
+      setIsConverting(false);
+    }
   };
 
   // Typage strict du tableau de statuts
@@ -125,12 +138,72 @@ export function ProspectDetail() {
           <h2>{prospect.name}</h2>
           <p style={{ color: 'var(--color-text-muted)' }}>{prospect.prospectNumber} - {prospect.company || 'Pas de société'}</p>
         </div>
-        {prospect.status !== 'Converti' && prospect.status !== 'Perdu' && (
-          <button className="btn btn-primary" onClick={handleConvert}>
+        {prospect.status !== 'Converti' && prospect.status !== 'Perdu' && canConvert && (
+          <button className="btn btn-primary" onClick={() => setShowConvertModal(true)}>
             <CheckCircle size={16} style={{ marginRight: '8px' }} /> Convertir en Client
           </button>
         )}
       </div>
+
+      {showConvertModal && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 1100, padding: '1rem'
+        }}>
+          <div style={{
+            background: '#ffffff', borderRadius: '12px', padding: '1.5rem',
+            maxWidth: '520px', width: '100%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'
+          }}>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0F172A', marginBottom: '0.75rem' }}>
+              Conversion du Prospect en Client
+            </h3>
+            <p style={{ fontSize: '0.875rem', color: '#475569', lineHeight: 1.5, marginBottom: '1rem' }}>
+              Vous êtes sur le point de convertir <strong>{prospect.name}</strong> en <strong>Client CRM officiel</strong>.
+              Une nouvelle fiche Client sera enregistrée avec ses coordonnées.
+            </p>
+
+            <div style={{
+              background: '#F0FDFA', border: '1px solid #CCFBF1', borderRadius: '8px',
+              padding: '0.85rem', marginBottom: '1.25rem'
+            }}>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={createAffaireOnConvert}
+                  onChange={e => setCreateAffaireOnConvert(e.target.checked)}
+                  style={{ marginTop: '0.2rem', accentColor: '#0D9488' }}
+                />
+                <span style={{ fontSize: '0.85rem', color: '#0F766E', fontWeight: 600 }}>
+                  Ouvrir immédiatement une première Affaire commerciale pour ce nouveau Client
+                </span>
+              </label>
+              <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0.35rem 0 0 1.6rem' }}>
+                Pré-remplira l'affaire avec le besoin ({prospect.need || 'Projet client'}) et le budget estimé ({prospect.budget?.toLocaleString('fr-FR') || 0} FCFA).
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => setShowConvertModal(false)}
+                disabled={isConverting}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleConfirmConvert}
+                disabled={isConverting}
+              >
+                {isConverting ? 'Conversion en cours...' : 'Valider la Conversion'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="dashboard-grid">
         <div className="card" style={{ padding: '24px' }}>

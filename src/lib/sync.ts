@@ -5,6 +5,13 @@ import { supabase } from './supabase';
 const isUuid = (value?: string) => !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
 export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT' | 
+                             'INSERT_AFFAIRE' | 'UPDATE_AFFAIRE' | 'DELETE_AFFAIRE' |
+                             'INSERT_FACTURE_PAIEMENT' |
+                             'INSERT_COUT' | 'UPDATE_COUT' | 'DELETE_COUT' |
+                             'INSERT_OBJECTIF' | 'UPDATE_OBJECTIF' | 'DELETE_OBJECTIF' |
+                             'INSERT_PRIME' | 'UPDATE_PRIME_STATUS' |
+                             'INSERT_PRIME_AUDIT_LOG' |
+                             'UPDATE_SCORING_RULE' | 'UPSERT_CLASSEMENT' |
                              'INSERT_QUOTE' | 'UPDATE_QUOTE' | 'DELETE_QUOTE' |
                              'INSERT_SALE' | 'UPDATE_SALE' | 'DELETE_SALE' |
                              'INSERT_COMMISSION' | 'UPDATE_COMMISSION' | 'DELETE_COMMISSION' |
@@ -15,7 +22,7 @@ export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT'
                              'INSERT_ACTIVITY_REPORT' | 'UPDATE_ACTIVITY_REPORT' | 'DELETE_ACTIVITY_REPORT' |
                              'INSERT_WEEKLY_REPORT' | 'UPDATE_WEEKLY_REPORT' |
                              'INSERT_V2_DAILY_REPORT' | 'UPDATE_V2_DAILY_REPORT' |
-                             'INSERT_V2_WEEKLY_REPORT' | 'UPDATE_V2_WEEKLY_REPORT' |
+                             'INSERT_V2_WEEKLY_REPORT' | 'UPDATE_V2_WEEKLY_REPORT' | 'DELETE_V2_WEEKLY_REPORT' |
                              'INSERT_CATEGORY' | 'DELETE_CATEGORY' |
                              'UPDATE_SETTINGS' | 'UPDATE_PROFILE' | 'DELETE_PROFILE' |
                              'INSERT_PRESTATION' | 'UPDATE_PRESTATION' | 'DELETE_PRESTATION' |
@@ -37,6 +44,7 @@ export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT'
                               'INSERT_IMPORT_SESSION' | 'UPDATE_IMPORT_SESSION' | 'DELETE_IMPORT_SESSION' |
                               'INSERT_IMPORT_ERROR' |
                               'INSERT_DOCUMENT' | 'DELETE_DOCUMENT' |
+                              'INSERT_CRM_FOLDER' | 'UPDATE_CRM_FOLDER' | 'DELETE_CRM_FOLDER' |
                               'MARK_NOTIFICATION_READ' | 'MARK_ALL_NOTIFICATIONS_READ';
 
 export interface SyncAction {
@@ -121,6 +129,260 @@ export const processSyncQueue = async () => {
           success = !error;
           break;
         }
+        case 'INSERT_AFFAIRE': {
+          const affaireData = action.payload;
+          const { error } = await supabase.from('affaires').insert([{
+            id: affaireData.id,
+            reference: affaireData.reference,
+            title: affaireData.title,
+            client_id: affaireData.clientId,
+            service_id: affaireData.serviceId,
+            commercial_id: affaireData.commercialId,
+            description: affaireData.description || null,
+            status: affaireData.status || 'QUALIFIEE',
+            estimated_amount_ht: affaireData.estimatedAmountHt || 0,
+            probability: affaireData.probability !== undefined ? affaireData.probability : 50,
+            source: affaireData.source || null,
+            start_date_planned: affaireData.startDatePlanned || null,
+            end_date_planned: affaireData.endDatePlanned || null,
+            end_date_real: affaireData.endDateReal || null,
+            notes: affaireData.notes || null,
+            created_at: affaireData.createdAt || new Date().toISOString(),
+            updated_at: affaireData.updatedAt || new Date().toISOString()
+          }]);
+          if (error) console.error('[Sync] INSERT_AFFAIRE échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'UPDATE_AFFAIRE': {
+          const { id, ...data } = action.payload;
+          const mappedData: any = {};
+          if (data.title !== undefined) mappedData.title = data.title;
+          if (data.clientId !== undefined) mappedData.client_id = data.clientId;
+          if (data.serviceId !== undefined) mappedData.service_id = data.serviceId;
+          if (data.commercialId !== undefined) mappedData.commercial_id = data.commercialId;
+          if (data.description !== undefined) mappedData.description = data.description;
+          if (data.status !== undefined) mappedData.status = data.status;
+          if (data.estimatedAmountHt !== undefined) mappedData.estimated_amount_ht = data.estimatedAmountHt;
+          if (data.probability !== undefined) mappedData.probability = data.probability;
+          if (data.source !== undefined) mappedData.source = data.source;
+          if (data.startDatePlanned !== undefined) mappedData.start_date_planned = data.startDatePlanned;
+          if (data.endDatePlanned !== undefined) mappedData.end_date_planned = data.endDatePlanned;
+          if (data.endDateReal !== undefined) mappedData.end_date_real = data.endDateReal;
+          if (data.notes !== undefined) mappedData.notes = data.notes;
+          mappedData.updated_at = new Date().toISOString();
+          const { error } = await supabase.from('affaires').update(mappedData).eq('id', id);
+          if (error) console.error('[Sync] UPDATE_AFFAIRE échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'DELETE_AFFAIRE': {
+          const { error } = await supabase.from('affaires').delete().eq('id', action.payload.id);
+          if (error) console.error('[Sync] DELETE_AFFAIRE échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'INSERT_FACTURE_PAIEMENT': {
+          const payment = action.payload;
+          const { error } = await supabase.from('facture_paiements').insert([{
+            id: payment.id,
+            payment_number: payment.paymentNumber,
+            payment_type: payment.paymentType,
+            vente_id: payment.venteId,
+            echeance_id: payment.echeanceId || null,
+            client_id: payment.clientId,
+            payment_date: payment.paymentDate,
+            amount: payment.amount,
+            payment_method: payment.paymentMethod,
+            reference: payment.reference || null,
+            proof_document_id: payment.proofDocumentId || null,
+            notes: payment.notes || null,
+            status: payment.status || 'VALIDE',
+            recorded_by: payment.recordedBy || null,
+            created_at: payment.createdAt || new Date().toISOString()
+          }]);
+          if (error) console.error('[Sync] INSERT_FACTURE_PAIEMENT échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'INSERT_COUT': {
+          const cout = action.payload;
+          const { error } = await supabase.from('couts').insert([{
+            id: cout.id,
+            reference: cout.reference,
+            cost_type: cout.costType,
+            category: cout.category,
+            amount_ht: cout.amountHt,
+            vat_rate: cout.vatRate || 0,
+            vat_amount: cout.vatAmount || 0,
+            amount_ttc: cout.amountTtc,
+            date: cout.date,
+            affaire_id: cout.affaireId || null,
+            service_id: cout.serviceId,
+            supplier_name: cout.supplierName || null,
+            invoice_ref: cout.invoiceRef || null,
+            description: cout.description,
+            proof_document_id: cout.proofDocumentId || null,
+            status: cout.status || 'VALIDE',
+            created_by: cout.createdBy || null,
+            created_at: cout.createdAt || new Date().toISOString(),
+            updated_at: cout.updatedAt || new Date().toISOString()
+          }]);
+          if (error) console.error('[Sync] INSERT_COUT échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'UPDATE_COUT': {
+          const { id, ...cData } = action.payload;
+          const mappedCout: any = {};
+          if (cData.costType !== undefined) mappedCout.cost_type = cData.costType;
+          if (cData.category !== undefined) mappedCout.category = cData.category;
+          if (cData.amountHt !== undefined) mappedCout.amount_ht = cData.amountHt;
+          if (cData.vatRate !== undefined) mappedCout.vat_rate = cData.vatRate;
+          if (cData.vatAmount !== undefined) mappedCout.vat_amount = cData.vatAmount;
+          if (cData.amountTtc !== undefined) mappedCout.amount_ttc = cData.amountTtc;
+          if (cData.date !== undefined) mappedCout.date = cData.date;
+          if (cData.affaireId !== undefined) mappedCout.affaire_id = cData.affaireId;
+          if (cData.serviceId !== undefined) mappedCout.service_id = cData.serviceId;
+          if (cData.supplierName !== undefined) mappedCout.supplier_name = cData.supplierName;
+          if (cData.invoiceRef !== undefined) mappedCout.invoice_ref = cData.invoiceRef;
+          if (cData.description !== undefined) mappedCout.description = cData.description;
+          if (cData.status !== undefined) mappedCout.status = cData.status;
+          mappedCout.updated_at = new Date().toISOString();
+          const { error } = await supabase.from('couts').update(mappedCout).eq('id', id);
+          if (error) console.error('[Sync] UPDATE_COUT échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'DELETE_COUT': {
+          const { error } = await supabase.from('couts').delete().eq('id', action.payload.id);
+          if (error) console.error('[Sync] DELETE_COUT échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'INSERT_OBJECTIF': {
+          const obj = action.payload;
+          const { error } = await supabase.from('objectifs').insert([{
+            id: obj.id,
+            profile_id: obj.profileId,
+            service_id: obj.serviceId,
+            period_type: obj.periodType,
+            start_date: obj.startDate,
+            end_date: obj.endDate,
+            target_revenue_ht: obj.targetRevenueHt,
+            target_margin_ht: obj.targetMarginHt,
+            target_deals_count: obj.targetDealsCount || 0,
+            target_new_clients: obj.targetNewClients || 0,
+            status: obj.status || 'EN_COURS',
+            created_by: obj.createdBy || null,
+            created_at: obj.createdAt || new Date().toISOString()
+          }]);
+          if (error) console.error('[Sync] INSERT_OBJECTIF échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'UPDATE_OBJECTIF': {
+          const { id, ...data } = action.payload;
+          const mapped: any = {};
+          if (data.targetRevenueHt !== undefined) mapped.target_revenue_ht = data.targetRevenueHt;
+          if (data.targetMarginHt !== undefined) mapped.target_margin_ht = data.targetMarginHt;
+          if (data.targetDealsCount !== undefined) mapped.target_deals_count = data.targetDealsCount;
+          if (data.targetNewClients !== undefined) mapped.target_new_clients = data.targetNewClients;
+          if (data.status !== undefined) mapped.status = data.status;
+          if (data.startDate !== undefined) mapped.start_date = data.startDate;
+          if (data.endDate !== undefined) mapped.end_date = data.endDate;
+          const { error } = await supabase.from('objectifs').update(mapped).eq('id', id);
+          if (error) console.error('[Sync] UPDATE_OBJECTIF échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'DELETE_OBJECTIF': {
+          const { error } = await supabase.from('objectifs').delete().eq('id', action.payload.id);
+          if (error) console.error('[Sync] DELETE_OBJECTIF échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'INSERT_PRIME': {
+          const prime = action.payload;
+          const { error } = await supabase.from('primes').insert([{
+            id: prime.id,
+            reference: prime.reference,
+            profile_id: prime.profileId,
+            service_id: prime.serviceId,
+            period_key: prime.periodKey,
+            prime_type: prime.primeType,
+            amount: prime.amount,
+            status: prime.status || 'PROPOSEE',
+            calculated_by: prime.calculatedBy || null,
+            validated_by: prime.validatedBy || null,
+            justification: prime.justification || null,
+            created_at: prime.createdAt || new Date().toISOString(),
+            updated_at: prime.updatedAt || new Date().toISOString()
+          }]);
+          if (error) console.error('[Sync] INSERT_PRIME échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'UPDATE_PRIME_STATUS': {
+          const { id, status, validatedBy, justification } = action.payload;
+          const mapped: any = { status, updated_at: new Date().toISOString() };
+          if (validatedBy !== undefined) mapped.validated_by = validatedBy;
+          if (justification !== undefined) mapped.justification = justification;
+          const { error } = await supabase.from('primes').update(mapped).eq('id', id);
+          if (error) console.error('[Sync] UPDATE_PRIME_STATUS échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'INSERT_PRIME_AUDIT_LOG': {
+          const log = action.payload;
+          const { error } = await supabase.from('prime_audit_logs').insert([{
+            id: log.id,
+            prime_id: log.primeId,
+            action: log.action,
+            actor_id: log.actorId,
+            actor_role: log.actorRole,
+            previous_state: log.previousState || null,
+            new_state: log.newState || null,
+            comment: log.comment || null,
+            created_at: log.createdAt || new Date().toISOString()
+          }]);
+          if (error) console.error('[Sync] INSERT_PRIME_AUDIT_LOG échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'UPDATE_SCORING_RULE': {
+          const { id, ...data } = action.payload;
+          const mapped: any = {};
+          if (data.weightMargin !== undefined) mapped.weight_margin = data.weightMargin;
+          if (data.weightRevenue !== undefined) mapped.weight_revenue = data.weightRevenue;
+          if (data.weightVolume !== undefined) mapped.weight_volume = data.weightVolume;
+          if (data.weightConversion !== undefined) mapped.weight_conversion = data.weightConversion;
+          if (data.isActive !== undefined) mapped.is_active = data.isActive;
+          const { error } = await supabase.from('scoring_rules').update(mapped).eq('id', id);
+          if (error) console.error('[Sync] UPDATE_SCORING_RULE échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'UPSERT_CLASSEMENT': {
+          const cl = action.payload;
+          const { error } = await supabase.from('classements').upsert([{
+            id: cl.id,
+            profile_id: cl.profileId,
+            service_id: cl.serviceId,
+            period_type: cl.periodType,
+            period_key: cl.periodKey,
+            score: cl.score,
+            rank: cl.rank,
+            revenue_achieved_ht: cl.revenueAchievedHt,
+            margin_achieved_ht: cl.marginAchievedHt,
+            deals_won_count: cl.dealsWonCount,
+            conversion_rate: cl.conversionRate,
+            updated_at: new Date().toISOString()
+          }]);
+          if (error) console.error('[Sync] UPSERT_CLASSEMENT échoué :', error.message);
+          success = !error;
+          break;
+        }
         case 'INSERT_QUOTE': {
           const { lines, ...quoteData } = action.payload;
           const { error } = await supabase.from('quotes').insert([{
@@ -129,6 +391,7 @@ export const processSyncQueue = async () => {
             client_id: quoteData.clientId,
             commercial_id: quoteData.commercialId,
             service_id: quoteData.serviceId || null,
+            affaire_id: quoteData.affaireId || null,
             subject: quoteData.subject,
             subtotal: quoteData.subtotal,
             vat: quoteData.vat ?? 0,
@@ -167,6 +430,7 @@ export const processSyncQueue = async () => {
             client_id: quoteData.clientId,
             commercial_id: quoteData.commercialId,
             service_id: quoteData.serviceId || null,
+            affaire_id: quoteData.affaireId !== undefined ? quoteData.affaireId : null,
             subject: quoteData.subject,
             subtotal: quoteData.subtotal,
             vat: quoteData.vat ?? 0,
@@ -210,8 +474,11 @@ export const processSyncQueue = async () => {
             id: saleData.id,
             sale_number: saleData.saleNumber,
             quote_id: saleData.quoteId || null,
+            affaire_id: saleData.affaireId || null,
             client_id: saleData.clientId,
             service_id: saleData.serviceId || null,
+            commercial_id: saleData.commercialId || null,
+            due_date: saleData.dueDate || null,
             subtotal: saleData.subtotal,
             vat: saleData.vat ?? 0,
             total: saleData.total,
@@ -244,8 +511,11 @@ export const processSyncQueue = async () => {
           const { error } = await supabase.from('ventes').update({
             sale_number: saleData.saleNumber,
             quote_id: saleData.quoteId || null,
+            affaire_id: saleData.affaireId !== undefined ? saleData.affaireId : null,
             client_id: saleData.clientId,
             service_id: saleData.serviceId || null,
+            commercial_id: saleData.commercialId !== undefined ? saleData.commercialId : null,
+            due_date: saleData.dueDate !== undefined ? saleData.dueDate : null,
             subtotal: saleData.subtotal,
             vat: saleData.vat ?? 0,
             total: saleData.total,
@@ -283,6 +553,7 @@ export const processSyncQueue = async () => {
           const { error } = await supabase.from('commissions').insert([{
             id: action.payload.id,
             vente_id: action.payload.saleId || null,
+            affaire_id: action.payload.affaireId || null,
             client_id: action.payload.clientId || null,
             commercial_id: action.payload.commercialId || null,
             service_id: action.payload.serviceId || null,
@@ -292,6 +563,7 @@ export const processSyncQueue = async () => {
             margin_percent: action.payload.marginPercent,
             commission_percent: action.payload.commissionPercent,
             commission_amount: action.payload.commissionAmount,
+            paid_amount: action.payload.paidAmount || 0,
             status: action.payload.status
           }]);
           if (error) console.error('[Sync] INSERT_COMMISSION échoué :', error.message);
@@ -309,6 +581,7 @@ export const processSyncQueue = async () => {
           if (updateData.commissionAmount !== undefined) mappedData.commission_amount = updateData.commissionAmount;
           if (updateData.status !== undefined) mappedData.status = updateData.status;
           if (updateData.paidAmount !== undefined) mappedData.paid_amount = updateData.paidAmount;
+          if (updateData.affaireId !== undefined) mappedData.affaire_id = updateData.affaireId;
           const { error } = await supabase.from('commissions').update(mappedData).eq('id', id);
           if (error) console.error('[Sync] UPDATE_COMMISSION échoué :', error.message);
           success = !error;
@@ -578,10 +851,18 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_V2_WEEKLY_REPORT': {
           const { error } = await supabase.from('v2_weekly_reports').insert([{
-            id: action.payload.id, author_id: action.payload.authorId, week_start: action.payload.weekStart, project: action.payload.project,
-            daily_report_ids: action.payload.dailyReportIds, weekly_objectives: action.payload.weeklyObjectives,
-            tasks_by_day: action.payload.tasksByDay, pending_tasks: action.payload.pendingTasks, summary: action.payload.summary,
-            next_week_objectives: action.payload.nextWeekObjectives, conclusion: action.payload.conclusion, status: action.payload.status
+            id: action.payload.id,
+            author_id: action.payload.authorId,
+            week_start: action.payload.weekStart,
+            project: action.payload.project || null,
+            daily_report_ids: action.payload.dailyReportIds || [],
+            weekly_objectives: action.payload.weeklyObjectives || '',
+            tasks_by_day: action.payload.tasksByDay || {},
+            pending_tasks: action.payload.pendingTasks || [],
+            summary: action.payload.summary || action.payload.aiSummary || '',
+            next_week_objectives: action.payload.nextWeekObjectives || '',
+            conclusion: action.payload.conclusion || '',
+            status: action.payload.status || 'Brouillon'
           }]);
           if (error) console.error('[Sync] INSERT_V2_WEEKLY_REPORT échoué :', error.message);
           success = !error;
@@ -589,12 +870,94 @@ export const processSyncQueue = async () => {
         }
         case 'UPDATE_V2_WEEKLY_REPORT': {
           const { error } = await supabase.from('v2_weekly_reports').update({
-            project: action.payload.project, daily_report_ids: action.payload.dailyReportIds, weekly_objectives: action.payload.weeklyObjectives,
-            tasks_by_day: action.payload.tasksByDay, pending_tasks: action.payload.pendingTasks, summary: action.payload.summary,
-            next_week_objectives: action.payload.nextWeekObjectives, conclusion: action.payload.conclusion, status: action.payload.status,
+            project: action.payload.project || null,
+            daily_report_ids: action.payload.dailyReportIds || [],
+            weekly_objectives: action.payload.weeklyObjectives || '',
+            tasks_by_day: action.payload.tasksByDay || {},
+            pending_tasks: action.payload.pendingTasks || [],
+            summary: action.payload.summary || action.payload.aiSummary || '',
+            next_week_objectives: action.payload.nextWeekObjectives || '',
+            conclusion: action.payload.conclusion || '',
+            status: action.payload.status,
             updated_at: action.payload.updatedAt || new Date().toISOString()
           }).eq('id', action.payload.id);
           if (error) console.error('[Sync] UPDATE_V2_WEEKLY_REPORT échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'DELETE_V2_WEEKLY_REPORT': {
+          const { error } = await supabase.from('v2_weekly_reports').delete().eq('id', action.payload.id);
+          success = !error;
+          break;
+        }
+        case 'INSERT_CRM_FOLDER': {
+          const { error } = await supabase.from('crm_folders').insert([{
+            id: action.payload.id,
+            name: action.payload.name,
+            owner_id: action.payload.ownerId,
+            parent_id: action.payload.parentId || null,
+            color: action.payload.color || '#0D9488',
+            is_shared: !!action.payload.isShared
+          }]);
+          if (error) console.error('[Sync] INSERT_CRM_FOLDER échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'UPDATE_CRM_FOLDER': {
+          const { error } = await supabase.from('crm_folders').update({
+            name: action.payload.name,
+            parent_id: action.payload.parentId || null,
+            color: action.payload.color,
+            is_shared: action.payload.isShared
+          }).eq('id', action.payload.id);
+          if (error) console.error('[Sync] UPDATE_CRM_FOLDER échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'DELETE_CRM_FOLDER': {
+          const { error } = await supabase.from('crm_folders').delete().eq('id', action.payload.id);
+          success = !error;
+          break;
+        }
+        case 'INSERT_DOCUMENT': {
+          const { id, name, type, sizeBytes, filePath, uploaderId, folderId, affaireId, clientId, category, isShared } = action.payload;
+          const fileData: Blob | null = await db.documentFiles.getItem(id);
+          let storageSuccess = true;
+          
+          if (fileData && filePath) {
+            const { error: storageError } = await supabase.storage.from('crm_documents').upload(filePath, fileData, { upsert: true });
+            if (storageError) {
+              console.error('[Sync] INSERT_DOCUMENT Storage Error:', storageError);
+              storageSuccess = false;
+            }
+          }
+
+          if (storageSuccess) {
+            const { error } = await supabase.from('crm_documents').insert([{
+              id,
+              name,
+              type,
+              size_bytes: sizeBytes,
+              file_path: filePath,
+              uploader_id: uploaderId,
+              folder_id: folderId || null,
+              affaire_id: affaireId || null,
+              client_id: clientId || null,
+              category: category || 'Autre',
+              is_shared: !!isShared
+            }]);
+            if (error) console.error('[Sync] INSERT_DOCUMENT DB Error:', error.message);
+            success = !error;
+          } else {
+            success = false;
+          }
+          break;
+        }
+        case 'DELETE_DOCUMENT': {
+          const { error } = await supabase.from('crm_documents').delete().eq('id', action.payload.id);
+          if (action.payload.filePath) {
+            await supabase.storage.from('crm_documents').remove([action.payload.filePath]);
+          }
           success = !error;
           break;
         }
@@ -634,7 +997,11 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_SERVICE': {
           const { error } = await supabase.from('services').insert([{
-            id: action.payload.id, name: action.payload.name, description: action.payload.description, members: action.payload.members
+            id: action.payload.id,
+            name: action.payload.name,
+            description: action.payload.description,
+            members: action.payload.members,
+            commission_rate: action.payload.commissionRate !== undefined ? action.payload.commissionRate : null
           }]);
           if (error) console.error('[Sync] INSERT_SERVICE échoué :', error.message);
           success = !error;
@@ -642,7 +1009,12 @@ export const processSyncQueue = async () => {
         }
         case 'UPDATE_SERVICE': {
           const { id, ...updateData } = action.payload;
-          const { error } = await supabase.from('services').update(updateData).eq('id', id);
+          const mapped: any = {};
+          if (updateData.name !== undefined) mapped.name = updateData.name;
+          if (updateData.description !== undefined) mapped.description = updateData.description;
+          if (updateData.members !== undefined) mapped.members = updateData.members;
+          if (updateData.commissionRate !== undefined) mapped.commission_rate = updateData.commissionRate;
+          const { error } = await supabase.from('services').update(mapped).eq('id', id);
           if (error) console.error('[Sync] UPDATE_SERVICE échoué :', error.message);
           success = !error;
           break;
@@ -1097,36 +1469,6 @@ export const processSyncQueue = async () => {
             severity: action.payload.severity
           }]);
           success = !error;
-          break;
-        }
-        case 'INSERT_DOCUMENT': {
-          const { id, name, type, sizeBytes, filePath, uploaderId, createdAt } = action.payload;
-          const fileData: Blob | null = await db.documentFiles.getItem(id);
-          let storageSuccess = true;
-          
-          if (fileData) {
-            const { error: storageError } = await supabase.storage.from('crm_documents').upload(filePath, fileData, { upsert: true });
-            if (storageError) {
-              console.error('[Sync] INSERT_DOCUMENT Storage Error:', storageError);
-              storageSuccess = false;
-            }
-          }
-          
-          if (storageSuccess) {
-            const { error } = await supabase.from('crm_documents').insert([{
-              id, name, type, size_bytes: sizeBytes, file_path: filePath, uploader_id: uploaderId, created_at: createdAt
-            }]);
-            success = !error;
-          } else {
-            success = false;
-          }
-          break;
-        }
-        case 'DELETE_DOCUMENT': {
-          const { id, filePath } = action.payload;
-          const { error: storageError } = await supabase.storage.from('crm_documents').remove([filePath]);
-          const { error } = await supabase.from('crm_documents').delete().eq('id', id);
-          success = !error && !storageError;
           break;
         }
         default:
