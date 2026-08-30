@@ -73,6 +73,63 @@ export default function PosSettings() {
             <div style={labelStyle}>Message sur le ticket</div>
             <textarea style={{ ...inputStyle, minHeight: '80px' }} value={form.ticketMessage} onChange={e => setForm({ ...form, ticketMessage: e.target.value })} />
           </div>
+
+          {/* Section Catalogue Public & Commandes WhatsApp */}
+          <div style={{ gridColumn: '1 / -1', marginTop: '16px', paddingTop: '16px', borderTop: '2px solid var(--color-border)' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0F766E', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>🛍️</span> Catalogue Public & Commandes WhatsApp
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+              Configurez le numéro WhatsApp sur lequel vos clients transmettent leurs commandes depuis le catalogue en ligne.
+            </p>
+          </div>
+
+          <div style={{ gridColumn: '1 / -1' }}>
+            <div style={labelStyle}>Numéro WhatsApp de réception des commandes *</div>
+            <input 
+              style={inputStyle} 
+              placeholder="Ex: +225 07 00 00 00 00 (avec indicatif)" 
+              value={(form as any).whatsappOrderPhone || ''} 
+              onChange={e => setForm({ ...form, whatsappOrderPhone: e.target.value } as any)} 
+            />
+            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+              Les commandes du catalogue public seront envoyées directement à ce numéro avec la liste des articles et les coordonnées du client.
+            </span>
+          </div>
+
+          <div style={{ gridColumn: '1 / -1' }}>
+            <div style={labelStyle}>Texte d'accroche de la bannière du catalogue</div>
+            <input 
+              style={inputStyle} 
+              placeholder="Ex: Commandez en quelques clics et faites-vous livrer rapidement via WhatsApp !" 
+              value={(form as any).catalogBannerText || ''} 
+              onChange={e => setForm({ ...form, catalogBannerText: e.target.value } as any)} 
+            />
+          </div>
+
+          <div style={{ gridColumn: '1 / -1', marginTop: '8px' }}>
+            <a 
+              href="/#/catalogue" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 16px',
+                backgroundColor: '#F0FDFA',
+                color: '#0F766E',
+                border: '1px solid #CCFBF1',
+                borderRadius: 'var(--radius-md)',
+                textDecoration: 'none',
+                fontWeight: 600,
+                fontSize: '13px'
+              }}
+            >
+              <span>Voir le Catalogue Public</span>
+              <span>↗</span>
+            </a>
+          </div>
         </div>
       </div>
       

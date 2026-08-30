@@ -109,6 +109,23 @@ export function Login() {
           </button>
           
           <InstallButton />
+
+          <div style={{ marginTop: '16px', textAlign: 'center' }}>
+            <a
+              href="/#/catalogue"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                color: 'var(--color-primary)',
+                fontSize: '13px',
+                fontWeight: 600,
+                textDecoration: 'none'
+              }}
+            >
+              <span>🛍️ Consulter le Catalogue Public</span>
+            </a>
+          </div>
         </form>
       </div>
       

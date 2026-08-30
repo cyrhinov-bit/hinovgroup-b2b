@@ -31,6 +31,7 @@ import { Rapports } from './pages/Rapports';
 import { Parametres } from './pages/Parametres';
 import { GeminiSettings } from './pages/GeminiSettings';
 import { Login } from './pages/Login';
+import { PublicCatalog } from './pages/public/PublicCatalog';
 import TestDashboard from './pages/TestDashboard';
 
 // AI Weekly Reports (Deleted)
@@ -142,6 +143,9 @@ function App() {
               <Toaster position="top-center" />
               <Routes>
                 <Route path="/login" element={<Login />} />
+                <Route path="/catalogue" element={<PublicCatalog />} />
+                <Route path="/catalog" element={<Navigate to="/catalogue" replace />} />
+                <Route path="/boutique" element={<Navigate to="/catalogue" replace />} />
                 <Route path="/test" element={<TestDashboard />} />
 
                 <Route path="/diagnostics" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><DiagnosticPage /></Suspense>} />

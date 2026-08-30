@@ -337,7 +337,17 @@ export interface AppNotification {
   created_at: string;
 }
 
-export interface PosSettings { libraryName: string; address: string; phone: string; email: string; currency: string; ticketMessage: string; printerType: string; }
+export interface PosSettings { 
+  libraryName: string; 
+  address: string; 
+  phone: string; 
+  email: string; 
+  currency: string; 
+  ticketMessage: string; 
+  printerType: string;
+  whatsappOrderPhone?: string;
+  catalogBannerText?: string;
+}
 export interface PosWorkspace { active: boolean; }
 
 interface AppState {
