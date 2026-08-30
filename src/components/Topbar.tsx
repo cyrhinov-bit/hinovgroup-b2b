@@ -29,6 +29,11 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
   const notifRef = useRef<HTMLDivElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
+  const userNotifications = notifications
+    .filter(n => n.user_id === currentUser?.id)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const unreadCount = userNotifications.filter(n => !n.is_read).length;
+
   // Fermer le menu si clic en dehors
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -43,8 +48,8 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const getInitials = (name: string) =>
-    name
+  const getInitials = (name?: string) =>
+    (name || '?')
       .split(' ')
       .map(n => n[0])
       .join('')
@@ -106,7 +111,7 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
     <>
       <nav className="topbar">
         <div className="topbar-left">
-          <button className="icon-button menu-toggle" onClick={onToggleMenu}>
+          <button className="icon-button menu-toggle" onClick={onToggleMenu} title="Menu de navigation">
             <Menu />
           </button>
           <span className="brand-name">{posWorkspace.active ? 'HINOV POS' : 'HINOV BUSINESS SUITE'}</span>
@@ -156,20 +161,13 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
         </div>
 
         <div className="topbar-right">
-          <div className="profile-wrapper" ref={notifRef} style={{ marginRight: '16px' }}>
-            <button className="icon-button notification-btn" onClick={() => setShowNotifications(p => !p)}>
+          <div className="profile-wrapper" ref={notifRef} style={{ marginRight: '12px' }}>
+            <button className="icon-button notification-btn" onClick={() => setShowNotifications(p => !p)} title="Notifications">
               <Bell />
-              {(() => {
-                const unreadCount = notifications.filter(n => n.user_id === currentUser?.id && !n.is_read).length;
-                return unreadCount > 0 ? <span className="badge">{unreadCount}</span> : null;
-              })()}
+              {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
             </button>
 
-            {showNotifications && (() => {
-              const userNotifications = notifications.filter(n => n.user_id === currentUser?.id).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-              const unreadCount = userNotifications.filter(n => !n.is_read).length;
-
-              return (
+            {showNotifications && (
               <div className="profile-dropdown notifications-dropdown" style={{ padding: '0' }}>
                 <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: 'bold' }}>Notifications</span>
@@ -198,8 +196,7 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
                   </div>
                 )}
               </div>
-              );
-            })()}
+            )}
           </div>
 
           {/* Avatar profil */}
@@ -209,7 +206,7 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
                 <img src={currentUser.photo} alt="Avatar" className="avatar-img" />
               ) : (
                 <span className="avatar-initials">
-                  {currentUser ? getInitials(currentUser.name) : '?'}
+                  {getInitials(currentUser?.name)}
                 </span>
               )}
             </button>
@@ -221,19 +218,19 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
                     {currentUser?.photo ? (
                       <img src={currentUser.photo} alt="Avatar" className="avatar-img-lg" />
                     ) : (
-                      currentUser ? getInitials(currentUser.name) : '?'
+                      getInitials(currentUser?.name)
                     )}
                   </div>
                   <div>
-                    <div className="profile-name">{currentUser?.name}</div>
-                    <div className="profile-role">{currentUser?.role}</div>
+                    <div className="profile-name">{currentUser?.name || 'Utilisateur'}</div>
+                    <div className="profile-role">{currentUser?.role || ''}</div>
                     {serviceName && (
                       <div className="profile-service-tag">
                         <Building2 size={12} style={{ marginRight: 3 }} />
                         {serviceName}
                       </div>
                     )}
-                    <div className="profile-email">{currentUser?.email}</div>
+                    <div className="profile-email">{currentUser?.email || ''}</div>
                   </div>
                 </div>
                 <button className="dropdown-item" onClick={() => photoInputRef.current?.click()}>
@@ -280,78 +277,99 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
               </div>
             </div>
 
-            <div className="pin-form">
+            <div className="pin-modal-body">
               {/* PIN actuel */}
-              <div className="pin-field">
+              <div className="pin-form-group">
                 <label>Code PIN actuel</label>
                 <div className="pin-input-wrapper">
-                  <input {...pinInputProps(currentPin, setCurrentPin)} type={showCurrent ? 'text' : 'password'} id="current-pin" />
-                  <button type="button" className="eye-btn" onClick={() => setShowCurrent(v => !v)}>
+                  <input {...pinInputProps(currentPin, setCurrentPin)} autoFocus />
+                  <button
+                    type="button"
+                    className="pin-toggle-visibility"
+                    onClick={() => setShowCurrent(p => !p)}
+                    tabIndex={-1}
+                  >
                     {showCurrent ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
+                <span className="pin-hint">Code à 4 ou 6 chiffres utilisé pour votre session</span>
               </div>
 
               {/* Nouveau PIN */}
-              <div className="pin-field">
-                <label>Nouveau code PIN <span className="pin-hint">(6 chiffres)</span></label>
+              <div className="pin-form-group">
+                <label>Nouveau code PIN</label>
                 <div className="pin-input-wrapper">
-                  <input {...pinInputProps(newPin, setNewPin)} type={showNew ? 'text' : 'password'} id="new-pin" />
-                  <button type="button" className="eye-btn" onClick={() => setShowNew(v => !v)}>
+                  <input {...pinInputProps(newPin, setNewPin)} />
+                  <button
+                    type="button"
+                    className="pin-toggle-visibility"
+                    onClick={() => setShowNew(p => !p)}
+                    tabIndex={-1}
+                  >
                     {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
-                {/* Indicateur de force */}
-                <div className="pin-strength">
+                <div className="pin-indicators">
                   {[...Array(6)].map((_, i) => (
-                    <div key={i} className={`pin-dot ${i < newPin.length ? 'filled' : ''}`} />
+                    <span
+                      key={i}
+                      className={`pin-dot ${i < newPin.length ? 'filled' : ''}`}
+                    />
                   ))}
-                  <span className="pin-count">{newPin.length}/6</span>
+                  <span className="pin-count">{newPin.length}/6 chiffres</span>
                 </div>
               </div>
 
-              {/* Confirmation */}
-              <div className="pin-field">
-                <label>Confirmer le nouveau PIN</label>
+              {/* Confirmation PIN */}
+              <div className="pin-form-group">
+                <label>Confirmer le nouveau code PIN</label>
                 <div className="pin-input-wrapper">
-                  <input {...pinInputProps(confirmPin, setConfirmPin)} type={showConfirm ? 'text' : 'password'} id="confirm-pin" />
-                  <button type="button" className="eye-btn" onClick={() => setShowConfirm(v => !v)}>
+                  <input {...pinInputProps(confirmPin, setConfirmPin)} />
+                  <button
+                    type="button"
+                    className="pin-toggle-visibility"
+                    onClick={() => setShowConfirm(p => !p)}
+                    tabIndex={-1}
+                  >
                     {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
                 {confirmPin.length > 0 && (
                   <div className={`match-indicator ${newPin === confirmPin ? 'match' : 'no-match'}`}>
-                    {newPin === confirmPin
-                      ? <><CheckCircle2 size={13} /> Les PIN correspondent</>
-                      : <><XCircle size={13} /> Les PIN ne correspondent pas</>
-                    }
+                    {newPin === confirmPin ? (
+                      <><CheckCircle2 size={13} /> Les codes correspondent</>
+                    ) : (
+                      <><XCircle size={13} /> Les codes ne correspondent pas</>
+                    )}
                   </div>
                 )}
               </div>
 
-              {/* Feedback */}
               {feedback && (
                 <div className={`pin-feedback ${feedback.type}`}>
-                  {feedback.type === 'success'
-                    ? <CheckCircle2 size={16} />
-                    : <XCircle size={16} />
-                  }
-                  {feedback.message}
+                  {feedback.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+                  <span>{feedback.message}</span>
                 </div>
               )}
+            </div>
 
-              <div className="pin-modal-actions">
-                <button className="btn btn-outline" onClick={() => setShowPinModal(false)} disabled={saving}>
-                  Annuler
-                </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleSavePin}
-                  disabled={saving || currentPin.length === 0 || newPin.length !== 6 || confirmPin.length !== 6}
-                >
-                  {saving ? 'Enregistrement...' : 'Enregistrer'}
-                </button>
-              </div>
+            <div className="pin-modal-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowPinModal(false)}
+                disabled={saving}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleSavePin}
+                disabled={saving || !currentPin || newPin.length < 4 || newPin !== confirmPin}
+              >
+                {saving ? 'Enregistrement...' : 'Enregistrer le PIN'}
+              </button>
             </div>
           </div>
         </div>
