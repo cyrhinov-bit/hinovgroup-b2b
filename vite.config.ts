@@ -27,10 +27,10 @@ export default defineConfig({
       },
       includeAssets: ['logoh.png', 'pwa-192x192.png', 'pwa-512x512.png'],
       manifest: {
-        name: 'Hinov Business Suite',
-        short_name: 'Hinov',
-        description: 'Application de gestion de devis',
-        theme_color: '#0056b3',
+        name: 'Hinov Group — Catalogue & Boutique',
+        short_name: 'Hinov Group',
+        description: 'Catalogue officiel et application de gestion Hinov Group',
+        theme_color: '#0D9488',
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'portrait-primary',
@@ -39,19 +39,19 @@ export default defineConfig({
         lang: 'fr',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: '/pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any'
           },
           {
-            src: 'pwa-512x512.png',
+            src: '/pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any'
           },
           {
-            src: 'pwa-512x512.png',
+            src: '/pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable'
