@@ -7,6 +7,8 @@ import ImportExportPanel from '../../features/products/presentation/ImportExport
 import ProductList from '../../features/products/presentation/ProductList';
 import BarcodeScannerPanel from '../../features/products/presentation/BarcodeScannerPanel';
 import ProductImageGallery from '../../features/products/images/ProductImageGallery';
+import { ProductImageManager } from '../../features/products/images/ProductImageManager';
+import { ProductPhotoStudioModal } from '../../features/products/images/ProductPhotoStudioModal';
 import ProductImage from '../../features/products/images/ProductImage';
 import { useAppContext } from '../../context/AppContext';
 import { useProductImages } from '../../features/products/images/ProductImagesContext';
@@ -23,11 +25,13 @@ export default function PosProducts() {
   const [search, setSearch] = useState('');
   const [initialBarcode, setInitialBarcode] = useState('');
   const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [studioProduct, setStudioProduct] = useState<any>(null);
 
   const tabs = [
     { id: 'catalog', label: 'Catalogue', icon: Package },
     { id: 'new', label: 'Nouveau produit', icon: Package },
     { id: 'import', label: 'Import / Export', icon: Upload },
+    { id: 'studio', label: 'Studio Photo', icon: Camera },
     { id: 'gallery', label: 'Galerie', icon: Images },
     { id: 'scan', label: 'Scanner', icon: Camera },
     { id: 'complete', label: 'À compléter', icon: FileSpreadsheet },
@@ -181,6 +185,13 @@ export default function PosProducts() {
                     <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right' }}>{product.quantity}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                       <button
+                        onClick={() => setStudioProduct(product)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: product.imageUrl ? 'var(--color-primary)' : '#94a3b8' }}
+                        title={product.imageUrl ? 'Modifier la photo (Studio)' : 'Prendre une photo (Studio)'}
+                      >
+                        <Camera size={16} />
+                      </button>
+                      <button
                         onClick={() => {
                           setEditingProduct(product);
                           setActiveTab('new');
@@ -237,12 +248,20 @@ export default function PosProducts() {
         />
       )}
       {activeTab === 'import' && <ImportExportPanel />}
+      {activeTab === 'studio' && <ProductImageManager />}
       {activeTab === 'gallery' && <ProductImageGallery />}
       {activeTab === 'scan' && <BarcodeScannerPanel onNotFound={(barcode) => {
         setInitialBarcode(barcode);
         setActiveTab('new');
       }} />}
       {activeTab === 'complete' && <ProductList />}
+
+      {/* Studio Photo Modal pour édition directe depuis le tableau */}
+      <ProductPhotoStudioModal
+        product={studioProduct}
+        isOpen={Boolean(studioProduct)}
+        onClose={() => setStudioProduct(null)}
+      />
     </div>
   );
 }
