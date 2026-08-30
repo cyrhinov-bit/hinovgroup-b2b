@@ -7,7 +7,12 @@ export function getUserGeminiKey(userId?: string): string {
     const key = localStorage.getItem(`gemini_key_${userId}`) || localStorage.getItem(`gemini_api_key_${userId}`);
     if (key && key.trim()) return key.trim();
   }
-  return (localStorage.getItem('gemini_api_key') || '').trim();
+  const globalUserKey = (localStorage.getItem('gemini_api_key') || '').trim();
+  if (globalUserKey) return globalUserKey;
+
+  // Fallback sur la clé d'entreprise configurée sur OnRender (VITE_GEMINI_API_KEY)
+  const envKey = (import.meta.env.VITE_GEMINI_API_KEY as string || '').trim();
+  return envKey;
 }
 
 export function setUserGeminiKey(userId: string, key: string): void {
