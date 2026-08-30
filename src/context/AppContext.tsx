@@ -347,6 +347,7 @@ export interface PosSettings {
   printerType: string;
   whatsappOrderPhone?: string;
   catalogBannerText?: string;
+  themeColor?: string;
 }
 export interface PosWorkspace { active: boolean; }
 

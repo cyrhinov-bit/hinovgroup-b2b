@@ -4,12 +4,33 @@ import { useAppContext } from '../../context/AppContext';
 import type { PosProduct } from '../../context/AppContext';
 import type { CartItem } from '../../lib/whatsappOrder';
 import { formatFCFA } from '../../lib/whatsappOrder';
+import { getDirectorThemeColor, hexToRgb, shadeColor } from '../../lib/theme';
 import { CatalogCartDrawer } from './components/CatalogCartDrawer';
 import { PwaInstallPrompt } from './components/PwaInstallPrompt';
 import './PublicCatalog.css';
 
 export function PublicCatalog() {
-  const { posProducts, posCategories, posBrands, posSettings } = useAppContext();
+  const { posProducts, posCategories, posBrands, posSettings, users } = useAppContext();
+
+  // Couleur du thème choisie par le Directeur
+  const themeColor = useMemo(() => getDirectorThemeColor(posSettings, users), [posSettings, users]);
+
+  // Variables de style CSS dynamiques calculées pour le thème
+  const themeStyles = useMemo(() => {
+    const { r, g, b } = hexToRgb(themeColor);
+    return {
+      '--catalog-primary': themeColor,
+      '--catalog-primary-dark': shadeColor(themeColor, -20),
+      '--catalog-primary-light': `rgba(${r}, ${g}, ${b}, 0.12)`,
+    } as React.CSSProperties;
+  }, [themeColor]);
+
+  // Appliquer sur les variables CSS globales pour le catalogue
+  useEffect(() => {
+    const { r, g, b } = hexToRgb(themeColor);
+    document.documentElement.style.setProperty('--color-primary', themeColor);
+    document.documentElement.style.setProperty('--color-primary-tint', `rgba(${r}, ${g}, ${b}, 0.12)`);
+  }, [themeColor]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
@@ -134,7 +155,7 @@ export function PublicCatalog() {
   };
 
   return (
-    <div className="native-catalog-app">
+    <div className="native-catalog-app" style={themeStyles}>
       {/* 1. TOP APP BAR NATIVE */}
       <header className="native-appbar">
         <div className="native-appbar-inner">
@@ -432,6 +453,7 @@ export function PublicCatalog() {
         onClearCart={handleClearCart}
         whatsappPhone={whatsappNumber}
         companyName={companyName}
+        primaryColor={themeColor}
       />
 
       {/* 8. BARRE DE NAVIGATION INFÉRIEURE (BOTTOM BAR NATIVE POUR SMARTPHONE) */}

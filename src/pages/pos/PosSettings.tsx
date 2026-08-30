@@ -107,6 +107,27 @@ export default function PosSettings() {
             />
           </div>
 
+          <div style={{ gridColumn: '1 / -1' }}>
+            <div style={labelStyle}>Couleur du Thème du Catalogue Public</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <input 
+                type="color" 
+                value={(form as any).themeColor || '#0D9488'} 
+                onChange={e => setForm({ ...form, themeColor: e.target.value } as any)}
+                style={{ width: '42px', height: '38px', borderRadius: '8px', border: '1px solid #D1D5DB', cursor: 'pointer', padding: '2px' }}
+              />
+              <input 
+                style={{ ...inputStyle, width: '140px' }} 
+                placeholder="#0D9488" 
+                value={(form as any).themeColor || ''} 
+                onChange={e => setForm({ ...form, themeColor: e.target.value } as any)} 
+              />
+              <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                Le catalogue s'adapte automatiquement à votre couleur personnalisée.
+              </span>
+            </div>
+          </div>
+
           <div style={{ gridColumn: '1 / -1', marginTop: '8px' }}>
             <a 
               href="/#/catalogue" 

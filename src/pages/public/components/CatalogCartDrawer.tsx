@@ -12,6 +12,7 @@ interface CatalogCartDrawerProps {
   onClearCart: () => void;
   whatsappPhone: string;
   companyName?: string;
+  primaryColor?: string;
 }
 
 export function CatalogCartDrawer({
@@ -22,8 +23,10 @@ export function CatalogCartDrawer({
   onRemoveItem,
   onClearCart,
   whatsappPhone,
-  companyName = 'Hinov Group'
+  companyName = 'Hinov Group',
+  primaryColor
 }: CatalogCartDrawerProps) {
+  const brandColor = primaryColor || 'var(--catalog-primary, #0F766E)';
   const [customer, setCustomer] = useState<CustomerOrderInfo>(() => {
     const saved = localStorage.getItem('hinov_customer_info');
     if (saved) {
@@ -116,7 +119,7 @@ export function CatalogCartDrawer({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ backgroundColor: '#CCFBF1', padding: '8px', borderRadius: '8px', color: '#0F766E' }}>
+            <div style={{ backgroundColor: 'var(--catalog-primary-light, #CCFBF1)', padding: '8px', borderRadius: '8px', color: brandColor }}>
               <ShoppingBag size={20} />
             </div>
             <div>
@@ -163,7 +166,7 @@ export function CatalogCartDrawer({
               <button
                 onClick={() => { setStep('cart'); onClose(); }}
                 style={{
-                  backgroundColor: '#0F766E',
+                  backgroundColor: brandColor,
                   color: 'white',
                   border: 'none',
                   padding: '12px 24px',
@@ -230,7 +233,7 @@ export function CatalogCartDrawer({
                         Réf: {item.reference}
                       </div>
                     )}
-                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F766E' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: brandColor }}>
                       {formatFCFA(item.sellingPrice)}
                     </div>
                   </div>
@@ -394,7 +397,7 @@ export function CatalogCartDrawer({
             {/* Total */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <span style={{ fontSize: '14px', color: '#6B7280', fontWeight: 500 }}>Total de la commande</span>
-              <span style={{ fontSize: '20px', fontWeight: 800, color: '#0F766E' }}>
+              <span style={{ fontSize: '20px', fontWeight: 800, color: brandColor }}>
                 {formatFCFA(totalAmount)}
               </span>
             </div>
@@ -404,7 +407,7 @@ export function CatalogCartDrawer({
                 onClick={() => setStep('checkout')}
                 style={{
                   width: '100%',
-                  backgroundColor: '#0F766E',
+                  backgroundColor: brandColor,
                   color: 'white',
                   border: 'none',
                   padding: '14px',
@@ -416,7 +419,7 @@ export function CatalogCartDrawer({
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
-                  boxShadow: '0 4px 12px rgba(15, 118, 110, 0.25)'
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
                 }}
               >
                 <span>Passer la commande</span>
