@@ -8,7 +8,8 @@ interface PwaInstallPromptProps {
 }
 
 export function PwaInstallPrompt({ variant = 'button', className = '' }: PwaInstallPromptProps) {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(() => (window as any).deferredInstallPrompt || null);
+  const getPrompt = () => (window as any).deferredPWAInstallPrompt || (window as any).deferredInstallPrompt || null;
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(getPrompt);
   const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
@@ -19,35 +20,36 @@ export function PwaInstallPrompt({ variant = 'button', className = '' }: PwaInst
       return;
     }
 
-    if ((window as any).deferredInstallPrompt) {
-      setDeferredPrompt((window as any).deferredInstallPrompt);
-    }
+    const syncPrompt = () => {
+      const p = getPrompt();
+      if (p) setDeferredPrompt(p);
+    };
+
+    syncPrompt();
 
     const handlePrompt = (e: Event) => {
       e.preventDefault();
+      (window as any).deferredPWAInstallPrompt = e;
       (window as any).deferredInstallPrompt = e;
       setDeferredPrompt(e);
-    };
-
-    const handleCustomInstallable = () => {
-      if ((window as any).deferredInstallPrompt) {
-        setDeferredPrompt((window as any).deferredInstallPrompt);
-      }
     };
 
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
+      (window as any).deferredPWAInstallPrompt = null;
       (window as any).deferredInstallPrompt = null;
     };
 
     window.addEventListener('beforeinstallprompt', handlePrompt);
-    window.addEventListener('pwa-installable', handleCustomInstallable);
+    window.addEventListener('pwa-install-ready', syncPrompt);
+    window.addEventListener('pwa-installable', syncPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handlePrompt);
-      window.removeEventListener('pwa-installable', handleCustomInstallable);
+      window.removeEventListener('pwa-install-ready', syncPrompt);
+      window.removeEventListener('pwa-installable', syncPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
@@ -55,22 +57,23 @@ export function PwaInstallPrompt({ variant = 'button', className = '' }: PwaInst
   const handleInstallClick = async (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
 
-    const promptEvent = deferredPrompt || (window as any).deferredInstallPrompt;
-    if (promptEvent) {
-      promptEvent.prompt();
-      const { outcome } = await promptEvent.userChoice;
-      if (outcome === 'accepted') {
-        setIsInstalled(true);
-        (window as any).deferredInstallPrompt = null;
-        setDeferredPrompt(null);
+    const promptEvent = deferredPrompt || getPrompt();
+    if (promptEvent && typeof promptEvent.prompt === 'function') {
+      try {
+        promptEvent.prompt();
+        const { outcome } = await promptEvent.userChoice;
+        if (outcome === 'accepted') {
+          setIsInstalled(true);
+          (window as any).deferredPWAInstallPrompt = null;
+          (window as any).deferredInstallPrompt = null;
+          setDeferredPrompt(null);
+        }
+      } catch (err) {
+        console.error('Erreur lors du prompt d\'installation:', err);
       }
     } else {
-      // Si le navigateur ne fournit pas encore l'événement, tenter de forcer le prompt
-      if ('beforeinstallprompt' in window) {
-        alert("L'installation est prête. Si votre navigateur ne l'affiche pas automatiquement, vous pouvez l'installer depuis le menu de votre navigateur.");
-      } else {
-        alert("Pour installer cette application sur votre écran d'accueil, utilisez l'option 'Installer' ou 'Ajouter à l'écran d'accueil' de votre navigateur.");
-      }
+      // Fallback si l'API est absente ou si le navigateur n'a pas encore émis l'événement
+      console.log('Prompt non disponible pour le moment.');
     }
   };
 
@@ -93,7 +96,7 @@ export function PwaInstallPrompt({ variant = 'button', className = '' }: PwaInst
         onClick={handleInstallClick}
         className="native-bottom-nav-item install-cta"
         type="button"
-        title="Installer l'application sur votre téléphone"
+        title="Installer l'application"
       >
         <div className="nav-icon-badge-wrap">
           <Download size={20} />

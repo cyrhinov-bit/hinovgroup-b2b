@@ -13,10 +13,13 @@
     <title>Hinov Business Suite</title>
     <script>
       window.deferredPWAInstallPrompt = null;
+      window.deferredInstallPrompt = null;
       window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
         window.deferredPWAInstallPrompt = e;
+        window.deferredInstallPrompt = e;
         window.dispatchEvent(new Event('pwa-install-ready'));
+        window.dispatchEvent(new CustomEvent('pwa-installable'));
       });
     </script>
   </head>

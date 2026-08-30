@@ -9,7 +9,9 @@ registerSW({ immediate: true });
 // Capture l'événement d'installation PWA dès le démarrage de l'application
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
+  (window as any).deferredPWAInstallPrompt = e;
   (window as any).deferredInstallPrompt = e;
+  window.dispatchEvent(new Event('pwa-install-ready'));
   window.dispatchEvent(new CustomEvent('pwa-installable'));
 });
 
