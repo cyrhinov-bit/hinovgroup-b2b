@@ -9,11 +9,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "start": "vite preview --host 0.0.0.0 --port ${PORT:-4173}",
     "lint": "oxlint",
     "preview": "vite preview",
-    "electron:dev": "concurrently \"npm run dev\" \"tsc -p tsconfig.electron.json -w\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "electron:dev": "concurrently \"cross-env ELECTRON=true npm run dev\" \"tsc -p tsconfig.electron.json -w\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
     "electron:start": "tsc -p tsconfig.electron.json && electron .",
-    "electron:build": "npm run build && tsc -p tsconfig.electron.json && electron-builder --win"
+    "electron:build": "cross-env ELECTRON=true npm run build && tsc -p tsconfig.electron.json && electron-builder --win"
   },
   "dependencies": {
     "@emoji-mart/data": "^1.2.1",
