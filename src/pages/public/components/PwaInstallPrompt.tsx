@@ -292,3 +292,4 @@ function IosInstallModal({ onClose }: { onClose: () => void }) {
     </div>
   );
 }
+

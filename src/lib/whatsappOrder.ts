@@ -98,3 +98,4 @@ export function openWhatsAppOrder(
   window.open(url, '_blank', 'noopener,noreferrer');
   return { success: true };
 }
+
