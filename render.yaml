@@ -2,7 +2,7 @@ services:
   - type: web
     name: hinov-business-suite
     env: static
-    buildCommand: npm install --legacy-peer-deps --include=dev && npm run build
+    buildCommand: npm install --include=optional --legacy-peer-deps --include=dev && npm run build
     staticPublishPath: ./dist
     routes:
       - type: rewrite
