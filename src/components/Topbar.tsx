@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Menu, Bell, KeyRound, LogOut, Eye, EyeOff, CheckCircle2, XCircle, ArrowLeftRight, Camera, Trash2, Palette } from 'lucide-react';
+import { Menu, Bell, KeyRound, LogOut, Eye, EyeOff, CheckCircle2, XCircle, ArrowLeftRight, Camera, Trash2, Palette, Building2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useAppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
@@ -8,13 +8,16 @@ import './Topbar.css';
 
 export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
   const { currentUser, logout, updatePin } = useAuth();
-  const { posWorkspace, setPosWorkspace, updateMyProfile, notifications, markNotificationAsRead, markAllNotificationsAsRead } = useAppContext();
+  const { posWorkspace, setPosWorkspace, updateMyProfile, notifications, markNotificationAsRead, markAllNotificationsAsRead, services } = useAppContext();
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [currentPin, setCurrentPin] = useState('');
+
+  const currentService = services.find(s => s.id === currentUser?.serviceId);
+  const serviceName = currentService?.name || null;
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [showCurrent, setShowCurrent] = useState(false);
@@ -143,6 +146,15 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
               {location.pathname.startsWith('/commercial') ? 'Retour Admin' : 'Ouvrir Espace Commercial'}
             </button>
           )}
+
+          {/* Badge Pôle / Service mis en avant pour les Responsables */}
+          {currentUser?.role === 'Responsable' && serviceName && (
+            <div className="topbar-service-badge" title={`Responsable du pôle ${serviceName}`}>
+              <Building2 size={15} />
+              <span className="topbar-service-label">Pôle :</span>
+              <span className="topbar-service-name">{serviceName}</span>
+            </div>
+          )}
         </div>
 
         <div className="topbar-right">
@@ -217,6 +229,12 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
                   <div>
                     <div className="profile-name">{currentUser?.name}</div>
                     <div className="profile-role">{currentUser?.role}</div>
+                    {serviceName && (
+                      <div className="profile-service-tag">
+                        <Building2 size={12} style={{ marginRight: 3 }} />
+                        {serviceName}
+                      </div>
+                    )}
                     <div className="profile-email">{currentUser?.email}</div>
                   </div>
                 </div>

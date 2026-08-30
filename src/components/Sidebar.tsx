@@ -3,7 +3,7 @@ import {
   Home, Users, Briefcase, FileText, Folder, Shield, PieChart, Settings, 
   UserCircle, LogOut, Receipt, Coins, Target, ShoppingCart, Package, Truck, 
   ClipboardList, Warehouse, Tag, BarChart3, DollarSign, RotateCcw, 
-  FileSpreadsheet, Wallet, ToggleRight, Trophy, Sparkles, Bot 
+  FileSpreadsheet, Wallet, ToggleRight, Trophy, Sparkles, Bot, Building2 
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -24,8 +24,11 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
   const location = useLocation();
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
-  const { posWorkspace } = useAppContext();
+  const { posWorkspace, services } = useAppContext();
   const [clickedPath, setClickedPath] = useState<string | null>(null);
+
+  const currentService = services.find(s => s.id === currentUser?.serviceId);
+  const serviceName = currentService?.name || null;
 
   const handleLogout = () => {
     logout();
@@ -141,6 +144,12 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
         <div className="user-info">
           <div className="user-name">{currentUser?.name || 'Utilisateur'}</div>
           <div className="user-role">{currentUser?.role || 'Aucun rôle'}</div>
+          {serviceName && (
+            <div className="sidebar-service-badge" title={`Pôle / Service rattaché : ${serviceName}`}>
+              <Building2 size={12} style={{ flexShrink: 0 }} />
+              <span>{serviceName}</span>
+            </div>
+          )}
         </div>
       </div>
 

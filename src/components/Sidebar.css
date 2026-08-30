@@ -39,6 +39,25 @@
   font-weight: 500;
 }
 
+.sidebar-service-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  max-width: 170px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  backdrop-filter: blur(4px);
+}
+
 .role-switcher {
   padding: 12px 16px;
   border-bottom: 1px solid var(--color-border, #e2e8f0);
