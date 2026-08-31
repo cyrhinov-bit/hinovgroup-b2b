@@ -62,8 +62,8 @@ export interface Client { id: string; name: string; email: string; phone: string
 export interface Service { id: string; name: string; description: string; members?: number; managerId?: string; commissionRate?: number; }
 export interface Category { id: string; serviceId: string; name: string; }
 export interface Prestation { id: string; code: string; name: string; description: string; price: number; serviceId: string; unit?: string; costPrice?: number; }
-export interface QuoteLine { id: string; prestationId: string; description: string; quantity: number; unitPrice: number; total: number; discountPercent?: number; costPrice?: number; }
-export interface Quote { id: string; quoteNumber: string; clientId: string; commercialId: string; serviceId?: string; affaireId?: string; subject: string; lines: QuoteLine[]; subtotal: number; total: number; status: 'Brouillon' | 'Envoyé' | 'Accepté' | 'Refusé' | 'Révision'; date: string; style?: 'Classique' | 'Moderne' | 'Minimaliste'; accentColor?: string; discountPercent?: number; discountAmount?: number; clientComment?: string; }
+export interface QuoteLine { id: string; prestationId: string; description: string; quantity: number; unit?: string; unitPrice: number; total: number; discountPercent?: number; costPrice?: number; }
+export interface Quote { id: string; quoteNumber: string; clientId: string; commercialId: string; serviceId?: string; affaireId?: string; subject: string; lines: QuoteLine[]; subtotal: number; total: number; status: 'Brouillon' | 'Envoyé' | 'Accepté' | 'Refusé' | 'Révision'; date: string; validUntil?: string; paymentTerms?: string; notes?: string; signatoryName?: string; signatoryRole?: string; style?: 'Classique' | 'Moderne' | 'Minimaliste'; accentColor?: string; discountPercent?: number; discountAmount?: number; clientComment?: string; }
 export interface SaleLine { id: string; description: string; quantity: number; unitPrice: number; costPrice?: number; total: number; }
 export interface Sale { id: string; saleNumber: string; quoteId?: string; affaireId?: string; clientId: string; serviceId?: string; commercialId?: string; dueDate?: string; lines: SaleLine[]; subtotal: number; total: number; status: 'Enregistrée' | 'Payée' | 'Annulée'; date: string; notes?: string; }
 export interface Installment { id: string; saleId: string; amount: number; dueDate: string; paidAmount: number; status: 'En attente' | 'Payée'; paidAt?: string; }
@@ -976,9 +976,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         if (quotesData && quotesData.length > 0) {
           const parsedQuotes = quotesData.map((q: any) => ({
-            id: q.id, quoteNumber: q.quote_number, clientId: q.client_id, commercialId: q.commercial_id, serviceId: q.service_id, affaireId: q.affaire_id || undefined, subject: q.subject, subtotal: q.subtotal, total: q.total, status: q.status, date: q.date, style: q.style, accentColor: q.accent_color,
+            id: q.id, quoteNumber: q.quote_number, clientId: q.client_id, commercialId: q.commercial_id, serviceId: q.service_id, affaireId: q.affaire_id || undefined, subject: q.subject, subtotal: q.subtotal, total: q.total, status: q.status, date: q.date,
+            validUntil: q.valid_until || undefined, paymentTerms: q.payment_terms || undefined, notes: q.notes || undefined, signatoryName: q.signatory_name || undefined, signatoryRole: q.signatory_role || undefined,
+            style: q.style, accentColor: q.accent_color,
             discountPercent: q.discount_percent || 0, discountAmount: q.discount_amount || 0, clientComment: q.client_comment,
-            lines: (q.quote_lines || []).map((l: any) => ({ id: l.id, prestationId: l.prestation_id, description: l.description, quantity: l.quantity, unitPrice: l.unit_price, total: l.total, discountPercent: l.discount_percent || 0 }))
+            lines: (q.quote_lines || []).map((l: any) => ({ id: l.id, prestationId: l.prestation_id, description: l.description, quantity: l.quantity, unit: l.unit || undefined, unitPrice: l.unit_price, total: l.total, discountPercent: l.discount_percent || 0 }))
           }));
           const merged = mergeData(cachedQuotes, parsedQuotes);
           setQuotes(merged); await db.quotes.setItem('data', merged);

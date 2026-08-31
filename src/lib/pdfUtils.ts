@@ -645,7 +645,9 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
   const isModerne = style === 'Moderne';
   const isMinimaliste = style === 'Minimaliste';
   const companyName = settings.companyName || 'Entreprise';
-  const validity = `Ce devis est valable pour une durée de ${settings.defaultValidity || 30} jours.`;
+  const validity = quote.validUntil 
+    ? `Ce devis est valable jusqu'au ${formatDateFr(quote.validUntil)}.`
+    : `Ce devis est valable pour une durée de ${settings.defaultValidity || 30} jours.`;
   const dateFr = formatDateFr(quote.date);
   let y = 0;
 
@@ -781,8 +783,8 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
   y += cardH + 10;
 
   // ====================== TABLEAU ======================
-  const colWidths = [contentW * 0.42, contentW * 0.09, contentW * 0.16, contentW * 0.11, contentW * 0.22];
-  const headers = ['DESCRIPTION', 'QTÉ', 'PRIX UNITAIRE', 'REMISE', 'TOTAL'];
+  const colWidths = [contentW * 0.40, contentW * 0.13, contentW * 0.16, contentW * 0.10, contentW * 0.21];
+  const headers = ['DESCRIPTION', 'QTÉ / UNITÉ', 'PRIX UNITAIRE', 'REMISE', 'TOTAL'];
   const tableX = margin;
 
   const drawTableHeader = () => {
@@ -833,14 +835,16 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
     let cx = tableX;
     doc.text(descLines[0], cx + 2, y + 5.5);
     cx += colWidths[0];
+    
+    const qtyDisplay = line.unit ? `${line.quantity || 0} ${line.unit}` : String(line.quantity || 0);
     const cells = [
-      String(line.quantity || 0),
+      qtyDisplay,
       formatAmount(line.unitPrice || 0),
       line.discountPercent && line.discountPercent > 0 ? `-${line.discountPercent}%` : '—',
       formatAmount(line.total || 0),
     ];
     cells.forEach((cell, i) => {
-      const colIdx = i + 1; // cells[0]=Qté→colWidths[1], cells[1]=Prix→colWidths[2], etc.
+      const colIdx = i + 1;
       cx += colWidths[colIdx];
       drawAutoText(doc, cell, cx - 2, y + 5.5, colWidths[colIdx] - 4, 8);
     });
@@ -904,52 +908,76 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
     y += 8;
   }
 
-  // ====================== CONDITIONS ======================
+  // ====================== CONDITIONS & MODALITÉS ======================
   y += 6;
-  if (y > pageH - 45) {
+  if (y > pageH - 55) {
     doc.addPage();
     y = margin + 6;
   }
   if (!isMinimaliste) {
     doc.setFillColor(...neutralLight);
-    doc.rect(margin, y, contentW, 8, 'F');
+    doc.rect(margin, y, contentW, 7, 'F');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(...accent);
-    doc.text('CONDITIONS GÉNÉRALES', margin + 5, y + 5.5);
-    y += 8 + 5;
+    doc.text('CONDITIONS & MODALITÉS DE RÈGLEMENT', margin + 5, y + 5);
+    y += 7 + 4;
   } else {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(...dark);
-    doc.text('CONDITIONS GÉNÉRALES', margin, y);
+    doc.text('CONDITIONS & MODALITÉS DE RÈGLEMENT', margin, y);
     doc.setDrawColor(0);
     doc.setLineWidth(0.3);
     doc.line(margin, y + 2, pageW - margin, y + 2);
-    y += 8;
+    y += 7;
   }
-  const terms = settings.defaultTerms ? `${validity}\n${settings.defaultTerms}` : validity;
-  const termLines = doc.splitTextToSize(terms, contentW) as string[];
+
+  // Lignes de conditions
+  const conditionsList: string[] = [];
+  conditionsList.push(`• Validité de l'offre : ${validity}`);
+  if (quote.paymentTerms) {
+    conditionsList.push(`• Modalités de paiement : ${quote.paymentTerms}`);
+  }
+  if (quote.notes) {
+    conditionsList.push(`• Remarques : ${quote.notes}`);
+  }
+  if (settings.defaultTerms) {
+    conditionsList.push(`• Conditions générales : ${settings.defaultTerms}`);
+  }
+
+  const termsText = conditionsList.join('\n');
+  const termLines = doc.splitTextToSize(termsText, contentW) as string[];
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...muted);
-  y += 2;
   doc.text(termLines, margin, y);
   y += termLines.length * 4 + 4;
 
   // ====================== SIGNATURES ======================
-  y += 6;
-  if (y > pageH - 30) y = pageH - 30;
+  y += 4;
+  if (y > pageH - 35) {
+    doc.addPage();
+    y = margin + 10;
+  }
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
   doc.setTextColor(...dark);
-  doc.text('Signature du prestataire', margin, y);
-  doc.text('Signature du client', pageW - margin, y, { align: 'right' });
+  
+  const signatoryTitle = quote.signatoryRole || 'Pour l\'entreprise';
+  const signatoryName = quote.signatoryName ? `${signatoryTitle} : ${quote.signatoryName}` : signatoryTitle;
+  doc.text(signatoryName, margin, y);
+  doc.text('Bon pour accord (Client) :', pageW - margin, y, { align: 'right' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(...muted);
+  doc.text('Date, signature & cachet', pageW - margin, y + 4, { align: 'right' });
+
   doc.setDrawColor(...muted);
   doc.setLineWidth(0.3);
   doc.setLineDashPattern([1.5, 1.5], 0);
-  doc.line(margin, y + 10, margin + 52, y + 10);
-  doc.line(pageW - margin - 52, y + 10, pageW - margin, y + 10);
+  doc.line(margin, y + 12, margin + 55, y + 12);
+  doc.line(pageW - margin - 55, y + 12, pageW - margin, y + 12);
   doc.setLineDashPattern([], 0);
 
   doc.setFont('helvetica', 'normal');
