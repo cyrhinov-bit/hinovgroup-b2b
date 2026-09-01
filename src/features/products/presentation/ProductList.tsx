@@ -8,6 +8,8 @@ import ProductImage from '../images/ProductImage';
 import EditProductForm from './EditProductForm';
 import type { ProductCompletionFilters } from '../../../context/AppContext';
 
+import { matchesProductSearch } from '../../../lib/searchUtils';
+
 export default function ProductList() {
   const { posProducts, posCategories, posBrands, posSuppliers, completeProduct } = useAppContext();
   const { setProductImage } = useProductImages();
@@ -42,12 +44,7 @@ export default function ProductList() {
 
   const filteredProducts = productCompletionService.getIncompleteProducts(posProducts, filters);
   const searchResults = search 
-    ? filteredProducts.filter(p => 
-        p.name.toLowerCase().includes(search.toLowerCase()) ||
-        p.reference.toLowerCase().includes(search.toLowerCase()) ||
-        p.barcode?.includes(search) ||
-        p.isbn?.includes(search)
-      )
+    ? filteredProducts.filter(p => matchesProductSearch(p, search))
     : filteredProducts;
 
   const handleFilterChange = (field: keyof ProductCompletionFilters) => {

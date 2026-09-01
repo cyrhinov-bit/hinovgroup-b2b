@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { db } from '../../lib/db';
 import { CatalogCartDrawer } from './components/CatalogCartDrawer';
 import { PwaInstallPrompt } from './components/PwaInstallPrompt';
+import { matchesProductSearch } from '../../lib/searchUtils';
 import './PublicCatalog.css';
 
 export function PublicCatalog() {
@@ -209,17 +210,9 @@ export function PublicCatalog() {
         // Filtre de catégorie
         if (selectedCategoryId !== 'all' && p.categoryId !== selectedCategoryId) return false;
 
-        // Recherche par texte
+        // Recherche par texte tolérante aux accents et multi-mots
         if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase().trim();
-          const matchName = p.name?.toLowerCase().includes(q);
-          const matchRef = p.reference?.toLowerCase().includes(q);
-          const matchBarcode = p.barcode?.includes(q);
-          const matchIsbn = p.isbn?.includes(q);
-          const matchDesc = p.description?.toLowerCase().includes(q);
-          if (!matchName && !matchRef && !matchBarcode && !matchIsbn && !matchDesc) {
-            return false;
-          }
+          return matchesProductSearch(p, searchQuery);
         }
 
         return true;

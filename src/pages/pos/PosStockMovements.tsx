@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Package, Search, Filter, ArrowUpRight, ArrowDownRight, Calendar, User, RefreshCw } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import { matchesSearchQuery } from '../../lib/searchUtils';
 
 
 export default function PosStockMovements() {
@@ -90,9 +91,10 @@ export default function PosStockMovements() {
       .filter(movement => {
         if (!movement) return false;
         const product = posProducts?.find(p => p.id === movement.productId);
-        const searchString = `${product?.name || ''} ${product?.reference || ''} ${movement.reference || ''}`.toLowerCase();
-        
-        const matchesSearch = searchString.includes(searchTerm.toLowerCase());
+        const matchesSearch = !searchTerm || matchesSearchQuery(
+          [product?.name, product?.reference, movement.reference, movement.notes, movement.type, movement.createdBy],
+          searchTerm
+        );
         const matchesType = typeFilter === 'all' || movement.type === typeFilter;
         
         let movementDateStr = '';

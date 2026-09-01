@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { AlertTriangle, Package, TrendingDown, Search } from 'lucide-react';
 import ProductImage from '../../features/products/images/ProductImage';
+import { matchesProductSearch } from '../../lib/searchUtils';
 
 export default function PosStock() {
   const { posProducts } = useAppContext();
@@ -14,10 +15,10 @@ export default function PosStock() {
   const totalStockValue = posProducts.reduce((sum, p) => sum + (p.purchasePrice || 0) * (p.quantity || 0), 0);
   const totalSellingValue = posProducts.reduce((sum, p) => sum + (p.sellingPrice || 0) * (p.quantity || 0), 0);
 
-  const filteredProducts = posProducts.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (p.reference && p.reference.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredProducts = posProducts.filter(p => {
+    if (!searchTerm || !searchTerm.trim()) return true;
+    return matchesProductSearch(p, searchTerm);
+  });
 
   const cardStyle: React.CSSProperties = { background: 'white', borderRadius: 'var(--radius-lg)', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' };
   const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 14px', paddingLeft: '36px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '14px', outline: 'none' };

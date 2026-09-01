@@ -9,6 +9,7 @@ import { useAppContext } from '../../../context/AppContext';
 import { formatFCFA } from '../../../lib/whatsappOrder';
 import { ProductPhotoStudioModal } from './ProductPhotoStudioModal';
 import { toast } from 'react-hot-toast';
+import { matchesProductSearch } from '../../../lib/searchUtils';
 
 export function ProductImageManager() {
   const { posProducts, posCategories, updatePosProduct, refreshData } = useAppContext();
@@ -44,12 +45,7 @@ export function ProductImageManager() {
 
       // Recherche texte
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchName = p.name?.toLowerCase().includes(q);
-        const matchRef = p.reference?.toLowerCase().includes(q);
-        const matchBarcode = p.barcode?.includes(q);
-        const matchIsbn = p.isbn?.includes(q);
-        if (!matchName && !matchRef && !matchBarcode && !matchIsbn) return false;
+        return matchesProductSearch(p, searchQuery);
       }
 
       return true;

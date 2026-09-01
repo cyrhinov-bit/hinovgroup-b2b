@@ -7,6 +7,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Search, Plus, RotateCcw, Eye, X, XCircle, Trash2, ArrowLeftRight, CheckCircle2, ShieldAlert, Banknote, ListRestart, ArrowLeft } from 'lucide-react';
 import { todayLocalKey, toLocalDayKey } from '../../lib/dates';
 import type { ExchangeLine } from '../../context/AppContext';
+import { matchesSearchQuery, matchesProductSearch, cleanCode } from '../../lib/searchUtils';
 
 interface ReturnLine {
   productId?: string;
@@ -55,7 +56,7 @@ export default function PosReturns() {
 
   const filteredReturns = useMemo(() => {
     return posReturns.filter(r => {
-      const matchSearch = !search || r.returnNumber.toLowerCase().includes(search.toLowerCase()) || r.date.includes(search);
+      const matchSearch = !search || matchesSearchQuery([r.returnNumber, r.type, r.status, r.notes, r.createdBy, r.date], search);
       const matchType = filterType === 'Tous' || r.type === filterType;
       const matchStatus = filterStatus === 'Tous' || r.status === filterStatus;
       return matchSearch && matchType && matchStatus;
@@ -108,16 +109,24 @@ export default function PosReturns() {
   const handleSearchTicket = () => {
     setTicketSearched(true);
     setTicketSearchMessage('');
-    const term = ticketSearch.trim().toLowerCase();
+    const term = ticketSearch.trim();
     
     if (!term) {
       setTicketSearchResults([]);
       return;
     }
 
-    // Priorité : correspondance exacte
-    let exactMatches = posTransactions.filter(t => t.transactionNumber.toLowerCase() === term && (t.status === 'Validée' || t.status === 'Retournée'));
-    let partialMatches = posTransactions.filter(t => t.transactionNumber.toLowerCase().includes(term) && t.transactionNumber.toLowerCase() !== term && (t.status === 'Validée' || t.status === 'Retournée'));
+    const cleanTerm = cleanCode(term);
+
+    // Priorité : correspondance exacte ou nettoyée
+    let exactMatches = posTransactions.filter(t => {
+      if (t.status !== 'Validée' && t.status !== 'Retournée') return false;
+      return cleanCode(t.transactionNumber) === cleanTerm;
+    });
+    let partialMatches = posTransactions.filter(t => {
+      if (t.status !== 'Validée' && t.status !== 'Retournée') return false;
+      return cleanCode(t.transactionNumber).includes(cleanTerm) && cleanCode(t.transactionNumber) !== cleanTerm;
+    });
     
     let allMatches = [...exactMatches, ...partialMatches];
     
@@ -308,10 +317,9 @@ export default function PosReturns() {
   };
 
   const filteredProducts = posProducts.filter(p => {
-    if (p.isActive === false) return false;
-    if (!productSearch) return true;
-    const q = productSearch.toLowerCase();
-    return p.name.toLowerCase().includes(q) || p.reference.toLowerCase().includes(q) || (p.barcode && p.barcode.includes(q));
+    if (p.isActive === false || p.status === 'Inactive') return false;
+    if (!productSearch || !productSearch.trim()) return true;
+    return matchesProductSearch(p, productSearch);
   });
 
   return (

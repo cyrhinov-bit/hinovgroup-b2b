@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import type { PosTransaction } from '../../context/AppContext';
+import { matchesSearchQuery } from '../../lib/searchUtils';
 
 export default function PosTransactions() {
   const { posTransactions, posCashSessions, voidPosTransaction, clearPosSalesHistory } = useAppContext();
@@ -18,9 +19,14 @@ export default function PosTransactions() {
   const openSession = posCashSessions.find(s => s.status === 'Ouverte');
 
   const filtered = posTransactions.filter(t => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return t.transactionNumber.toLowerCase().includes(q) || t.date.includes(q);
+    if (!search || !search.trim()) return true;
+    return matchesSearchQuery([
+      t.transactionNumber, 
+      t.date, 
+      t.status, 
+      String(t.total),
+      t.lines?.map(l => l.description).join(' ')
+    ], search);
   }).sort((a, b) => b.date.localeCompare(a.date));
 
   const role = currentUser?.role;

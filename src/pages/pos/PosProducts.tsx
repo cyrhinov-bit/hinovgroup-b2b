@@ -13,6 +13,7 @@ import ProductImage from '../../features/products/images/ProductImage';
 import { useAppContext } from '../../context/AppContext';
 import { useProductImages } from '../../features/products/images/ProductImagesContext';
 import { useConfirm } from '../../components/ConfirmModal';
+import { matchesProductSearch } from '../../lib/searchUtils';
 
 export default function PosProducts() {
   const navigate = useNavigate();
@@ -38,14 +39,8 @@ export default function PosProducts() {
   ];
 
   const filteredProducts = posProducts.filter(p => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      p.name.toLowerCase().includes(q) ||
-      p.reference.toLowerCase().includes(q) ||
-      (p.barcode || '').includes(q) ||
-      (p.isbn || '').includes(q)
-    );
+    if (!search || !search.trim()) return true;
+    return matchesProductSearch(p, search);
   });
 
   return (

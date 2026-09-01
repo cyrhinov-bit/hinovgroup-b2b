@@ -13,6 +13,7 @@ import { Modal } from '../../components/ui/Modal';
 import { toast } from 'react-hot-toast';
 import { platform } from '../../platform';
 import { todayLocalKey, toLocalDayKey } from '../../lib/dates';
+import { matchesProductSearch, parseNumericInput } from '../../lib/searchUtils';
 
 interface CartItem { id: string; productId: string; name: string; reference: string; unitPrice: number; quantity: number; discountType: 'none' | 'percent' | 'amount'; discountPercent: number; discountAmount: number; total: number; }
 
@@ -59,20 +60,11 @@ export default function PosTerminal() {
   const isLivre = (p: typeof posProducts[0]) => (p.family && p.family.toLowerCase().startsWith('livre')) || !!(p.isbn && p.isbn.trim());
 
   const filteredProducts = posProducts.filter(p => {
-    if (p.status === 'Inactive') return false;
+    if (p.status === 'Inactive' || p.isActive === false) return false;
     if (selectedFamily === 'Livre' && !isLivre(p)) return false;
     if (selectedFamily === 'Fourniture' && isLivre(p)) return false;
     if (!search || !search.trim()) return true;
-    const q = search.toLowerCase().trim();
-    const cleanQ = q.replace(/[-\s]/g, '');
-    const cleanBarcode = p.barcode ? p.barcode.replace(/[-\s]/g, '').toLowerCase() : '';
-    const cleanIsbn = p.isbn ? p.isbn.replace(/[-\s]/g, '').toLowerCase() : '';
-    return (
-      (p.name || '').toLowerCase().includes(q) ||
-      (p.reference && p.reference.toLowerCase().includes(q)) ||
-      (cleanBarcode && cleanBarcode.includes(cleanQ)) ||
-      (cleanIsbn && cleanIsbn.includes(cleanQ))
-    );
+    return matchesProductSearch(p, search);
   });
 
   const addToCart = (product: typeof posProducts[0]) => {

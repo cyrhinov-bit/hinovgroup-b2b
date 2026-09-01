@@ -51,9 +51,9 @@ export class BarcodeScannerService {
       const now = Date.now();
       const timeSinceLast = now - this.lastInputTime;
 
-      // Une douchette envoie une rafale rapide (< 60ms par touche).
-      // Si plus de 120ms se sont écoulées, on repart sur un nouveau buffer.
-      if (timeSinceLast > 120) {
+      // Une douchette envoie une rafale rapide (< 40ms par touche).
+      // Si plus de 100ms se sont écoulées, on repart sur un nouveau buffer.
+      if (timeSinceLast > 100) {
         this.scanBuffer = [];
         this.keyTimestamps = [];
         this.isScanning = true;
@@ -61,7 +61,7 @@ export class BarcodeScannerService {
       this.lastInputTime = now;
 
       if (e.key === 'Enter') {
-        if (this.scanBuffer.length >= 2) {
+        if (this.scanBuffer.length >= 4) {
           const totalDuration = this.keyTimestamps.length > 1
             ? this.keyTimestamps[this.keyTimestamps.length - 1] - this.keyTimestamps[0]
             : 0;
@@ -69,36 +69,31 @@ export class BarcodeScannerService {
             ? totalDuration / (this.keyTimestamps.length - 1)
             : 0;
 
-          // Détection de la douchette : cadence très rapide ou rafale courte
-          const isScannerSpeed = avgCharTime <= 65 || totalDuration < 400;
+          const rawBarcode = this.scanBuffer.join('');
+          const cleaned = BarcodeScannerService.cleanBarcodeData(rawBarcode);
+          const isNumeric = BarcodeScannerService.isNumericBarcode(cleaned);
 
-          if (isScannerSpeed) {
+          // Détection stricte d'un vrai scanner physique :
+          // 1. Cadence ultra-rapide (< 40ms par caractère)
+          // 2. Longueur minimale (au moins 4 caractères)
+          // 3. Contenu de type code-barres / numérique
+          const isTrueScannerBurst = avgCharTime <= 40 && totalDuration < 300 && (isNumeric || cleaned.length >= 8);
+
+          const isUserTypingInInput = 
+            document.activeElement instanceof HTMLInputElement || 
+            document.activeElement instanceof HTMLTextAreaElement;
+
+          // Si l'utilisateur tape dans un champ de formulaire normal, ne PAS détourner la saisie humaine
+          if (isTrueScannerBurst && (!isUserTypingInInput || (document.activeElement as HTMLElement)?.dataset?.barcodeTarget)) {
             e.preventDefault();
             e.stopPropagation();
 
-            const rawBarcode = this.scanBuffer.join('');
             this.scanBuffer = [];
             this.keyTimestamps = [];
             this.isScanning = false;
             this.scannerDetected = false;
             this.notifyScannerState(false);
 
-            // Retirer les caractères parasites injectés dans l'input actif
-            if (document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement) {
-              const input = document.activeElement;
-              if (input.value && input.value.endsWith(rawBarcode)) {
-                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                  Object.getPrototypeOf(input),
-                  'value'
-                )?.set;
-                if (nativeInputValueSetter) {
-                  nativeInputValueSetter.call(input, input.value.slice(0, -rawBarcode.length));
-                  input.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-              }
-            }
-
-            const cleaned = BarcodeScannerService.cleanBarcodeData(rawBarcode);
             if (cleaned) {
               this.notifyListeners(cleaned);
             }
@@ -106,7 +101,7 @@ export class BarcodeScannerService {
           }
         }
 
-        // Si ce n'était pas un scan rapide, réinitialiser
+        // Réinitialiser le buffer sur tout autre Enter
         this.scanBuffer = [];
         this.keyTimestamps = [];
         this.isScanning = false;
@@ -116,7 +111,7 @@ export class BarcodeScannerService {
         if (!e.ctrlKey && !e.altKey && !e.metaKey) {
           this.scanBuffer.push(e.key);
           this.keyTimestamps.push(now);
-          if (!this.scannerDetected && this.scanBuffer.length >= 3) {
+          if (!this.scannerDetected && this.scanBuffer.length >= 6) {
             this.scannerDetected = true;
             this.notifyScannerState(true);
           }
@@ -124,7 +119,6 @@ export class BarcodeScannerService {
       }
     };
 
-    // Utilisation de la phase de capture pour intercepter les touches en amont
     document.addEventListener('keydown', this.keydownListener, true);
   }
 
