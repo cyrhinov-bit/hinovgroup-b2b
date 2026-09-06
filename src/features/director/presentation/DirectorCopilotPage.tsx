@@ -168,6 +168,89 @@ export default function DirectorCopilotPage() {
         boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
         overflow: 'hidden'
       }}>
+        {/* Strategic Advice Quick Pills */}
+        <div style={{
+          display: 'flex',
+          gap: '8px',
+          padding: '10px 16px',
+          background: 'linear-gradient(90deg, #F5F3FF 0%, #EFF6FF 100%)',
+          borderBottom: '1px solid var(--color-border)',
+          overflowX: 'auto',
+          flexShrink: 0
+        }}>
+          <span style={{ fontSize: '12px', fontWeight: 700, color: '#6D28D9', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+            <Sparkles size={13} color="#7C3AED" /> Conseils Express :
+          </span>
+          <button
+            type="button"
+            onClick={() => handleSend("Donnez-moi vos conseils et votre plan d'action pour booster le chiffre d'affaires et le panier moyen du magasin")}
+            style={{
+              padding: '4px 10px',
+              borderRadius: '12px',
+              border: '1px solid #DDD6FE',
+              background: 'white',
+              color: '#5B21B6',
+              fontSize: '11.5px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            🚀 Booster le Chiffre d'Affaires
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSend("Quels sont vos conseils pour l'approvisionnement et la gestion des ruptures de stock ?")}
+            style={{
+              padding: '4px 10px',
+              borderRadius: '12px',
+              border: '1px solid #BAE6FD',
+              background: 'white',
+              color: '#0369A1',
+              fontSize: '11.5px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            📦 Conseils Approvisionnement & Stocks
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSend("Comment optimiser nos marges et encadrer les remises accordées en caisse ?")}
+            style={{
+              padding: '4px 10px',
+              borderRadius: '12px',
+              border: '1px solid #FED7AA',
+              background: 'white',
+              color: '#C2410C',
+              fontSize: '11.5px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            🏷️ Optimiser les Marges & Prix
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSend("Quels sont vos conseils pour sécuriser les caisses et supprimer les écarts de fin de journée ?")}
+            style={{
+              padding: '4px 10px',
+              borderRadius: '12px',
+              border: '1px solid #FECACA',
+              background: 'white',
+              color: '#B91C1C',
+              fontSize: '11.5px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            🛡️ Sécuriser les Clôtures de Caisse
+          </button>
+        </div>
+
         {/* Messages List */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {messages.map(msg => (

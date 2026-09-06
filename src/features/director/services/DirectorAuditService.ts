@@ -181,21 +181,21 @@ export async function generateAiAuditDiagnostic(
   }
 
   const prompt = `
-Tu es l'Auditeur Financier et Contrôleur de Gestion en Chef de HINOV GROUP.
-Voici les résultats de l'audit automatique des caisses, remises et marges :
+Tu es l'Auditeur Financier et Conseiller de Gestion Senior en Chef du Point de Vente de HINOV GROUP.
+Voici les résultats de l'audit automatique des caisses, remises et marges du magasin :
 
-Score global : ${audit.healthScore}/100 (${audit.status})
-Écarts de caisse cumulés : ${audit.totalCashDiscrepancy} FCFA
-Pertes sur ventes : ${audit.totalLossRisk} FCFA
-Remises élevées : ${audit.totalHighDiscounts} FCFA
+Score global de santé financière : ${audit.healthScore}/100 (${audit.status})
+Écarts de caisse cumulés : ${audit.totalCashDiscrepancy.toLocaleString()} FCFA
+Pertes potentielles sur ventes à perte : ${audit.totalLossRisk.toLocaleString()} FCFA
+Total des remises exceptionnelles : ${audit.totalHighDiscounts.toLocaleString()} FCFA
 
-Liste des anomalies constatées :
+Liste détaillée des anomalies constatées :
 ${JSON.stringify(audit.anomalies.slice(0, 15), null, 2)}
 
-INSTRUCTIONS :
-1. Rédige un rapport d'audit exécutif clair et percutant pour le Directeur Général.
-2. Identifie les risques majeurs de fraude ou de fuite de trésorerie.
-3. Propose 3 actions correctives immédiates et concrètes.
+INSTRUCTIONS DE RÉDACTION :
+1. Rédige un diagnostic d'audit exécutif percutant, chiffré et direct pour le Directeur Général.
+2. Évalue clairement le niveau de risque financier et de fuite de trésorerie en caisse.
+3. INCLURE OBLIGATOIREMENT : "### 💡 Recommandations & Conseils Correctifs pour la Direction" avec 3 à 5 directives précises (ex: procédures de contrôle de caisse, plafonnement strict des remises, sanctions ou entretiens avec les caissiers à écarts répétés, audit physique de stock).
 `;
 
   try {

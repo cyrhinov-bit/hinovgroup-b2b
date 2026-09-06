@@ -123,7 +123,7 @@ export async function askDirectorCopilot(
   if (!query) {
     return {
       replyText: "Veuillez poser une question sur les ventes, stocks, caisses ou finances du magasin.",
-      suggestedFollowUps: ["Bilan financier du magasin", "Articles en alerte de stock", "Derniers écarts de caisse"]
+      suggestedFollowUps: ["💡 Vos conseils pour augmenter les ventes", "📦 Articles en alerte de stock", "💰 Contrôle des écarts de caisse"]
     };
   }
 
@@ -131,7 +131,7 @@ export async function askDirectorCopilot(
   const userApiKey = getUserGeminiKey(context.userId);
 
   const systemInstruction = `
-Tu es le Copilote Décisionnel et Conseiller Stratégique exclusif du Point de Vente (POS / Boutique / Caisse) de HINOV GROUP.
+Tu es le Copilote Décisionnel et Conseiller Stratégique Senior exclusif du Point de Vente (POS / Boutique / Caisse) de HINOV GROUP.
 Tu t'adresses directement à la Direction du Point de Vente (${context.currentUserName || 'Monsieur le Directeur'}).
 Tu es 100% focalisé sur la gestion du magasin, les ventes en caisse, les stocks de la boutique, les sessions de caisse, les prix, les remises et la rentabilité du point de vente.
 
@@ -142,7 +142,9 @@ RÈGLES DE RÉPONSE STRICTES :
 1. Sois direct, professionnel, chiffré, rigoureux et orienté décision magasin.
 2. Utilise impérativement la devise FCFA pour tous les montants.
 3. Mets en valeur les chiffres clés en gras, et utilise des listes à puces ou tableaux simples pour la lisibilité.
-4. Identifie proactivement les points de vigilance (ex: ruptures de stock, écarts de caisse, remises élevées, produits à faible marge).
+4. OBLIGATION DE CONSEIL : Tu ne dois pas être un simple tableau de chiffres passif. TU DOIS SYSTÉMATIQUEMENT INCLURE UNE SECTION :
+   "### 💡 Conseils & Recommandations Stratégiques"
+   avec 2 à 4 conseils très concrets, actionnables et personnalisés (ex: booster le panier moyen par de la vente additionnelle en caisse, réajuster les prix/marges, lancer des réapprovisionnements prioritaires, former les caissiers pour éviter les écarts).
 5. Ne fais AUCUNE mention du CRM ou des devis B2B car ton périmètre est strictement le Point de Vente / Magasin.
 6. Propose 2 à 3 questions de suivi pertinentes à la fin sous format JSON structuré si possible.
 `;
@@ -163,7 +165,7 @@ RÈGLES DE RÉPONSE STRICTES :
               }
             ],
             generationConfig: {
-              temperature: 0.2
+              temperature: 0.25
             }
           })
         }
@@ -176,9 +178,9 @@ RÈGLES DE RÉPONSE STRICTES :
           return {
             replyText: reply,
             suggestedFollowUps: [
-              "Quels sont nos 5 articles les plus rentables ?",
-              "Y a-t-il des anomalies sur les clôtures de caisse ?",
-              "Articles à réapprovisionner en priorité"
+              "💡 Comment booster notre panier moyen ce mois-ci ?",
+              "📦 Quels articles commander d'urgence aux fournisseurs ?",
+              "💰 Quel plan d'action pour sécuriser les clôtures de caisse ?"
             ]
           };
         }
@@ -188,20 +190,123 @@ RÈGLES DE RÉPONSE STRICTES :
     }
   }
 
-  // Fallback intelligent en local
-  const k = posData.kpis;
+  // Fallback intelligent en local avec conseils contextuels
+  return generateLocalPosAnalysis(query, posData);
+}
+
+function generateLocalPosAnalysis(query: string, posData: ReturnType<typeof buildPosSummary>) {
+  const q = query.toLowerCase();
+  const { kpis, topProducts, sessionsWithDiscrepancy, outOfStockSample, lowStockSample } = posData;
+
+  if (q.includes('conseil') || q.includes('recommandation') || q.includes('strategie') || q.includes('booster') || q.includes('ameliorer')) {
+    return {
+      replyText: `### 💡 Plan d'Actions & Conseils Stratégiques Magasin\n\n` +
+        `Voici les 4 leviers prioritaires identifiés pour optimiser les performances de la boutique :\n\n` +
+        `1. **Augmentation du Panier Moyen (${kpis.averageTicket.toLocaleString()} FCFA actuel) :**\n` +
+        `   - Mettre en place des ventes croisées au comptoir de caisse (articles d'impulsion : stylos, correcteurs, consommables rapides).\n` +
+        `   - Créer des packs ou bundles avantageux pour les fournitures à forte rotation.\n\n` +
+        `2. **Sécurisation de la Trésorerie & Clôtures de Caisse :**\n` +
+        `   - Écarts constatés : **${kpis.totalCashDiscrepancies.toLocaleString()} FCFA**. Imposer un recomptage à l'aveugle par le caissier avant impression du Z de caisse.\n` +
+        `   - Conditionner toute annulation de ticket à la validation du Gérant.\n\n` +
+        `3. **Gestion des Stocks & Ruptures Critiques :**\n` +
+        `   - **${kpis.outOfStockCount}** articles en rupture totale et **${kpis.lowStockCount}** en stock critique.\n` +
+        `   - Passer immédiatement commande auprès des fournisseurs pour les bestsellers afin d'éviter le manque à gagner.\n\n` +
+        `4. **Optimisation des Marges & Remises :**\n` +
+        `   - Remises accordées : **${kpis.totalPosDiscounts.toLocaleString()} FCFA**. Plafonner les remises caissiers à 5% maximum sans visa hiérarchique.`,
+      suggestedFollowUps: [
+        "Quels sont les articles en rupture urgente ?",
+        "Détail des écarts de caisse par session",
+        "Top des meilleures ventes boutique"
+      ]
+    };
+  }
+
+  if (q.includes('bilan') || q.includes('chiffre') || q.includes('revenu') || q.includes('total') || q.includes('finance')) {
+    return {
+      replyText: `### 📊 Synthèse Financière du Point de Vente\n\n` +
+        `- **Chiffre d'affaires Magasin :** **${kpis.totalPosRevenue.toLocaleString()} FCFA** (${kpis.totalValidTransactions} ventes validées)\n` +
+        `- **Panier moyen :** **${kpis.averageTicket.toLocaleString()} FCFA**\n` +
+        `- **Répartition des encaissements :**\n` +
+        `  - 💵 Espèces : **${kpis.cashRevenue.toLocaleString()} FCFA**\n` +
+        `  - 📱 Mobile Money : **${kpis.mobileRevenue.toLocaleString()} FCFA**\n` +
+        `- **Remises accordées :** **${kpis.totalPosDiscounts.toLocaleString()} FCFA**\n` +
+        `- **Valeur du stock en magasin :** **${kpis.totalStockPurchaseValue.toLocaleString()} FCFA** (Valeur vente : **${kpis.totalStockSellingValue.toLocaleString()} FCFA**)\n` +
+        `- **Marge brute potentielle :** **${kpis.theoreticalProfitMargin.toLocaleString()} FCFA**\n\n` +
+        `### 💡 Conseils pour la Direction :\n` +
+        `- Favoriser les paiements Mobile Money pour limiter les manipulations de cash et réduire le risque de vol ou d'erreur de caisse.\n` +
+        `- Inciter les caissiers à proposer un article complémentaire pour faire passer le panier moyen au-dessus de **${(kpis.averageTicket * 1.2).toLocaleString()} FCFA**.`,
+      suggestedFollowUps: [
+        "💡 Vos conseils pour augmenter les ventes",
+        "Quels sont les articles en rupture ?",
+        "Y a-t-il des écarts de caisse ?"
+      ]
+    };
+  }
+
+  if (q.includes('stock') || q.includes('rupture') || q.includes('alerte') || q.includes('approvisionnement')) {
+    const outList = outOfStockSample.length > 0
+      ? outOfStockSample.map(p => `- ❌ **${p.name}** (Réf: ${p.ref || 'N/A'})`).join('\n')
+      : "✅ Aucune rupture totale de stock.";
+
+    const lowList = lowStockSample.length > 0
+      ? lowStockSample.map(p => `- ⚠️ **${p.name}** : **${p.stock}** restants (Seuil min: ${p.min})`).join('\n')
+      : "✅ Aucun stock sous le seuil minimum.";
+
+    return {
+      replyText: `### 📦 État des Stocks du Magasin\n\n` +
+        `- **Articles actifs au catalogue :** ${kpis.activeProductsCount}\n` +
+        `- **Articles en rupture totale :** **${kpis.outOfStockCount}**\n` +
+        `- **Articles en stock critique :** **${kpis.lowStockCount}**\n\n` +
+        `#### ❌ Ruptures critiques :\n${outList}\n\n` +
+        `#### ⚠️ Alertes réapprovisionnement :\n${lowList}\n\n` +
+        `### 💡 Conseils d'Approvisionnement :\n` +
+        `- Négocier des remises de volume avec vos fournisseurs principaux pour réapprovisionner les articles en rupture.\n` +
+        `- Rehausser le seuil d'alerte sur les articles à rotation rapide pour anticiper les délais de livraison.`,
+      suggestedFollowUps: [
+        "Quelle est la valeur totale de notre stock ?",
+        "💡 Conseils pour liquider les stocks dormants",
+        "Bilan financier global du magasin"
+      ]
+    };
+  }
+
+  if (q.includes('écart') || q.includes('caisse') || q.includes('clôture') || q.includes('session') || q.includes('manquant')) {
+    const discList = sessionsWithDiscrepancy.length > 0
+      ? sessionsWithDiscrepancy.map(s => {
+          const diff = s.difference || 0;
+          return `- **${s.cashier}** (${new Date(s.sessionDate).toLocaleDateString('fr-FR')}) : **${diff < 0 ? '-' : '+'}${Math.abs(diff).toLocaleString()} FCFA** (Compté: ${(s.counted || 0).toLocaleString()} vs Attendu: ${(s.expected || 0).toLocaleString()})`;
+        }).join('\n')
+      : "✅ Aucun écart significatif enregistré sur les dernières sessions fermées.";
+
+    return {
+      replyText: `### 💰 Contrôle des Sessions de Caisse\n\n` +
+        `- **Sessions fermées analysées :** ${kpis.closedSessionsCount}\n` +
+        `- **Cumul net des écarts de caisse :** **${kpis.totalCashDiscrepancies.toLocaleString()} FCFA**\n\n` +
+        `#### Détail des écarts récents :\n${discList}\n\n` +
+        `### 💡 Conseils Anti-Fraude & Sécurité :\n` +
+        `- Instaurer un contrôle quotidien contradictoire en fin de journée.\n` +
+        `- Tout écart supérieur à 2 000 FCFA doit donner lieu à une fiche d'explication signée du caissier.`,
+      suggestedFollowUps: [
+        "Vérifier le bouclier anti-fraude",
+        "💡 Comment former les caissiers ?",
+        "Bilan financier du magasin"
+      ]
+    };
+  }
+
+  // Réponse générique avec conseils
   return {
-    replyText: `**Synthèse Point de Vente (POS) pour la Direction :**\n\n` +
-      `• **Chiffre d'Affaires POS (Caisse)** : **${k.totalPosRevenue.toLocaleString()} FCFA** (${k.totalValidTransactions} ventes, panier moyen : **${k.averageTicket.toLocaleString()} FCFA**)\n` +
-      `• **Encaissements** : Espèces **${k.cashRevenue.toLocaleString()} FCFA** | Mobile Money **${k.mobileRevenue.toLocaleString()} FCFA**\n` +
-      `• **Valeur du Stock Magasin (Achat)** : **${k.totalStockPurchaseValue.toLocaleString()} FCFA** (Valeur de vente : **${k.totalStockSellingValue.toLocaleString()} FCFA**)\n` +
-      `• **Alertes Stock** : **${k.outOfStockCount}** rupture(s) | **${k.lowStockCount}** article(s) sous le seuil\n` +
-      `• **Écarts cumulés de caisse** : **${k.totalCashDiscrepancies > 0 ? '+' : ''}${k.totalCashDiscrepancies.toLocaleString()} FCFA** sur ${k.closedSessionsCount} session(s) fermée(s)\n\n` +
-      `*Pour une analyse plus détaillée en langage naturel, assurez-vous que votre clé API Gemini est configurée dans Paramètres IA.*`,
+    replyText: `### 🏪 Point de Situation Magasin & Recommandations\n\n` +
+      `- **Chiffre d'affaires POS :** **${kpis.totalPosRevenue.toLocaleString()} FCFA**\n` +
+      `- **Articles en rupture :** **${kpis.outOfStockCount}**\n` +
+      `- **Écarts de caisse :** **${kpis.totalCashDiscrepancies.toLocaleString()} FCFA**\n` +
+      `- **Valeur stock vente :** **${kpis.totalStockSellingValue.toLocaleString()} FCFA**\n\n` +
+      `### 💡 Conseil clé du jour :\n` +
+      `Concentrez les efforts sur le réapprovisionnement des **${kpis.outOfStockCount}** articles en rupture et le contrôle strict des remises accordées en caisse.`,
     suggestedFollowUps: [
-      "Quels articles sont en rupture de stock ?",
-      "Détail des remises accordées en caisse",
-      "Écarts de caisse par caissier"
+      "💡 Donnez-moi vos conseils pour booster les ventes",
+      "Articles en alerte de stock",
+      "Contrôle des écarts de caisse"
     ]
   };
 }
