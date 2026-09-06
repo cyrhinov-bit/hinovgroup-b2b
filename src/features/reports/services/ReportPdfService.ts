@@ -163,10 +163,21 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
   );
 
   // Section 3 : Journal détaillé des tâches (Lundi -> Samedi)
+  let rawTasksByDay: Record<string, any[]> = {};
+  if (typeof report.tasksByDay === 'string') {
+    try {
+      rawTasksByDay = JSON.parse(report.tasksByDay);
+    } catch {
+      rawTasksByDay = {};
+    }
+  } else if (report.tasksByDay && typeof report.tasksByDay === 'object') {
+    rawTasksByDay = report.tasksByDay as any;
+  }
+
   const standardDays = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-  const allDayKeys = Array.from(new Set([...standardDays, ...Object.keys(report.tasksByDay || {})]));
+  const allDayKeys = Array.from(new Set([...standardDays, ...Object.keys(rawTasksByDay)]));
   const taskDays = allDayKeys.filter(d => {
-    const list = report.tasksByDay?.[d] || (report.tasksByDay as any)?.[d.toLowerCase()] || [];
+    const list = rawTasksByDay[d] || rawTasksByDay[d.toLowerCase()] || rawTasksByDay[d.toUpperCase()] || [];
     return Array.isArray(list) && list.length > 0;
   });
 
@@ -186,14 +197,18 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
       doc.text(day.toUpperCase(), 26, y);
       y += 6;
 
-      const tasks = report.tasksByDay?.[day] || (report.tasksByDay as any)?.[day.toLowerCase()] || [];
-      tasks.forEach(t => {
+      const tasks = rawTasksByDay[day] || rawTasksByDay[day.toLowerCase()] || rawTasksByDay[day.toUpperCase()] || [];
+      tasks.forEach((t: any) => {
         checkNewPage(12);
         
+        const status = typeof t === 'object' && t ? (t.status || 'Effectuée') : 'Effectuée';
+        const difficulty = typeof t === 'object' && t ? t.difficulty : undefined;
+        const timeSpent = typeof t === 'object' && t ? t.timeSpent : undefined;
+
         // Puce vectorielle colorée selon le statut
-        if (t.status === 'Effectuée') {
+        if (status === 'Effectuée') {
           doc.setFillColor(5, 150, 105);
-        } else if (t.status === 'Bloquée') {
+        } else if (status === 'Bloquée') {
           doc.setFillColor(220, 38, 38);
         } else {
           doc.setFillColor(217, 119, 6);
@@ -203,11 +218,19 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8.5);
         doc.setTextColor(51, 65, 85);
-        let taskDesc = cleanPdfText(t.description);
-        if (t.difficulty) taskDesc += ` [Difficulté: ${cleanPdfText(t.difficulty)}]`;
-        if (t.timeSpent) taskDesc += ` (${cleanPdfText(t.timeSpent)})`;
+        
+        let rawDesc = '';
+        if (typeof t === 'string') {
+          rawDesc = t;
+        } else if (typeof t === 'object' && t) {
+          rawDesc = t.description || t.label || t.task || t.title || t.content || JSON.stringify(t);
+        }
+        
+        let taskDesc = cleanPdfText(rawDesc);
+        if (difficulty) taskDesc += ` [Difficulté: ${cleanPdfText(difficulty)}]`;
+        if (timeSpent) taskDesc += ` (${cleanPdfText(timeSpent)})`;
 
-        const lines = doc.splitTextToSize(taskDesc, pageW - 56);
+        const lines = doc.splitTextToSize(taskDesc || 'Tâche effectuée', pageW - 56);
         lines.forEach((l: string, i: number) => {
           if (i > 0) checkNewPage(6);
           doc.text(l, 30, y);

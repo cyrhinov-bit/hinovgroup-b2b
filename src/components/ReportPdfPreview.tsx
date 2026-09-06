@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Download, Printer, FileText } from 'lucide-react';
+import { Download, Printer, FileText, ExternalLink } from 'lucide-react';
 import { Modal } from './ui/Modal';
 import { downloadDataUrl } from '../lib/pdfUtils';
 
@@ -61,12 +61,18 @@ export function ReportPdfPreview({ preview, onClose }: ReportPdfPreviewProps) {
     printWin?.print();
   };
 
+  const handleOpenExternal = () => {
+    if (activeUrl) {
+      window.open(activeUrl, '_blank');
+    }
+  };
+
   return (
     <Modal
       open={!!preview}
       title={preview?.title || 'Lecture du document PDF'}
       onClose={onClose}
-      width={940}
+      width={960}
       footer={
         preview && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '10px' }}>
@@ -74,7 +80,16 @@ export function ReportPdfPreview({ preview, onClose }: ReportPdfPreviewProps) {
               <FileText size={16} />
               <span>{preview.filename}</span>
             </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleOpenExternal}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                title="Ouvrir dans un nouvel onglet"
+              >
+                <ExternalLink size={15} /> Ouvrir plein écran
+              </button>
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -82,7 +97,7 @@ export function ReportPdfPreview({ preview, onClose }: ReportPdfPreviewProps) {
                 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                 title="Imprimer le document"
               >
-                <Printer size={16} /> Imprimer
+                <Printer size={15} /> Imprimer
               </button>
               <button
                 type="button"
@@ -91,7 +106,7 @@ export function ReportPdfPreview({ preview, onClose }: ReportPdfPreviewProps) {
                 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                 title="Télécharger une copie PDF"
               >
-                <Download size={16} /> Télécharger PDF
+                <Download size={15} /> Télécharger PDF
               </button>
             </div>
           </div>
@@ -99,13 +114,27 @@ export function ReportPdfPreview({ preview, onClose }: ReportPdfPreviewProps) {
       }
     >
       {preview && activeUrl ? (
-        <div style={{ width: '100%', height: '74vh', backgroundColor: '#525659', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
-          <iframe
-            id="report-pdf-iframe"
-            src={activeUrl}
-            title={preview.title}
-            style={{ width: '100%', height: '100%', border: 'none' }}
-          />
+        <div style={{ width: '100%', height: '75vh', backgroundColor: '#334155', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+          <object
+            data={`${activeUrl}#toolbar=1&navpanes=0`}
+            type="application/pdf"
+            width="100%"
+            height="100%"
+            style={{ display: 'block', width: '100%', height: '100%' }}
+          >
+            <embed
+              src={`${activeUrl}#toolbar=1`}
+              type="application/pdf"
+              width="100%"
+              height="100%"
+            />
+            <iframe
+              id="report-pdf-iframe"
+              src={activeUrl}
+              title={preview.title}
+              style={{ width: '100%', height: '100%', border: 'none' }}
+            />
+          </object>
         </div>
       ) : (
         <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' }}>

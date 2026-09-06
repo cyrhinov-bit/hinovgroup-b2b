@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Sparkles, Download, Save, Send, Plus, Trash2, CheckCircle2, Clock, AlertCircle, ChevronLeft, ChevronRight, Calendar, Building, User as UserIcon, Key, Eye } from 'lucide-react';
+import { Sparkles, Download, Save, Send, Plus, Trash2, CheckCircle2, Clock, AlertCircle, ChevronLeft, ChevronRight, Calendar, Building, User as UserIcon, Key, Eye, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAppContext, type V2WeeklyReport, type V2Task } from '../../../../context/AppContext';
 import { useAuth } from '../../../../context/AuthContext';
@@ -14,7 +14,7 @@ const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
 export function WeeklyReportEditor() {
   const { currentUser } = useAuth();
-  const { v2WeeklyReports, services, settings, saveV2WeeklyReport, submitV2WeeklyReport } = useAppContext();
+  const { v2WeeklyReports, v2DailyReports, activityReports, services, settings, saveV2WeeklyReport, submitV2WeeklyReport } = useAppContext();
   const { confirm } = useConfirm();
 
   // Week calculation helper
@@ -51,6 +51,80 @@ export function WeeklyReportEditor() {
   const [reportId, setReportId] = useState<string>('');
   const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
 
+  const importWeekDailyTasks = (force = false) => {
+    const dayMap: Record<string, V2Task[]> = {
+      Lundi: [],
+      Mardi: [],
+      Mercredi: [],
+      Jeudi: [],
+      Vendredi: [],
+      Samedi: []
+    };
+
+    const daysList = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+    let collectedObjectives: string[] = [];
+    let collectedResults: string[] = [];
+    let collectedDifficulties: string[] = [];
+    let count = 0;
+
+    const startDate = new Date(currentWeekStart + 'T00:00:00');
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(startDate);
+      d.setDate(d.getDate() + i);
+      const dStr = d.toISOString().slice(0, 10);
+      const dayName = daysList[i];
+
+      const daily = v2DailyReports?.find(r => r.authorId === currentUser?.id && r.date === dStr);
+      if (daily) {
+        if (daily.objectives) collectedObjectives.push(daily.objectives);
+        if (daily.results) collectedResults.push(daily.results);
+        if (daily.difficulties) collectedDifficulties.push(daily.difficulties);
+        if (Array.isArray(daily.tasks) && daily.tasks.length > 0) {
+          dayMap[dayName] = [...(dayMap[dayName] || []), ...daily.tasks];
+          count += daily.tasks.length;
+        }
+      }
+
+      const act = activityReports?.find(r => r.authorId === currentUser?.id && r.date === dStr);
+      if (act) {
+        if (act.realisations) {
+          dayMap[dayName].push({
+            id: `act-${act.id || Date.now()}-${i}`,
+            description: act.realisations,
+            status: 'Effectuée'
+          });
+          collectedResults.push(act.realisations);
+          count++;
+        }
+        if (act.difficultes) {
+          collectedDifficulties.push(act.difficultes);
+        }
+      }
+    }
+
+    setTasksByDay(prev => {
+      const merged: Record<string, V2Task[]> = { ...prev };
+      for (const day of daysList) {
+        const existingDescs = new Set((merged[day] || []).map(t => t.description?.toLowerCase().trim()));
+        const toAdd = dayMap[day].filter(t => t.description && !existingDescs.has(t.description.toLowerCase().trim()));
+        merged[day] = [...(merged[day] || []), ...toAdd];
+      }
+      return merged;
+    });
+
+    if (collectedObjectives.length > 0 && (!weeklyObjectives || force)) {
+      setWeeklyObjectives(collectedObjectives.filter((v, i, a) => a.indexOf(v) === i).join(' ; '));
+    }
+    if (collectedResults.length > 0 && (!achievements || force)) {
+      setAchievements(collectedResults.filter((v, i, a) => a.indexOf(v) === i).join('\n• '));
+    }
+    if (collectedDifficulties.length > 0 && (!difficulties || force)) {
+      setDifficulties(collectedDifficulties.filter((v, i, a) => a.indexOf(v) === i).join('\n• '));
+    }
+
+    return count;
+  };
+
   useEffect(() => {
     if (existingReport) {
       setReportId(existingReport.id);
@@ -64,12 +138,14 @@ export function WeeklyReportEditor() {
     } else {
       setReportId(Date.now().toString());
       setWeeklyObjectives('');
-      setTasksByDay({ Lundi: [], Mardi: [], Mercredi: [], Jeudi: [], Vendredi: [] });
+      setTasksByDay({ Lundi: [], Mardi: [], Mercredi: [], Jeudi: [], Vendredi: [], Samedi: [] });
       setAiSummary('');
       setAchievements('');
       setDifficulties('');
       setNextWeekObjectives('');
       setStatus('Brouillon');
+      // Pre-fill from existing daily reports if any
+      importWeekDailyTasks(false);
     }
   }, [existingReport, currentWeekStart]);
 
@@ -256,12 +332,30 @@ export function WeeklyReportEditor() {
       {/* 2. Journal des Tâches par Jour */}
       <div className="card" style={{ marginBottom: '20px', padding: '20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>
-            📋 2. Journal des Tâches Réalisées par Jour
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>
+              📋 2. Journal des Tâches Réalisées par Jour
+            </h3>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                const count = importWeekDailyTasks(true);
+                if (count > 0) {
+                  alert(`${count} tâche(s) synchronisée(s) depuis vos rapports journaliers.`);
+                } else {
+                  alert('Aucun rapport journalier trouvé pour cette semaine.');
+                }
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem' }}
+              title="Importer automatiquement les tâches enregistrées dans les rapports journaliers de cette semaine"
+            >
+              <RefreshCw size={13} /> 🔄 Importer mes tâches journalières
+            </button>
+          </div>
 
           {/* Day selection tabs */}
-          <div style={{ display: 'flex', gap: '6px' }}>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             {DAYS.map(day => (
               <button
                 key={day}
