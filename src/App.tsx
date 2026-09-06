@@ -220,6 +220,7 @@ function App() {
                     <Route path="pos/terminal" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosTerminal /></Suspense>} />
                     <Route path="pos/transactions" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosTransactions /></Suspense>} />
                     <Route path="pos/cash" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosCash /></Suspense>} />
+                    <Route path="pos/parametres-ia" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><GeminiSettings /></Suspense>} />
                     
                     <Route path="*" element={<div style={{ padding: '20px' }}><h1>Page introuvable</h1></div>} />
                   </Route>

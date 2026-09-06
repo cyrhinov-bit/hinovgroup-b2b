@@ -4,7 +4,9 @@ import { Button } from '../ui/Button';
 import { Sparkles, Mic, MicOff, Loader2, Plus, AlertCircle, Package, Volume2, Trash2, Radio } from 'lucide-react';
 import { parseNaturalLanguageOrder, parseAudioVoiceOrder, type ParsedOrderItem } from '../../features/pos/services/PosAiService';
 import type { PosProduct } from '../../context/AppContext';
+import { getUserGeminiKey, setUserGeminiKey, testGeminiApiKey } from '../../lib/geminiKey';
 import { toast } from 'react-hot-toast';
+import { Key, CheckCircle, Settings as SettingsIcon } from 'lucide-react';
 
 interface PosVoiceAiModalProps {
   open: boolean;
@@ -30,6 +32,16 @@ export default function PosVoiceAiModal({
   const [interpretation, setInterpretation] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+
+  // Gemini API Key config state
+  const [showKeyConfig, setShowKeyConfig] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState(() => getUserGeminiKey(userId));
+  const [isTestingKey, setIsTestingKey] = useState(false);
+  const [keyTestSuccess, setKeyTestSuccess] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setApiKeyInput(getUserGeminiKey(userId));
+  }, [userId, open]);
 
   // Audio recording refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -341,6 +353,106 @@ export default function PosVoiceAiModal({
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+        {/* Gemini API Key Configuration Helper */}
+        <div style={{
+          padding: '10px 14px',
+          borderRadius: 'var(--radius-md)',
+          background: apiKeyInput ? 'var(--color-primary-tint)' : '#fffbeb',
+          border: apiKeyInput ? '1px solid var(--color-primary)' : '1px solid #fde68a',
+          fontSize: '13px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: apiKeyInput ? 'var(--color-primary-strong)' : '#b45309' }}>
+              <Key size={15} />
+              <span>{apiKeyInput ? 'Clé API Gemini Caissier configurée' : '⚠️ Aucune clé API Gemini configurée pour le caissier'}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowKeyConfig(!showKeyConfig)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--color-primary)',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '12px',
+                textDecoration: 'underline'
+              }}
+            >
+              {showKeyConfig ? 'Masquer' : 'Modifier la clé'}
+            </button>
+          </div>
+
+          {showKeyConfig && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '6px', borderTop: '1px dashed var(--color-border)' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="password"
+                  placeholder="Collez votre clé API Gemini (ex: AIzaSy...)"
+                  value={apiKeyInput}
+                  onChange={e => {
+                    setApiKeyInput(e.target.value);
+                    setKeyTestSuccess(null);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '6px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--color-border)',
+                    fontSize: '13px',
+                    fontFamily: 'monospace'
+                  }}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={isTestingKey || !apiKeyInput.trim()}
+                  onClick={async () => {
+                    setIsTestingKey(true);
+                    try {
+                      const res = await testGeminiApiKey(apiKeyInput);
+                      if (res.success) {
+                        toast.success('Clé API valide !');
+                        setKeyTestSuccess(true);
+                      } else {
+                        toast.error(res.message);
+                        setKeyTestSuccess(false);
+                      }
+                    } catch (e: any) {
+                      toast.error('Erreur test : ' + (e.message || e));
+                      setKeyTestSuccess(false);
+                    } finally {
+                      setIsTestingKey(false);
+                    }
+                  }}
+                >
+                  {isTestingKey ? 'Test...' : 'Tester'}
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={!apiKeyInput.trim()}
+                  onClick={() => {
+                    if (userId) {
+                      setUserGeminiKey(userId, apiKeyInput);
+                    }
+                    toast.success('Clé API enregistrée avec succès !');
+                    setShowKeyConfig(false);
+                  }}
+                >
+                  Enregistrer
+                </Button>
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                Obtenez une clé gratuite sur <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'underline' }}>Google AI Studio</a>.
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Permission / Support Warning */}
         {permissionError && (

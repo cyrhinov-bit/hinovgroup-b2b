@@ -64,7 +64,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Documents (GED)', icon: Folder, path: '/documents', color: '#0284C7', bg: '#F0F9FF', roles: ['Directeur', 'Responsable'] },
     { label: 'Utilisateurs', icon: Shield, path: '/utilisateurs', color: '#475569', bg: '#F8FAFC', roles: ['Directeur', 'SuperAdmin'] },
     { label: 'Rapports', icon: PieChart, path: '/rapports', color: '#3B82F6', bg: '#EFF6FF', roles: ['Directeur'] },
-    { label: 'Paramètres Gemini IA', icon: Bot, path: '/parametres-ia', color: '#D946EF', bg: '#FDF4FF', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin', 'Commercial'] },
+    { label: 'Paramètres Gemini IA', icon: Bot, path: '/parametres-ia', color: '#D946EF', bg: '#FDF4FF', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin', 'Commercial', 'Caissier', 'Gerant'] },
     { label: 'Paramètres', icon: Settings, path: '/parametres', color: '#64748B', bg: '#F1F5F9', roles: ['Directeur'] },
     // Commercial routes
     { label: 'Dashboard', icon: Home, path: '/commercial', color: '#2563EB', bg: '#EFF6FF', roles: ['Commercial', 'SuperAdmin'] },
@@ -87,6 +87,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Retours', icon: RotateCcw, path: '/pos/returns', color: '#F43F5E', bg: '#FFF1F2', roles: ['Directeur', 'Gerant', 'Caissier'] },
     { label: 'Gestion de caisse', icon: Wallet, path: '/pos/cash', color: '#059669', bg: '#ECFDF5', roles: ['Caissier'] },
     { label: 'Historique', icon: Receipt, path: '/pos/transactions', color: '#0284C7', bg: '#F0F9FF', roles: ['Directeur', 'Caissier'] },
+    { label: 'Paramètres IA Gemini', icon: Bot, path: '/pos/parametres-ia', color: '#D946EF', bg: '#FDF4FF', roles: ['Directeur', 'Gerant', 'Caissier'] },
     // Administration Directeur
     { label: 'Paramètres', icon: Settings, path: '/pos/settings', color: '#64748B', bg: '#F1F5F9', roles: ['Directeur'] },
     { label: 'Utilisateurs', icon: Shield, path: '/pos/users', color: '#475569', bg: '#F8FAFC', roles: ['Directeur', 'Gerant'] },
