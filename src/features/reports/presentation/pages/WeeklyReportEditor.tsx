@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Sparkles, Download, Save, Send, Plus, Trash2, CheckCircle2, Clock, AlertCircle, ChevronLeft, ChevronRight, Calendar, Building, User as UserIcon, Key } from 'lucide-react';
+import { Sparkles, Download, Save, Send, Plus, Trash2, CheckCircle2, Clock, AlertCircle, ChevronLeft, ChevronRight, Calendar, Building, User as UserIcon, Key, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAppContext, type V2WeeklyReport, type V2Task } from '../../../../context/AppContext';
 import { useAuth } from '../../../../context/AuthContext';
 import { useConfirm } from '../../../../components/ConfirmModal';
 import { generateAiWeeklySynthesis } from '../../services/AiReportService';
-import { generateV2WeeklyReportPdf } from '../../services/ReportPdfService';
+import { generateV2WeeklyReportPdf, getV2WeeklyReportPdfBlobUrl } from '../../services/ReportPdfService';
+import { ReportPdfPreview, type ReportPdfPreviewData } from '../../../../components/ReportPdfPreview';
 import { getUserGeminiKey } from '../../../../lib/geminiKey';
 import './WeeklyReportEditor.css';
 
@@ -48,6 +49,7 @@ export function WeeklyReportEditor() {
   const [nextWeekObjectives, setNextWeekObjectives] = useState('');
   const [status, setStatus] = useState<V2WeeklyReport['status']>('Brouillon');
   const [reportId, setReportId] = useState<string>('');
+  const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
 
   useEffect(() => {
     if (existingReport) {
@@ -184,6 +186,18 @@ export function WeeklyReportEditor() {
   const handleDownloadPdf = () => {
     const reportObj = getCurrentReportObject();
     generateV2WeeklyReportPdf(reportObj, currentUser, settings);
+  };
+
+  const handlePreviewPdf = () => {
+    const reportObj = getCurrentReportObject();
+    const blobUrl = getV2WeeklyReportPdfBlobUrl(reportObj, currentUser, settings);
+    const authorName = (currentUser?.name || 'collaborateur').toLowerCase().replace(/\s+/g, '_');
+    setPreview({
+      blobUrl,
+      filename: `rapport_hebdo_${authorName}_${reportObj.weekStart}.pdf`,
+      title: `Aperçu du Rapport Hebdomadaire — ${currentUser?.name || 'Mon Rapport'}`,
+      onDownload: () => generateV2WeeklyReportPdf(reportObj, currentUser, settings)
+    });
   };
 
   const totalWeekTasks = Object.values(tasksByDay).flat().length;
@@ -431,21 +445,28 @@ export function WeeklyReportEditor() {
 
       {/* Action Bar */}
       <div className="report-actions-bar">
-        <button type="button" className="btn btn-secondary" onClick={handleDownloadPdf}>
-          <Download size={16} style={{ marginRight: '6px' }} />
-          Télécharger le PDF Officiel
+        <button type="button" className="btn btn-secondary" onClick={handlePreviewPdf} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Eye size={16} />
+          👁️ Prévisualiser le PDF
         </button>
 
-        <button type="button" className="btn btn-secondary" onClick={handleSaveDraft}>
-          <Save size={16} style={{ marginRight: '6px' }} />
+        <button type="button" className="btn btn-secondary" onClick={handleDownloadPdf} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Download size={16} />
+          Télécharger le PDF
+        </button>
+
+        <button type="button" className="btn btn-secondary" onClick={handleSaveDraft} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Save size={16} />
           Enregistrer le Brouillon
         </button>
 
-        <button type="button" className="btn btn-primary" onClick={handleSubmitReport}>
-          <Send size={16} style={{ marginRight: '6px' }} />
+        <button type="button" className="btn btn-primary" onClick={handleSubmitReport} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Send size={16} />
           🚀 Soumettre à la Direction
         </button>
       </div>
+
+      <ReportPdfPreview preview={preview} onClose={() => setPreview(null)} />
     </div>
   );
 }

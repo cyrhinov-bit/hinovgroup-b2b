@@ -23,7 +23,7 @@ export function Rapports() {
       
     // V2 Reports
     const v2 = v2WeeklyReports
-      .filter(r => r.status === 'Validé') // Only show submitted reports to managers
+      .filter(r => r.status === 'Validé' || r.status === 'Soumis' || r.status === 'Relu')
       .map(r => {
         const author = users.find(u => u.id === r.authorId);
         return {
@@ -55,19 +55,23 @@ export function Rapports() {
     if (report.isV2) {
       const doc = buildV2WeeklyReportPdf(report, report.author, settings);
       const safeName = report.author?.name ? report.author.name.replace(/\s+/g, '_') : 'Inconnu';
+      const blobUrl = URL.createObjectURL(doc.output('blob'));
       setPreview({
-        dataUrl: doc.output('dataurlstring'),
+        blobUrl,
         filename: `Rapport_Hebdomadaire_${safeName}_${report.weekStart}.pdf`,
-        title: `Aperçu — Rapport hebdomadaire V2 (${report.author?.name || 'Expéditeur'})`,
+        title: `Lecture du Rapport hebdomadaire (${report.author?.name || 'Expéditeur'})`,
+        onDownload: () => generateV2WeeklyReportPdf(report, report.author, settings)
       });
     } else {
       const daily = activityReports.filter(r => r.authorId === report.authorId && r.role === report.role && r.date >= report.weekStart);
       const kpis = report.kpis || {};
       const doc = buildWeeklyReportPdf(report, daily, kpis, report.author || null, settings);
+      const blobUrl = URL.createObjectURL(doc.output('blob'));
       setPreview({
-        dataUrl: doc.output('dataurlstring'),
+        blobUrl,
         filename: `Rapport_Hebdomadaire_${report.weekStart}.pdf`,
-        title: `Aperçu — Rapport hebdomadaire V1 (${report.author?.name || 'Expéditeur'})`,
+        title: `Lecture du Rapport hebdomadaire (${report.author?.name || 'Expéditeur'})`,
+        onDownload: () => generateWeeklyReportPdf(report, daily, kpis, report.author || null, settings)
       });
     }
   };

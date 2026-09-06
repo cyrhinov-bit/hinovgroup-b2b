@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { Download, Eye, CheckCircle, MessageSquare, Calendar, Building, User as UserIcon, X, Filter } from 'lucide-react';
+import { Download, Eye, CheckCircle, MessageSquare, Calendar, Building, User as UserIcon, X, Filter, FileText } from 'lucide-react';
 import { useAppContext, type V2WeeklyReport } from '../../../../context/AppContext';
 import { useAuth } from '../../../../context/AuthContext';
 import { useConfirm } from '../../../../components/ConfirmModal';
-import { generateV2WeeklyReportPdf } from '../../services/ReportPdfService';
+import { generateV2WeeklyReportPdf, getV2WeeklyReportPdfBlobUrl } from '../../services/ReportPdfService';
+import { ReportPdfPreview, type ReportPdfPreviewData } from '../../../../components/ReportPdfPreview';
 import './TeamReportsView.css';
 
 export function TeamReportsView() {
@@ -16,6 +17,7 @@ export function TeamReportsView() {
   const [filterStatus, setFilterStatus] = useState('');
   const [selectedReport, setSelectedReport] = useState<V2WeeklyReport | null>(null);
   const [directorNote, setDirectorNote] = useState('');
+  const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
 
   const isDirection = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
 
@@ -41,6 +43,18 @@ export function TeamReportsView() {
 
   const getAuthor = (authorId: string) => users.find(u => u.id === authorId);
   const getServiceName = (serviceId?: string) => services.find(s => s.id === serviceId)?.name || 'Général';
+
+  const handlePreviewPdf = (report: V2WeeklyReport) => {
+    const author = getAuthor(report.authorId);
+    const blobUrl = getV2WeeklyReportPdfBlobUrl(report, author, settings);
+    const safeName = author?.name ? author.name.toLowerCase().replace(/\s+/g, '_') : 'collaborateur';
+    setPreview({
+      blobUrl,
+      filename: `rapport_hebdo_${safeName}_${report.weekStart}.pdf`,
+      title: `Rapport Hebdomadaire — ${author?.name || 'Collaborateur'} (Semaine du ${new Date(report.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')})`,
+      onDownload: () => generateV2WeeklyReportPdf(report, author, settings)
+    });
+  };
 
   const handleOpenReport = (report: V2WeeklyReport) => {
     setSelectedReport(report);
@@ -161,23 +175,33 @@ export function TeamReportsView() {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid #F1F5F9' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid #F1F5F9', gap: '6px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"
+                    onClick={() => handlePreviewPdf(report)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                    title="Lire directement le rapport PDF sans télécharger"
+                  >
+                    <Eye size={14} /> 📄 Lire le PDF
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
                     onClick={() => handleOpenReport(report)}
                     style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
                   >
-                    <Eye size={14} /> Consulter & Valider
+                    <MessageSquare size={14} /> Consulter & Valider
                   </button>
 
                   <button
                     type="button"
                     className="icon-button text-teal-700"
                     onClick={() => generateV2WeeklyReportPdf(report, author, settings)}
-                    title="Télécharger le PDF Officiel"
+                    title="Télécharger une copie PDF"
                   >
-                    <Download size={18} />
+                    <Download size={17} />
                   </button>
                 </div>
               </div>
@@ -292,30 +316,47 @@ export function TeamReportsView() {
               )}
             </div>
 
-            <div className="commission-modal-footer">
+            <div className="commission-modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => generateV2WeeklyReportPdf(selectedReport, getAuthor(selectedReport.authorId), settings)}
+                onClick={() => handlePreviewPdf(selectedReport)}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                title="Lire le document PDF complet dans le lecteur"
               >
-                <Download size={16} style={{ marginRight: '6px' }} />
-                Télécharger PDF
+                <Eye size={16} />
+                👁️ Lire le Document PDF
               </button>
 
-              {isDirection && (
+              <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
                 <button
                   type="button"
-                  className="btn btn-success"
-                  onClick={handleValidateReport}
+                  className="btn btn-secondary"
+                  onClick={() => generateV2WeeklyReportPdf(selectedReport, getAuthor(selectedReport.authorId), settings)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                 >
-                  <CheckCircle size={16} style={{ marginRight: '6px' }} />
-                  Valider & Enregistrer le Visa
+                  <Download size={16} />
+                  Télécharger PDF
                 </button>
-              )}
+
+                {isDirection && (
+                  <button
+                    type="button"
+                    className="btn btn-success"
+                    onClick={handleValidateReport}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <CheckCircle size={16} />
+                    Valider & Enregistrer le Visa
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      <ReportPdfPreview preview={preview} onClose={() => setPreview(null)} />
     </div>
   );
 }

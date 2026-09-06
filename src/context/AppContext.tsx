@@ -2278,6 +2278,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setV2WeeklyReports(newReports);
     await db.v2WeeklyReports.setItem('data', newReports);
     await queueSyncAction('UPDATE_V2_WEEKLY_REPORT', updated);
+
+    // Notify direction and supervisors
+    const author = users.find(u => u.id === report.authorId);
+    const authorName = author?.name || 'Un collaborateur';
+    const recipientUsers = users.filter(u => 
+      ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(u.role) ||
+      (u.role === 'Responsable' && author?.serviceId && u.serviceId === author.serviceId)
+    );
+    if (recipientUsers.length > 0) {
+      const newNotifs: AppNotification[] = recipientUsers.map(d => ({
+        id: uuidv4(),
+        user_id: d.id,
+        title: 'Nouveau rapport d\'activité hebdomadaire',
+        message: `${authorName} a soumis son rapport pour la semaine du ${new Date(report.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')}.`,
+        type: 'info',
+        is_read: false,
+        link: '/rapports-equipe',
+        created_at: now
+      }));
+      const updatedNotifs = [...notifications, ...newNotifs];
+      setNotifications(updatedNotifs);
+      await db.notifications.setItem('data', updatedNotifs);
+    }
   };
 
   const reviewV2WeeklyReport = async (id: string, comment?: string, status: 'Validé' | 'Relu' = 'Validé') => {
@@ -2296,6 +2319,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setV2WeeklyReports(newReports);
     await db.v2WeeklyReports.setItem('data', newReports);
     await queueSyncAction('UPDATE_V2_WEEKLY_REPORT', updated);
+
+    // Notify the author
+    if (report.authorId && report.authorId !== currentUser?.id) {
+      const authorNotif: AppNotification = {
+        id: uuidv4(),
+        user_id: report.authorId,
+        title: `Rapport hebdomadaire ${status === 'Validé' ? 'validé' : 'relu'}`,
+        message: `Votre rapport pour la semaine du ${new Date(report.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')} a été ${status === 'Validé' ? 'validé par la Direction' : 'relu'}.`,
+        type: 'success',
+        is_read: false,
+        link: '/mon-rapport-hebdo',
+        created_at: now
+      };
+      const updatedNotifs = [...notifications, authorNotif];
+      setNotifications(updatedNotifs);
+      await db.notifications.setItem('data', updatedNotifs);
+    }
   };
 
   const deleteV2WeeklyReport = async (id: string) => {

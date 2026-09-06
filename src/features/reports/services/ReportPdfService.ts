@@ -293,3 +293,14 @@ export function generateV2WeeklyReportPdf(report: V2WeeklyReport, author: User |
   const authorName = (author?.name || 'collaborateur').toLowerCase().replace(/\s+/g, '_');
   doc.save(`rapport_hebdo_${authorName}_${report.weekStart}.pdf`);
 }
+
+export function getV2WeeklyReportPdfBlobUrl(report: V2WeeklyReport, author: User | null | undefined, settings?: AppSettings): string {
+  const doc = buildV2WeeklyReportPdf(report, author, settings);
+  const blob = doc.output('blob');
+  return URL.createObjectURL(blob);
+}
+
+export function getV2WeeklyReportPdfDataUrl(report: V2WeeklyReport, author: User | null | undefined, settings?: AppSettings): string {
+  const doc = buildV2WeeklyReportPdf(report, author, settings);
+  return doc.output('dataurlstring');
+}

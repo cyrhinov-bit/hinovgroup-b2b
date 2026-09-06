@@ -1,18 +1,32 @@
-import React, { useMemo } from 'react';
-import { Download, Calendar, FileText, Sparkles } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Download, Calendar, FileText, Sparkles, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useAppContext } from '../../../../context/AppContext';
+import { useAppContext, type V2WeeklyReport } from '../../../../context/AppContext';
 import { useAuth } from '../../../../context/AuthContext';
-import { generateV2WeeklyReportPdf } from '../../services/ReportPdfService';
+import { generateV2WeeklyReportPdf, getV2WeeklyReportPdfBlobUrl } from '../../services/ReportPdfService';
+import { ReportPdfPreview, type ReportPdfPreviewData } from '../../../../components/ReportPdfPreview';
 
 export const ReportsHistory: React.FC = () => {
   const { v2DailyReports, v2WeeklyReports, users, settings } = useAppContext();
   const { currentUser } = useAuth();
+  const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
 
-  const isDirector = currentUser?.role === 'Directeur';
+  const isDirector = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
 
   const myDaily = useMemo(() => isDirector ? v2DailyReports : v2DailyReports.filter(r => r.authorId === currentUser?.id), [v2DailyReports, currentUser, isDirector]);
   const myWeekly = useMemo(() => isDirector ? v2WeeklyReports : v2WeeklyReports.filter(r => r.authorId === currentUser?.id), [v2WeeklyReports, currentUser, isDirector]);
+
+  const handlePreviewPdf = (report: V2WeeklyReport) => {
+    const author = users?.find((u: any) => u.id === report.authorId) || currentUser;
+    const blobUrl = getV2WeeklyReportPdfBlobUrl(report, author, settings);
+    const safeName = author?.name ? author.name.toLowerCase().replace(/\s+/g, '_') : 'collaborateur';
+    setPreview({
+      blobUrl,
+      filename: `rapport_hebdo_${safeName}_${report.weekStart}.pdf`,
+      title: `Rapport Hebdomadaire — ${author?.name || 'Moi'} (Semaine du ${new Date(report.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')})`,
+      onDownload: () => generateV2WeeklyReportPdf(report, author, settings)
+    });
+  };
 
   return (
     <div className="dashboard">
@@ -39,14 +53,19 @@ export const ReportsHistory: React.FC = () => {
               {myWeekly.sort((a, b) => b.weekStart.localeCompare(a.weekStart)).map(report => {
                 const author = users?.find((u: any) => u.id === report.authorId);
                 return (
-                  <div key={report.id} style={{ padding: '12px', border: '1px solid var(--color-border)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div key={report.id} style={{ padding: '12px', border: '1px solid var(--color-border)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
                     <div>
                       <p style={{ margin: 0, fontWeight: 600 }}>Semaine du {new Date(report.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')}</p>
-                      <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Projet: {report.project} {isDirector && `• Par: ${author?.name}`}</p>
+                      <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Projet: {report.project || 'Général'} {isDirector && `• Par: ${author?.name || 'Inconnu'}`}</p>
                     </div>
-                    <button className="btn btn-outline btn-sm" onClick={() => generateV2WeeklyReportPdf(report, author || currentUser, settings)} title="Télécharger PDF">
-                      <Download size={16} />
-                    </button>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button className="btn btn-outline btn-sm" onClick={() => handlePreviewPdf(report)} title="Lire le document PDF en ligne">
+                        <Eye size={16} />
+                      </button>
+                      <button className="btn btn-outline btn-sm" onClick={() => generateV2WeeklyReportPdf(report, author || currentUser, settings)} title="Télécharger PDF">
+                        <Download size={16} />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -78,6 +97,8 @@ export const ReportsHistory: React.FC = () => {
           )}
         </div>
       </div>
+
+      <ReportPdfPreview preview={preview} onClose={() => setPreview(null)} />
     </div>
   );
 };

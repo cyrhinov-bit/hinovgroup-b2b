@@ -1,11 +1,14 @@
-import { Download } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Download, Printer, FileText } from 'lucide-react';
 import { Modal } from './ui/Modal';
 import { downloadDataUrl } from '../lib/pdfUtils';
 
 export interface ReportPdfPreviewData {
-  dataUrl: string;
+  dataUrl?: string;
+  blobUrl?: string;
   filename: string;
   title: string;
+  onDownload?: () => void;
 }
 
 interface ReportPdfPreviewProps {
@@ -14,30 +17,100 @@ interface ReportPdfPreviewProps {
 }
 
 export function ReportPdfPreview({ preview, onClose }: ReportPdfPreviewProps) {
+  const [activeUrl, setActiveUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (preview) {
+      const url = preview.blobUrl || preview.dataUrl || '';
+      setActiveUrl(url);
+    } else {
+      setActiveUrl('');
+    }
+  }, [preview]);
+
+  const handleDownload = () => {
+    if (!preview) return;
+    if (preview.onDownload) {
+      preview.onDownload();
+    } else if (preview.blobUrl) {
+      const a = document.createElement('a');
+      a.href = preview.blobUrl;
+      a.download = preview.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } else if (preview.dataUrl) {
+      downloadDataUrl(preview.dataUrl, preview.filename);
+    }
+  };
+
+  const handlePrint = () => {
+    if (!activeUrl) return;
+    const iframe = document.getElementById('report-pdf-iframe') as HTMLIFrameElement;
+    if (iframe?.contentWindow) {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        return;
+      } catch (err) {
+        console.warn('Iframe print failed, falling back to window.open', err);
+      }
+    }
+    const printWin = window.open(activeUrl, '_blank');
+    printWin?.focus();
+    printWin?.print();
+  };
+
   return (
     <Modal
       open={!!preview}
-      title={preview?.title || 'Aperçu du rapport'}
+      title={preview?.title || 'Lecture du document PDF'}
       onClose={onClose}
-      width={860}
+      width={940}
       footer={
         preview && (
-          <button
-            className="btn btn-primary"
-            style={{ display: 'flex', alignItems: 'center' }}
-            onClick={() => downloadDataUrl(preview.dataUrl, preview.filename)}
-          >
-            <Download size={16} style={{ marginRight: '8px' }} /> Télécharger PDF
-          </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+              <FileText size={16} />
+              <span>{preview.filename}</span>
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handlePrint}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                title="Imprimer le document"
+              >
+                <Printer size={16} /> Imprimer
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleDownload}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                title="Télécharger une copie PDF"
+              >
+                <Download size={16} /> Télécharger PDF
+              </button>
+            </div>
+          </div>
         )
       }
     >
-      {preview && (
-        <iframe
-          src={preview.dataUrl}
-          title={preview.title}
-          style={{ width: '100%', height: '72vh', border: '1px solid var(--color-border)', borderRadius: '8px' }}
-        />
+      {preview && activeUrl ? (
+        <div style={{ width: '100%', height: '74vh', backgroundColor: '#525659', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+          <iframe
+            id="report-pdf-iframe"
+            src={activeUrl}
+            title={preview.title}
+            style={{ width: '100%', height: '100%', border: 'none' }}
+          />
+        </div>
+      ) : (
+        <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+          Chargement du document PDF en cours...
+        </div>
       )}
     </Modal>
   );
