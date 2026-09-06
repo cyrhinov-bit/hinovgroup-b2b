@@ -1,6 +1,4 @@
-/**
- * Helper to manage individual Gemini API keys per user
- */
+import { supabase } from './supabase';
 
 export function getUserGeminiKey(userId?: string): string {
   if (userId) {
@@ -20,6 +18,14 @@ export function setUserGeminiKey(userId: string, key: string): void {
   if (userId) {
     localStorage.setItem(`gemini_key_${userId}`, cleanKey);
     localStorage.setItem(`gemini_api_key_${userId}`, cleanKey);
+    // Synchro avec Supabase pour persistance multi-appareils et après déconnexion
+    supabase
+      .from('profiles')
+      .update({ gemini_api_key: cleanKey })
+      .eq('id', userId)
+      .then(({ error }) => {
+        if (error) console.warn('[GeminiKey] Erreur synchro clé vers Supabase :', error.message);
+      });
   }
   localStorage.setItem('gemini_api_key', cleanKey);
 }

@@ -59,6 +59,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
         
       if (data && !error) {
+        const geminiKey = (data.gemini_api_key || '').trim();
+        if (geminiKey) {
+          localStorage.setItem(`gemini_key_${data.id}`, geminiKey);
+          localStorage.setItem(`gemini_api_key_${data.id}`, geminiKey);
+        }
+
         setCurrentUser({
           id: data.id,
           name: data.name,
@@ -69,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           lastLogin: data.last_login,
           active: data.active !== false,
           photo: data.photo || undefined,
+          geminiApiKey: geminiKey || undefined,
           posReturnsEnabled: data.pos_returns_enabled === true,
           posCatalogueEnabled: data.pos_catalogue_enabled === true,
           posSupplyEnabled: data.pos_supply_enabled === true,

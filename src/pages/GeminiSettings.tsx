@@ -5,8 +5,8 @@ import { getUserGeminiKey, setUserGeminiKey, testGeminiApiKey } from '../lib/gem
 import './GeminiSettings.css';
 
 export function GeminiSettings() {
-  const { currentUser } = useAuth();
-  const [apiKey, setApiKey] = useState('');
+  const { currentUser, updateCurrentUser } = useAuth();
+  const [apiKey, setApiKey] = useState(() => currentUser?.geminiApiKey || getUserGeminiKey(currentUser?.id));
   const [showKey, setShowKey] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -14,7 +14,7 @@ export function GeminiSettings() {
 
   useEffect(() => {
     if (currentUser?.id) {
-      const savedKey = getUserGeminiKey(currentUser.id);
+      const savedKey = currentUser.geminiApiKey || getUserGeminiKey(currentUser.id);
       setApiKey(savedKey);
     }
   }, [currentUser]);
@@ -42,6 +42,7 @@ export function GeminiSettings() {
   const handleSave = () => {
     if (!currentUser?.id) return;
     setUserGeminiKey(currentUser.id, apiKey);
+    updateCurrentUser({ geminiApiKey: apiKey.trim() });
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 4000);
   };

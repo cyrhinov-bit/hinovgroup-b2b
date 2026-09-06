@@ -9,10 +9,10 @@ import { THEME_PRESETS, THEME_CATEGORIES, DEFAULT_THEME_COLOR, getUserThemeColor
 
 export function Parametres() {
   const { settings, updateSettings } = useAppContext();
-  const { currentUser } = useAuth();
+  const { currentUser, updateCurrentUser } = useAuth();
   const { confirm } = useConfirm();
   const [localSettings, setLocalSettings] = useState(settings);
-  const [geminiKey, setGeminiKey] = useState(() => getUserGeminiKey(currentUser?.id));
+  const [geminiKey, setGeminiKey] = useState(() => currentUser?.geminiApiKey || getUserGeminiKey(currentUser?.id));
   const [selectedThemeColor, setSelectedThemeColor] = useState(() => getUserThemeColor(currentUser?.id));
   const [themeCategory, setThemeCategory] = useState<string>('Tous');
 
@@ -47,6 +47,7 @@ export function Parametres() {
         if (currentUser?.id) {
           setUserGeminiKey(currentUser.id, geminiKey);
           setUserThemeColor(currentUser.id, selectedThemeColor);
+          updateCurrentUser({ geminiApiKey: geminiKey.trim() });
         }
         await updateSettings(localSettings);
       }

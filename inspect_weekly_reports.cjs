@@ -6,10 +6,10 @@ const client = new Client({
 
 async function run() {
   await client.connect();
-  const res = await client.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'v2_weekly_reports'");
-  console.log('v2_weekly_reports columns:', res.rows.map(r => r.column_name));
-  const rows = await client.query("SELECT * FROM v2_weekly_reports LIMIT 3");
-  console.log('Sample v2_weekly_reports:', rows.rows);
+  await client.query("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS gemini_api_key TEXT;");
+  console.log('ALTER TABLE profiles executed successfully.');
+  const resProfiles = await client.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'profiles'");
+  console.log('profiles columns:', resProfiles.rows.map(r => r.column_name));
   await client.end();
 }
 

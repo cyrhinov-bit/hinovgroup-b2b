@@ -37,6 +37,7 @@ export interface User {
   posSupplyEnabled?: boolean;
   posInventoryEnabled?: boolean;
   posStockEnabled?: boolean;
+  geminiApiKey?: string;
 }
 export type AffaireStatus = 'PROSPECTION' | 'QUALIFIEE' | 'PROPOSITION' | 'NEGOCIATION' | 'GAGNEE' | 'EN_COURS' | 'CLOTUREE' | 'PERDUE' | 'ANNULEE';
 export interface Affaire {
@@ -750,7 +751,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             posSupplyEnabled: p.pos_supply_enabled === true,
             posInventoryEnabled: p.pos_inventory_enabled === true,
             posStockEnabled: p.pos_stock_enabled === true,
-            posRole: p.pos_role || null
+            posRole: p.pos_role || null,
+            geminiApiKey: p.gemini_api_key || undefined
           }));
           const mergedUsers = mergeData(cachedUsers, parsedUsers);
           setUsers(mergedUsers); await db.profiles.setItem('data', mergedUsers);
