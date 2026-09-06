@@ -3,7 +3,7 @@ import {
   Home, Users, Briefcase, FileText, Folder, Shield, PieChart, Settings, 
   UserCircle, LogOut, Receipt, Coins, Target, ShoppingCart, Package, Truck, 
   ClipboardList, Warehouse, Tag, BarChart3, DollarSign, RotateCcw, 
-  FileSpreadsheet, Wallet, ToggleRight, Trophy, Sparkles, Bot, Building2 
+  FileSpreadsheet, Wallet, ToggleRight, Trophy, Sparkles, Bot, Building2, ShieldAlert 
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -64,6 +64,8 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Documents (GED)', icon: Folder, path: '/documents', color: '#0284C7', bg: '#F0F9FF', roles: ['Directeur', 'Responsable'] },
     { label: 'Utilisateurs', icon: Shield, path: '/utilisateurs', color: '#475569', bg: '#F8FAFC', roles: ['Directeur', 'SuperAdmin'] },
     { label: 'Rapports', icon: PieChart, path: '/rapports', color: '#3B82F6', bg: '#EFF6FF', roles: ['Directeur'] },
+    { label: 'Copilot Direction IA', icon: Bot, path: '/copilot-ia', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
+    { label: 'Audit & Anti-Fraude IA', icon: ShieldAlert, path: '/audit-ia', color: '#EF4444', bg: '#FEF2F2', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Paramètres Gemini IA', icon: Bot, path: '/parametres-ia', color: '#D946EF', bg: '#FDF4FF', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin', 'Commercial', 'Caissier', 'Gerant'] },
     { label: 'Paramètres', icon: Settings, path: '/parametres', color: '#64748B', bg: '#F1F5F9', roles: ['Directeur'] },
     // Commercial routes
@@ -80,6 +82,8 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
   // POS nav items avec couleurs distinctives
   const posNavItems: NavItemConfig[] = [
     { label: 'Dashboard', icon: Home, path: '/pos', color: '#2563EB', bg: '#EFF6FF', roles: ['Directeur', 'Gerant'] },
+    { label: 'Copilot Direction IA', icon: Bot, path: '/pos/copilot-ia', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Directeur', 'Gerant'] },
+    { label: 'Audit & Anti-Fraude IA', icon: ShieldAlert, path: '/pos/audit-ia', color: '#EF4444', bg: '#FEF2F2', roles: ['Directeur', 'Gerant'] },
     { label: 'Finance', icon: DollarSign, path: '/pos/finance', color: '#10B981', bg: '#ECFDF5', roles: ['Directeur', 'Gerant'] },
     { label: 'Caisse', icon: ShoppingCart, path: '/pos/terminal', color: '#0D9488', bg: '#F0FDFA', roles: ['Caissier'] },
     { label: 'Catalogue', icon: Package, path: '/pos/products', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Directeur', 'Gerant', 'Caissier'] },

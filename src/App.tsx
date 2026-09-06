@@ -39,6 +39,8 @@ import TestDashboard from './pages/TestDashboard';
 // POS Pages (lazy loaded)
 import { lazy, Suspense } from 'react';
 import type { ReactNode } from 'react';
+const DirectorCopilotPage = lazy(() => import('./features/director/presentation/DirectorCopilotPage'));
+const DirectorAuditPage = lazy(() => import('./features/director/presentation/DirectorAuditPage'));
 const DashboardPos = lazy(() => import('./pages/pos/DashboardPos'));
 const PosSettings = lazy(() => import('./pages/pos/PosSettings'));
 const PosUsers = lazy(() => import('./pages/pos/PosUsers'));
@@ -188,6 +190,10 @@ function App() {
                     <Route path="parametres-ia" element={<GeminiSettings />} />
                     <Route path="parametres" element={<Parametres />} />
 
+                    {/* Direction AI Routes */}
+                    <Route path="copilot-ia" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'SuperAdmin']}><DirectorCopilotPage /></RequireRole></Suspense>} />
+                    <Route path="audit-ia" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'SuperAdmin']}><DirectorAuditPage /></RequireRole></Suspense>} />
+
                     {/* Commercial routes */}
                     <Route path="commercial" element={<DashboardCommercial />} />
                     <Route path="commercial/prospects" element={<Prospects />} />
@@ -201,6 +207,8 @@ function App() {
 
                     {/* POS routes */}
                     <Route path="pos" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><DashboardPos /></Suspense>} />
+                    <Route path="pos/copilot-ia" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant']}><DirectorCopilotPage /></RequireRole></Suspense>} />
+                    <Route path="pos/audit-ia" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant']}><DirectorAuditPage /></RequireRole></Suspense>} />
                     <Route path="pos/settings" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosSettings /></Suspense>} />
                     <Route path="pos/users" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosUsers /></Suspense>} />
                     <Route path="pos/cashier-modules" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant']}><CashierModulesManager /></RequireRole></Suspense>} />
