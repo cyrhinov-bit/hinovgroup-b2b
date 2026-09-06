@@ -8,7 +8,7 @@ import { toast } from 'react-hot-toast';
 
 export default function DirectorAuditPage() {
   const { currentUser } = useAuth();
-  const { posTransactions, posCashSessions, posProducts, posReturns, users, sales } = useAppContext();
+  const { posTransactions, posCashSessions, posProducts, posReturns, users } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<'ALL' | 'CRITICAL' | 'CASH' | 'LOSS' | 'DISCOUNT'>('ALL');
   const [aiDiagnostic, setAiDiagnostic] = useState<string | null>(null);
@@ -21,10 +21,9 @@ export default function DirectorAuditPage() {
       posCashSessions,
       posProducts,
       posReturns,
-      users,
-      sales
+      users
     });
-  }, [posTransactions, posCashSessions, posProducts, posReturns, users, sales]);
+  }, [posTransactions, posCashSessions, posProducts, posReturns, users]);
 
   const filteredAnomalies = useMemo(() => {
     return audit.anomalies.filter(a => {
@@ -312,3 +311,4 @@ export default function DirectorAuditPage() {
     </div>
   );
 }
+

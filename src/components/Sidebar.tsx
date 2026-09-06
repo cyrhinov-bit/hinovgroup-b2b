@@ -64,8 +64,6 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Documents (GED)', icon: Folder, path: '/documents', color: '#0284C7', bg: '#F0F9FF', roles: ['Directeur', 'Responsable'] },
     { label: 'Utilisateurs', icon: Shield, path: '/utilisateurs', color: '#475569', bg: '#F8FAFC', roles: ['Directeur', 'SuperAdmin'] },
     { label: 'Rapports', icon: PieChart, path: '/rapports', color: '#3B82F6', bg: '#EFF6FF', roles: ['Directeur'] },
-    { label: 'Copilot Direction IA', icon: Bot, path: '/copilot-ia', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
-    { label: 'Audit & Anti-Fraude IA', icon: ShieldAlert, path: '/audit-ia', color: '#EF4444', bg: '#FEF2F2', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Paramètres Gemini IA', icon: Bot, path: '/parametres-ia', color: '#D946EF', bg: '#FDF4FF', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin', 'Commercial', 'Caissier', 'Gerant'] },
     { label: 'Paramètres', icon: Settings, path: '/parametres', color: '#64748B', bg: '#F1F5F9', roles: ['Directeur'] },
     // Commercial routes

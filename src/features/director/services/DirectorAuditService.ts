@@ -1,5 +1,5 @@
 import { getUserGeminiKey } from '../../../lib/geminiKey';
-import type { PosProduct, PosTransaction, PosCashSession, PosReturn, Sale, User } from '../../../context/AppContext';
+import type { PosProduct, PosTransaction, PosCashSession, PosReturn, User } from '../../../context/AppContext';
 
 export interface AuditAnomaly {
   id: string;
@@ -26,7 +26,7 @@ export interface AuditReportResult {
 }
 
 /**
- * Analyse l'ensemble des données POS et financières pour détecter les anomalies et fraudes potentielles
+ * Analyse l'ensemble des données POS pour détecter les anomalies et fraudes potentielles
  */
 export function runFinancialAudit(params: {
   posTransactions: PosTransaction[];
@@ -34,7 +34,6 @@ export function runFinancialAudit(params: {
   posProducts: PosProduct[];
   posReturns?: PosReturn[];
   users: User[];
-  sales?: Sale[];
 }): AuditReportResult {
   const { posTransactions, posCashSessions, posProducts, posReturns = [], users } = params;
   const anomalies: AuditAnomaly[] = [];
@@ -223,3 +222,4 @@ INSTRUCTIONS :
 
   return audit.summary;
 }
+

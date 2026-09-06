@@ -190,10 +190,6 @@ function App() {
                     <Route path="parametres-ia" element={<GeminiSettings />} />
                     <Route path="parametres" element={<Parametres />} />
 
-                    {/* Direction AI Routes */}
-                    <Route path="copilot-ia" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'SuperAdmin']}><DirectorCopilotPage /></RequireRole></Suspense>} />
-                    <Route path="audit-ia" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'SuperAdmin']}><DirectorAuditPage /></RequireRole></Suspense>} />
-
                     {/* Commercial routes */}
                     <Route path="commercial" element={<DashboardCommercial />} />
                     <Route path="commercial/prospects" element={<Prospects />} />

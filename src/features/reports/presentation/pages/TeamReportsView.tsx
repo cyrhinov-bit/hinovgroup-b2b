@@ -1,11 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { Download, Eye, CheckCircle, MessageSquare, Calendar, Building, User as UserIcon, X, Filter, FileText, Sparkles } from 'lucide-react';
+import { Download, Eye, CheckCircle, MessageSquare, Calendar, Building, User as UserIcon, X, Filter, FileText } from 'lucide-react';
 import { useAppContext, type V2WeeklyReport } from '../../../../context/AppContext';
 import { useAuth } from '../../../../context/AuthContext';
 import { useConfirm } from '../../../../components/ConfirmModal';
 import { generateV2WeeklyReportPdf, getV2WeeklyReportPdfBlobUrl } from '../../services/ReportPdfService';
 import { ReportPdfPreview, type ReportPdfPreviewData } from '../../../../components/ReportPdfPreview';
-import TeamExecutiveSynthesisModal from '../../../director/presentation/TeamExecutiveSynthesisModal';
 import { Button } from '../../../../components/ui/Button';
 import './TeamReportsView.css';
 
@@ -20,7 +19,6 @@ export function TeamReportsView() {
   const [selectedReport, setSelectedReport] = useState<V2WeeklyReport | null>(null);
   const [directorNote, setDirectorNote] = useState('');
   const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
-  const [showSynthesisModal, setShowSynthesisModal] = useState(false);
 
   const isDirection = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
 
@@ -79,22 +77,6 @@ export function TeamReportsView() {
             Consultez, annotez et validez les comptes-rendus hebdomadaires des collaborateurs
           </p>
         </div>
-
-        {isDirection && (
-          <Button
-            variant="primary"
-            onClick={() => setShowSynthesisModal(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-              boxShadow: '0 2px 6px rgba(79, 70, 229, 0.25)'
-            }}
-          >
-            <Sparkles size={16} /> Synthèse IA Globale de la Semaine
-          </Button>
-        )}
       </div>
 
       {/* Filter bar */}
@@ -376,16 +358,6 @@ export function TeamReportsView() {
       )}
 
       <ReportPdfPreview preview={preview} onClose={() => setPreview(null)} />
-
-      {/* Modal Synthèse IA Globale Direction */}
-      <TeamExecutiveSynthesisModal
-        open={showSynthesisModal}
-        onClose={() => setShowSynthesisModal(false)}
-        v2WeeklyReports={v2WeeklyReports}
-        users={users}
-        services={services}
-        userId={currentUser?.id}
-      />
     </div>
   );
 }

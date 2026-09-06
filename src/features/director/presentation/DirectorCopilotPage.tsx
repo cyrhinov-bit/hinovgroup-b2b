@@ -8,7 +8,7 @@ import { toast } from 'react-hot-toast';
 
 export default function DirectorCopilotPage() {
   const { currentUser } = useAuth();
-  const { posProducts, posTransactions, posCashSessions, sales, clients, users, v2WeeklyReports } = useAppContext();
+  const { posProducts, posTransactions, posCashSessions, posReturns, users } = useAppContext();
 
   const [inputQuery, setInputQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,13 +17,13 @@ export default function DirectorCopilotPage() {
     {
       id: 'welcome',
       sender: 'assistant',
-      text: `Bonjour **${currentUser?.name || 'Monsieur le Directeur'}** ! Je suis votre **Copilote Décisionnel IA**.\n\nJe suis connecté en direct à toutes vos données de vente POS, factures B2B, stocks, caisses et rapports d'activité.\n\nQuelle analyse souhaitez-vous effectuer aujourd'hui ?`,
+      text: `Bonjour **${currentUser?.name || 'Monsieur le Directeur'}** ! Je suis votre **Copilote Décisionnel IA (Point de Vente)**.\n\nJe suis connecté en direct aux données du magasin : ventes de caisse, stocks, sessions de caisse, remises et rentabilité.\n\nQuelle analyse souhaitez-vous effectuer aujourd'hui ?`,
       timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
       suggestedFollowUps: [
-        "📊 Bilan d'activité global de la semaine",
+        "📊 Bilan d'activité du magasin",
         "⚠️ Quels sont les articles en rupture ou stock critique ?",
         "💰 Y a-t-il eu des écarts lors des clôtures de caisse ?",
-        "🏆 Quel est le top 5 de nos articles les plus rentables ?"
+        "🏆 Quel est le top 5 de nos articles les plus vendus ?"
       ]
     }
   ]);
@@ -62,10 +62,8 @@ export default function DirectorCopilotPage() {
           posProducts,
           posTransactions,
           posCashSessions,
-          sales,
-          clients,
+          posReturns,
           users,
-          v2WeeklyReports,
           currentUserName: currentUser?.name,
           userId: currentUser?.id
         },
@@ -299,3 +297,4 @@ export default function DirectorCopilotPage() {
     </div>
   );
 }
+

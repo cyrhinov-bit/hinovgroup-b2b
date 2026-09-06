@@ -1,5 +1,5 @@
 import { getUserGeminiKey } from '../../../lib/geminiKey';
-import type { PosProduct, PosTransaction, PosCashSession, Sale, Client, User, V2WeeklyReport } from '../../../context/AppContext';
+import type { PosProduct, PosTransaction, PosCashSession, PosReturn, User } from '../../../context/AppContext';
 
 export interface CopilotMessage {
   id: string;
@@ -15,55 +15,53 @@ export interface CopilotContextData {
   posProducts: PosProduct[];
   posTransactions: PosTransaction[];
   posCashSessions: PosCashSession[];
-  sales: Sale[];
-  clients: Client[];
+  posReturns?: PosReturn[];
   users: User[];
-  v2WeeklyReports: V2WeeklyReport[];
   currentUserName?: string;
   userId?: string;
 }
 
 /**
- * Prépare un condensé des métriques clés de l'entreprise pour le prompt IA
+ * Prépare un condensé des métriques clés du Point de Vente (POS) pour le prompt IA
  */
-function buildCompanySummary(context: CopilotContextData) {
-  const { posProducts, posTransactions, posCashSessions, sales, clients, users, v2WeeklyReports } = context;
+function buildPosSummary(context: CopilotContextData) {
+  const { posProducts, posTransactions, posCashSessions, posReturns = [], users } = context;
 
-  // Calculs POS
+  // Calculs Ventes POS
   const validTransactions = posTransactions.filter(t => t.status === 'Validée');
   const totalPosRevenue = validTransactions.reduce((sum, t) => sum + (t.total || 0), 0);
   const totalPosDiscounts = validTransactions.reduce((sum, t) => sum + (t.discountAmount || 0), 0);
+  const averageTicket = validTransactions.length > 0 ? Math.round(totalPosRevenue / validTransactions.length) : 0;
   
   // Ventes par mode de paiement
   let cashRevenue = 0;
   let mobileRevenue = 0;
+  let otherRevenue = 0;
   validTransactions.forEach(t => {
     (t.payments || []).forEach(p => {
       if (p.method === 'Espèces') cashRevenue += p.amount;
-      if (p.method === 'Mobile Money') mobileRevenue += p.amount;
+      else if (p.method === 'Mobile Money') mobileRevenue += p.amount;
+      else otherRevenue += p.amount;
     });
   });
 
-  // Calculs B2B CRM
-  const totalSalesRevenue = sales.filter(s => s.status !== 'Annulée').reduce((sum, s) => sum + (s.total || 0), 0);
-  const paidSales = sales.filter(s => s.status === 'Payée').reduce((sum, s) => sum + (s.total || 0), 0);
-  const unpaidReceivables = sales.filter(s => s.status === 'Enregistrée').reduce((sum, s) => sum + (s.total || 0), 0);
-
-  // Stocks & Produits
+  // Stocks & Produits Magasin
   const activeProducts = posProducts.filter(p => p.isActive !== false && p.status !== 'Inactive');
-  const outOfStockCount = activeProducts.filter(p => p.quantity <= 0).length;
-  const lowStockCount = activeProducts.filter(p => p.quantity > 0 && p.quantity <= (p.minStock || 5)).length;
-  const totalStockValue = activeProducts.reduce((sum, p) => sum + (p.purchasePrice || 0) * (p.quantity || 0), 0);
+  const outOfStock = activeProducts.filter(p => p.quantity <= 0);
+  const lowStock = activeProducts.filter(p => p.quantity > 0 && p.quantity <= (p.minStock || 5));
+  const totalStockPurchaseValue = activeProducts.reduce((sum, p) => sum + (p.purchasePrice || 0) * (p.quantity || 0), 0);
   const totalStockSellingValue = activeProducts.reduce((sum, p) => sum + (p.sellingPrice || 0) * (p.quantity || 0), 0);
+  const theoreticalProfitMargin = totalStockSellingValue - totalStockPurchaseValue;
 
-  // Top 5 produits par vente
+  // Top 5 produits par chiffre d'affaires
   const productSalesMap = new Map<string, { name: string; qty: number; revenue: number }>();
   validTransactions.forEach(tx => {
     (tx.lines || []).forEach(line => {
-      const existing = productSalesMap.get(line.productId || line.description) || { name: line.description, qty: 0, revenue: 0 };
+      const key = line.productId || line.description;
+      const existing = productSalesMap.get(key) || { name: line.description, qty: 0, revenue: 0 };
       existing.qty += line.quantity;
       existing.revenue += line.total;
-      productSalesMap.set(line.productId || line.description, existing);
+      productSalesMap.set(key, existing);
     });
   });
   const topProducts = Array.from(productSalesMap.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
@@ -71,44 +69,50 @@ function buildCompanySummary(context: CopilotContextData) {
   // Sessions de caisse & Écarts
   const closedSessions = posCashSessions.filter(s => s.status === 'Fermée');
   const totalCashDiscrepancies = closedSessions.reduce((sum, s) => sum + (s.difference || 0), 0);
+  const sessionsWithDiscrepancy = closedSessions
+    .filter(s => typeof s.difference === 'number' && Math.abs(s.difference) > 0)
+    .map(s => {
+      const cashier = users.find(u => u.id === s.cashierId)?.name || 'Inconnu';
+      return {
+        sessionDate: s.closedAt || s.openedAt,
+        cashier,
+        difference: s.difference,
+        expected: s.expectedAmount,
+        counted: s.finalAmount
+      };
+    });
 
-  // Rapports d'équipe récents
-  const recentReportsSummary = v2WeeklyReports.slice(0, 10).map(r => {
-    const author = users.find(u => u.id === r.authorId);
-    return {
-      author: author?.name || 'Inconnu',
-      role: author?.role || 'Collaborateur',
-      week: r.weekStart,
-      difficulties: r.difficulties || 'Aucune',
-      status: r.status
-    };
-  });
+  // Retours POS
+  const totalReturnsAmount = posReturns.reduce((sum, r) => sum + (r.totalRefund || 0), 0);
 
   return {
     kpis: {
       totalPosRevenue,
       totalPosDiscounts,
+      averageTicket,
+      totalValidTransactions: validTransactions.length,
       cashRevenue,
       mobileRevenue,
-      totalSalesRevenue,
-      unpaidReceivables,
+      otherRevenue,
       activeProductsCount: activeProducts.length,
-      outOfStockCount,
-      lowStockCount,
-      totalStockValue,
+      outOfStockCount: outOfStock.length,
+      lowStockCount: lowStock.length,
+      totalStockPurchaseValue,
       totalStockSellingValue,
+      theoreticalProfitMargin,
       totalCashDiscrepancies,
-      usersCount: users.length,
-      clientsCount: clients.length,
-      closedSessionsCount: closedSessions.length
+      closedSessionsCount: closedSessions.length,
+      totalReturnsAmount
     },
     topProducts,
-    recentReportsSummary
+    outOfStockSample: outOfStock.slice(0, 8).map(p => ({ name: p.name, ref: p.reference })),
+    lowStockSample: lowStock.slice(0, 8).map(p => ({ name: p.name, ref: p.reference, stock: p.quantity, min: p.minStock })),
+    sessionsWithDiscrepancy: sessionsWithDiscrepancy.slice(0, 5)
   };
 }
 
 /**
- * Interroge le Copilot Direction (Gemini) avec l'état temps réel de l'entreprise
+ * Interroge le Copilot Direction POS (Gemini) avec l'état temps réel du Point de Vente
  */
 export async function askDirectorCopilot(
   userQuery: string,
@@ -118,27 +122,29 @@ export async function askDirectorCopilot(
   const query = userQuery.trim();
   if (!query) {
     return {
-      replyText: "Veuillez poser une question sur les ventes, stocks, caisses ou finances de l'entreprise.",
-      suggestedFollowUps: ["Bilan financier global", "Articles en alerte de stock", "Derniers écarts de caisse"]
+      replyText: "Veuillez poser une question sur les ventes, stocks, caisses ou finances du magasin.",
+      suggestedFollowUps: ["Bilan financier du magasin", "Articles en alerte de stock", "Derniers écarts de caisse"]
     };
   }
 
-  const companyData = buildCompanySummary(context);
+  const posData = buildPosSummary(context);
   const userApiKey = getUserGeminiKey(context.userId);
 
   const systemInstruction = `
-Tu es le Copilote Stratégique & Conseiller Décisionnel de la Direction Générale de HINOV GROUP (Entreprise B2B, Papeterie, Librairie et Fournitures).
-Tu t'adresses directement au Directeur Général (${context.currentUserName || 'Monsieur le Directeur'}).
+Tu es le Copilote Décisionnel et Conseiller Stratégique exclusif du Point de Vente (POS / Boutique / Caisse) de HINOV GROUP.
+Tu t'adresses directement à la Direction du Point de Vente (${context.currentUserName || 'Monsieur le Directeur'}).
+Tu es 100% focalisé sur la gestion du magasin, les ventes en caisse, les stocks de la boutique, les sessions de caisse, les prix, les remises et la rentabilité du point de vente.
 
-DONNÉES EN TEMPS RÉEL DE L'ENTREPRISE :
-${JSON.stringify(companyData, null, 2)}
+DONNÉES EN TEMPS RÉEL DU POINT DE VENTE (POS) :
+${JSON.stringify(posData, null, 2)}
 
 RÈGLES DE RÉPONSE STRICTES :
-1. Sois direct, professionnel, chiffré, rigoureux et stratégique.
-2. Utilise la devise FCFA pour tous les montants.
-3. Mets en valeur les chiffres clés en gras, et utilise des listes à puces ou tableaux simples quand c'est pertinent.
-4. Identifie proactivement les points de vigilance (ex: créances impayées, stocks faibles, écarts de caisse).
-5. Propose 2 à 3 questions de suivi pertinentes à la fin sous format JSON structuré si possible.
+1. Sois direct, professionnel, chiffré, rigoureux et orienté décision magasin.
+2. Utilise impérativement la devise FCFA pour tous les montants.
+3. Mets en valeur les chiffres clés en gras, et utilise des listes à puces ou tableaux simples pour la lisibilité.
+4. Identifie proactivement les points de vigilance (ex: ruptures de stock, écarts de caisse, remises élevées, produits à faible marge).
+5. Ne fais AUCUNE mention du CRM ou des devis B2B car ton périmètre est strictement le Point de Vente / Magasin.
+6. Propose 2 à 3 questions de suivi pertinentes à la fin sous format JSON structuré si possible.
 `;
 
   if (userApiKey) {
@@ -153,7 +159,7 @@ RÈGLES DE RÉPONSE STRICTES :
               ...conversationHistory,
               {
                 role: 'user',
-                parts: [{ text: `${systemInstruction}\n\nQUESTION DU DIRECTEUR :\n"${query}"` }]
+                parts: [{ text: `${systemInstruction}\n\nQUESTION DE LA DIRECTION :\n"${query}"` }]
               }
             ],
             generationConfig: {
@@ -167,36 +173,35 @@ RÈGLES DE RÉPONSE STRICTES :
         const data = await response.json();
         const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (reply) {
-          // Extraire des suggestions automatiques
-          const followUps = [
-            "Quels sont nos 5 articles les plus rentables ?",
-            "Y a-t-il des anomalies sur les clôtures de caisse ?",
-            "Quel est le bilan des créances clients à recouvrer ?"
-          ];
           return {
             replyText: reply,
-            suggestedFollowUps: followUps
+            suggestedFollowUps: [
+              "Quels sont nos 5 articles les plus rentables ?",
+              "Y a-t-il des anomalies sur les clôtures de caisse ?",
+              "Articles à réapprovisionner en priorité"
+            ]
           };
         }
       }
     } catch (err) {
-      console.warn('Erreur appel Copilot Direction :', err);
+      console.warn('Erreur appel Copilot Direction POS :', err);
     }
   }
 
-  // Réponse locale intelligente de secours
-  const k = companyData.kpis;
+  // Fallback intelligent en local
+  const k = posData.kpis;
   return {
-    replyText: `**Synthèse Globale pour la Direction :**\n\n` +
-      `• **Chiffre d'Affaires POS (Caisse)** : ${k.totalPosRevenue.toLocaleString()} FCFA\n` +
-      `• **Chiffre d'Affaires B2B** : ${k.totalSalesRevenue.toLocaleString()} FCFA (Créances : ${k.unpaidReceivables.toLocaleString()} FCFA)\n` +
-      `• **Valeur du Stock (Achat)** : ${k.totalStockValue.toLocaleString()} FCFA (${k.outOfStockCount} rupture(s), ${k.lowStockCount} stock(s) faible(s))\n` +
-      `• **Écarts cumulés de caisse** : ${k.totalCashDiscrepancies > 0 ? '+' : ''}${k.totalCashDiscrepancies.toLocaleString()} FCFA sur ${k.closedSessionsCount} session(s)\n\n` +
-      `*Pour une analyse plus détaillée en langage naturel, assurez-vous que votre clé API Gemini est configurée.*`,
+    replyText: `**Synthèse Point de Vente (POS) pour la Direction :**\n\n` +
+      `• **Chiffre d'Affaires POS (Caisse)** : **${k.totalPosRevenue.toLocaleString()} FCFA** (${k.totalValidTransactions} ventes, panier moyen : **${k.averageTicket.toLocaleString()} FCFA**)\n` +
+      `• **Encaissements** : Espèces **${k.cashRevenue.toLocaleString()} FCFA** | Mobile Money **${k.mobileRevenue.toLocaleString()} FCFA**\n` +
+      `• **Valeur du Stock Magasin (Achat)** : **${k.totalStockPurchaseValue.toLocaleString()} FCFA** (Valeur de vente : **${k.totalStockSellingValue.toLocaleString()} FCFA**)\n` +
+      `• **Alertes Stock** : **${k.outOfStockCount}** rupture(s) | **${k.lowStockCount}** article(s) sous le seuil\n` +
+      `• **Écarts cumulés de caisse** : **${k.totalCashDiscrepancies > 0 ? '+' : ''}${k.totalCashDiscrepancies.toLocaleString()} FCFA** sur ${k.closedSessionsCount} session(s) fermée(s)\n\n` +
+      `*Pour une analyse plus détaillée en langage naturel, assurez-vous que votre clé API Gemini est configurée dans Paramètres IA.*`,
     suggestedFollowUps: [
-      "Quels produits sont en rupture de stock ?",
-      "Détail des remises accordées",
-      "Point sur les règlements clients"
+      "Quels articles sont en rupture de stock ?",
+      "Détail des remises accordées en caisse",
+      "Écarts de caisse par caissier"
     ]
   };
 }
