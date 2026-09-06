@@ -126,11 +126,20 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
     y += 10;
   };
 
+  const cleanPdfText = (text?: string | null): string => {
+    if (!text) return '';
+    return text
+      .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '') // Supprime les paires surrogates (emojis)
+      .replace(/[\u2600-\u27BF]/g, '') // Supprime les symboles divers
+      .trim();
+  };
+
   const drawParagraph = (text?: string, fallback = 'Néant') => {
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(51, 65, 85);
-    const content = text && text.trim() ? text.trim() : fallback;
+    const cleaned = cleanPdfText(text);
+    const content = cleaned ? cleaned : fallback;
     const lines = doc.splitTextToSize(content, pageW - 40);
     lines.forEach((line: string) => {
       checkNewPage(8);
@@ -162,39 +171,42 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
 
     taskDays.forEach(day => {
       checkNewPage(18);
+      
+      // Puce vectorielle élégante pour le jour
+      doc.setFillColor(13, 148, 136);
+      doc.circle(22, y - 1, 1.5, 'F');
+
       doc.setFontSize(9.5);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(13, 148, 136);
-      doc.text(`📅 ${day}`, 22, y);
+      doc.text(day.toUpperCase(), 26, y);
       y += 6;
 
       const tasks = report.tasksByDay[day] || [];
       tasks.forEach(t => {
         checkNewPage(12);
         
-        // Checkmark / status dot
-        doc.setFontSize(8.5);
+        // Puce vectorielle colorée selon le statut
         if (t.status === 'Effectuée') {
-          doc.setTextColor(5, 150, 105);
-          doc.text("✔", 25, y);
+          doc.setFillColor(5, 150, 105);
         } else if (t.status === 'Bloquée') {
-          doc.setTextColor(220, 38, 38);
-          doc.text("✖", 25, y);
+          doc.setFillColor(220, 38, 38);
         } else {
-          doc.setTextColor(217, 119, 6);
-          doc.text("●", 25, y);
+          doc.setFillColor(217, 119, 6);
         }
+        doc.circle(25, y - 1, 1.2, 'F');
 
         doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
         doc.setTextColor(51, 65, 85);
-        let taskDesc = t.description;
-        if (t.difficulty) taskDesc += ` [Difficulté: ${t.difficulty}]`;
-        if (t.timeSpent) taskDesc += ` (${t.timeSpent})`;
+        let taskDesc = cleanPdfText(t.description);
+        if (t.difficulty) taskDesc += ` [Difficulté: ${cleanPdfText(t.difficulty)}]`;
+        if (t.timeSpent) taskDesc += ` (${cleanPdfText(t.timeSpent)})`;
 
         const lines = doc.splitTextToSize(taskDesc, pageW - 56);
         lines.forEach((l: string, i: number) => {
           if (i > 0) checkNewPage(6);
-          doc.text(l, 31, y);
+          doc.text(l, 30, y);
           y += 5;
         });
       });
