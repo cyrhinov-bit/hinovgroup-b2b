@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Search, Trash2, Plus, Minus, Clock, ArrowLeft, Package, Layers, RefreshCw } from 'lucide-react';
+import { Search, Trash2, Plus, Minus, Clock, ArrowLeft, Package, Layers, RefreshCw, Sparkles, Mic, AlertTriangle, TrendingUp, TrendingDown, Info, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { barcodeScannerService } from '../../features/products/services/BarcodeScannerService';
@@ -14,6 +14,8 @@ import { toast } from 'react-hot-toast';
 import { platform } from '../../platform';
 import { todayLocalKey, toLocalDayKey } from '../../lib/dates';
 import { matchesProductSearch, parseNumericInput } from '../../lib/searchUtils';
+import PosVoiceAiModal from '../../components/pos/PosVoiceAiModal';
+import { calculateCartMargin, type CartMarginInfo } from '../../features/pos/services/PosAiService';
 
 interface CartItem { id: string; productId: string; name: string; reference: string; unitPrice: number; quantity: number; discountType: 'none' | 'percent' | 'amount'; discountPercent: number; discountAmount: number; total: number; }
 
@@ -22,6 +24,8 @@ export default function PosTerminal() {
   const { posProducts, posSettings, posCashSessions, addPosTransaction, addPosCashSession, suspendedCarts, addSuspendedCart, removeSuspendedCart, settings: crmSettings, loading, refreshData } = useAppContext();
   const { currentUser } = useAuth();
   const [search, setSearch] = useState('');
+  const [showVoiceAiModal, setShowVoiceAiModal] = useState(false);
+  const [showMarginAdviceModal, setShowMarginAdviceModal] = useState(false);
   const [cart, setCart] = useState<CartItem[]>(() => {
     if (!currentUser) return [];
     try { const saved = localStorage.getItem(`pos_active_cart_${currentUser.id}`); return saved ? JSON.parse(saved) : []; } catch { return []; }
@@ -85,6 +89,40 @@ export default function PosTerminal() {
       return [...prev, { id: uuidv4(), productId: product.id, name: product.name, reference: product.reference, unitPrice: product.sellingPrice, quantity: 1, discountType: 'none' as const, discountPercent: 0, discountAmount: 0, total: product.sellingPrice }];
     });
     setSearch('');
+  };
+
+  const handleAddAiItemsToCart = (items: { product: typeof posProducts[0]; quantity: number }[], replace = false) => {
+    setCart(prev => {
+      let newCart = replace ? [] : [...prev];
+      for (const { product, quantity } of items) {
+        const existingIndex = newCart.findIndex(c => c.productId === product.id);
+        if (existingIndex >= 0) {
+          const existing = newCart[existingIndex];
+          const newQty = existing.quantity + quantity;
+          let itemTotal = newQty * existing.unitPrice;
+          if (existing.discountType === 'percent') {
+            itemTotal = newQty * existing.unitPrice * (1 - existing.discountPercent / 100);
+          } else if (existing.discountType === 'amount') {
+            itemTotal = newQty * existing.unitPrice - existing.discountAmount;
+          }
+          newCart[existingIndex] = { ...existing, quantity: newQty, total: Math.max(0, itemTotal) };
+        } else {
+          newCart.push({
+            id: uuidv4(),
+            productId: product.id,
+            name: product.name,
+            reference: product.reference,
+            unitPrice: product.sellingPrice,
+            quantity,
+            discountType: 'none',
+            discountPercent: 0,
+            discountAmount: 0,
+            total: product.sellingPrice * quantity
+          });
+        }
+      }
+      return newCart;
+    });
   };
 
   useEffect(() => {
@@ -154,9 +192,18 @@ export default function PosTerminal() {
   else if (discountType === 'amount') globalDiscount = discountValue;
   const total = Math.max(0, afterCartDiscount - globalDiscount);
 
+  const marginInfo = calculateCartMargin(cart, posProducts, discountType, discountValue);
+
   const handlePayment = async () => {
     if (!openSession) { alert('Aucune session caisse ouverte.'); return; }
     if (cart.length === 0) { alert('Panier vide.'); return; }
+
+    if (marginInfo.isLoss) {
+      const confirmLoss = window.confirm(
+        `⚠️ ALERTE RENTABILITÉ : VENTE À PERTE !\n\nCette commande dégage une perte estimée à ${Math.abs(marginInfo.grossMarginAmount).toLocaleString()} FCFA (Marge négative de ${marginInfo.grossMarginRate.toFixed(1)}%).\n\nSouhaitez-vous tout de même forcer la validation du paiement ?`
+      );
+      if (!confirmLoss) return;
+    }
 
     const receivedCash = Number(cashAmount) || 0;
     const receivedMobile = Number(mobileAmount) || 0;
@@ -409,6 +456,31 @@ export default function PosTerminal() {
                 </button>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => setShowVoiceAiModal(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '0 16px',
+                borderRadius: 'var(--radius-md)',
+                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                color: 'white',
+                border: 'none',
+                fontWeight: 600,
+                fontSize: '14px',
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(79, 70, 229, 0.25)',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap'
+              }}
+              title="Commande rapide vocale ou texte par IA"
+            >
+              <Sparkles size={16} />
+              <span>Commande IA</span>
+              <Mic size={14} style={{ opacity: 0.9 }} />
+            </button>
           </div>
 
           {/* Family selection tabs */}
@@ -613,6 +685,50 @@ export default function PosTerminal() {
           </div>
           {globalDiscount > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px', color: 'var(--color-success)' }}><span>Remise globale</span><span>-{globalDiscount.toLocaleString()} FCFA</span></div>}
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '20px', fontWeight: 700, paddingTop: '8px', borderTop: '2px solid var(--color-border)' }}><span>Total</span><span>{total.toLocaleString()} FCFA</span></div>
+
+          {/* Real-time Profitability & Margin Shield */}
+          {cart.length > 0 && marginInfo.totalPurchaseCost > 0 && (
+            <div style={{
+              marginTop: '12px',
+              padding: '10px 12px',
+              borderRadius: 'var(--radius-md)',
+              background: marginInfo.isLoss ? '#fef2f2' : marginInfo.isLowMargin ? '#fffbeb' : '#f0fdf4',
+              border: `1px solid ${marginInfo.isLoss ? '#fecaca' : marginInfo.isLowMargin ? '#fde68a' : '#bbf7d0'}`,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: marginInfo.isLoss ? '#b91c1c' : marginInfo.isLowMargin ? '#b45309' : '#15803d' }}>
+                  {marginInfo.isLoss ? <AlertTriangle size={14} /> : marginInfo.isLowMargin ? <Info size={14} /> : <ShieldCheck size={14} />}
+                  <span>{marginInfo.isLoss ? 'Alerte : Vente à perte !' : marginInfo.isLowMargin ? 'Marge faible' : 'Rentabilité saine'}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowMarginAdviceModal(true)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: 'var(--color-primary)',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    padding: 0
+                  }}
+                >
+                  Conseil IA Remise
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                <span style={{ color: 'var(--color-text-muted)' }}>Marge brute :</span>
+                <span style={{ fontWeight: 700, color: marginInfo.isLoss ? '#dc2626' : marginInfo.isLowMargin ? '#d97706' : '#16a34a' }}>
+                  {marginInfo.grossMarginAmount > 0 ? '+' : ''}{marginInfo.grossMarginAmount.toLocaleString()} FCFA ({marginInfo.grossMarginRate.toFixed(1)}%)
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Payment button */}
@@ -841,6 +957,106 @@ export default function PosTerminal() {
       >
         <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '16px', background: '#f5f5f5', maxHeight: '60vh', overflowY: 'auto' }}>
           <ReceiptTicket data={receiptData} settings={posSettings} crmSettings={crmSettings} preview={true} />
+        </div>
+      </Modal>
+
+      {/* Voice / Natural Language AI Order Modal */}
+      <PosVoiceAiModal
+        open={showVoiceAiModal}
+        onClose={() => setShowVoiceAiModal(false)}
+        posProducts={posProducts}
+        userId={currentUser?.id}
+        onAddItemsToCart={handleAddAiItemsToCart}
+      />
+
+      {/* Margin & Profitability Advice Modal */}
+      <Modal
+        open={showMarginAdviceModal}
+        onClose={() => setShowMarginAdviceModal(false)}
+        title="Assistant IA : Analyse de Rentabilité & Remise"
+        width={480}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+            <Button variant="ghost" onClick={() => setShowMarginAdviceModal(false)}>Fermer</Button>
+            {marginInfo.recommendedMaxDiscountAmount > 0 && (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setDiscountType('amount');
+                  setDiscountValue(marginInfo.recommendedMaxDiscountAmount);
+                  setShowMarginAdviceModal(false);
+                  toast.success(`Remise ajustée à ${marginInfo.recommendedMaxDiscountAmount.toLocaleString()} FCFA (marge cible 20%).`);
+                }}
+              >
+                Appliquer remise conseillée ({marginInfo.recommendedMaxDiscountPercent}%)
+              </Button>
+            )}
+          </div>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{
+            padding: '12px 16px',
+            borderRadius: 'var(--radius-md)',
+            background: marginInfo.isLoss ? '#fef2f2' : marginInfo.isLowMargin ? '#fffbeb' : '#f0fdf4',
+            border: `1px solid ${marginInfo.isLoss ? '#fecaca' : marginInfo.isLowMargin ? '#fde68a' : '#bbf7d0'}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            {marginInfo.isLoss ? <AlertTriangle size={24} color="#b91c1c" /> : marginInfo.isLowMargin ? <Info size={24} color="#b45309" /> : <ShieldCheck size={24} color="#15803d" />}
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '15px', color: marginInfo.isLoss ? '#b91c1c' : marginInfo.isLowMargin ? '#b45309' : '#15803d' }}>
+                {marginInfo.isLoss ? 'Vente à perte détectée !' : marginInfo.isLowMargin ? 'Marge sous le seuil d’alerte' : 'Rentabilité saine & protégée'}
+              </div>
+              <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                {marginInfo.isLoss 
+                  ? 'Le prix net de vente est inférieur au coût d’achat fournisseur des articles.'
+                  : marginInfo.isLowMargin
+                  ? 'La marge actuelle est inférieure à 15%. Soyez vigilant sur les remises supplémentaires.'
+                  : 'La marge commerciale est conforme aux objectifs de rentabilité (≥ 20%).'}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--color-surface-alt)', padding: '12px 16px', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--color-text-muted)' }}>Coût d’achat total (fournisseur) :</span>
+              <strong>{marginInfo.totalPurchaseCost.toLocaleString()} FCFA</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--color-text-muted)' }}>Prix de vente catalogue :</span>
+              <strong>{marginInfo.subtotal.toLocaleString()} FCFA</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--color-text-muted)' }}>Remise totale accordée :</span>
+              <strong style={{ color: marginInfo.totalDiscount > 0 ? '#dc2626' : 'inherit' }}>
+                {marginInfo.totalDiscount > 0 ? `-${marginInfo.totalDiscount.toLocaleString()} FCFA` : '0 FCFA'}
+              </strong>
+            </div>
+            <div style={{ height: '1px', background: 'var(--color-border)', margin: '4px 0' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+              <span>Total net client :</span>
+              <strong>{marginInfo.netRevenue.toLocaleString()} FCFA</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+              <span>Marge brute nette :</span>
+              <strong style={{ color: marginInfo.isLoss ? '#dc2626' : marginInfo.isLowMargin ? '#d97706' : '#16a34a' }}>
+                {marginInfo.grossMarginAmount > 0 ? '+' : ''}{marginInfo.grossMarginAmount.toLocaleString()} FCFA ({marginInfo.grossMarginRate.toFixed(1)}%)
+              </strong>
+            </div>
+          </div>
+
+          {marginInfo.totalPurchaseCost > 0 && (
+            <div style={{ border: '1px dashed var(--color-primary)', background: 'var(--color-primary-tint)', padding: '12px 16px', borderRadius: 'var(--radius-md)', fontSize: '13px', color: 'var(--color-primary-strong)' }}>
+              <div style={{ fontWeight: 600, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Sparkles size={15} /> Recommandation de négociation :
+              </div>
+              <div>
+                Pour maintenir une <b>marge minimale de 20%</b>, la remise maximale accordable sur ce panier est de <b>{marginInfo.recommendedMaxDiscountAmount.toLocaleString()} FCFA</b> ({marginInfo.recommendedMaxDiscountPercent}%).
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
       </div>
