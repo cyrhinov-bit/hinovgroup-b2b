@@ -1,110 +1,5 @@
 import { getUserGeminiKey } from '../../../lib/geminiKey';
 
-export type StudioSettingType = 
-  | 'studio_white' 
-  | 'studio_gradient' 
-  | 'wooden_desk' 
-  | 'library_shelf' 
-  | 'luxury_boutique';
-
-export interface StudioSettingConfig {
-  id: StudioSettingType;
-  label: string;
-  badge: string;
-  icon: string;
-  description: string;
-  bgPrompt: string;
-  canvasBg: {
-    gradient: string[];
-    shadowColor: string;
-    ambientLight: string;
-  };
-}
-
-export const STUDIO_SETTINGS: Record<StudioSettingType, StudioSettingConfig> = {
-  studio_white: {
-    id: 'studio_white',
-    label: 'Blanc Pur E-Commerce',
-    badge: 'Standard Amazon / Fnac',
-    icon: '⚪',
-    description: 'Fond blanc pur #FFFFFF immaculé avec ombre de contact douce au sol. Standard e-commerce officiel.',
-    bgPrompt: 'on a pure crisp white studio background with soft realistic ambient contact shadow underneath, high-end commercial e-commerce packshot photography, 4k ultra detailed, studio strobe lighting, centered 1:1',
-    canvasBg: {
-      gradient: ['#FFFFFF', '#FFFFFF'],
-      shadowColor: 'rgba(0, 0, 0, 0.14)',
-      ambientLight: '#FFFFFF'
-    }
-  },
-  studio_gradient: {
-    id: 'studio_gradient',
-    label: 'Podium & Spot Studio',
-    badge: 'Packshot Premium',
-    icon: '🏢',
-    description: 'Podium moderne avec fond dégradé gris perle et éclairage zénithal doux pour donner du relief.',
-    bgPrompt: 'on a sleek minimalist modern concrete podium with soft studio lighting, smooth neutral grey studio gradient background, realistic diffuse shadow, premium advertising product photograph, 8k resolution, centered 1:1',
-    canvasBg: {
-      gradient: ['#F8FAFC', '#E2E8F0'],
-      shadowColor: 'rgba(15, 23, 42, 0.22)',
-      ambientLight: '#F1F5F9'
-    }
-  },
-  wooden_desk: {
-    id: 'wooden_desk',
-    label: 'Bureau Bois & Papeterie',
-    badge: 'Ambiance Travail',
-    icon: '🪵',
-    description: 'Mise en scène chaleureuse sur un bureau en bois clair épuré, parfait pour cahiers, stylos et fournitures.',
-    bgPrompt: 'placed neatly on an elegant light oak wooden executive desk, subtle blurred modern office background with warm natural soft morning sunlight, professional lifestyle product photography, 4k, centered 1:1',
-    canvasBg: {
-      gradient: ['#FEF3C7', '#FDE68A'],
-      shadowColor: 'rgba(120, 53, 15, 0.25)',
-      ambientLight: '#FFFBEB'
-    }
-  },
-  library_shelf: {
-    id: 'library_shelf',
-    label: 'Étagère Librairie',
-    badge: 'Livres & Manuels',
-    icon: '📚',
-    description: 'Ambiance librairie avec rayonnage moderne en arrière-plan flouté, idéal pour livres et manuels scolaires.',
-    bgPrompt: 'displayed upright in a modern cozy boutique bookstore on a clean shelf, softly blurred books and warm ambient bookstore lighting in background, high-end commercial book packaging shot, 8k, centered 1:1',
-    canvasBg: {
-      gradient: ['#EEF2FF', '#E0E7FF'],
-      shadowColor: 'rgba(30, 27, 75, 0.22)',
-      ambientLight: '#F5F3FF'
-    }
-  },
-  luxury_boutique: {
-    id: 'luxury_boutique',
-    label: 'Vitrine Showroom',
-    badge: 'Haute Définition',
-    icon: '💎',
-    description: 'Ambiance vitrine lumineuse avec reflets subtils et mise en valeur haut de gamme du produit.',
-    bgPrompt: 'in a luxury flagship store showroom window, soft studio spotlights, subtle reflective glossy glass surface, luxury commercial product campaign, 8k sharp, centered 1:1',
-    canvasBg: {
-      gradient: ['#F0FDFA', '#CCFBF1'],
-      shadowColor: 'rgba(19, 78, 74, 0.25)',
-      ambientLight: '#F0FDFA'
-    }
-  }
-};
-
-export interface RegenerateImageParams {
-  imageSource: string;
-  productName: string;
-  category?: string;
-  reference?: string;
-  setting: StudioSettingType;
-  userId?: string;
-}
-
-export interface RegenerateImageResult {
-  imageUrl: string;
-  source: 'gemini_imagen' | 'ai_studio_flux' | 'canvas_smart_packshot';
-  setting: StudioSettingType;
-  promptUsed: string;
-}
-
 /**
  * Prompt Maître officiel pour la régénération studio photo produit IA
  */
@@ -120,23 +15,34 @@ Rendu photoréaliste, photographie publicitaire premium, qualité e-commerce pro
 
 IMPORTANT : Fidélité absolue au produit original. Ne pas réinventer, déformer ou modifier le produit.`;
 
+export interface RegenerateImageParams {
+  imageSource: string;
+  productName: string;
+  category?: string;
+  reference?: string;
+  userId?: string;
+}
+
+export interface RegenerateImageResult {
+  imageUrl: string;
+  source: 'gemini_imagen' | 'ai_studio_flux' | 'canvas_smart_packshot';
+  promptUsed: string;
+}
+
 /**
- * Régénère l'image d'un produit avec l'IA en modifiant le cadre, l'éclairage et la mise en scène
- * en respectant scrupuleusement le prompt maître de fidélité absolue
+ * Régénère l'image d'un produit avec l'IA en appliquant scrupuleusement le prompt maître
  */
 export async function regenerateProductImageWithAi(
   params: RegenerateImageParams
 ): Promise<RegenerateImageResult> {
-  const { imageSource, productName, category = 'Fournitures', reference = '', setting = 'studio_white', userId } = params;
-  const settingConfig = STUDIO_SETTINGS[setting] || STUDIO_SETTINGS.studio_white;
+  const { imageSource, productName, category = 'Fournitures', reference = '', userId } = params;
   const userApiKey = getUserGeminiKey(userId);
-
   const cleanProductName = productName.trim();
 
-  // Prompt anglais de base pour les moteurs d'images, dérivé du prompt maître
-  const basePrompt = `High-end commercial product packshot photography of "${cleanProductName}" (${category}${reference ? `, ref: ${reference}` : ''}). Keep the product EXACTLY IDENTICAL to the original: same exact shape, colors, proportions, textures, packaging, logos, labels, and all details. Do not add, remove, or modify anything on the actual product. Only enhance photographic quality: professional studio lighting, extreme crisp sharpness, 8k resolution, centered commercial framing, realistic soft contact shadows, ${settingConfig.bgPrompt}. Photorealistic advertising e-commerce catalog quality, absolute fidelity to the original product.`;
+  // Prompt anglais pour les modèles de génération d'images traduisant exactement le prompt maître
+  const basePrompt = `High-end commercial product packshot photography of "${cleanProductName}" (${category}${reference ? `, ref: ${reference}` : ''}). Transform this photo into a professional high-end product photograph. Keep the product EXACTLY IDENTICAL to the original: same exact shape, color, proportions, texture, packaging, logo, texts, and details. Do NOT add, remove, or modify anything on the product. Only enhance the quality of the photography: professional studio lighting, extreme crisp sharpness, 8k high resolution, clean commercial framing, natural soft contact shadows, and premium presentation. Clean and elegant background suitable for a professional catalog. Product centered and perfectly highlighted. Photorealistic rendering, premium advertising photography, professional e-commerce quality. IMPORTANT: Absolute fidelity to the original product. Do not reinvent, distort, or modify the product.`;
 
-  // 1. Pipeline Gemini Vision + Imagen 3 si clé API fournie
+  // 1. Pipeline Gemini Vision + Imagen 3 si clé API configurée
   if (userApiKey) {
     try {
       let base64Data = '';
@@ -165,10 +71,9 @@ export async function regenerateProductImageWithAi(
 
 Nom du produit : "${cleanProductName}"
 Catégorie : "${category}" ${reference ? `(Réf: ${reference})` : ''}
-Décor/Cadre sélectionné : ${settingConfig.label} (${settingConfig.description})
 
 Consigne stricte pour l'IA d'analyse visuelle :
-Analyse cette photo prise par la caméra. Génère un prompt ultra-précis en anglais pour recréer une photo studio 8k de ce produit en préservant 100% de ses caractéristiques réelles (forme géométrique exacte, couleurs exactes, textes de la couverture/étiquette, logos, packaging, matériaux), centré sur le fond studio : "${settingConfig.bgPrompt}". Ne rien inventer ni modifier.`
+Analyse cette photo prise par la caméra. Décris avec une fidélité absolue en anglais (pour le modèle d'image) l'apparence physique exacte du produit (forme, couleur exacte, logo de la marque, texte de couverture/étiquette, emballage). Construis une consigne garantissant un rendu 8K studio avec le produit centré sur un fond propre et élégant de catalogue professionnel avec ombres douces. Ne rien modifier ni ajouter.`
                     },
                     {
                       inlineData: {
@@ -186,7 +91,7 @@ Analyse cette photo prise par la caméra. Génère un prompt ultra-précis en an
             const visionData = await visionRes.json();
             const desc = visionData?.candidates?.[0]?.content?.parts?.[0]?.text;
             if (desc) {
-              enrichedPrompt = `Professional commercial studio photography of "${cleanProductName}". Product details from original photo: ${desc.trim()}. Keep product 100% identical, centered 1:1, studio strobe lighting, ultra sharp 8k, ${settingConfig.bgPrompt}.`;
+              enrichedPrompt = `Professional commercial studio photography of "${cleanProductName}". Product exact features from original photo: ${desc.trim()}. Keep product 100% identical, centered 1:1, studio lighting, clean elegant catalog background with realistic soft contact shadow, ultra sharp 8k.`;
             }
           }
         } catch (visionErr) {
@@ -218,7 +123,6 @@ Analyse cette photo prise par la caméra. Génère un prompt ultra-précis en an
             return {
               imageUrl: "data:image/jpeg;base64," + b64,
               source: 'gemini_imagen',
-              setting,
               promptUsed: MASTER_PRODUCT_AI_PROMPT
             };
           }
@@ -243,7 +147,6 @@ Analyse cette photo prise par la caméra. Génère un prompt ultra-précis en an
       return {
         imageUrl: base64,
         source: 'ai_studio_flux',
-        setting,
         promptUsed: MASTER_PRODUCT_AI_PROMPT
       };
     }
@@ -251,23 +154,19 @@ Analyse cette photo prise par la caméra. Génère un prompt ultra-précis en an
     console.warn('[PollinationsFlux] Fallback to smart canvas packshot:', fluxErr);
   }
 
-  // 3. Moteur Canvas 2D Studio Packshot en local (Fidélité 100% garantie à l'objet brut)
-  const localPackshot = await generateLocalCanvasStudioPackshot(imageSource, settingConfig);
+  // 3. Moteur Canvas 2D Studio Packshot en local (Fidélité 100% garantie)
+  const localPackshot = await generateLocalCanvasStudioPackshot(imageSource);
   return {
     imageUrl: localPackshot,
     source: 'canvas_smart_packshot',
-    setting,
     promptUsed: MASTER_PRODUCT_AI_PROMPT
   };
 }
 
 /**
- * Génère un packshot studio professionnel en Canvas 2D avec détourage, fond studio et ombre portée
+ * Génère un packshot studio propre et élégant en Canvas 2D avec fond catalogue et ombre portée
  */
-async function generateLocalCanvasStudioPackshot(
-  sourceUrl: string,
-  setting: StudioSettingConfig
-): Promise<string> {
+async function generateLocalCanvasStudioPackshot(sourceUrl: string): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -282,22 +181,21 @@ async function generateLocalCanvasStudioPackshot(
         return;
       }
 
-      // 1. Dessiner le fond de studio sélectionné
-      const bg = setting.canvasBg;
+      // 1. Fond propre et élégant adapté au catalogue (dégradé très doux blanc / gris perle subtil)
       const grad = ctx.createLinearGradient(0, 0, 0, size);
-      grad.addColorStop(0, bg.gradient[0]);
-      grad.addColorStop(1, bg.gradient[1]);
+      grad.addColorStop(0, '#FFFFFF');
+      grad.addColorStop(1, '#F8FAFC');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, size, size);
 
-      // Spot lumineux central
+      // Spot lumineux doux
       const radial = ctx.createRadialGradient(size / 2, size * 0.45, size * 0.1, size / 2, size * 0.45, size * 0.7);
-      radial.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
+      radial.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
       radial.addColorStop(1, 'rgba(255, 255, 255, 0)');
       ctx.fillStyle = radial;
       ctx.fillRect(0, 0, size, size);
 
-      // 2. Calculer le ratio et dimensions du produit centré (avec marge de 12%)
+      // 2. Centrage du produit (avec marge de 12%)
       const targetMax = size * 0.76;
       let drawW = img.width;
       let drawH = img.height;
@@ -308,16 +206,16 @@ async function generateLocalCanvasStudioPackshot(
       const posX = (size - drawW) / 2;
       const posY = (size - drawH) / 2 - 15;
 
-      // 3. Ombre de contact au sol réaliste
+      // 3. Ombre de contact au sol naturelle
       const shadowY = posY + drawH - 5;
       const shadowW = drawW * 0.85;
-      const shadowH = 24;
+      const shadowH = 22;
       const shadowGrad = ctx.createRadialGradient(
         size / 2, shadowY + shadowH / 2, 5,
         size / 2, shadowY + shadowH / 2, shadowW / 2
       );
-      shadowGrad.addColorStop(0, bg.shadowColor);
-      shadowGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.08)');
+      shadowGrad.addColorStop(0, 'rgba(15, 23, 42, 0.18)');
+      shadowGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.06)');
       shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
       ctx.save();
@@ -327,7 +225,7 @@ async function generateLocalCanvasStudioPackshot(
       ctx.fill();
       ctx.restore();
 
-      // 4. Dessiner le produit avec rehaussement de netteté et clarté
+      // 4. Dessin du produit avec rehaussement de netteté et clarté
       ctx.save();
       ctx.filter = 'contrast(108%) brightness(104%) saturate(106%)';
       ctx.drawImage(img, posX, posY, drawW, drawH);

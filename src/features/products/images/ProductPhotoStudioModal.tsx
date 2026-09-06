@@ -3,11 +3,7 @@ import { Wand2, X, Save, Camera, Upload } from 'lucide-react';
 import type { PosProduct } from '../../../context/AppContext';
 import { useAppContext } from '../../../context/AppContext';
 import { enhanceProductImage, type EnhanceOptions, PRESET_CONFIGS } from '../../../lib/imageEnhancer';
-import { 
-  regenerateProductImageWithAi, 
-  STUDIO_SETTINGS, 
-  type StudioSettingType 
-} from '../services/ProductImageAiService';
+import { regenerateProductImageWithAi } from '../services/ProductImageAiService';
 import { supabase } from '../../../lib/supabase';
 import { db } from '../../../lib/db';
 import { toast } from 'react-hot-toast';
@@ -45,7 +41,6 @@ export function ProductPhotoStudioModal({
   const [showOriginal, setShowOriginal] = useState(false);
 
   // IA Studio
-  const [selectedStudioSetting, setSelectedStudioSetting] = useState<StudioSettingType>('studio_white');
   const [isRegeneratingAi, setIsRegeneratingAi] = useState(false);
   const [aiRegenerationSource, setAiRegenerationSource] = useState<string | null>(null);
 
@@ -143,19 +138,17 @@ export function ProductPhotoStudioModal({
     setRotation((prev) => (prev + 90) % 360);
   };
 
-  // Régénération par l'IA
+  // Régénération par l'IA avec le prompt officiel
   const handleAiRegenerate = async () => {
     if (!rawImageSource || !product) return;
     setIsRegeneratingAi(true);
-    const settingName = STUDIO_SETTINGS[selectedStudioSetting]?.label || 'Studio';
-    const toastId = toast.loading(`Régénération IA en cours ("${settingName}")...`);
+    const toastId = toast.loading('Régénération IA studio en cours...');
     try {
       const result = await regenerateProductImageWithAi({
         imageSource: rawImageSource,
         productName: product.name,
         category: product.family || 'Fourniture',
-        reference: product.reference,
-        setting: selectedStudioSetting
+        reference: product.reference
       });
 
       setProcessedDataUrl(result.imageUrl);
@@ -167,13 +160,7 @@ export function ProductPhotoStudioModal({
       setProcessedBlob(blob);
       setFileSizeKb(Math.round(blob.size / 1024));
 
-      const sourceLabel = result.source === 'gemini_imagen'
-        ? 'Gemini Vision + Imagen'
-        : result.source === 'ai_studio_flux'
-        ? 'Flux Studio Ultra HD'
-        : 'Packshot Studio 2D';
-
-      toast.success(`Photo régénérée avec succès (${sourceLabel}) !`, { id: toastId });
+      toast.success("Photo régénérée avec succès par l'IA !", { id: toastId });
     } catch (err) {
       console.error('Erreur régénération IA:', err);
       toast.error("Erreur lors de la régénération par l'IA.", { id: toastId });
@@ -239,7 +226,7 @@ export function ProductPhotoStudioModal({
         )
       );
 
-      toast.success(`Photo de "${product.name}" mise à jour et publiée au catalogue !`);
+      toast.success(`Photo de "${product.name}" enregistrée et publiée au catalogue !`);
       if (onSaved) onSaved(updatedProduct);
       onClose();
     } catch (err) {
@@ -249,7 +236,7 @@ export function ProductPhotoStudioModal({
     }
   };
 
-  // Sélection depuis fichier dans le mode edit
+  // Sélection directe d'un fichier depuis l'écran edit
   const handleDirectFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -388,13 +375,10 @@ export function ProductPhotoStudioModal({
                 onRotate={handleRotate}
                 fileSizeKb={fileSizeKb}
                 isRegeneratingAi={isRegeneratingAi}
-                selectedSetting={selectedStudioSetting}
               />
 
-              {/* Module Studio IA & Décors */}
+              {/* Module Studio IA avec le prompt officiel */}
               <StudioAiPanel
-                selectedSetting={selectedStudioSetting}
-                onSelectSetting={setSelectedStudioSetting}
                 onRegenerate={handleAiRegenerate}
                 isRegenerating={isRegeneratingAi}
                 aiSource={aiRegenerationSource}

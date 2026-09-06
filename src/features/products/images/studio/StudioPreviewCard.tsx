@@ -1,6 +1,5 @@
 import React from 'react';
 import { Eye, RotateCw, Loader2 } from 'lucide-react';
-import { STUDIO_SETTINGS, type StudioSettingType } from '../../services/ProductImageAiService';
 
 interface StudioPreviewCardProps {
   currentSrc: string;
@@ -11,7 +10,6 @@ interface StudioPreviewCardProps {
   onRotate: () => void;
   fileSizeKb: number;
   isRegeneratingAi: boolean;
-  selectedSetting: StudioSettingType;
 }
 
 export const StudioPreviewCard: React.FC<StudioPreviewCardProps> = ({
@@ -22,8 +20,7 @@ export const StudioPreviewCard: React.FC<StudioPreviewCardProps> = ({
   onHoldOriginalEnd,
   onRotate,
   fileSizeKb,
-  isRegeneratingAi,
-  selectedSetting
+  isRegeneratingAi
 }) => {
   const displaySrc = showOriginal && originalSrc ? originalSrc : currentSrc;
 
@@ -71,10 +68,10 @@ export const StudioPreviewCard: React.FC<StudioPreviewCardProps> = ({
         >
           <Loader2 size={36} style={{ animation: 'spin 1s linear infinite', marginBottom: '12px', color: '#5EEAD4' }} />
           <span style={{ fontWeight: 800, fontSize: '14px', marginBottom: '4px' }}>
-            Studio Photo IA en action...
+            Régénération Studio IA en cours...
           </span>
-          <span style={{ fontSize: '11px', color: '#CBD5E1', maxWidth: '220px' }}>
-            Mise en scène dans le décor « {STUDIO_SETTINGS[selectedSetting]?.label || 'Studio'} »
+          <span style={{ fontSize: '11px', color: '#CBD5E1', maxWidth: '240px' }}>
+            Application du prompt d'éclairage et présentation catalogue
           </span>
         </div>
       )}
