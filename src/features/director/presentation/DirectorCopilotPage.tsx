@@ -31,14 +31,33 @@ export default function DirectorCopilotPage() {
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<any>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const shouldListenRef = useRef(false);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
+  useEffect(() => {
+    return () => {
+      // Nettoyage au démontage
+      shouldListenRef.current = false;
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+      }
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(t => t.stop());
+      }
+    };
+  }, []);
+
   const handleSend = async (queryText?: string) => {
     const q = (queryText || inputQuery).trim();
     if (!q || loading) return;
+
+    if (isListening) {
+      stopVoiceListening();
+    }
 
     const userMsg: CopilotMessage = {
       id: `user-${Date.now()}`,
@@ -87,37 +106,88 @@ export default function DirectorCopilotPage() {
     }
   };
 
-  const toggleVoice = () => {
+  const stopVoiceListening = () => {
+    shouldListenRef.current = false;
+    setIsListening(false);
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(t => t.stop());
+      mediaStreamRef.current = null;
+    }
+  };
+
+  const toggleVoice = async () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      toast.error('Reconnaissance vocale non supportée par votre navigateur (utilisez Chrome ou Edge).');
+      toast.error('Reconnaissance vocale non supportée par votre navigateur (veuillez utiliser Google Chrome ou Microsoft Edge).');
       return;
     }
 
     if (isListening) {
-      if (recognitionRef.current) recognitionRef.current.stop();
-      setIsListening(false);
+      stopVoiceListening();
+      toast('Micro désactivé', { icon: '🔇' });
       return;
     }
 
     try {
+      // 1. Demander explicitement la permission au micro
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaStreamRef.current = stream;
+      }
+
+      // 2. Initialiser la reconnaissance vocale
       const rec = new SpeechRecognition();
-      rec.continuous = false;
+      rec.continuous = true;
+      rec.interimResults = true;
       rec.lang = 'fr-FR';
-      rec.onstart = () => setIsListening(true);
+
+      rec.onstart = () => {
+        setIsListening(true);
+        shouldListenRef.current = true;
+        toast.success('Micro activé ! Parlez maintenant...', { icon: '🎙️' });
+      };
+
       rec.onresult = (e: any) => {
-        const spoken = e.results[0][0].transcript;
-        if (spoken) {
-          setInputQuery(spoken);
-          handleSend(spoken);
+        let fullTranscript = '';
+        for (let i = 0; i < e.results.length; i++) {
+          fullTranscript += e.results[i][0].transcript + ' ';
+        }
+        const cleanText = fullTranscript.trim();
+        if (cleanText) {
+          setInputQuery(cleanText);
         }
       };
-      rec.onerror = () => setIsListening(false);
-      rec.onend = () => setIsListening(false);
+
+      rec.onerror = (e: any) => {
+        console.warn('SpeechRecognition error:', e);
+        if (e.error === 'not-allowed') {
+          toast.error("Accès microphone refusé. Veuillez autoriser le micro dans les paramètres de votre navigateur.");
+          stopVoiceListening();
+        } else if (e.error === 'no-speech') {
+          // Silence détecté, ne pas bloquer
+        } else {
+          toast.error(`Erreur micro (${e.error})`);
+        }
+      };
+
+      rec.onend = () => {
+        if (shouldListenRef.current) {
+          try {
+            rec.start();
+          } catch {}
+        } else {
+          setIsListening(false);
+        }
+      };
+
       recognitionRef.current = rec;
       rec.start();
-      toast('Écoute en cours... parlez !', { icon: '🎙️' });
-    } catch {
+    } catch (err: any) {
+      console.error('Erreur microphone:', err);
+      toast.error("Impossible d'accéder au microphone : " + (err.message || err));
       setIsListening(false);
     }
   };
@@ -337,6 +407,54 @@ export default function DirectorCopilotPage() {
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Listening Live Banner */}
+        {isListening && (
+          <div style={{
+            padding: '8px 16px',
+            background: '#FEF2F2',
+            borderTop: '1px solid #FECACA',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '13px',
+            color: '#991B1B',
+            fontWeight: 600
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                background: '#EF4444',
+                display: 'inline-block',
+                boxShadow: '0 0 8px #EF4444',
+                animation: 'pulseGlow 1.5s infinite'
+              }} />
+              <span>🎙️ Reconnaissance vocale active — Parlez, le texte s'écrit en direct...</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const q = inputQuery.trim();
+                stopVoiceListening();
+                if (q) handleSend(q);
+              }}
+              style={{
+                background: '#DC2626',
+                color: 'white',
+                border: 'none',
+                padding: '4px 12px',
+                borderRadius: '12px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Arrêter & Poser la question
+            </button>
+          </div>
+        )}
+
         {/* Input Bar */}
         <div style={{ padding: '16px', borderTop: '1px solid var(--color-border)', background: '#FAF5FF', display: 'flex', gap: '10px', alignItems: 'center' }}>
           <button
@@ -348,13 +466,14 @@ export default function DirectorCopilotPage() {
               borderRadius: '50%',
               background: isListening ? '#ef4444' : 'white',
               color: isListening ? 'white' : 'var(--color-text)',
-              border: '1px solid var(--color-border)',
+              border: isListening ? '2px solid #dc2626' : '1px solid var(--color-border)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
               transition: 'all 0.2s',
-              flexShrink: 0
+              flexShrink: 0,
+              boxShadow: isListening ? '0 0 14px rgba(239, 68, 68, 0.45)' : 'none'
             }}
             title={isListening ? 'Arrêter le micro' : 'Poser la question à la voix'}
           >
@@ -371,15 +490,17 @@ export default function DirectorCopilotPage() {
                 handleSend();
               }
             }}
-            placeholder="Posez une question sur les ventes, stocks, marges, créances ou rapports..."
+            placeholder={isListening ? "🎙️ Parlez maintenant, votre voix s'écrit ici en temps réel..." : "Posez une question sur les ventes, stocks, marges, créances ou rapports..."}
             style={{
               flex: 1,
               padding: '12px 16px',
               borderRadius: 'var(--radius-full)',
-              border: '1px solid var(--color-border)',
+              border: isListening ? '2px solid #EF4444' : '1px solid var(--color-border)',
+              boxShadow: isListening ? '0 0 10px rgba(239, 68, 68, 0.25)' : 'none',
               fontSize: '14px',
               outline: 'none',
-              background: 'white'
+              background: isListening ? '#FFF5F5' : 'white',
+              transition: 'all 0.2s'
             }}
           />
 
