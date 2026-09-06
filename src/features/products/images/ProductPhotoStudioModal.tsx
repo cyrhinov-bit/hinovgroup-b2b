@@ -2,11 +2,17 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   Camera, Upload, X, Check, Wand2, RotateCw, Sliders, 
   Sparkles, RefreshCw, Eye, Image as ImageIcon, CheckCircle2,
-  SwitchCamera, AlertCircle, Save
+  SwitchCamera, AlertCircle, Save, Loader2, Sparkle
 } from 'lucide-react';
 import type { PosProduct } from '../../../context/AppContext';
 import { useAppContext } from '../../../context/AppContext';
 import { enhanceProductImage, type EnhanceOptions, PRESET_CONFIGS } from '../../../lib/imageEnhancer';
+import { 
+  regenerateProductImageWithAi, 
+  STUDIO_SETTINGS, 
+  type StudioSettingType,
+  type StudioSettingConfig 
+} from '../services/ProductImageAiService';
 import { supabase } from '../../../lib/supabase';
 import { db } from '../../../lib/db';
 import { toast } from 'react-hot-toast';
@@ -36,7 +42,13 @@ export function ProductPhotoStudioModal({
   const [isProcessing, setIsProcessing] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
 
-  // Options d'amélioration
+  // IA Studio Settings & State
+  const [selectedStudioSetting, setSelectedStudioSetting] = useState<StudioSettingType>('studio_white');
+  const [isRegeneratingAi, setIsRegeneratingAi] = useState(false);
+  const [aiRegenerationSource, setAiRegenerationSource] = useState<string | null>(null);
+  const [aiPromptUsed, setAiPromptUsed] = useState<string | null>(null);
+
+  // Options d'amélioration classique
   const [preset, setPreset] = useState<EnhanceOptions['preset']>('auto');
   const [brightness, setBrightness] = useState(0);
   const [contrast, setContrast] = useState(0);
@@ -210,6 +222,54 @@ export function ProductPhotoStudioModal({
   // Rotation 90°
   const handleRotate = () => {
     setRotation(prev => (prev + 90) % 360);
+  };
+
+  // Régénération complète par l'IA avec le décor choisi
+  const handleAiRegenerate = async () => {
+    if (!rawImageSource || !product) return;
+    setIsRegeneratingAi(true);
+    const settingName = STUDIO_SETTINGS[selectedStudioSetting]?.label || 'Studio';
+    const toastId = toast.loading(`Régénération IA en cours ("${settingName}")...`);
+    try {
+      const result = await regenerateProductImageWithAi({
+        imageSource: rawImageSource,
+        productName: product.name,
+        category: product.family || 'Fourniture',
+        reference: product.reference,
+        setting: selectedStudioSetting
+      });
+
+      setProcessedDataUrl(result.imageUrl);
+      setAiRegenerationSource(result.source);
+      setAiPromptUsed(result.promptUsed);
+
+      // Convertir en Blob pour l'upload
+      const res = await fetch(result.imageUrl);
+      const blob = await res.blob();
+      setProcessedBlob(blob);
+      setFileSizeKb(Math.round(blob.size / 1024));
+
+      const sourceLabel = result.source === 'gemini_imagen' 
+        ? 'Gemini Vision + Imagen' 
+        : result.source === 'ai_studio_flux' 
+        ? 'Flux Studio Ultra HD' 
+        : 'Packshot Studio 2D';
+
+      toast.success(`Photo régénérée avec succès (${sourceLabel}) !`, { id: toastId });
+    } catch (err) {
+      console.error('Erreur régénération IA:', err);
+      toast.error('Erreur lors de la régénération par l\'IA. Veuillez réessayer.', { id: toastId });
+    } finally {
+      setIsRegeneratingAi(false);
+    }
+  };
+
+  // Réinitialiser vers le filtre algorithmique standard
+  const handleResetToStandard = () => {
+    setAiRegenerationSource(null);
+    setAiPromptUsed(null);
+    processImage();
+    toast.success('Rétabli aux filtres classiques.');
   };
 
   // Enregistrer et publier
@@ -525,7 +585,7 @@ export function ProductPhotoStudioModal({
                 style={{
                   position: 'relative',
                   width: '100%',
-                  maxWidth: '300px',
+                  maxWidth: '320px',
                   aspectRatio: '1 / 1',
                   margin: '0 auto 16px auto',
                   backgroundColor: '#FFFFFF',
@@ -543,6 +603,34 @@ export function ProductPhotoStudioModal({
                   alt="Aperçu Studio"
                   style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                 />
+
+                {/* Overlay pendant la régénération IA */}
+                {isRegeneratingAi && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                      backdropFilter: 'blur(4px)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '16px',
+                      textAlign: 'center',
+                      color: 'white',
+                      zIndex: 10
+                    }}
+                  >
+                    <Loader2 size={36} className="animate-spin" style={{ animation: 'spin 1s linear infinite', marginBottom: '12px', color: '#5EEAD4' }} />
+                    <span style={{ fontWeight: 800, fontSize: '14px', marginBottom: '4px' }}>
+                      Studio Photo IA en action...
+                    </span>
+                    <span style={{ fontSize: '11px', color: '#CBD5E1', maxWidth: '220px' }}>
+                      Mise en scène dans le décor « {STUDIO_SETTINGS[selectedStudioSetting].label} »
+                    </span>
+                  </div>
+                )}
 
                 {/* Badge Info Format & Poids */}
                 <div
@@ -618,105 +706,244 @@ export function ProductPhotoStudioModal({
                 </button>
               </div>
 
-              {/* BARRE DES PRESETS DE L'ALGORITHME */}
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>
-                  Filtres d'optimisation intelligente
-                </label>
+              {/* MODULE PRINCIPAL : RÉGÉNÉRATION STUDIO IA & DÉCORS */}
+              <div
+                style={{
+                  marginBottom: '16px',
+                  backgroundColor: '#F0FDFA',
+                  border: '1px solid #99F6E4',
+                  borderRadius: '14px',
+                  padding: '12px 14px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Sparkles size={16} color="#0D9488" />
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F766E' }}>
+                      Studio IA & Décors Publicitaires
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '10px', backgroundColor: '#CCFBF1', color: '#0F766E', padding: '2px 6px', borderRadius: '6px', fontWeight: 700 }}>
+                    HD & Ambiance
+                  </span>
+                </div>
+
+                <p style={{ fontSize: '11px', color: '#115E59', margin: '0 0 10px 0', lineHeight: '1.4' }}>
+                  Sélectionnez un décor studio et laissez l'IA créer une photo professionnelle pour le catalogue public.
+                </p>
+
+                {/* Grille des 5 décors studio */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '6px', marginBottom: '12px' }}>
+                  {(Object.keys(STUDIO_SETTINGS) as StudioSettingType[]).map((key) => {
+                    const cfg = STUDIO_SETTINGS[key];
+                    const isSelected = selectedStudioSetting === key;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setSelectedStudioSetting(key)}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'flex-start',
+                          padding: '8px 10px',
+                          borderRadius: '10px',
+                          border: `1.5px solid ${isSelected ? '#0D9488' : '#CCFBF1'}`,
+                          backgroundColor: isSelected ? '#FFFFFF' : '#F0FDFA',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          boxShadow: isSelected ? '0 2px 8px rgba(13, 148, 136, 0.15)' : 'none',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', marginBottom: '2px' }}>
+                          <span style={{ fontSize: '14px' }}>{cfg.icon}</span>
+                          <span style={{ fontSize: '11px', fontWeight: isSelected ? 800 : 700, color: isSelected ? '#0F766E' : '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {cfg.label}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '9px', color: '#0D9488', fontWeight: 600 }}>
+                          {cfg.badge}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Bouton de déclenchement de la régénération IA */}
+                <button
+                  type="button"
+                  onClick={handleAiRegenerate}
+                  disabled={isRegeneratingAi}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #0D9488 0%, #0F766E 100%)',
+                    color: 'white',
+                    border: 'none',
+                    fontWeight: 800,
+                    fontSize: '13px',
+                    cursor: isRegeneratingAi ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 12px rgba(13, 148, 136, 0.25)',
+                    opacity: isRegeneratingAi ? 0.7 : 1
+                  }}
+                >
+                  {isRegeneratingAi ? (
+                    <>
+                      <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                      <span>Régénération en cours...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 size={16} />
+                      <span>🪄 Régénérer avec le décor « {STUDIO_SETTINGS[selectedStudioSetting].label} »</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Badge statut si l'image est générée par l'IA */}
+                {aiRegenerationSource && (
+                  <div
+                    style={{
+                      marginTop: '10px',
+                      padding: '6px 10px',
+                      borderRadius: '8px',
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #99F6E4',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: '11px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#0F766E', fontWeight: 700 }}>
+                      <CheckCircle2 size={13} color="#0D9488" />
+                      <span>Rendu IA actif ({STUDIO_SETTINGS[selectedStudioSetting].label})</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResetToStandard}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#64748B',
+                        fontSize: '10px',
+                        textDecoration: 'underline',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Filtre classique
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* BARRE DES PRESETS ALGORITHMIQUES CLASSIQUES */}
+              <div style={{ marginBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>
+                    Filtres d'optimisation instantanés (Hors IA)
+                  </label>
+                </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
                   <button
                     type="button"
-                    onClick={() => applyPreset('auto')}
+                    onClick={() => { setAiRegenerationSource(null); applyPreset('auto'); }}
                     style={{
-                      padding: '8px 4px',
-                      borderRadius: '10px',
-                      border: `1px solid ${preset === 'auto' ? '#0F766E' : '#E2E8F0'}`,
-                      backgroundColor: preset === 'auto' ? '#F0FDFA' : 'white',
-                      color: preset === 'auto' ? '#0F766E' : '#475569',
+                      padding: '7px 4px',
+                      borderRadius: '8px',
+                      border: `1px solid ${preset === 'auto' && !aiRegenerationSource ? '#0F766E' : '#E2E8F0'}`,
+                      backgroundColor: preset === 'auto' && !aiRegenerationSource ? '#F0FDFA' : 'white',
+                      color: preset === 'auto' && !aiRegenerationSource ? '#0F766E' : '#475569',
                       fontWeight: 700,
                       fontSize: '11px',
                       cursor: 'pointer',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      gap: '4px'
+                      gap: '2px'
                     }}
                   >
-                    <span>🪄 Auto</span>
+                    <span>⚡ Auto</span>
                     <span style={{ fontSize: '9px', fontWeight: 500, opacity: 0.8 }}>Équilibré</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => applyPreset('studio')}
+                    onClick={() => { setAiRegenerationSource(null); applyPreset('studio'); }}
                     style={{
-                      padding: '8px 4px',
-                      borderRadius: '10px',
-                      border: `1px solid ${preset === 'studio' ? '#0F766E' : '#E2E8F0'}`,
-                      backgroundColor: preset === 'studio' ? '#F0FDFA' : 'white',
-                      color: preset === 'studio' ? '#0F766E' : '#475569',
+                      padding: '7px 4px',
+                      borderRadius: '8px',
+                      border: `1px solid ${preset === 'studio' && !aiRegenerationSource ? '#0F766E' : '#E2E8F0'}`,
+                      backgroundColor: preset === 'studio' && !aiRegenerationSource ? '#F0FDFA' : 'white',
+                      color: preset === 'studio' && !aiRegenerationSource ? '#0F766E' : '#475569',
                       fontWeight: 700,
                       fontSize: '11px',
                       cursor: 'pointer',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      gap: '4px'
+                      gap: '2px'
                     }}
                   >
-                    <span>🧼 Studio</span>
-                    <span style={{ fontSize: '9px', fontWeight: 500, opacity: 0.8 }}>Fond blanc</span>
+                    <span>🧼 Fond Blanc</span>
+                    <span style={{ fontSize: '9px', fontWeight: 500, opacity: 0.8 }}>Détourage</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => applyPreset('vibrant')}
+                    onClick={() => { setAiRegenerationSource(null); applyPreset('vibrant'); }}
                     style={{
-                      padding: '8px 4px',
-                      borderRadius: '10px',
-                      border: `1px solid ${preset === 'vibrant' ? '#0F766E' : '#E2E8F0'}`,
-                      backgroundColor: preset === 'vibrant' ? '#F0FDFA' : 'white',
-                      color: preset === 'vibrant' ? '#0F766E' : '#475569',
+                      padding: '7px 4px',
+                      borderRadius: '8px',
+                      border: `1px solid ${preset === 'vibrant' && !aiRegenerationSource ? '#0F766E' : '#E2E8F0'}`,
+                      backgroundColor: preset === 'vibrant' && !aiRegenerationSource ? '#F0FDFA' : 'white',
+                      color: preset === 'vibrant' && !aiRegenerationSource ? '#0F766E' : '#475569',
                       fontWeight: 700,
                       fontSize: '11px',
                       cursor: 'pointer',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      gap: '4px'
+                      gap: '2px'
                     }}
                   >
                     <span>🎨 Vives</span>
-                    <span style={{ fontSize: '9px', fontWeight: 500, opacity: 0.8 }}>Couvertures</span>
+                    <span style={{ fontSize: '9px', fontWeight: 500, opacity: 0.8 }}>Couleurs</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => applyPreset('sharp')}
+                    onClick={() => { setAiRegenerationSource(null); applyPreset('sharp'); }}
                     style={{
-                      padding: '8px 4px',
-                      borderRadius: '10px',
-                      border: `1px solid ${preset === 'sharp' ? '#0F766E' : '#E2E8F0'}`,
-                      backgroundColor: preset === 'sharp' ? '#F0FDFA' : 'white',
-                      color: preset === 'sharp' ? '#0F766E' : '#475569',
+                      padding: '7px 4px',
+                      borderRadius: '8px',
+                      border: `1px solid ${preset === 'sharp' && !aiRegenerationSource ? '#0F766E' : '#E2E8F0'}`,
+                      backgroundColor: preset === 'sharp' && !aiRegenerationSource ? '#F0FDFA' : 'white',
+                      color: preset === 'sharp' && !aiRegenerationSource ? '#0F766E' : '#475569',
                       fontWeight: 700,
                       fontSize: '11px',
                       cursor: 'pointer',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      gap: '4px'
+                      gap: '2px'
                     }}
                   >
                     <span>🔍 Textes</span>
-                    <span style={{ fontSize: '9px', fontWeight: 500, opacity: 0.8 }}>Netteté max</span>
+                    <span style={{ fontSize: '9px', fontWeight: 500, opacity: 0.8 }}>Netteté</span>
                   </button>
                 </div>
               </div>
 
               {/* LIEN VERS NOUVELLE CAPTURE OU IMPORT */}
-              <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '12px', marginTop: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '12px', marginTop: '8px' }}>
                 <button
                   type="button"
                   onClick={startCamera}
