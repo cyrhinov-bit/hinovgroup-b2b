@@ -246,3 +246,31 @@ function applySharpenConvolution(
 
   return output;
 }
+
+/**
+ * Redimensionne et compresse une photo de profil pour obtenir un avatar léger (< 40 Ko) en JPEG/WebP
+ */
+export async function compressProfileAvatar(source: File | Blob | string, maxDim = 256): Promise<string> {
+  const img = await loadImageElement(source);
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D context non disponible');
+
+  let width = img.naturalWidth || img.width;
+  let height = img.naturalHeight || img.height;
+
+  // Calcul du cadrage centré carré (1:1)
+  const minDim = Math.min(width, height);
+  const srcX = (width - minDim) / 2;
+  const srcY = (height - minDim) / 2;
+
+  canvas.width = maxDim;
+  canvas.height = maxDim;
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  ctx.drawImage(img, srcX, srcY, minDim, minDim, 0, 0, maxDim, maxDim);
+
+  return canvas.toDataURL('image/jpeg', 0.85);
+}

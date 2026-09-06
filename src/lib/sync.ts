@@ -1483,6 +1483,41 @@ export const processSyncQueue = async () => {
           success = !error;
           break;
         }
+        case 'UPDATE_PROFILE': {
+          const { id, ...data } = action.payload;
+          const mapped: any = { updated_at: new Date().toISOString() };
+          if (data.photo !== undefined) mapped.photo = data.photo || null;
+          if (data.name !== undefined) mapped.name = data.name;
+          if (data.role !== undefined) mapped.role = data.role;
+          if (data.active !== undefined) mapped.active = data.active;
+          if (data.serviceId !== undefined) mapped.service_id = data.serviceId || null;
+          if (data.posRole !== undefined) mapped.pos_role = data.posRole || null;
+          if (data.posReturnsEnabled !== undefined) mapped.pos_returns_enabled = data.posReturnsEnabled;
+          if (data.posCatalogueEnabled !== undefined) mapped.pos_catalogue_enabled = data.posCatalogueEnabled;
+          if (data.posSupplyEnabled !== undefined) mapped.pos_supply_enabled = data.posSupplyEnabled;
+          if (data.posInventoryEnabled !== undefined) mapped.pos_inventory_enabled = data.posInventoryEnabled;
+          if (data.posStockEnabled !== undefined) mapped.pos_stock_enabled = data.posStockEnabled;
+          const { error } = await supabase.from('profiles').update(mapped).eq('id', id);
+          if (error) console.error('[Sync] UPDATE_PROFILE échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'DELETE_PROFILE': {
+          const { error } = await supabase.from('profiles').delete().eq('id', action.payload.id);
+          if (error) console.error('[Sync] DELETE_PROFILE échoué :', error.message);
+          success = !error;
+          break;
+        }
+        case 'UPDATE_SETTINGS': {
+          const { error } = await supabase.from('settings').upsert({
+            id: action.payload.id || 'default',
+            ...action.payload,
+            updated_at: new Date().toISOString()
+          });
+          if (error) console.error('[Sync] UPDATE_SETTINGS échoué :', error.message);
+          success = !error;
+          break;
+        }
         default:
           success = true; // Ignore unknown actions
       }

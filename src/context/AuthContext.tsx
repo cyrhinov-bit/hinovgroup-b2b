@@ -12,6 +12,7 @@ interface AuthState {
   loginAsTestUser: (role: User['role']) => void;
   logout: () => Promise<void>;
   updatePin: (currentPin: string, newPin: string) => Promise<{ success: boolean; error?: string }>;
+  updateCurrentUser: (updates: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -173,8 +174,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { success: true };
   };
 
+  const updateCurrentUser = (updates: Partial<User>) => {
+    setCurrentUser(prev => (prev ? { ...prev, ...updates } : null));
+  };
+
   return (
-    <AuthContext.Provider value={{ currentUser, loading, login, loginAsTestUser, logout, updatePin }}>
+    <AuthContext.Provider value={{ currentUser, loading, login, loginAsTestUser, logout, updatePin, updateCurrentUser }}>
       {children}
     </AuthContext.Provider>
   );

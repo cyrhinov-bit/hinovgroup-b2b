@@ -4,10 +4,12 @@ import { useAuth } from '../context/AuthContext';
 import { useAppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { ThemeModal } from './ThemeModal';
+import { compressProfileAvatar } from '../lib/imageEnhancer';
+import { toast } from 'react-hot-toast';
 import './Topbar.css';
 
 export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
-  const { currentUser, logout, updatePin } = useAuth();
+  const { currentUser, logout, updatePin, updateCurrentUser } = useAuth();
   const { posWorkspace, setPosWorkspace, updateMyProfile, notifications, markNotificationAsRead, markAllNotificationsAsRead, services } = useAppContext();
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -91,19 +93,28 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
     placeholder: '••••••',
   });
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      await updateMyProfile({ photo: reader.result as string });
+    try {
+      toast.loading('Optimisation de la photo...', { id: 'photo-upload' });
+      const compressedDataUrl = await compressProfileAvatar(file, 256);
+      updateCurrentUser({ photo: compressedDataUrl });
+      await updateMyProfile({ photo: compressedDataUrl });
+      toast.success('Photo de profil mise à jour !', { id: 'photo-upload' });
       setShowProfileMenu(false);
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Erreur traitement photo:', err);
+      toast.error('Erreur lors du traitement de la photo', { id: 'photo-upload' });
+    } finally {
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
   };
 
   const handleRemovePhoto = async () => {
+    updateCurrentUser({ photo: undefined });
     await updateMyProfile({ photo: '' });
+    toast.success('Photo de profil supprimée');
     setShowProfileMenu(false);
   };
 

@@ -220,7 +220,18 @@ export function Utilisateurs() {
           <tbody>
             {users.map(u => (
               <tr key={u.id} style={{ opacity: u.active !== false ? 1 : 0.6 }}>
-                <td data-label="Nom"><strong>{u.name}</strong></td>
+                <td data-label="Nom">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {u.photo ? (
+                      <img src={u.photo} alt={u.name} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--color-border)' }} />
+                    ) : (
+                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--color-surface-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', border: '1px solid var(--color-border)' }}>
+                        {(u.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    <strong>{u.name}</strong>
+                  </div>
+                </td>
                 <td data-label="Email">{u.email}</td>
                 <td data-label="Rôle"><span className="badge-status" style={{ backgroundColor: getRoleColor(u.role) }}>{u.role}</span></td>
                 <td data-label="Statut">
