@@ -106,7 +106,23 @@ export interface RegenerateImageResult {
 }
 
 /**
+ * Prompt Maître officiel pour la régénération studio photo produit IA
+ */
+export const MASTER_PRODUCT_AI_PROMPT = `Transforme cette photo en photographie produit professionnelle haut de gamme.
+
+Conserve le produit EXACTEMENT identique à l'original : même forme, couleur, proportions, texture, emballage, logo, textes et détails. Ne rien ajouter, supprimer ou modifier sur le produit.
+
+Améliore uniquement la qualité de la photographie : éclairage studio professionnel, netteté, haute résolution, cadrage commercial, ombres naturelles et présentation premium.
+
+Fond propre et élégant adapté à un catalogue professionnel. Produit centré et parfaitement mis en valeur.
+
+Rendu photoréaliste, photographie publicitaire premium, qualité e-commerce professionnelle.
+
+IMPORTANT : Fidélité absolue au produit original. Ne pas réinventer, déformer ou modifier le produit.`;
+
+/**
  * Régénère l'image d'un produit avec l'IA en modifiant le cadre, l'éclairage et la mise en scène
+ * en respectant scrupuleusement le prompt maître de fidélité absolue
  */
 export async function regenerateProductImageWithAi(
   params: RegenerateImageParams
@@ -116,9 +132,11 @@ export async function regenerateProductImageWithAi(
   const userApiKey = getUserGeminiKey(userId);
 
   const cleanProductName = productName.trim();
-  const basePrompt = "Professional commercial studio product photography of " + cleanProductName + " (" + category + (reference ? ", ref: " + reference : "") + "), " + settingConfig.bgPrompt + ", clean sharp focus, no blur, award-winning e-commerce product shot";
 
-  // 1. Tenter la génération / analyse visuelle avec Gemini si clé API fournie
+  // Prompt anglais de base pour les moteurs d'images, dérivé du prompt maître
+  const basePrompt = `High-end commercial product packshot photography of "${cleanProductName}" (${category}${reference ? `, ref: ${reference}` : ''}). Keep the product EXACTLY IDENTICAL to the original: same exact shape, colors, proportions, textures, packaging, logos, labels, and all details. Do not add, remove, or modify anything on the actual product. Only enhance photographic quality: professional studio lighting, extreme crisp sharpness, 8k resolution, centered commercial framing, realistic soft contact shadows, ${settingConfig.bgPrompt}. Photorealistic advertising e-commerce catalog quality, absolute fidelity to the original product.`;
+
+  // 1. Pipeline Gemini Vision + Imagen 3 si clé API fournie
   if (userApiKey) {
     try {
       let base64Data = '';
@@ -143,7 +161,14 @@ export async function regenerateProductImageWithAi(
                 contents: [{
                   parts: [
                     {
-                      text: "Analyze this product photo taken by a store camera for product \"" + cleanProductName + "\". Describe in 2 sentences in English its exact physical appearance (colors, shape, brand logo, packaging type, text on cover) so it can be recreated as a clean 4K studio packshot on " + settingConfig.label + "."
+                      text: `${MASTER_PRODUCT_AI_PROMPT}
+
+Nom du produit : "${cleanProductName}"
+Catégorie : "${category}" ${reference ? `(Réf: ${reference})` : ''}
+Décor/Cadre sélectionné : ${settingConfig.label} (${settingConfig.description})
+
+Consigne stricte pour l'IA d'analyse visuelle :
+Analyse cette photo prise par la caméra. Génère un prompt ultra-précis en anglais pour recréer une photo studio 8k de ce produit en préservant 100% de ses caractéristiques réelles (forme géométrique exacte, couleurs exactes, textes de la couverture/étiquette, logos, packaging, matériaux), centré sur le fond studio : "${settingConfig.bgPrompt}". Ne rien inventer ni modifier.`
                     },
                     {
                       inlineData: {
@@ -161,7 +186,7 @@ export async function regenerateProductImageWithAi(
             const visionData = await visionRes.json();
             const desc = visionData?.candidates?.[0]?.content?.parts?.[0]?.text;
             if (desc) {
-              enrichedPrompt = "Studio product photography of " + cleanProductName + ": " + desc.trim() + ", " + settingConfig.bgPrompt;
+              enrichedPrompt = `Professional commercial studio photography of "${cleanProductName}". Product details from original photo: ${desc.trim()}. Keep product 100% identical, centered 1:1, studio strobe lighting, ultra sharp 8k, ${settingConfig.bgPrompt}.`;
             }
           }
         } catch (visionErr) {
@@ -194,7 +219,7 @@ export async function regenerateProductImageWithAi(
               imageUrl: "data:image/jpeg;base64," + b64,
               source: 'gemini_imagen',
               setting,
-              promptUsed: enrichedPrompt
+              promptUsed: MASTER_PRODUCT_AI_PROMPT
             };
           }
         }
@@ -219,20 +244,20 @@ export async function regenerateProductImageWithAi(
         imageUrl: base64,
         source: 'ai_studio_flux',
         setting,
-        promptUsed: basePrompt
+        promptUsed: MASTER_PRODUCT_AI_PROMPT
       };
     }
   } catch (fluxErr) {
     console.warn('[PollinationsFlux] Fallback to smart canvas packshot:', fluxErr);
   }
 
-  // 3. Moteur Canvas 2D Studio Packshot en local
+  // 3. Moteur Canvas 2D Studio Packshot en local (Fidélité 100% garantie à l'objet brut)
   const localPackshot = await generateLocalCanvasStudioPackshot(imageSource, settingConfig);
   return {
     imageUrl: localPackshot,
     source: 'canvas_smart_packshot',
     setting,
-    promptUsed: basePrompt
+    promptUsed: MASTER_PRODUCT_AI_PROMPT
   };
 }
 

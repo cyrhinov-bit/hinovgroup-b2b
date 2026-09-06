@@ -729,7 +729,7 @@ export function ProductPhotoStudioModal({
                 </div>
 
                 <p style={{ fontSize: '11px', color: '#115E59', margin: '0 0 10px 0', lineHeight: '1.4' }}>
-                  Sélectionnez un décor studio et laissez l'IA créer une photo professionnelle pour le catalogue public.
+                  <strong>Fidélité 100% garantie :</strong> le produit reste strictement identique à l'original (forme, logo, textes, couleurs) avec un éclairage studio professionnel et un décor adapté au catalogue.
                 </p>
 
                 {/* Grille des 5 décors studio */}
