@@ -1,30 +1,32 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { 
-  Camera, Upload, X, Check, Wand2, RotateCw, Sliders, 
-  Sparkles, RefreshCw, Eye, Image as ImageIcon, CheckCircle2,
-  SwitchCamera, AlertCircle, Save, Loader2, Sparkle
-} from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Wand2, X, Save, Camera, Upload } from 'lucide-react';
 import type { PosProduct } from '../../../context/AppContext';
 import { useAppContext } from '../../../context/AppContext';
 import { enhanceProductImage, type EnhanceOptions, PRESET_CONFIGS } from '../../../lib/imageEnhancer';
 import { 
   regenerateProductImageWithAi, 
   STUDIO_SETTINGS, 
-  type StudioSettingType,
-  type StudioSettingConfig 
+  type StudioSettingType 
 } from '../services/ProductImageAiService';
 import { supabase } from '../../../lib/supabase';
 import { db } from '../../../lib/db';
 import { toast } from 'react-hot-toast';
 
-interface ProductPhotoStudioModalProps {
+import { useProductCamera } from './studio/useProductCamera';
+import { StudioSelectSourceView } from './studio/StudioSelectSourceView';
+import { StudioCameraView } from './studio/StudioCameraView';
+import { StudioPreviewCard } from './studio/StudioPreviewCard';
+import { StudioAiPanel } from './studio/StudioAiPanel';
+import { StudioFilterBar } from './studio/StudioFilterBar';
+
+export interface ProductPhotoStudioModalProps {
   product: PosProduct | null;
   isOpen: boolean;
   onClose: () => void;
   onSaved?: (updated: PosProduct) => void;
 }
 
-type Mode = 'select' | 'camera' | 'edit' | 'saving';
+type StudioMode = 'select' | 'camera' | 'edit' | 'saving';
 
 export function ProductPhotoStudioModal({
   product,
@@ -34,7 +36,7 @@ export function ProductPhotoStudioModal({
 }: ProductPhotoStudioModalProps) {
   const { updatePosProduct } = useAppContext();
 
-  const [mode, setMode] = useState<Mode>('select');
+  const [mode, setMode] = useState<StudioMode>('select');
   const [rawImageSource, setRawImageSource] = useState<string | null>(null);
   const [processedDataUrl, setProcessedDataUrl] = useState<string | null>(null);
   const [processedBlob, setProcessedBlob] = useState<Blob | null>(null);
@@ -42,26 +44,31 @@ export function ProductPhotoStudioModal({
   const [isProcessing, setIsProcessing] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
 
-  // IA Studio Settings & State
+  // IA Studio
   const [selectedStudioSetting, setSelectedStudioSetting] = useState<StudioSettingType>('studio_white');
   const [isRegeneratingAi, setIsRegeneratingAi] = useState(false);
   const [aiRegenerationSource, setAiRegenerationSource] = useState<string | null>(null);
-  const [aiPromptUsed, setAiPromptUsed] = useState<string | null>(null);
 
-  // Options d'amélioration classique
+  // Amélioration classique
   const [preset, setPreset] = useState<EnhanceOptions['preset']>('auto');
-  const [brightness, setBrightness] = useState(0);
-  const [contrast, setContrast] = useState(0);
-  const [saturation, setSaturation] = useState(0);
-  const [sharpen, setSharpen] = useState(3);
-  const [whiteBoost, setWhiteBoost] = useState(20);
   const [rotation, setRotation] = useState(0);
-  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
 
-  // Caméra
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const cameraStreamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Hook caméra personnalisé
+  const {
+    videoRef,
+    startCamera,
+    stopCameraStream,
+    toggleFacingMode,
+    capturePhoto
+  } = useProductCamera((dataUrl) => {
+    setRawImageSource(dataUrl);
+    setPreset('auto');
+    setRotation(0);
+    setAiRegenerationSource(null);
+    setMode('edit');
+  });
 
   // Initialisation à l'ouverture
   useEffect(() => {
@@ -75,100 +82,18 @@ export function ProductPhotoStudioModal({
       }
       setPreset('auto');
       setRotation(0);
+      setAiRegenerationSource(null);
     }
   }, [isOpen, product]);
 
-  // Arrêter la caméra lors de la fermeture
-  const stopCameraStream = useCallback(() => {
-    if (cameraStreamRef.current) {
-      cameraStreamRef.current.getTracks().forEach(t => t.stop());
-      cameraStreamRef.current = null;
-    }
-  }, []);
-
+  // Arrêt caméra si fermeture
   useEffect(() => {
     if (!isOpen) {
       stopCameraStream();
     }
-    return () => {
-      stopCameraStream();
-    };
   }, [isOpen, stopCameraStream]);
 
-  // Démarrer la caméra
-  const startCamera = async () => {
-    setMode('camera');
-    try {
-      stopCameraStream();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: facingMode },
-          width: { ideal: 1280 },
-          height: { ideal: 1280 }
-        },
-        audio: false
-      });
-      cameraStreamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-    } catch (err) {
-      console.error('Erreur accès caméra:', err);
-      toast.error('Impossible d\'accéder à la caméra. Vérifiez les autorisations du navigateur.');
-      setMode('select');
-    }
-  };
-
-  // Basculer caméra avant / arrière
-  const toggleFacingMode = () => {
-    const next = facingMode === 'environment' ? 'user' : 'environment';
-    setFacingMode(next);
-    startCamera();
-  };
-
-  // Capturer une photo depuis le flux vidéo
-  const capturePhoto = () => {
-    if (!videoRef.current) return;
-    const video = videoRef.current;
-    const canvas = document.createElement('canvas');
-    const size = Math.min(video.videoWidth || 640, video.videoHeight || 640);
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      // Centrer et recadrer en carré
-      const startX = (video.videoWidth - size) / 2;
-      const startY = (video.videoHeight - size) / 2;
-      ctx.drawImage(video, startX, startY, size, size, 0, 0, size, size);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-      stopCameraStream();
-      setRawImageSource(dataUrl);
-      setPreset('auto');
-      setRotation(0);
-      setMode('edit');
-    }
-  };
-
-  // Sélectionner un fichier
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      toast.error('Veuillez sélectionner un fichier image valide (PNG, JPG, WEBP).');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      setRawImageSource(dataUrl);
-      setPreset('auto');
-      setRotation(0);
-      setMode('edit');
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Déclencher l'algorithme d'amélioration de l'image
+  // Algorithme d'optimisation classique
   const processImage = useCallback(async () => {
     if (!rawImageSource) return;
     setIsProcessing(true);
@@ -180,12 +105,13 @@ export function ProductPhotoStudioModal({
         quality: 0.88
       };
 
-      if (preset === 'none') {
-        options.brightness = brightness;
-        options.contrast = contrast;
-        options.saturation = saturation;
-        options.sharpen = sharpen;
-        options.whiteBoost = whiteBoost;
+      if (preset && preset !== 'none') {
+        const cfg = PRESET_CONFIGS[preset];
+        options.brightness = cfg.brightness;
+        options.contrast = cfg.contrast;
+        options.saturation = cfg.saturation;
+        options.sharpen = cfg.sharpen;
+        options.whiteBoost = cfg.whiteBoost;
       }
 
       const result = await enhanceProductImage(rawImageSource, options);
@@ -194,37 +120,30 @@ export function ProductPhotoStudioModal({
       setFileSizeKb(Math.round(result.blob.size / 1024));
     } catch (err) {
       console.error('Erreur traitement image:', err);
-      toast.error('Erreur lors du traitement visuel de l\'image.');
+      toast.error("Erreur lors du traitement visuel de l'image.");
     } finally {
       setIsProcessing(false);
     }
-  }, [rawImageSource, preset, brightness, contrast, saturation, sharpen, whiteBoost, rotation]);
+  }, [rawImageSource, preset, rotation]);
 
   useEffect(() => {
-    if (mode === 'edit' && rawImageSource) {
+    if (mode === 'edit' && rawImageSource && !aiRegenerationSource) {
       processImage();
     }
-  }, [mode, rawImageSource, preset, rotation, processImage]);
+  }, [mode, rawImageSource, preset, rotation, aiRegenerationSource, processImage]);
 
-  // Choisir un preset prédéfini
-  const applyPreset = (newPreset: EnhanceOptions['preset']) => {
+  // Sélection de filtre classique
+  const handleSelectPreset = (newPreset: EnhanceOptions['preset']) => {
+    setAiRegenerationSource(null);
     setPreset(newPreset);
-    if (newPreset && newPreset !== 'none') {
-      const cfg = PRESET_CONFIGS[newPreset];
-      setBrightness(cfg.brightness);
-      setContrast(cfg.contrast);
-      setSaturation(cfg.saturation);
-      setSharpen(cfg.sharpen);
-      setWhiteBoost(cfg.whiteBoost);
-    }
   };
 
   // Rotation 90°
   const handleRotate = () => {
-    setRotation(prev => (prev + 90) % 360);
+    setRotation((prev) => (prev + 90) % 360);
   };
 
-  // Régénération complète par l'IA avec le décor choisi
+  // Régénération par l'IA
   const handleAiRegenerate = async () => {
     if (!rawImageSource || !product) return;
     setIsRegeneratingAi(true);
@@ -241,33 +160,31 @@ export function ProductPhotoStudioModal({
 
       setProcessedDataUrl(result.imageUrl);
       setAiRegenerationSource(result.source);
-      setAiPromptUsed(result.promptUsed);
 
-      // Convertir en Blob pour l'upload
+      // Conversion en Blob pour publication
       const res = await fetch(result.imageUrl);
       const blob = await res.blob();
       setProcessedBlob(blob);
       setFileSizeKb(Math.round(blob.size / 1024));
 
-      const sourceLabel = result.source === 'gemini_imagen' 
-        ? 'Gemini Vision + Imagen' 
-        : result.source === 'ai_studio_flux' 
-        ? 'Flux Studio Ultra HD' 
+      const sourceLabel = result.source === 'gemini_imagen'
+        ? 'Gemini Vision + Imagen'
+        : result.source === 'ai_studio_flux'
+        ? 'Flux Studio Ultra HD'
         : 'Packshot Studio 2D';
 
       toast.success(`Photo régénérée avec succès (${sourceLabel}) !`, { id: toastId });
     } catch (err) {
       console.error('Erreur régénération IA:', err);
-      toast.error('Erreur lors de la régénération par l\'IA. Veuillez réessayer.', { id: toastId });
+      toast.error("Erreur lors de la régénération par l'IA.", { id: toastId });
     } finally {
       setIsRegeneratingAi(false);
     }
   };
 
-  // Réinitialiser vers le filtre algorithmique standard
+  // Rétablir les filtres classiques
   const handleResetToStandard = () => {
     setAiRegenerationSource(null);
-    setAiPromptUsed(null);
     processImage();
     toast.success('Rétabli aux filtres classiques.');
   };
@@ -280,7 +197,7 @@ export function ProductPhotoStudioModal({
     try {
       let finalImageUrl = processedDataUrl;
 
-      // 1. Tenter d'uploader vers Supabase Storage si en ligne
+      // 1. Upload Supabase Storage si en ligne
       if (navigator.onLine) {
         try {
           const ext = processedBlob.type.includes('webp') ? 'webp' : 'jpg';
@@ -305,7 +222,7 @@ export function ProductPhotoStudioModal({
         }
       }
 
-      // 2. Mettre à jour le produit dans le state global et la base
+      // 2. Mettre à jour le produit
       const updatedProduct: PosProduct = {
         ...product,
         imageUrl: finalImageUrl,
@@ -314,10 +231,13 @@ export function ProductPhotoStudioModal({
 
       await updatePosProduct(product.id, { imageUrl: finalImageUrl });
 
-      // 3. Sauvegarder dans le cache local
-      await db.posProducts.setItem('data', (await db.posProducts.getItem<PosProduct[]>('data') || []).map(p =>
-        p.id === product.id ? updatedProduct : p
-      ));
+      // 3. Mise à jour IndexedDB local
+      await db.posProducts.setItem(
+        'data',
+        ((await db.posProducts.getItem<PosProduct[]>('data')) || []).map((p) =>
+          p.id === product.id ? updatedProduct : p
+        )
+      );
 
       toast.success(`Photo de "${product.name}" mise à jour et publiée au catalogue !`);
       if (onSaved) onSaved(updatedProduct);
@@ -327,6 +247,26 @@ export function ProductPhotoStudioModal({
       toast.error('Erreur lors de la sauvegarde de la photo.');
       setMode('edit');
     }
+  };
+
+  // Sélection depuis fichier dans le mode edit
+  const handleDirectFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Veuillez sélectionner un fichier image valide.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      setRawImageSource(dataUrl);
+      setPreset('auto');
+      setRotation(0);
+      setAiRegenerationSource(null);
+      setMode('edit');
+    };
+    reader.readAsDataURL(file);
   };
 
   if (!isOpen || !product) return null;
@@ -344,7 +284,7 @@ export function ProductPhotoStudioModal({
         padding: '16px',
         backdropFilter: 'blur(4px)'
       }}
-      onClick={e => e.target === e.currentTarget && onClose()}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
         style={{
@@ -380,7 +320,7 @@ export function ProductPhotoStudioModal({
                 Studio Photo — {product.name}
               </h3>
               <span style={{ fontSize: '11px', color: '#64748B' }}>
-                {product.reference ? `Réf: ${product.reference} • ` : ''}Optimisation e-commerce automatique
+                {product.reference ? `Réf: ${product.reference} • ` : ''}Packshot & Optimisation e-commerce
               </span>
             </div>
           </div>
@@ -405,548 +345,77 @@ export function ProductPhotoStudioModal({
 
         {/* CORPS DE LA MODALE */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
-          {/* 1. ÉCRAN DE SÉLECTION DU MODE DE CAPTURE */}
+          {/* 1. Sélection source */}
           {mode === 'select' && (
-            <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <p style={{ fontSize: '13px', color: '#64748B', marginBottom: '24px' }}>
-                Capturez une photo directement avec votre téléphone ou téléversez un fichier image.
-              </p>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
-                <button
-                  type="button"
-                  onClick={startCamera}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '10px',
-                    padding: '24px 16px',
-                    borderRadius: '16px',
-                    border: '2px dashed #0F766E',
-                    backgroundColor: '#F0FDFA',
-                    color: '#0F766E',
-                    cursor: 'pointer',
-                    transition: 'transform 0.15s'
-                  }}
-                >
-                  <Camera size={36} />
-                  <span style={{ fontWeight: 700, fontSize: '14px' }}>Prendre une photo</span>
-                  <span style={{ fontSize: '11px', opacity: 0.8 }}>Caméra smartphone</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '10px',
-                    padding: '24px 16px',
-                    borderRadius: '16px',
-                    border: '2px dashed #CBD5E1',
-                    backgroundColor: '#F8FAFC',
-                    color: '#475569',
-                    cursor: 'pointer',
-                    transition: 'transform 0.15s'
-                  }}
-                >
-                  <Upload size={36} />
-                  <span style={{ fontWeight: 700, fontSize: '14px' }}>Importer image</span>
-                  <span style={{ fontSize: '11px', color: '#94A3B8' }}>PNG, JPG, WEBP</span>
-                </button>
-              </div>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                onChange={handleFileSelect}
-              />
-            </div>
+            <StudioSelectSourceView
+              onStartCamera={() => {
+                setMode('camera');
+                startCamera();
+              }}
+              onFileSelect={(dataUrl) => {
+                setRawImageSource(dataUrl);
+                setPreset('auto');
+                setRotation(0);
+                setAiRegenerationSource(null);
+                setMode('edit');
+              }}
+            />
           )}
 
-          {/* 2. ÉCRAN CAMÉRA DIRECTE AVEC CADRAGE CARRÉ */}
+          {/* 2. Caméra en direct */}
           {mode === 'camera' && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div
-                style={{
-                  position: 'relative',
-                  width: '100%',
-                  maxWidth: '360px',
-                  aspectRatio: '1 / 1',
-                  backgroundColor: '#000',
-                  borderRadius: '16px',
-                  overflow: 'hidden',
-                  marginBottom: '16px',
-                  boxShadow: '0 4px 15px rgba(0,0,0,0.2)'
-                }}
-              >
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-
-                {/* Grille de composition carrée 1:1 */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    border: '2px solid rgba(255, 255, 255, 0.4)',
-                    pointerEvents: 'none',
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr 1fr',
-                    gridTemplateRows: '1fr 1fr 1fr'
-                  }}
-                >
-                  <div style={{ borderRight: '1px solid rgba(255,255,255,0.2)', borderBottom: '1px solid rgba(255,255,255,0.2)' }} />
-                  <div style={{ borderRight: '1px solid rgba(255,255,255,0.2)', borderBottom: '1px solid rgba(255,255,255,0.2)' }} />
-                  <div style={{ borderBottom: '1px solid rgba(255,255,255,0.2)' }} />
-                  <div style={{ borderRight: '1px solid rgba(255,255,255,0.2)', borderBottom: '1px solid rgba(255,255,255,0.2)' }} />
-                  <div style={{ borderRight: '1px solid rgba(255,255,255,0.2)', borderBottom: '1px solid rgba(255,255,255,0.2)' }} />
-                  <div style={{ borderBottom: '1px solid rgba(255,255,255,0.2)' }} />
-                  <div style={{ borderRight: '1px solid rgba(255,255,255,0.2)' }} />
-                  <div style={{ borderRight: '1px solid rgba(255,255,255,0.2)' }} />
-                  <div />
-                </div>
-
-                {/* Bouton de bascule caméra avant/arrière */}
-                <button
-                  type="button"
-                  onClick={toggleFacingMode}
-                  style={{
-                    position: 'absolute',
-                    top: '12px',
-                    right: '12px',
-                    background: 'rgba(0, 0, 0, 0.5)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '50%',
-                    width: '36px',
-                    height: '36px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    backdropFilter: 'blur(4px)'
-                  }}
-                  title="Changer de caméra"
-                >
-                  <SwitchCamera size={18} />
-                </button>
-              </div>
-
-              {/* Bouton Déclencheur */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                <button
-                  type="button"
-                  onClick={() => { stopCameraStream(); setMode('select'); }}
-                  style={{ background: 'none', border: 'none', color: '#64748B', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}
-                >
-                  Annuler
-                </button>
-
-                <button
-                  type="button"
-                  onClick={capturePhoto}
-                  style={{
-                    width: '64px',
-                    height: '64px',
-                    borderRadius: '50%',
-                    backgroundColor: '#0F766E',
-                    border: '4px solid white',
-                    boxShadow: '0 4px 15px rgba(15, 118, 110, 0.4)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white'
-                  }}
-                  title="Prendre la photo"
-                >
-                  <Camera size={28} />
-                </button>
-              </div>
-            </div>
+            <StudioCameraView
+              videoRef={videoRef}
+              onToggleFacingMode={toggleFacingMode}
+              onCapture={capturePhoto}
+              onCancel={() => {
+                stopCameraStream();
+                setMode('select');
+              }}
+            />
           )}
 
-          {/* 3. ÉCRAN DE RETOUCHE & ENHANCER ALGORITHMIQUE */}
+          {/* 3. Retouche & Studio IA */}
           {(mode === 'edit' || mode === 'saving') && (
             <div>
-              {/* APERÇU DE L'IMAGE AVEC BOUTONS D'ACTION RAPIDE */}
-              <div
-                style={{
-                  position: 'relative',
-                  width: '100%',
-                  maxWidth: '320px',
-                  aspectRatio: '1 / 1',
-                  margin: '0 auto 16px auto',
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: '16px',
-                  border: '1px solid #E2E8F0',
-                  overflow: 'hidden',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.06)'
-                }}
-              >
-                <img
-                  src={showOriginal ? rawImageSource! : (processedDataUrl || rawImageSource!)}
-                  alt="Aperçu Studio"
-                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                />
+              {/* Carte Aperçu & Commandes Rapides */}
+              <StudioPreviewCard
+                currentSrc={processedDataUrl || rawImageSource || ''}
+                originalSrc={rawImageSource}
+                showOriginal={showOriginal}
+                onHoldOriginalStart={() => setShowOriginal(true)}
+                onHoldOriginalEnd={() => setShowOriginal(false)}
+                onRotate={handleRotate}
+                fileSizeKb={fileSizeKb}
+                isRegeneratingAi={isRegeneratingAi}
+                selectedSetting={selectedStudioSetting}
+              />
 
-                {/* Overlay pendant la régénération IA */}
-                {isRegeneratingAi && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      backgroundColor: 'rgba(15, 23, 42, 0.75)',
-                      backdropFilter: 'blur(4px)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '16px',
-                      textAlign: 'center',
-                      color: 'white',
-                      zIndex: 10
-                    }}
-                  >
-                    <Loader2 size={36} className="animate-spin" style={{ animation: 'spin 1s linear infinite', marginBottom: '12px', color: '#5EEAD4' }} />
-                    <span style={{ fontWeight: 800, fontSize: '14px', marginBottom: '4px' }}>
-                      Studio Photo IA en action...
-                    </span>
-                    <span style={{ fontSize: '11px', color: '#CBD5E1', maxWidth: '220px' }}>
-                      Mise en scène dans le décor « {STUDIO_SETTINGS[selectedStudioSetting].label} »
-                    </span>
-                  </div>
-                )}
+              {/* Module Studio IA & Décors */}
+              <StudioAiPanel
+                selectedSetting={selectedStudioSetting}
+                onSelectSetting={setSelectedStudioSetting}
+                onRegenerate={handleAiRegenerate}
+                isRegenerating={isRegeneratingAi}
+                aiSource={aiRegenerationSource}
+                onResetStandard={handleResetToStandard}
+              />
 
-                {/* Badge Info Format & Poids */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    bottom: '8px',
-                    left: '8px',
-                    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-                    color: 'white',
-                    fontSize: '10px',
-                    fontWeight: 700,
-                    padding: '3px 8px',
-                    borderRadius: '6px',
-                    backdropFilter: 'blur(4px)'
-                  }}
-                >
-                  800×800 • {fileSizeKb > 0 ? `${fileSizeKb} Ko` : 'WebP'}
-                </div>
+              {/* Filtres Algorithmiques Instantanés */}
+              <StudioFilterBar
+                currentPreset={preset}
+                onSelectPreset={handleSelectPreset}
+                isAiActive={!!aiRegenerationSource}
+              />
 
-                {/* Bouton Voir l'Original (Maintien) */}
-                <button
-                  type="button"
-                  onMouseDown={() => setShowOriginal(true)}
-                  onMouseUp={() => setShowOriginal(false)}
-                  onTouchStart={() => setShowOriginal(true)}
-                  onTouchEnd={() => setShowOriginal(false)}
-                  style={{
-                    position: 'absolute',
-                    top: '8px',
-                    left: '8px',
-                    backgroundColor: showOriginal ? '#0F766E' : 'rgba(255, 255, 255, 0.9)',
-                    color: showOriginal ? 'white' : '#1E293B',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '4px 8px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
-                  }}
-                  title="Maintenir pour voir l'image brute"
-                >
-                  <Eye size={12} />
-                  <span>{showOriginal ? 'Original' : 'Avant/Après'}</span>
-                </button>
-
-                {/* Bouton Rotation 90° */}
-                <button
-                  type="button"
-                  onClick={handleRotate}
-                  style={{
-                    position: 'absolute',
-                    top: '8px',
-                    right: '8px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                    color: '#1E293B',
-                    border: 'none',
-                    borderRadius: '8px',
-                    width: '30px',
-                    height: '30px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
-                  }}
-                  title="Pivoter de 90°"
-                >
-                  <RotateCw size={14} />
-                </button>
-              </div>
-
-              {/* MODULE PRINCIPAL : RÉGÉNÉRATION STUDIO IA & DÉCORS */}
-              <div
-                style={{
-                  marginBottom: '16px',
-                  backgroundColor: '#F0FDFA',
-                  border: '1px solid #99F6E4',
-                  borderRadius: '14px',
-                  padding: '12px 14px'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Sparkles size={16} color="#0D9488" />
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F766E' }}>
-                      Studio IA & Décors Publicitaires
-                    </span>
-                  </div>
-                  <span style={{ fontSize: '10px', backgroundColor: '#CCFBF1', color: '#0F766E', padding: '2px 6px', borderRadius: '6px', fontWeight: 700 }}>
-                    HD & Ambiance
-                  </span>
-                </div>
-
-                <p style={{ fontSize: '11px', color: '#115E59', margin: '0 0 10px 0', lineHeight: '1.4' }}>
-                  <strong>Fidélité 100% garantie :</strong> le produit reste strictement identique à l'original (forme, logo, textes, couleurs) avec un éclairage studio professionnel et un décor adapté au catalogue.
-                </p>
-
-                {/* Grille des 5 décors studio */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '6px', marginBottom: '12px' }}>
-                  {(Object.keys(STUDIO_SETTINGS) as StudioSettingType[]).map((key) => {
-                    const cfg = STUDIO_SETTINGS[key];
-                    const isSelected = selectedStudioSetting === key;
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => setSelectedStudioSetting(key)}
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'flex-start',
-                          padding: '8px 10px',
-                          borderRadius: '10px',
-                          border: `1.5px solid ${isSelected ? '#0D9488' : '#CCFBF1'}`,
-                          backgroundColor: isSelected ? '#FFFFFF' : '#F0FDFA',
-                          cursor: 'pointer',
-                          textAlign: 'left',
-                          boxShadow: isSelected ? '0 2px 8px rgba(13, 148, 136, 0.15)' : 'none',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', marginBottom: '2px' }}>
-                          <span style={{ fontSize: '14px' }}>{cfg.icon}</span>
-                          <span style={{ fontSize: '11px', fontWeight: isSelected ? 800 : 700, color: isSelected ? '#0F766E' : '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {cfg.label}
-                          </span>
-                        </div>
-                        <span style={{ fontSize: '9px', color: '#0D9488', fontWeight: 600 }}>
-                          {cfg.badge}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Bouton de déclenchement de la régénération IA */}
-                <button
-                  type="button"
-                  onClick={handleAiRegenerate}
-                  disabled={isRegeneratingAi}
-                  style={{
-                    width: '100%',
-                    padding: '10px 14px',
-                    borderRadius: '10px',
-                    background: 'linear-gradient(135deg, #0D9488 0%, #0F766E 100%)',
-                    color: 'white',
-                    border: 'none',
-                    fontWeight: 800,
-                    fontSize: '13px',
-                    cursor: isRegeneratingAi ? 'not-allowed' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    boxShadow: '0 4px 12px rgba(13, 148, 136, 0.25)',
-                    opacity: isRegeneratingAi ? 0.7 : 1
-                  }}
-                >
-                  {isRegeneratingAi ? (
-                    <>
-                      <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                      <span>Régénération en cours...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 size={16} />
-                      <span>🪄 Régénérer avec le décor « {STUDIO_SETTINGS[selectedStudioSetting].label} »</span>
-                    </>
-                  )}
-                </button>
-
-                {/* Badge statut si l'image est générée par l'IA */}
-                {aiRegenerationSource && (
-                  <div
-                    style={{
-                      marginTop: '10px',
-                      padding: '6px 10px',
-                      borderRadius: '8px',
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid #99F6E4',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      fontSize: '11px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#0F766E', fontWeight: 700 }}>
-                      <CheckCircle2 size={13} color="#0D9488" />
-                      <span>Rendu IA actif ({STUDIO_SETTINGS[selectedStudioSetting].label})</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleResetToStandard}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#64748B',
-                        fontSize: '10px',
-                        textDecoration: 'underline',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Filtre classique
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* BARRE DES PRESETS ALGORITHMIQUES CLASSIQUES */}
-              <div style={{ marginBottom: '14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>
-                    Filtres d'optimisation instantanés (Hors IA)
-                  </label>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
-                  <button
-                    type="button"
-                    onClick={() => { setAiRegenerationSource(null); applyPreset('auto'); }}
-                    style={{
-                      padding: '7px 4px',
-                      borderRadius: '8px',
-                      border: `1px solid ${preset === 'auto' && !aiRegenerationSource ? '#0F766E' : '#E2E8F0'}`,
-                      backgroundColor: preset === 'auto' && !aiRegenerationSource ? '#F0FDFA' : 'white',
-                      color: preset === 'auto' && !aiRegenerationSource ? '#0F766E' : '#475569',
-                      fontWeight: 700,
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '2px'
-                    }}
-                  >
-                    <span>⚡ Auto</span>
-                    <span style={{ fontSize: '9px', fontWeight: 500, opacity: 0.8 }}>Équilibré</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => { setAiRegenerationSource(null); applyPreset('studio'); }}
-                    style={{
-                      padding: '7px 4px',
-                      borderRadius: '8px',
-                      border: `1px solid ${preset === 'studio' && !aiRegenerationSource ? '#0F766E' : '#E2E8F0'}`,
-                      backgroundColor: preset === 'studio' && !aiRegenerationSource ? '#F0FDFA' : 'white',
-                      color: preset === 'studio' && !aiRegenerationSource ? '#0F766E' : '#475569',
-                      fontWeight: 700,
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '2px'
-                    }}
-                  >
-                    <span>🧼 Fond Blanc</span>
-                    <span style={{ fontSize: '9px', fontWeight: 500, opacity: 0.8 }}>Détourage</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => { setAiRegenerationSource(null); applyPreset('vibrant'); }}
-                    style={{
-                      padding: '7px 4px',
-                      borderRadius: '8px',
-                      border: `1px solid ${preset === 'vibrant' && !aiRegenerationSource ? '#0F766E' : '#E2E8F0'}`,
-                      backgroundColor: preset === 'vibrant' && !aiRegenerationSource ? '#F0FDFA' : 'white',
-                      color: preset === 'vibrant' && !aiRegenerationSource ? '#0F766E' : '#475569',
-                      fontWeight: 700,
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '2px'
-                    }}
-                  >
-                    <span>🎨 Vives</span>
-                    <span style={{ fontSize: '9px', fontWeight: 500, opacity: 0.8 }}>Couleurs</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => { setAiRegenerationSource(null); applyPreset('sharp'); }}
-                    style={{
-                      padding: '7px 4px',
-                      borderRadius: '8px',
-                      border: `1px solid ${preset === 'sharp' && !aiRegenerationSource ? '#0F766E' : '#E2E8F0'}`,
-                      backgroundColor: preset === 'sharp' && !aiRegenerationSource ? '#F0FDFA' : 'white',
-                      color: preset === 'sharp' && !aiRegenerationSource ? '#0F766E' : '#475569',
-                      fontWeight: 700,
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '2px'
-                    }}
-                  >
-                    <span>🔍 Textes</span>
-                    <span style={{ fontSize: '9px', fontWeight: 500, opacity: 0.8 }}>Netteté</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* LIEN VERS NOUVELLE CAPTURE OU IMPORT */}
+              {/* Reprise photo ou changement de fichier */}
               <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '12px', marginTop: '8px' }}>
                 <button
                   type="button"
-                  onClick={startCamera}
+                  onClick={() => {
+                    setMode('camera');
+                    startCamera();
+                  }}
                   style={{ background: 'none', border: 'none', color: '#0F766E', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                 >
                   <Camera size={14} />
@@ -967,13 +436,13 @@ export function ProductPhotoStudioModal({
                 type="file"
                 accept="image/*"
                 style={{ display: 'none' }}
-                onChange={handleFileSelect}
+                onChange={handleDirectFileSelect}
               />
             </div>
           )}
         </div>
 
-        {/* PIED DE PAGE & ACTIONS DE VALIDATION */}
+        {/* PIED DE PAGE & VALIDATION */}
         {mode === 'edit' && (
           <div
             style={{
@@ -1006,7 +475,7 @@ export function ProductPhotoStudioModal({
             <button
               type="button"
               onClick={handleSaveAndPublish}
-              disabled={isProcessing}
+              disabled={isProcessing || isRegeneratingAi}
               style={{
                 flex: 1,
                 backgroundColor: '#0F766E',
@@ -1016,7 +485,7 @@ export function ProductPhotoStudioModal({
                 borderRadius: '10px',
                 fontWeight: 700,
                 fontSize: '14px',
-                cursor: isProcessing ? 'not-allowed' : 'pointer',
+                cursor: isProcessing || isRegeneratingAi ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
