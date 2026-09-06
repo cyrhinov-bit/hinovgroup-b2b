@@ -3,6 +3,7 @@ import { Bot, Send, Sparkles, Mic, MicOff, Loader2, TrendingUp, AlertTriangle, S
 import { useAppContext } from '../../../context/AppContext';
 import { useAuth } from '../../../context/AuthContext';
 import { askDirectorCopilot, type CopilotMessage } from '../services/DirectorAiService';
+import { DirectorAiResponseViewer } from './DirectorAiResponseViewer';
 import { Button } from '../../../components/ui/Button';
 import { toast } from 'react-hot-toast';
 
@@ -260,22 +261,37 @@ export default function DirectorCopilotPage() {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: msg.sender === 'user' ? 'flex-end' : 'flex-start',
-                maxWidth: '85%',
+                maxWidth: msg.sender === 'user' ? '80%' : '95%',
+                width: msg.sender === 'assistant' ? '95%' : 'auto',
                 alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start'
               }}
             >
-              <div style={{
-                padding: '14px 18px',
-                borderRadius: msg.sender === 'user' ? '16px 16px 2px 16px' : '16px 16px 16px 2px',
-                background: msg.sender === 'user' ? 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' : 'var(--color-surface-alt)',
-                color: msg.sender === 'user' ? 'white' : 'var(--color-text)',
-                fontSize: '14px',
-                lineHeight: '1.6',
-                border: msg.sender === 'assistant' ? '1px solid var(--color-border)' : 'none',
-                whiteSpace: 'pre-line'
-              }}>
-                {msg.text}
-              </div>
+              {msg.sender === 'assistant' ? (
+                <div style={{
+                  width: '100%',
+                  padding: '18px 22px',
+                  borderRadius: '18px 18px 18px 4px',
+                  background: 'white',
+                  border: '1px solid #E2E8F0',
+                  boxShadow: '0 4px 18px rgba(0,0,0,0.05)',
+                  color: 'var(--color-text)'
+                }}>
+                  <DirectorAiResponseViewer content={msg.text} />
+                </div>
+              ) : (
+                <div style={{
+                  padding: '12px 18px',
+                  borderRadius: '18px 18px 4px 18px',
+                  background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  boxShadow: '0 4px 14px rgba(79, 70, 229, 0.25)',
+                  whiteSpace: 'pre-line'
+                }}>
+                  {msg.text}
+                </div>
+              )}
 
               <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px', padding: '0 4px' }}>
                 {msg.timestamp}
