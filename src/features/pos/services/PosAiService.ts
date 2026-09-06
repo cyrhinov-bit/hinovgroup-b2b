@@ -235,6 +235,146 @@ Génère UNIQUEMENT un objet JSON valide (sans formatage markdown) avec cette st
 }
 
 /**
+ * Analyse directe d'un enregistrement Audio (Voix du caissier) avec Gemini Multimodal Audio
+ * Fonctionne sur TOUS les navigateurs (aucun besoin des serveurs de reconnaissance Google Chrome)
+ */
+export async function parseAudioVoiceOrder(
+  audioBlob: Blob,
+  posProducts: PosProduct[],
+  userId?: string
+): Promise<ParseOrderResult & { transcriptDetected: string }> {
+  // Convert blob to base64
+  const arrayBuffer = await audioBlob.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const base64Audio = btoa(binary);
+  const rawMime = audioBlob.type || 'audio/webm';
+  const cleanMime = rawMime.split(';')[0].trim() || 'audio/webm';
+
+  const activeProducts = posProducts.filter(p => p.isActive !== false && p.status !== 'Inactive');
+  const catalogSummary = activeProducts.map(p => ({
+    id: p.id,
+    name: p.name,
+    ref: p.reference,
+    isbn: p.isbn || '',
+    price: p.sellingPrice,
+    stock: p.quantity,
+    family: p.family || ''
+  }));
+
+  const prompt = `
+Tu es l'assistant de caisse intelligent pour une librairie, papeterie et magasin B2B (HINOV GROUP).
+ÉCOUTE attentivement l'enregistrement audio dicté par le caissier en français.
+
+Voici le catalogue des articles disponibles en magasin :
+${JSON.stringify(catalogSummary)}
+
+MISSION :
+1. Transcris fidèlement en français ce que le caissier a dit dans la clé "transcriptDetected".
+2. Analyse les articles et quantités demandés.
+3. Associe chaque demande au produit correspondant le plus pertinent dans le catalogue.
+4. Si un article demandé est introuvable ou ambigu, indique-le dans "unmatchedPhrases".
+5. Indique pour chaque article la quantité demandée (par défaut 1).
+
+Génère UNIQUEMENT un objet JSON valide (sans aucun formatage markdown) avec cette structure exacte :
+{
+  "transcriptDetected": "Texte exact transcrit depuis la voix du caissier",
+  "rawInterpretation": "Explication courte en français de ce qui a été compris",
+  "items": [
+    {
+      "productId": "id-du-produit-exact-dans-le-catalogue",
+      "quantity": 2,
+      "confidence": 0.95
+    }
+  ],
+  "unmatchedPhrases": []
+}
+`;
+
+  const userApiKey = getUserGeminiKey(userId);
+
+  if (userApiKey) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(userApiKey)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: prompt },
+                  {
+                    inlineData: {
+                      mimeType: cleanMime,
+                      data: base64Audio
+                    }
+                  }
+                ]
+              }
+            ],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              temperature: 0.1
+            }
+          })
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          const parsed = JSON.parse(cleaned);
+
+          const matchedItems: ParsedOrderItem[] = [];
+          if (Array.isArray(parsed.items)) {
+            for (const it of parsed.items) {
+              const prod = activeProducts.find(p => p.id === it.productId);
+              if (prod) {
+                matchedItems.push({
+                  productId: prod.id,
+                  productName: prod.name,
+                  reference: prod.reference,
+                  quantity: Math.max(1, Number(it.quantity) || 1),
+                  unitPrice: prod.sellingPrice,
+                  stockAvailable: prod.quantity,
+                  confidence: Number(it.confidence) || 0.95
+                });
+              }
+            }
+          }
+
+          return {
+            transcriptDetected: parsed.transcriptDetected || '',
+            items: matchedItems,
+            unmatchedPhrases: Array.isArray(parsed.unmatchedPhrases) ? parsed.unmatchedPhrases : [],
+            rawInterpretation: parsed.rawInterpretation || 'Analyse audio réussie.'
+          };
+        }
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        console.warn('Erreur API Gemini Audio:', errData);
+      }
+    } catch (err) {
+      console.warn('Erreur lors du traitement audio Gemini:', err);
+    }
+  }
+
+  return {
+    transcriptDetected: '',
+    items: [],
+    unmatchedPhrases: [],
+    rawInterpretation: "Impossible d'analyser l'audio via Gemini (vérifiez la clé API ou la connexion)."
+  };
+}
+
+/**
  * Parseur local rapide (fallback sans connexion / sans API)
  */
 function fallbackLocalOrderParser(input: string, products: PosProduct[]): ParseOrderResult {
@@ -286,3 +426,4 @@ function fallbackLocalOrderParser(input: string, products: PosProduct[]): ParseO
       : 'Aucun article correspondant trouvé précisément.'
   };
 }
+
