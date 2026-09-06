@@ -5,6 +5,7 @@ import { Sparkles, Mic, MicOff, Loader2, Plus, AlertCircle, Package, Volume2, Tr
 import { parseNaturalLanguageOrder, parseAudioVoiceOrder, type ParsedOrderItem } from '../../features/pos/services/PosAiService';
 import type { PosProduct } from '../../context/AppContext';
 import { getUserGeminiKey, setUserGeminiKey, testGeminiApiKey } from '../../lib/geminiKey';
+import { formatVoiceTranscription } from '../../lib/searchUtils';
 import { toast } from 'react-hot-toast';
 import { Key, CheckCircle, Settings as SettingsIcon } from 'lucide-react';
 
@@ -182,8 +183,9 @@ export default function PosVoiceAiModal({
             for (let i = 0; i < e.results.length; i++) {
               resText += e.results[i][0].transcript + ' ';
             }
-            if (resText.trim()) {
-              setTranscript(resText.trim());
+            const clean = formatVoiceTranscription(resText);
+            if (clean) {
+              setTranscript(clean);
             }
           };
           sr.start();

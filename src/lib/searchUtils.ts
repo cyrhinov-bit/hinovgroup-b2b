@@ -6,8 +6,9 @@
 import type { PosProduct } from '../context/AppContext';
 
 /**
- * Normalise une chaîne de texte :
+ * Normalise une chaîne de texte pour la recherche :
  * - Supprime les accents et diacritiques (é -> e, ç -> c, etc.)
+ * - Remplace la ponctuation et caractères spéciaux par des espaces
  * - Convertit en minuscules
  * - Remplace les espaces multiples par un seul espace
  */
@@ -15,9 +16,22 @@ export function normalizeSearchText(str?: string | null): string {
   if (!str) return '';
   return String(str)
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/g, '') // Supprime les accents
+    .replace(/[^\w\s]|_/g, ' ')       // Supprime toute ponctuation et symboles
     .toLowerCase()
+    .replace(/\s+/g, ' ')             // Élimine les espaces multiples
     .trim();
+}
+
+/**
+ * Formate la transcription vocale pour la recherche en caisse :
+ * - EN MAJUSCULES
+ * - SANS ACCENT
+ * - SANS PONCTUATION NI CARACTÈRES SPÉCIAUX
+ */
+export function formatVoiceTranscription(raw?: string | null): string {
+  if (!raw) return '';
+  return normalizeSearchText(raw).toUpperCase();
 }
 
 /**

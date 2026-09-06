@@ -4,6 +4,7 @@ import { useAppContext } from '../../../context/AppContext';
 import { useAuth } from '../../../context/AuthContext';
 import { askDirectorCopilot, type CopilotMessage } from '../services/DirectorAiService';
 import { DirectorAiResponseViewer } from './DirectorAiResponseViewer';
+import { formatVoiceTranscription } from '../../../lib/searchUtils';
 import { Button } from '../../../components/ui/Button';
 import { toast } from 'react-hot-toast';
 
@@ -155,7 +156,7 @@ export default function DirectorCopilotPage() {
         for (let i = 0; i < e.results.length; i++) {
           fullTranscript += e.results[i][0].transcript + ' ';
         }
-        const cleanText = fullTranscript.trim();
+        const cleanText = formatVoiceTranscription(fullTranscript);
         if (cleanText) {
           setInputQuery(cleanText);
         }
