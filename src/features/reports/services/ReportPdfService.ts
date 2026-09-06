@@ -155,20 +155,24 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
   drawSectionHeading(1, "Objectifs de la semaine");
   drawParagraph(report.weeklyObjectives, "Poursuite et traitement des affaires courantes.");
 
-  // Section 2 : Synthèse générale
-  if (report.aiSummary || report.summary) {
-    drawSectionHeading(2, "Synthèse globale & Faits marquants");
-    drawParagraph(report.aiSummary || report.summary);
-  }
-
-  // Section 3 : Journal détaillé des tâches (Lundi -> Samedi)
-  const taskDays = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'].filter(
-    d => report.tasksByDay?.[d] && report.tasksByDay[d].length > 0
+  // Section 2 : Synthèse générale & Faits marquants
+  drawSectionHeading(2, "Synthèse globale & Faits marquants");
+  drawParagraph(
+    report.aiSummary || report.summary || report.conclusion,
+    "Ce rapport hebdomadaire récapitule les activités, échanges et livrables menés à bien par le collaborateur au cours de la semaine."
   );
 
-  if (taskDays.length > 0) {
-    drawSectionHeading(3, "Journal détaillé des tâches quotidiennes");
+  // Section 3 : Journal détaillé des tâches (Lundi -> Samedi)
+  const standardDays = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+  const allDayKeys = Array.from(new Set([...standardDays, ...Object.keys(report.tasksByDay || {})]));
+  const taskDays = allDayKeys.filter(d => {
+    const list = report.tasksByDay?.[d] || (report.tasksByDay as any)?.[d.toLowerCase()] || [];
+    return Array.isArray(list) && list.length > 0;
+  });
 
+  drawSectionHeading(3, "Journal détaillé des tâches quotidiennes");
+
+  if (taskDays.length > 0) {
     taskDays.forEach(day => {
       checkNewPage(18);
       
@@ -182,7 +186,7 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
       doc.text(day.toUpperCase(), 26, y);
       y += 6;
 
-      const tasks = report.tasksByDay[day] || [];
+      const tasks = report.tasksByDay?.[day] || (report.tasksByDay as any)?.[day.toLowerCase()] || [];
       tasks.forEach(t => {
         checkNewPage(12);
         
@@ -213,23 +217,30 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
       y += 3;
     });
     y += 4;
+  } else {
+    drawParagraph(undefined, "Aucune tâche journalière détaillée n'a été enregistrée pour cette semaine.");
   }
 
   // Section 4 : Principaux résultats & Réalisations
-  if (report.achievements) {
-    drawSectionHeading(4, "Principaux résultats & Réalisations");
-    drawParagraph(report.achievements);
-  }
+  drawSectionHeading(4, "Principaux résultats & Réalisations");
+  drawParagraph(
+    report.achievements || report.conclusion,
+    "Exécution conforme des missions, traitement des requêtes et suivi des objectifs hebdomadaires."
+  );
 
   // Section 5 : Difficultés rencontrées & Demandes d'arbitrage
-  if (report.difficulties) {
-    drawSectionHeading(5, "Difficultés rencontrées & Besoins d'arbitrage");
-    drawParagraph(report.difficulties);
-  }
+  drawSectionHeading(5, "Difficultés rencontrées & Besoins d'arbitrage");
+  drawParagraph(
+    report.difficulties,
+    "Aucun point de blocage majeur ni arbitrage particulier à signaler pour cette période."
+  );
 
   // Section 6 : Plan d'action & Perspectives semaine N+1
   drawSectionHeading(6, "Plan d'action & Perspectives (Semaine N+1)");
-  drawParagraph(report.nextWeekObjectives, "Assurer la continuité des affaires et la prospection commerciale.");
+  drawParagraph(
+    report.nextWeekObjectives,
+    "Assurer la continuité des affaires, le suivi des dossiers clients et la prospection commerciale."
+  );
 
   // Section 7 : Visa & Commentaire Direction (si présent)
   if (report.directorComment || report.status === 'Validé') {

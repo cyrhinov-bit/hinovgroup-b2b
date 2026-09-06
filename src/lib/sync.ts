@@ -862,37 +862,57 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_V2_WEEKLY_REPORT': {
+          const r = action.payload;
           const { error } = await supabase.from('v2_weekly_reports').insert([{
-            id: action.payload.id,
-            author_id: action.payload.authorId,
-            week_start: action.payload.weekStart,
-            project: action.payload.project || null,
-            daily_report_ids: action.payload.dailyReportIds || [],
-            weekly_objectives: action.payload.weeklyObjectives || '',
-            tasks_by_day: action.payload.tasksByDay || {},
-            pending_tasks: action.payload.pendingTasks || [],
-            summary: action.payload.summary || action.payload.aiSummary || '',
-            next_week_objectives: action.payload.nextWeekObjectives || '',
-            conclusion: action.payload.conclusion || '',
-            status: action.payload.status || 'Brouillon'
+            id: r.id,
+            author_id: r.authorId,
+            week_start: r.weekStart,
+            week_end: r.weekEnd || null,
+            project: r.project || null,
+            daily_report_ids: r.dailyReportIds || [],
+            weekly_objectives: r.weeklyObjectives || '',
+            tasks_by_day: r.tasksByDay || {},
+            pending_tasks: r.pendingTasks || [],
+            summary: r.summary || r.aiSummary || '',
+            ai_summary: r.aiSummary || r.summary || '',
+            achievements: r.achievements || '',
+            difficulties: r.difficulties || '',
+            next_week_objectives: r.nextWeekObjectives || '',
+            conclusion: r.conclusion || '',
+            director_comment: r.directorComment || null,
+            submitted_at: r.submittedAt || null,
+            reviewed_at: r.reviewedAt || null,
+            reviewed_by: r.reviewedBy || null,
+            status: r.status || 'Brouillon'
           }]);
           if (error) console.error('[Sync] INSERT_V2_WEEKLY_REPORT échoué :', error.message);
           success = !error;
           break;
         }
         case 'UPDATE_V2_WEEKLY_REPORT': {
-          const { error } = await supabase.from('v2_weekly_reports').update({
-            project: action.payload.project || null,
-            daily_report_ids: action.payload.dailyReportIds || [],
-            weekly_objectives: action.payload.weeklyObjectives || '',
-            tasks_by_day: action.payload.tasksByDay || {},
-            pending_tasks: action.payload.pendingTasks || [],
-            summary: action.payload.summary || action.payload.aiSummary || '',
-            next_week_objectives: action.payload.nextWeekObjectives || '',
-            conclusion: action.payload.conclusion || '',
-            status: action.payload.status,
-            updated_at: action.payload.updatedAt || new Date().toISOString()
-          }).eq('id', action.payload.id);
+          const r = action.payload;
+          const mapped: any = { updated_at: r.updatedAt || new Date().toISOString() };
+          if (r.project !== undefined) mapped.project = r.project;
+          if (r.weekEnd !== undefined) mapped.week_end = r.weekEnd;
+          if (r.dailyReportIds !== undefined) mapped.daily_report_ids = r.dailyReportIds;
+          if (r.weeklyObjectives !== undefined) mapped.weekly_objectives = r.weeklyObjectives;
+          if (r.tasksByDay !== undefined) mapped.tasks_by_day = r.tasksByDay;
+          if (r.pendingTasks !== undefined) mapped.pending_tasks = r.pendingTasks;
+          if (r.summary !== undefined || r.aiSummary !== undefined) {
+            mapped.summary = r.summary || r.aiSummary || '';
+            mapped.ai_summary = r.aiSummary || r.summary || '';
+          }
+          if (r.achievements !== undefined) mapped.achievements = r.achievements;
+          if (r.difficulties !== undefined) mapped.difficulties = r.difficulties;
+          if (r.nextWeekObjectives !== undefined) mapped.next_week_objectives = r.nextWeekObjectives;
+          if (r.conclusion !== undefined) mapped.conclusion = r.conclusion;
+          if (r.directorComment !== undefined) mapped.director_comment = r.directorComment;
+          if (r.submittedAt !== undefined) mapped.submitted_at = r.submittedAt;
+          if (r.reviewedAt !== undefined) mapped.reviewed_at = r.reviewedAt;
+          if (r.reviewedBy !== undefined) mapped.reviewed_by = r.reviewedBy;
+          if (r.status !== undefined) mapped.status = r.status;
+
+          const { error } = await supabase.from('v2_weekly_reports').update(mapped).eq('id', r.id);
           if (error) console.error('[Sync] UPDATE_V2_WEEKLY_REPORT échoué :', error.message);
           success = !error;
           break;

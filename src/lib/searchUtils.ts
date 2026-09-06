@@ -95,3 +95,4 @@ export function parseNumericInput(value: string | number, fallback = 0): number 
   const num = parseFloat(sanitized);
   return isNaN(num) ? fallback : num;
 }
+

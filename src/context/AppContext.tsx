@@ -1084,11 +1084,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         if (v2WeeklyReportsData && v2WeeklyReportsData.length > 0) {
           const parsed = v2WeeklyReportsData.map((r: any) => ({
-            id: r.id, authorId: r.author_id, weekStart: r.week_start, project: r.project,
-            dailyReportIds: r.daily_report_ids || [], weeklyObjectives: r.weekly_objectives || '',
-            tasksByDay: r.tasks_by_day || {}, pendingTasks: r.pending_tasks || [], summary: r.summary || '',
-            nextWeekObjectives: r.next_week_objectives || '', conclusion: r.conclusion || '', status: r.status,
-            createdAt: r.created_at, updatedAt: r.updated_at
+            id: r.id, 
+            authorId: r.author_id, 
+            weekStart: r.week_start,
+            weekEnd: r.week_end || undefined,
+            project: r.project,
+            dailyReportIds: r.daily_report_ids || [], 
+            weeklyObjectives: r.weekly_objectives || '',
+            tasksByDay: r.tasks_by_day || {}, 
+            pendingTasks: r.pending_tasks || [], 
+            summary: r.summary || r.ai_summary || '',
+            aiSummary: r.ai_summary || r.summary || '',
+            achievements: r.achievements || '',
+            difficulties: r.difficulties || '',
+            nextWeekObjectives: r.next_week_objectives || '', 
+            conclusion: r.conclusion || '', 
+            directorComment: r.director_comment || undefined,
+            submittedAt: r.submitted_at || undefined,
+            reviewedAt: r.reviewed_at || undefined,
+            reviewedBy: r.reviewed_by || undefined,
+            status: r.status,
+            createdAt: r.created_at, 
+            updatedAt: r.updated_at
           }));
           const merged = mergeData(cachedV2WeeklyReports, parsed);
           setV2WeeklyReports(merged); await db.v2WeeklyReports.setItem('data', merged);
