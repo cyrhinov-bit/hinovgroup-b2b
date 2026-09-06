@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Search, Trash2, Plus, Minus, Clock, ArrowLeft, Package, Layers, RefreshCw, Sparkles, Mic, AlertTriangle, TrendingUp, TrendingDown, Info, ShieldCheck } from 'lucide-react';
+import { Search, Trash2, Plus, Minus, Clock, ArrowLeft, Package, Layers, RefreshCw, Sparkles, Mic, MicOff, AlertTriangle, TrendingUp, TrendingDown, Info, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { barcodeScannerService } from '../../features/products/services/BarcodeScannerService';
@@ -26,6 +26,88 @@ export default function PosTerminal() {
   const [search, setSearch] = useState('');
   const [showVoiceAiModal, setShowVoiceAiModal] = useState(false);
   const [showMarginAdviceModal, setShowMarginAdviceModal] = useState(false);
+  const [isDirectListening, setIsDirectListening] = useState(false);
+  const directRecognitionRef = useRef<any>(null);
+  const shouldDirectListenRef = useRef(false);
+
+  const toggleDirectListening = async () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error('Reconnaissance vocale non disponible sur ce navigateur.');
+      return;
+    }
+
+    if (isDirectListening) {
+      shouldDirectListenRef.current = false;
+      setIsDirectListening(false);
+      if (directRecognitionRef.current) {
+        try { directRecognitionRef.current.stop(); } catch {}
+      }
+      toast('Micro désactivé.', { icon: '🔇' });
+      return;
+    }
+
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'fr-FR';
+
+      recognition.onstart = () => {
+        setIsDirectListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let chunk = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          chunk += event.results[i][0].transcript;
+        }
+        if (chunk) {
+          setSearch(chunk.trim());
+        }
+      };
+
+      recognition.onerror = (e: any) => {
+        console.warn('Direct Speech error:', e);
+        if (e.error === 'not-allowed') {
+          toast.error("Accès microphone refusé.");
+          shouldDirectListenRef.current = false;
+          setIsDirectListening(false);
+        }
+      };
+
+      recognition.onend = () => {
+        if (shouldDirectListenRef.current) {
+          try { recognition.start(); } catch {}
+        } else {
+          setIsDirectListening(false);
+        }
+      };
+
+      directRecognitionRef.current = recognition;
+      shouldDirectListenRef.current = true;
+      setIsDirectListening(true);
+      recognition.start();
+      toast.success('Micro actif en permanence ! Parlez pour rechercher.');
+    } catch (err: any) {
+      toast.error("Erreur micro : " + (err.message || err));
+      setIsDirectListening(false);
+      shouldDirectListenRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      shouldDirectListenRef.current = false;
+      if (directRecognitionRef.current) {
+        try { directRecognitionRef.current.stop(); } catch {}
+      }
+    };
+  }, []);
   const [cart, setCart] = useState<CartItem[]>(() => {
     if (!currentUser) return [];
     try { const saved = localStorage.getItem(`pos_active_cart_${currentUser.id}`); return saved ? JSON.parse(saved) : []; } catch { return []; }
@@ -427,8 +509,8 @@ export default function PosTerminal() {
               <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
               <input 
                 autoFocus 
-                style={{ ...inputStyle, paddingLeft: '36px', fontSize: '16px' }} 
-                placeholder="Scanner code-barres ou rechercher par nom, réf, ISBN..." 
+                style={{ ...inputStyle, paddingLeft: '36px', paddingRight: '72px', fontSize: '16px', border: isDirectListening ? '2px solid #22c55e' : '1px solid var(--color-border)', background: isDirectListening ? '#f0fdf4' : 'white' }} 
+                placeholder={isDirectListening ? "🎙️ Écoute continue active... parlez !" : "Scanner code-barres ou rechercher par nom, réf, ISBN..."} 
                 value={search} 
                 onChange={e => setSearch(e.target.value)} 
                 onKeyDown={e => { 
@@ -447,14 +529,37 @@ export default function PosTerminal() {
                   } 
                 }} 
               />
-              {search && (
-                <button 
-                  onClick={() => setSearch('')} 
-                  style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '13px', fontWeight: 600 }}
+              <div style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {search && (
+                  <button 
+                    type="button"
+                    onClick={() => setSearch('')} 
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '13px', fontWeight: 600, padding: '4px' }}
+                    title="Effacer"
+                  >
+                    ✕
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={toggleDirectListening}
+                  style={{
+                    background: isDirectListening ? '#22c55e' : 'var(--color-surface-alt)',
+                    color: isDirectListening ? 'white' : 'var(--color-text)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer',
+                    padding: '5px 7px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s'
+                  }}
+                  title={isDirectListening ? "Désactiver le micro de recherche" : "Activer le micro de recherche en continu"}
                 >
-                  ✕
+                  {isDirectListening ? <MicOff size={15} className="animate-pulse" /> : <Mic size={15} />}
                 </button>
-              )}
+              </div>
             </div>
             <button
               type="button"
