@@ -253,8 +253,8 @@ export function Documents() {
           )}
 
           {activeTab !== 'AFFAIRES' && (
-            <button className="btn btn-secondary" onClick={() => setShowFolderModal(true)}>
-              <FolderPlus size={16} style={{ marginRight: '6px' }} /> Nouveau dossier
+            <button className="btn-new-folder" onClick={() => setShowFolderModal(true)}>
+              <FolderPlus size={16} /> Nouveau dossier
             </button>
           )}
 
