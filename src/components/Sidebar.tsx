@@ -3,7 +3,8 @@ import {
   Home, Users, Briefcase, FileText, Folder, Shield, PieChart, Settings, 
   UserCircle, LogOut, Receipt, Coins, Target, ShoppingCart, Package, Truck, 
   ClipboardList, Warehouse, Tag, BarChart3, DollarSign, RotateCcw, 
-  FileSpreadsheet, Wallet, ToggleRight, Trophy, Sparkles, Bot, Building2, ShieldAlert 
+  FileSpreadsheet, Wallet, ToggleRight, Trophy, Sparkles, Bot, Building2, ShieldAlert,
+  History
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -60,7 +61,8 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Performance & Primes', icon: Trophy, path: '/performance', color: '#F97316', bg: '#FFF7ED', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'Commercial', 'SuperAdmin'] },
     { label: 'Mes Commissions', icon: Coins, path: '/mes-commissions', color: '#EAB308', bg: '#FEFCE8', roles: ['Responsable'] },
     { label: 'Mon Rapport Hebdo (IA)', icon: Sparkles, path: '/mon-rapport-hebdo', color: '#A855F7', bg: '#FAF5FF', roles: ['Commercial', 'Responsable', 'Directeur', 'Directeur adjoint', 'SuperAdmin'] },
-    { label: 'Rapports d\'Équipe', icon: ClipboardList, path: '/rapports-equipe', color: '#06B6D4', bg: '#ECFEFF', roles: ['Directeur', 'Directeur adjoint', 'Responsable', 'SuperAdmin'] },
+    { label: 'Historique Rapports', icon: History, path: '/mes-rapports', color: '#0284C7', bg: '#F0F9FF', roles: ['Commercial', 'Responsable', 'Directeur', 'Directeur adjoint', 'SuperAdmin'] },
+    { label: 'Rapports d\'Équipe', icon: ClipboardList, path: '/rapports-equipe', color: '#06B6D4', bg: '#ECFEFF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Documents (GED)', icon: Folder, path: '/documents', color: '#0284C7', bg: '#F0F9FF', roles: ['Directeur', 'Responsable'] },
     { label: 'Utilisateurs', icon: Shield, path: '/utilisateurs', color: '#475569', bg: '#F8FAFC', roles: ['Directeur', 'SuperAdmin'] },
     { label: 'Rapports', icon: PieChart, path: '/rapports', color: '#3B82F6', bg: '#EFF6FF', roles: ['Directeur'] },
@@ -73,6 +75,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Clients Apportés', icon: Users, path: '/commercial/clients', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Commercial', 'SuperAdmin'] },
     { label: 'Mes Commissions', icon: Coins, path: '/commercial/commissions', color: '#EAB308', bg: '#FEFCE8', roles: ['Commercial', 'SuperAdmin'] },
     { label: 'Mon Rapport Hebdo (IA)', icon: Sparkles, path: '/mon-rapport-hebdo', color: '#A855F7', bg: '#FAF5FF', roles: ['Commercial', 'SuperAdmin'] },
+    { label: 'Historique Rapports', icon: History, path: '/commercial/mes-rapports', color: '#0284C7', bg: '#F0F9FF', roles: ['Commercial', 'SuperAdmin'] },
     { label: 'Paramètres Gemini IA', icon: Bot, path: '/parametres-ia', color: '#D946EF', bg: '#FDF4FF', roles: ['Commercial', 'SuperAdmin'] },
     { label: 'Documents (GED)', icon: Folder, path: '/commercial/documents', color: '#0284C7', bg: '#F0F9FF', roles: ['Commercial', 'SuperAdmin'] },
   ];

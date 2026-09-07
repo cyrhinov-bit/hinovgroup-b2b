@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Sparkles, Download, Save, Send, Plus, Trash2, CheckCircle2, Clock, AlertCircle, ChevronLeft, ChevronRight, Calendar, Building, User as UserIcon, Key, Eye, RefreshCw } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAppContext, type V2WeeklyReport, type V2Task } from '../../../../context/AppContext';
 import { useAuth } from '../../../../context/AuthContext';
 import { useConfirm } from '../../../../components/ConfirmModal';
@@ -16,6 +16,7 @@ export function WeeklyReportEditor() {
   const { currentUser } = useAuth();
   const { v2WeeklyReports, v2DailyReports, activityReports, services, settings, saveV2WeeklyReport, submitV2WeeklyReport } = useAppContext();
   const { confirm } = useConfirm();
+  const [searchParams] = useSearchParams();
 
   // Week calculation helper
   const getMondayOf = (d: Date) => {
@@ -26,7 +27,16 @@ export function WeeklyReportEditor() {
     return mon.toISOString().slice(0, 10);
   };
 
-  const [currentWeekStart, setCurrentWeekStart] = useState<string>(() => getMondayOf(new Date()));
+  const initialWeek = searchParams.get('week') || getMondayOf(new Date());
+  const [currentWeekStart, setCurrentWeekStart] = useState<string>(initialWeek);
+
+  useEffect(() => {
+    const paramWeek = searchParams.get('week');
+    if (paramWeek && paramWeek !== currentWeekStart) {
+      setCurrentWeekStart(paramWeek);
+    }
+  }, [searchParams]);
+
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const [activeDay, setActiveDay] = useState<string>('Lundi');
 

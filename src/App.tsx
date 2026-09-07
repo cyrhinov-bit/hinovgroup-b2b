@@ -122,7 +122,7 @@ function RoleBasedDashboard() {
 }
 
 // Garde de route par rôle
-type Role = 'SuperAdmin' | 'Directeur' | 'Responsable' | 'Commercial' | 'Gerant' | 'Caissier';
+type Role = 'SuperAdmin' | 'Directeur' | 'Directeur adjoint' | 'Responsable' | 'Commercial' | 'Gerant' | 'Caissier';
 function RequireRole({ roles, children }: { roles: Role[]; children: ReactNode }) {
   const { currentUser } = useAuth();
   if (!currentUser) return <Navigate to="/login" replace />;
@@ -180,7 +180,7 @@ function App() {
                     <Route path="performance" element={<Performance />} />
                     <Route path="mes-commissions" element={<CommercialCommissions />} />
                     <Route path="mon-rapport-hebdo" element={<WeeklyReportEditor />} />
-                    <Route path="rapports-equipe" element={<TeamReportsView />} />
+                    <Route path="rapports-equipe" element={<RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><TeamReportsView /></RequireRole>} />
                     <Route path="documents" element={<Documents />} />
                     <Route path="utilisateurs" element={<Utilisateurs />} />
                     <Route path="rapports" element={<RequireRole roles={['Directeur']}><Rapports /></RequireRole>} />
