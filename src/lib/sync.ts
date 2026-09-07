@@ -35,7 +35,7 @@ export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT'
                              'INSERT_POS_STOCK_MOVEMENT' |
                              'INSERT_POS_INVENTORY' | 'UPDATE_POS_INVENTORY' | 'DELETE_POS_INVENTORY' |
                              'INSERT_POS_CASH_SESSION' | 'UPDATE_POS_CASH_SESSION' |
-                             'INSERT_POS_TRANSACTION' | 'UPDATE_POS_TRANSACTION' | 'CLEAR_POS_SALES_HISTORY' |
+                             'INSERT_POS_TRANSACTION' | 'UPDATE_POS_TRANSACTION' | 'CLEAR_POS_SALES_HISTORY' | 'DELETE_POS_MOVEMENTS_BY_RANGE' |
                              'INSERT_POS_PAYMENT' |
                               'INSERT_POS_DISCOUNT' | 'UPDATE_POS_DISCOUNT' | 'DELETE_POS_DISCOUNT' |
                               'UPDATE_POS_SETTINGS' |
@@ -1320,6 +1320,49 @@ export const processSyncQueue = async () => {
           await supabase.from('pos_payments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
           await supabase.from('pos_transaction_lines').delete().neq('id', '00000000-0000-0000-0000-000000000000');
           await supabase.from('pos_transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          success = true;
+          break;
+        }
+        case 'DELETE_POS_MOVEMENTS_BY_RANGE': {
+          const { startDate, endDate } = action.payload;
+          const startIso = `${startDate}T00:00:00.000Z`;
+          const endIso = `${endDate}T23:59:59.999Z`;
+
+          // 1. Transactions de la plage
+          const { data: targetTxs } = await supabase
+            .from('pos_transactions')
+            .select('id')
+            .gte('date', startIso)
+            .lte('date', endIso);
+
+          const txIds = (targetTxs || []).map((t: any) => t.id);
+
+          if (txIds.length > 0) {
+            await supabase.from('pos_payments').delete().in('transaction_id', txIds);
+            await supabase.from('pos_transaction_lines').delete().in('transaction_id', txIds);
+            await supabase.from('pos_transactions').delete().in('id', txIds);
+          }
+
+          // 2. Retours de la plage
+          const { data: targetReturns } = await supabase
+            .from('pos_returns')
+            .select('id')
+            .gte('date', startIso)
+            .lte('date', endIso);
+
+          const returnIds = (targetReturns || []).map((r: any) => r.id);
+          if (returnIds.length > 0) {
+            await supabase.from('pos_return_lines').delete().in('return_id', returnIds);
+            await supabase.from('pos_returns').delete().in('id', returnIds);
+          }
+
+          // 3. Sessions de caisse de la plage
+          await supabase
+            .from('pos_cash_sessions')
+            .delete()
+            .gte('opened_at', startIso)
+            .lte('opened_at', endIso);
+
           success = true;
           break;
         }

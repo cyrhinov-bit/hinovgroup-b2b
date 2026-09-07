@@ -1,16 +1,34 @@
 import { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { TrendingUp, ShoppingCart, RotateCcw, Wallet, CreditCard, Smartphone, Layers, ChevronDown, ChevronRight, DollarSign } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { 
+  TrendingUp, ShoppingCart, RotateCcw, Wallet, CreditCard, 
+  Smartphone, Layers, ChevronDown, ChevronRight, DollarSign,
+  Trash2, AlertTriangle, Calendar, X, Check
+} from 'lucide-react';
 import { todayLocalKey, toLocalDayKey } from '../../lib/dates';
+import { toast } from 'react-hot-toast';
 
 type Period = 'today' | '7days' | '30days' | 'custom';
 
 export default function PosFinance() {
-  const { posTransactions, posCashSessions, posPayments, posProducts, posReturns } = useAppContext();
+  const { 
+    posTransactions, posCashSessions, posPayments, posProducts, 
+    posReturns, deletePosMovementsByDateRange 
+  } = useAppContext();
+  const { currentUser } = useAuth();
+
   const [period, setPeriod] = useState<Period>('today');
   const [startDate, setStartDate] = useState(todayLocalKey());
   const [endDate, setEndDate] = useState(todayLocalKey());
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
+
+  // Modal Purge Période
+  const [showPurgeModal, setShowPurgeModal] = useState(false);
+  const [purgeStartDate, setPurgeStartDate] = useState('2026-08-09');
+  const [purgeEndDate, setPurgeEndDate] = useState('2026-08-31');
+  const [isPurging, setIsPurging] = useState(false);
+  const [confirmPurgeCheck, setConfirmPurgeCheck] = useState(false);
 
   const getDateRange = (): { start: string; end: string } => {
     const today = new Date();
@@ -125,9 +143,77 @@ export default function PosFinance() {
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' });
 
+  // Calcul d'impact de la purge sur la période sélectionnée
+  const purgeTxs = posTransactions.filter(t => {
+    const d = toLocalDayKey(t.date);
+    return d >= purgeStartDate && d <= purgeEndDate;
+  });
+  const purgeReturns = posReturns.filter(r => {
+    const d = toLocalDayKey(r.date);
+    return d >= purgeStartDate && d <= purgeEndDate;
+  });
+  const purgeSessions = posCashSessions.filter(s => {
+    const d = toLocalDayKey(s.openedAt);
+    return d >= purgeStartDate && d <= purgeEndDate;
+  });
+  const purgeTotalSales = purgeTxs.reduce((s, t) => s + (t.status === 'Validée' ? t.total : 0), 0);
+
+  const handleExecutePurge = async () => {
+    if (!confirmPurgeCheck) {
+      toast.error('Veuillez cocher la case de confirmation pour valider la purge.');
+      return;
+    }
+    setIsPurging(true);
+    try {
+      await deletePosMovementsByDateRange(purgeStartDate, purgeEndDate);
+      toast.success(`Mouvements du ${purgeStartDate} au ${purgeEndDate} supprimés avec succès.`);
+      setShowPurgeModal(false);
+      setConfirmPurgeCheck(false);
+    } catch (err) {
+      console.error('Erreur purge:', err);
+      toast.error('Erreur lors de la suppression des mouvements.');
+    } finally {
+      setIsPurging(false);
+    }
+  };
+
+  const isAuthorized = !currentUser?.role || currentUser.role === 'Directeur' || currentUser.role === 'Gerant';
+
   return (
     <div className="pos-page">
-      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '20px' }}>Finance POS</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>Finance POS</h1>
+        
+        {isAuthorized && (
+          <button
+            type="button"
+            onClick={() => {
+              setPurgeStartDate('2026-08-09');
+              setPurgeEndDate('2026-08-31');
+              setConfirmPurgeCheck(false);
+              setShowPurgeModal(true);
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              backgroundColor: '#FEF2F2',
+              color: '#DC2626',
+              border: '1px solid #FECACA',
+              borderRadius: 'var(--radius-md)',
+              fontWeight: 600,
+              fontSize: '13px',
+              cursor: 'pointer',
+              transition: 'background 0.15s'
+            }}
+            title="Supprimer les écritures financières sur une plage de dates"
+          >
+            <Trash2 size={16} />
+            <span>Purger une période (ex: 9 au 31 août)</span>
+          </button>
+        )}
+      </div>
 
       {/* Period filter */}
       <div style={{ ...cardStyle, marginBottom: '24px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -364,6 +450,157 @@ export default function PosFinance() {
             </tbody>
           </table>
 </div>
+        </div>
+      )}
+      {/* Modale de Purge de Période Sécurisée */}
+      {showPurgeModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            backdropFilter: 'blur(3px)'
+          }}
+          onClick={e => e.target === e.currentTarget && !isPurging && setShowPurgeModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '16px',
+              maxWidth: '520px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
+              animation: 'scaleUp 0.15s ease-out'
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ backgroundColor: '#FEE2E2', color: '#DC2626', padding: '8px', borderRadius: '10px' }}>
+                  <Trash2 size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#1E293B' }}>
+                    Purger les Mouvements Financiers
+                  </h3>
+                  <span style={{ fontSize: '12px', color: '#64748B' }}>
+                    Nettoyage financier pur (stock physique non altéré)
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isPurging && setShowPurgeModal(false)}
+                style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Plage de dates */}
+            <div style={{ backgroundColor: '#F8FAFC', padding: '14px', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '8px' }}>
+                Sélectionner la période à supprimer :
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>Date début :</span>
+                  <input
+                    type="date"
+                    value={purgeStartDate}
+                    onChange={e => setPurgeStartDate(e.target.value)}
+                    style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
+                  />
+                </div>
+                <span style={{ color: '#94A3B8', marginTop: '14px' }}>→</span>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>Date fin :</span>
+                  <input
+                    type="date"
+                    value={purgeEndDate}
+                    onChange={e => setPurgeEndDate(e.target.value)}
+                    style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '13px' }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Récapitulatif d'impact */}
+            <div style={{ backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '12px', padding: '14px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: '#991B1B', fontWeight: 700, fontSize: '13px' }}>
+                <AlertTriangle size={16} />
+                <span>Éléments identifiés sur la période ({purgeStartDate} au {purgeEndDate}) :</span>
+              </div>
+              <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '12px', color: '#7F1D1D', lineHeight: '1.6' }}>
+                <li><strong>{purgeTxs.length}</strong> transaction{purgeTxs.length > 1 ? 's' : ''} de vente ({purgeTotalSales.toLocaleString()} FCFA)</li>
+                <li><strong>{purgeReturns.length}</strong> retour{purgeReturns.length > 1 ? 's' : ''} de marchandise</li>
+                <li><strong>{purgeSessions.length}</strong> session{purgeSessions.length > 1 ? 's' : ''} de caisse</li>
+                <li>Les écritures seront retirées des totaux financiers et des mouvements journaliers.</li>
+              </ul>
+            </div>
+
+            {/* Case à cocher de confirmation */}
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer', marginBottom: '20px', fontSize: '12px', color: '#334155' }}>
+              <input
+                type="checkbox"
+                checked={confirmPurgeCheck}
+                onChange={e => setConfirmPurgeCheck(e.target.checked)}
+                style={{ marginTop: '2px' }}
+              />
+              <span>
+                Je confirme vouloir supprimer définitivement les mouvements de vente et d'encaissement de la période du <strong>{purgeStartDate}</strong> au <strong>{purgeEndDate}</strong>.
+              </span>
+            </label>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setShowPurgeModal(false)}
+                disabled={isPurging}
+                style={{
+                  padding: '9px 16px',
+                  borderRadius: '8px',
+                  backgroundColor: '#E2E8F0',
+                  color: '#334155',
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  cursor: isPurging ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Annuler
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExecutePurge}
+                disabled={!confirmPurgeCheck || isPurging}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  backgroundColor: !confirmPurgeCheck || isPurging ? '#FCA5A5' : '#DC2626',
+                  color: 'white',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: !confirmPurgeCheck || isPurging ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 6px rgba(220, 38, 38, 0.3)'
+                }}
+              >
+                {isPurging ? 'Suppression en cours...' : 'Confirmer la suppression'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

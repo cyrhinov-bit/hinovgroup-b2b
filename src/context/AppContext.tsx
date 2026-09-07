@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import { isProductComplete } from '../features/products/services/ProductService';
 import type { ProductPersistence } from '../features/products/data/repositories/ProductRepository';
 import { productService } from '../features/products/services/ProductService';
+import { toLocalDayKey } from '../lib/dates';
 
 const isUuid = (value?: string) => !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
@@ -474,6 +475,7 @@ interface AppState {
   updatePosTransaction: (id: string, data: Partial<PosTransaction>) => Promise<void>;
   voidPosTransaction: (id: string) => Promise<void>;
   clearPosSalesHistory: () => Promise<void>;
+  deletePosMovementsByDateRange: (startDate: string, endDate: string) => Promise<void>;
   addPosDiscount: (discount: PosDiscount) => Promise<void>;
   updatePosDiscount: (id: string, data: Partial<PosDiscount>) => Promise<void>;
   deletePosDiscount: (id: string) => Promise<void>;
@@ -2838,6 +2840,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('CLEAR_POS_SALES_HISTORY', {});
   };
 
+  const deletePosMovementsByDateRange = async (startDate: string, endDate: string) => {
+    // 1. Identifier et filtrer les transactions & paiements dans la plage
+    const txsToDelete = posTransactions.filter(t => {
+      const day = toLocalDayKey(t.date);
+      return day >= startDate && day <= endDate;
+    });
+    const txIdsToDelete = new Set(txsToDelete.map(t => t.id));
+
+    const nextTxs = posTransactions.filter(t => !txIdsToDelete.has(t.id));
+    const nextPayments = posPayments.filter(p => !p.transactionId || !txIdsToDelete.has(p.transactionId));
+
+    // 2. Filtrer les retours
+    const nextReturns = posReturns.filter(r => {
+      const day = toLocalDayKey(r.date);
+      return !(day >= startDate && day <= endDate) && !txIdsToDelete.has(r.transactionId || '');
+    });
+
+    // 3. Filtrer les sessions de caisse
+    const nextSessions = posCashSessions.filter(s => {
+      const day = toLocalDayKey(s.openedAt);
+      return !(day >= startDate && day <= endDate);
+    });
+
+    setPosTransactions(nextTxs);
+    setPosPayments(nextPayments);
+    setPosReturns(nextReturns);
+    setPosCashSessions(nextSessions);
+
+    await db.posTransactions.setItem('data', nextTxs);
+    await db.posPayments.setItem('data', nextPayments);
+    await db.posReturns.setItem('data', nextReturns);
+    await db.posCashSessions.setItem('data', nextSessions);
+
+    await queueSyncAction('DELETE_POS_MOVEMENTS_BY_RANGE', { startDate, endDate });
+  };
+
   const addPosDiscount = async (discount: PosDiscount) => {
     const newDiscount = { ...discount, id: discount.id || uuidv4() };
     setPosDiscounts(prev => {
@@ -3279,7 +3317,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AppContext.Provider value={{ users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, reviewV2WeeklyReport, deleteV2WeeklyReport, updateMyProfile, addCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData }}>
+    <AppContext.Provider value={{ users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, reviewV2WeeklyReport, deleteV2WeeklyReport, updateMyProfile, addCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData }}>
       {children}
     </AppContext.Provider>
   );
