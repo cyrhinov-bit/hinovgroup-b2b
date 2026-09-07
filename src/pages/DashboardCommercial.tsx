@@ -109,9 +109,6 @@ export function DashboardCommercial() {
             <Trophy size={20} color="#0D9488" />
             <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>Ma Performance du Mois</h3>
           </div>
-          <Link to="/performance" style={{ fontSize: '0.82rem', color: '#0D9488', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}>
-            Voir le classement complet <ArrowUpRight size={14} />
-          </Link>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>

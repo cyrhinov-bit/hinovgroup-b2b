@@ -58,7 +58,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Ventes', icon: Receipt, path: '/ventes', color: '#10B981', bg: '#ECFDF5', roles: ['Directeur', 'Responsable'] },
     { label: 'Coûts & Dépenses', icon: DollarSign, path: '/couts', color: '#F43F5E', bg: '#FFF1F2', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Commissions', icon: Coins, path: '/commissions', color: '#EAB308', bg: '#FEFCE8', roles: ['Directeur', 'Responsable'] },
-    { label: 'Performance & Primes', icon: Trophy, path: '/performance', color: '#F97316', bg: '#FFF7ED', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'Commercial', 'SuperAdmin'] },
+    { label: 'Performance & Primes', icon: Trophy, path: '/performance', color: '#F97316', bg: '#FFF7ED', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Mes Commissions', icon: Coins, path: '/mes-commissions', color: '#EAB308', bg: '#FEFCE8', roles: ['Responsable'] },
     { label: 'Mon Rapport Hebdo (IA)', icon: Sparkles, path: '/mon-rapport-hebdo', color: '#A855F7', bg: '#FAF5FF', roles: ['Commercial', 'Responsable', 'Directeur', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Historique Rapports', icon: History, path: '/mes-rapports', color: '#0284C7', bg: '#F0F9FF', roles: ['Commercial', 'Responsable', 'Directeur', 'Directeur adjoint', 'SuperAdmin'] },

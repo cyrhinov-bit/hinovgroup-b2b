@@ -177,7 +177,7 @@ function App() {
                     <Route path="ventes" element={<Sales />} />
                     <Route path="couts" element={<Couts />} />
                     <Route path="commissions" element={<Commissions />} />
-                    <Route path="performance" element={<Performance />} />
+                    <Route path="performance" element={<RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><Performance /></RequireRole>} />
                     <Route path="mes-commissions" element={<CommercialCommissions />} />
                     <Route path="mon-rapport-hebdo" element={<WeeklyReportEditor />} />
                     <Route path="rapports-equipe" element={<RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><TeamReportsView /></RequireRole>} />
