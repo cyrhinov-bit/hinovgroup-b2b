@@ -1178,16 +1178,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const merged = mergeData(cachedPosInventories, parsed);
           setPosInventories(merged); await db.posInventories.setItem('data', merged);
         }
-        if (posCashSessionsData && posCashSessionsData.length > 0) {
+        if (posCashSessionsData) {
           const parsed = posCashSessionsData.map((s: any) => ({
             id: s.id, cashierId: s.cashier_id, openedAt: s.opened_at, closedAt: s.closed_at,
             initialFund: s.initial_fund, finalAmount: s.final_amount, expectedAmount: s.expected_amount,
             difference: s.difference, status: s.status
           }));
-          const merged = mergeData(cachedPosCashSessions, parsed);
-          setPosCashSessions(merged); await db.posCashSessions.setItem('data', merged);
+          setPosCashSessions(parsed); await db.posCashSessions.setItem('data', parsed);
         }
-        if (posTransactionsData && posTransactionsData.length > 0) {
+        if (posTransactionsData) {
           const parsed = posTransactionsData.map((t: any) => ({
             id: t.id, transactionNumber: t.transaction_number, cashierId: t.cashier_id,
             sessionId: t.session_id, date: t.date, subtotal: t.subtotal, vat: t.vat ?? 0,
@@ -1200,25 +1199,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
               id: p.id, transactionId: p.transaction_id, method: p.method, amount: p.amount, reference: p.reference
             }))
           }));
-          const merged = mergeData(cachedPosTransactions, parsed);
-          setPosTransactions(merged); await db.posTransactions.setItem('data', merged);
+          setPosTransactions(parsed); await db.posTransactions.setItem('data', parsed);
         }
-        if (posPaymentsData && posPaymentsData.length > 0) {
+        if (posPaymentsData) {
           const parsed = posPaymentsData.map((p: any) => ({ id: p.id, transactionId: p.transaction_id, method: p.method, amount: p.amount, reference: p.reference }));
-          const merged = mergeData(cachedPosPayments, parsed);
-          setPosPayments(merged); await db.posPayments.setItem('data', merged);
+          setPosPayments(parsed); await db.posPayments.setItem('data', parsed);
         }
-        if (posDiscountsData && posDiscountsData.length > 0) {
+        if (posDiscountsData) {
           const parsed = posDiscountsData.map((d: any) => ({ id: d.id, name: d.name, type: d.type, value: d.value, maxPercent: d.max_percent, maxAmount: d.max_amount, active: d.active }));
-          const merged = mergeData(cachedPosDiscounts, parsed);
-          setPosDiscounts(merged); await db.posDiscounts.setItem('data', merged);
+          setPosDiscounts(parsed); await db.posDiscounts.setItem('data', parsed);
         }
         if (posSettingsData) {
           const parsed: PosSettings = { libraryName: posSettingsData.library_name, address: posSettingsData.address, phone: posSettingsData.phone, email: posSettingsData.email, currency: posSettingsData.currency, ticketMessage: posSettingsData.ticket_message, printerType: posSettingsData.printer_type };
           setPosSettingsState(parsed); await db.posSettings.setItem('data', parsed);
         }
         
-        if (posReturnsData && posReturnsData.length > 0) {
+        if (posReturnsData) {
           const parsed: PosReturn[] = posReturnsData.map((r: any) => ({
             id: r.id,
             returnNumber: r.return_number,
@@ -1241,8 +1237,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             })),
             exchangeLines: []
           }));
-          const merged = mergeData(cachedPosReturns || [], parsed);
-          setPosReturns(merged); await db.posReturns.setItem('data', merged);
+          setPosReturns(parsed); await db.posReturns.setItem('data', parsed);
         }
 
           // Update last sync time for next delta fetch

@@ -137,7 +137,9 @@ export default function PosFinance() {
     }
   });
 
-  const dailyEntries = Array.from(dailyMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  const dailyEntries = Array.from(dailyMap.entries())
+    .filter(([_, data]) => data.nbVentes > 0 || data.nbRetours > 0 || data.ventes > 0)
+    .sort((a, b) => b[0].localeCompare(a[0]));
 
   const cardStyle: React.CSSProperties = { background: 'white', borderRadius: 'var(--radius-lg)', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' };
 
