@@ -18,19 +18,23 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
   };
 
   // ================= 1. EN-TÊTE OFFICIEL =================
-  // Logo entreprise (Haut gauche)
+  // Logo entreprise (Haut gauche - Espace élargi)
   if (settings?.headerLogoBase64) {
     try {
-      doc.addImage(settings.headerLogoBase64, 'PNG', 18, 12, 50, 16);
+      doc.addImage(settings.headerLogoBase64, 'PNG', 18, 8, 90, 25);
     } catch {
-      // fallback text
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(13, 148, 136); // Teal
-      doc.text(settings?.companyName || 'HINOV GROUP', 18, 20);
+      try {
+        doc.addImage(settings.headerLogoBase64, 'JPEG', 18, 8, 90, 25);
+      } catch {
+        // fallback text
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(13, 148, 136); // Teal
+        doc.text(settings?.companyName || 'HINOV GROUP', 18, 20);
+      }
     }
   } else {
-    doc.setFontSize(14);
+    doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(13, 148, 136); // Teal
     doc.text(settings?.companyName || 'HINOV GROUP', 18, 20);
@@ -39,7 +43,7 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
   // Cartouche Collaborateur avec Photo de profil ronde (Haut droite)
   const cx = pageW - 24;
   const cy = 20;
-  const r = 9;
+  const r = 10;
 
   if (author?.photo) {
     try {
@@ -56,17 +60,17 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
   }
 
   // Nom & Rôle du collaborateur
-  doc.setFontSize(9);
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42); // Slate-900
-  doc.text(author?.name || 'Collaborateur', pageW - 36, 17, { align: 'right' });
-  doc.setFontSize(8);
+  doc.text(author?.name || 'Collaborateur', pageW - 38, 17, { align: 'right' });
+  doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 116, 139); // Slate-500
-  doc.text(author?.role || 'Commercial', pageW - 36, 22, { align: 'right' });
+  doc.text(author?.role || 'Commercial', pageW - 38, 23, { align: 'right' });
 
   // Ligne de séparation élégante
-  y = 33;
+  y = 38;
   doc.setDrawColor(226, 232, 240); // Slate-200
   doc.setLineWidth(0.75);
   doc.line(18, y, pageW - 18, y);

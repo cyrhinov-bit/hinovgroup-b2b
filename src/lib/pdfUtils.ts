@@ -652,25 +652,37 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
   let y = 0;
 
   // ============================ HEADER ============================
-  if (isModerne) {
+  if (settings.headerLogoBase64) {
+    const bannerH = 38;
+    try {
+      doc.addImage(settings.headerLogoBase64, 'PNG', 0, 0, pageW, bannerH);
+    } catch {
+      try {
+        doc.addImage(settings.headerLogoBase64, 'JPEG', 0, 0, pageW, bannerH);
+      } catch {
+        // fallback text if image fails
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.setTextColor(...dark);
+        doc.text(companyName.toUpperCase(), margin, 18);
+      }
+    }
+    y = bannerH + 6;
+  } else if (isModerne) {
     doc.setFillColor(...accent);
     doc.rect(0, 0, pageW, 44, 'F');
     doc.setFillColor(...mixWithWhite(accent, 0.15));
     doc.rect(0, 44, pageW, 1.5, 'F');
 
     doc.setTextColor(255, 255, 255);
-    if (settings.headerLogoBase64) {
-      try { doc.addImage(settings.headerLogoBase64, 'PNG', margin, 8, 36, 14); } catch { /* logo invalide */ }
-    }
-    const logoOffset = settings.headerLogoBase64 ? margin + 40 : margin;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
-    doc.text(companyName, logoOffset, 18);
+    doc.text(companyName, margin, 18);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(226, 240, 245);
-    doc.text(settings.companyAddress || '', logoOffset, 25);
-    if (settings.companySiret) doc.text(`RCCM : ${settings.companySiret}`, logoOffset, 30);
+    doc.text(settings.companyAddress || '', margin, 25);
+    if (settings.companySiret) doc.text(`RCCM : ${settings.companySiret}`, margin, 30);
 
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
@@ -683,53 +695,39 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
     doc.setFontSize(8);
     doc.setTextColor(226, 240, 245);
     doc.text(validity, pageW - margin, 38, { align: 'right' });
-    y = 56;
+    y = 54;
   } else {
-    // En-tête pleine largeur avec bandeau coloré
+    // En-tête pleine largeur avec bandeau coloré classique
     if (!isMinimaliste) {
       doc.setFillColor(...accent);
       doc.rect(0, 0, pageW, 38, 'F');
       doc.setFillColor(...mixWithWhite(accent, 0.3));
       doc.rect(0, 38, pageW, 1, 'F');
     }
-    y = isMinimaliste ? margin : 8;
-    if (settings.headerLogoBase64) {
-      try { doc.addImage(settings.headerLogoBase64, 'PNG', margin, y, 36, 14); } catch { /* logo invalide */ }
-      const logoOffset = margin + 40;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(16);
-      doc.setTextColor(isMinimaliste ? dark[0] : 255, isMinimaliste ? dark[1] : 255, isMinimaliste ? dark[2] : 255);
-      doc.text(companyName, logoOffset, y + 8);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(isMinimaliste ? muted[0] : 226, isMinimaliste ? muted[1] : 240, isMinimaliste ? muted[2] : 245);
-      doc.text(settings.companyAddress || '', logoOffset, y + 13);
-      if (settings.companySiret) doc.text(`RCCM : ${settings.companySiret}`, logoOffset, y + 18);
-    } else {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(16);
-      doc.setTextColor(isMinimaliste ? dark[0] : 255, isMinimaliste ? dark[1] : 255, isMinimaliste ? dark[2] : 255);
-      doc.text(companyName.toUpperCase(), margin, y + 8);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(isMinimaliste ? muted[0] : 226, isMinimaliste ? muted[1] : 240, isMinimaliste ? muted[2] : 245);
-      doc.text(settings.companyAddress || '', margin, y + 13);
-      if (settings.companySiret) doc.text(`RCCM : ${settings.companySiret}`, margin, y + 18);
-    }
+    const headerTextY = isMinimaliste ? margin : 8;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(isMinimaliste ? dark[0] : 255, isMinimaliste ? dark[1] : 255, isMinimaliste ? dark[2] : 255);
+    doc.text(companyName.toUpperCase(), margin, headerTextY + 8);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(isMinimaliste ? muted[0] : 226, isMinimaliste ? muted[1] : 240, isMinimaliste ? muted[2] : 245);
+    doc.text(settings.companyAddress || '', margin, headerTextY + 13);
+    if (settings.companySiret) doc.text(`RCCM : ${settings.companySiret}`, margin, headerTextY + 18);
 
     // Titre DEVIS à droite
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(24);
     doc.setTextColor(isMinimaliste ? dark[0] : 255, isMinimaliste ? dark[1] : 255, isMinimaliste ? dark[2] : 255);
-    doc.text('DEVIS', pageW - margin, y + 8, { align: 'right' });
+    doc.text('DEVIS', pageW - margin, headerTextY + 8, { align: 'right' });
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(isMinimaliste ? muted[0] : 226, isMinimaliste ? muted[1] : 240, isMinimaliste ? muted[2] : 245);
-    doc.text(`N° ${quote.quoteNumber}`, pageW - margin, y + 15, { align: 'right' });
-    doc.text(`Date : ${dateFr}`, pageW - margin, y + 20, { align: 'right' });
+    doc.text(`N° ${quote.quoteNumber}`, pageW - margin, headerTextY + 15, { align: 'right' });
+    doc.text(`Date : ${dateFr}`, pageW - margin, headerTextY + 20, { align: 'right' });
     doc.setFontSize(8);
-    doc.text(validity, pageW - margin, y + 25, { align: 'right' });
-    y = isMinimaliste ? y + 30 : 48;
+    doc.text(validity, pageW - margin, headerTextY + 25, { align: 'right' });
+    y = isMinimaliste ? headerTextY + 30 : 48;
   }
 
   // ====================== CLIENT + OBJET ======================
