@@ -4,6 +4,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { Save, X, Plus, Upload } from 'lucide-react';
 import { useProductImages } from '../images/ProductImagesContext';
 import { v4 as uuidv4 } from 'uuid';
+import { toast } from 'react-hot-toast';
 import type { PosProduct } from '../../../context/AppContext';
 
 interface ProductFormData {
@@ -26,7 +27,7 @@ interface AutoCalculations {
 
 interface ProductEntryFormProps {
   initialBarcode?: string;
-  initialProduct?: PosProduct;
+  initialProduct?: PosProduct | null;
   onCancel?: () => void;
 }
 
@@ -39,9 +40,9 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
     barcode: initialProduct?.barcode || initialBarcode || '',
     isbn: initialProduct?.isbn || '',
     name: initialProduct?.name || '',
-    purchasePrice: initialProduct?.purchasePrice || 0,
-    quantity: initialProduct?.quantity || 0,
-    sellingPrice: initialProduct?.sellingPrice || 0,
+    purchasePrice: initialProduct?.purchasePrice ?? 0,
+    quantity: initialProduct?.quantity ?? 0,
+    sellingPrice: initialProduct?.sellingPrice ?? 0,
     family: initialProduct?.family || 'Fourniture',
   });
   const [calc, setCalc] = useState<AutoCalculations>({
@@ -52,6 +53,34 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
   });
   const [scanResult, setScanResult] = useState<PosProduct | null>(null);
   const [imageDataUri, setImageDataUri] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (initialProduct) {
+      setFormData({
+        reference: initialProduct.reference || '',
+        barcode: initialProduct.barcode || initialBarcode || '',
+        isbn: initialProduct.isbn || '',
+        name: initialProduct.name || '',
+        purchasePrice: initialProduct.purchasePrice ?? 0,
+        quantity: initialProduct.quantity ?? 0,
+        sellingPrice: initialProduct.sellingPrice ?? 0,
+        family: initialProduct.family || 'Fourniture',
+      });
+      setImageDataUri(undefined);
+    } else {
+      setFormData({
+        reference: '',
+        barcode: initialBarcode || '',
+        isbn: '',
+        name: '',
+        purchasePrice: 0,
+        quantity: 0,
+        sellingPrice: 0,
+        family: 'Fourniture',
+      });
+      setImageDataUri(undefined);
+    }
+  }, [initialProduct, initialBarcode]);
 
   useEffect(() => {
     const quantity = Number(formData.quantity) || 0;
@@ -105,6 +134,7 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
         await setProductImage(initialProduct, imageDataUri);
       }
       
+      toast.success('Produit / Service mis à jour avec succès');
       if (onCancel) onCancel(); // Return to catalog
     } else {
       // Create mode

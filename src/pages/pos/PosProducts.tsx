@@ -244,6 +244,7 @@ export default function PosProducts() {
 
       {activeTab === 'new' && (
         <ProductEntryForm 
+          key={editingProduct?.id || 'new'}
           initialBarcode={initialBarcode} 
           initialProduct={editingProduct} 
           onCancel={() => { setActiveTab('catalog'); setInitialBarcode(''); setEditingProduct(null); }} 

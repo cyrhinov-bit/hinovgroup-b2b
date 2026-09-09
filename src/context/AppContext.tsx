@@ -295,19 +295,19 @@ export interface PosCartItem { id: string; productId: string; name: string; refe
 export interface SuspendedCart { id: string; reference?: string; date: string; cart: PosCartItem[]; }
 
 export const DEFAULT_SERVICE_CATEGORY: PosCategory = {
-  id: 'cat-service-impressions',
+  id: '00000000-0000-0000-0000-000000000000',
   name: 'Impressions & Photocopies',
   family: 'Service'
 };
 
 export const DEFAULT_SERVICE_PRODUCTS: PosProduct[] = [
-  { id: 'srv-photocopie-nb-recto', reference: 'SRV-COP-NB-R', name: 'Photocopie A4 N&B (Recto)', family: 'Service', categoryId: 'cat-service-impressions', purchasePrice: 0, sellingPrice: 25, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Photocopie monochrome noir & blanc simple face A4' },
-  { id: 'srv-photocopie-nb-rv', reference: 'SRV-COP-NB-RV', name: 'Photocopie A4 N&B (Recto-Verso)', family: 'Service', categoryId: 'cat-service-impressions', purchasePrice: 0, sellingPrice: 50, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Photocopie monochrome noir & blanc recto/verso A4' },
-  { id: 'srv-impression-nb', reference: 'SRV-IMP-NB', name: 'Impression A4 N&B', family: 'Service', categoryId: 'cat-service-impressions', purchasePrice: 0, sellingPrice: 50, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Impression document noir & blanc A4' },
-  { id: 'srv-impression-couleur', reference: 'SRV-IMP-COL', name: 'Impression A4 Couleur', family: 'Service', categoryId: 'cat-service-impressions', purchasePrice: 0, sellingPrice: 150, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Impression document couleur A4' },
-  { id: 'srv-scan-document', reference: 'SRV-SCAN-A4', name: 'Numérisation / Scan Document', family: 'Service', categoryId: 'cat-service-impressions', purchasePrice: 0, sellingPrice: 100, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Numérisation document vers PDF / Clé USB' },
-  { id: 'srv-plastification-a4', reference: 'SRV-PLAST-A4', name: 'Plastification Document A4', family: 'Service', categoryId: 'cat-service-impressions', purchasePrice: 0, sellingPrice: 200, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Plastification thermique haute protection A4' },
-  { id: 'srv-reliure-spirale', reference: 'SRV-RELIURE', name: 'Reliure Document (Spirale)', family: 'Service', categoryId: 'cat-service-impressions', purchasePrice: 0, sellingPrice: 500, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Reliure spirale plastique avec transparents' },
+  { id: '11111111-0000-0000-0000-000000000001', reference: 'SRV-COP-NB-R', name: 'Photocopie A4 N&B (Recto)', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 25, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Photocopie monochrome noir & blanc simple face A4' },
+  { id: '11111111-0000-0000-0000-000000000002', reference: 'SRV-COP-NB-RV', name: 'Photocopie A4 N&B (Recto-Verso)', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 50, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Photocopie monochrome noir & blanc recto/verso A4' },
+  { id: '11111111-0000-0000-0000-000000000003', reference: 'SRV-IMP-NB', name: 'Impression A4 N&B', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 50, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Impression document noir & blanc A4' },
+  { id: '11111111-0000-0000-0000-000000000004', reference: 'SRV-IMP-COL', name: 'Impression A4 Couleur', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 150, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Impression document couleur A4' },
+  { id: '11111111-0000-0000-0000-000000000005', reference: 'SRV-SCAN-A4', name: 'Numérisation / Scan Document', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 100, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Numérisation document vers PDF / Clé USB' },
+  { id: '11111111-0000-0000-0000-000000000006', reference: 'SRV-PLAST-A4', name: 'Plastification Document A4', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 200, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Plastification thermique haute protection A4' },
+  { id: '11111111-0000-0000-0000-000000000007', reference: 'SRV-RELIURE', name: 'Reliure Document (Spirale)', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 500, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Reliure spirale plastique avec transparents' },
 ];
 
 // Product Module Interfaces
@@ -655,12 +655,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await db.posCategories.setItem('data', categoriesToSet);
       }
 
-      const productsWithServices = (cachedPosProducts && cachedPosProducts.length > 0)
-        ? (cachedPosProducts.some(p => p.family === 'Service') ? cachedPosProducts : [...cachedPosProducts, ...DEFAULT_SERVICE_PRODUCTS])
-        : DEFAULT_SERVICE_PRODUCTS;
+      const cachedProducts = cachedPosProducts || [];
+      const missingDefaults = DEFAULT_SERVICE_PRODUCTS.filter(def => 
+        !cachedProducts.some(m => m.id === def.id || (m.reference && m.reference === def.reference))
+      );
+      const productsWithServices = [...cachedProducts, ...missingDefaults];
       setPosProducts(prev => {
         if (prev.length === 0) return productsWithServices;
-        return prev.some(p => p.family === 'Service') ? prev : [...prev, ...DEFAULT_SERVICE_PRODUCTS];
+        const missing = DEFAULT_SERVICE_PRODUCTS.filter(def => 
+          !prev.some(p => p.id === def.id || (p.reference && p.reference === def.reference))
+        );
+        return missing.length > 0 ? [...prev, ...missing] : prev;
       });
 
       // 2. Fetch from Supabase (if online) and update Cache
@@ -1156,11 +1161,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
               status: p.status || 'Active', isActive: p.is_active !== false, unit: p.unit, createdAt: p.created_at, updatedAt: p.updated_at
             };
           });
-          const mergedWithServices = parsed.some((p: any) => p.family === 'Service')
-            ? parsed
-            : [...parsed, ...DEFAULT_SERVICE_PRODUCTS];
-          setPosProducts(mergedWithServices);
-          await db.posProducts.setItem('data', mergedWithServices);
+          const merged = mergeData(cachedPosProducts, parsed);
+          const missingDefaults = DEFAULT_SERVICE_PRODUCTS.filter(def => 
+            !merged.some((m: any) => m.id === def.id || (m.reference && m.reference === def.reference))
+          );
+          const finalProducts = [...merged, ...missingDefaults];
+          setPosProducts(finalProducts);
+          await db.posProducts.setItem('data', finalProducts);
         }
         if (posStockEntriesData && posStockEntriesData.length > 0) {
           const parsed = posStockEntriesData
@@ -2521,14 +2528,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       data.quantity = Math.max(0, data.quantity);
     }
     const oldProduct = posProducts.find(p => p.id === id);
-    if (oldProduct && data.quantity !== undefined && data.quantity !== oldProduct.quantity) {
-      await addPosStockMovement({
-        productId: id,
-        type: 'Ajustement Manuel',
-        quantity: data.quantity - oldProduct.quantity,
-        createdBy: currentUser?.name,
-        notes: 'Modification manuelle'
-      });
+    if (oldProduct && data.quantity !== undefined && data.quantity !== oldProduct.quantity && oldProduct.family !== 'Service') {
+      try {
+        await addPosStockMovement({
+          productId: id,
+          type: 'Ajustement Manuel',
+          quantity: data.quantity - oldProduct.quantity,
+          createdBy: currentUser?.name,
+          notes: 'Modification manuelle'
+        });
+      } catch (err) {
+        console.warn('Ajustement de stock ignoré pour ce produit :', err);
+      }
     }
     setPosProducts(prev => {
       const next = prev.map(p => p.id === id ? { ...p, ...data } : p);
