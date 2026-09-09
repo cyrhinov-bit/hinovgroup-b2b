@@ -14,7 +14,7 @@ interface ProductFormData {
   purchasePrice: number | '';
   quantity: number | '';
   sellingPrice: number | '';
-  family: 'Livre' | 'Fourniture';
+  family: 'Livre' | 'Fourniture' | 'Service';
 }
 
 interface AutoCalculations {
@@ -218,7 +218,7 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
                 className="table-input"
                 value={formData.family}
                 onChange={(e) => {
-                  const newFamily = e.target.value as 'Livre' | 'Fourniture';
+                  const newFamily = e.target.value as 'Livre' | 'Fourniture' | 'Service';
                   if (newFamily === 'Livre' && formData.sellingPrice !== '') {
                     const sp = Number(formData.sellingPrice) || 0;
                     setFormData({ ...formData, family: newFamily, purchasePrice: Math.round(sp * 0.75) });
@@ -230,6 +230,7 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
               >
                 <option value="Livre">Livre</option>
                 <option value="Fourniture">Fourniture</option>
+                <option value="Service">Service / Impression</option>
               </select>
             </div>
           </div>

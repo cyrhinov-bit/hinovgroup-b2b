@@ -142,7 +142,7 @@ export interface SharedPosProduct {
   barcode?: string;
   isbn?: string;
   name: string;
-  family?: 'Livre' | 'Fourniture';
+  family?: 'Livre' | 'Fourniture' | 'Service';
   categoryId?: string;
   brandId?: string;
   supplierId?: string;

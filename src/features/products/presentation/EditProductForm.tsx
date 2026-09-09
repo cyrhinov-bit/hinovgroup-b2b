@@ -163,7 +163,7 @@ export default function EditProductForm({ product, categories, brands, suppliers
           className="table-input"
           value={formData.family || 'Fourniture'}
           onChange={e => {
-            const newFamily = e.target.value as 'Livre' | 'Fourniture';
+            const newFamily = e.target.value as 'Livre' | 'Fourniture' | 'Service';
             if (newFamily === 'Livre' && (formData.sellingPrice || 0) > 0) {
               const sp = formData.sellingPrice || 0;
               setFormData({ ...formData, family: newFamily, purchasePrice: Math.round(sp * 0.75) });
@@ -174,6 +174,7 @@ export default function EditProductForm({ product, categories, brands, suppliers
         >
           <option value="Livre">Livre</option>
           <option value="Fourniture">Fourniture</option>
+          <option value="Service">Service / Impression</option>
         </select>
       </div>
 

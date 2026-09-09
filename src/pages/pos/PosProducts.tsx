@@ -168,8 +168,15 @@ export default function PosProducts() {
                     <td style={{ padding: '12px 16px', fontSize: '14px', color: 'var(--color-text-muted)' }}>{product.isbn || '-'}</td>
                     <td style={{ padding: '12px 16px' }}>
                       {product.family ? (
-                        <span style={{ padding: '2px 8px', borderRadius: 'var(--radius-md)', fontSize: '11px', fontWeight: 500, background: product.family === 'Livre' ? 'var(--color-primary-tint)' : 'var(--color-success-tint)', color: product.family === 'Livre' ? 'var(--color-primary)' : 'var(--color-success)' }}>
-                          {product.family}
+                        <span style={{ 
+                          padding: '2px 8px', 
+                          borderRadius: 'var(--radius-md)', 
+                          fontSize: '11px', 
+                          fontWeight: 500, 
+                          background: product.family === 'Livre' ? 'var(--color-primary-tint)' : product.family === 'Service' ? '#f3e8ff' : 'var(--color-success-tint)', 
+                          color: product.family === 'Livre' ? 'var(--color-primary)' : product.family === 'Service' ? '#7c3aed' : 'var(--color-success)' 
+                        }}>
+                          {product.family === 'Service' ? '🖨️ Service' : product.family}
                         </span>
                       ) : (
                         '-'

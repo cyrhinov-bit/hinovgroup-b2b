@@ -275,10 +275,10 @@ export interface V2WeeklyReport {
   updatedAt?: string;
 }
 // POS Interfaces
-export interface PosCategory { id: string; name: string; family: 'Livre' | 'Fourniture'; }
+export interface PosCategory { id: string; name: string; family: 'Livre' | 'Fourniture' | 'Service'; }
 export interface PosBrand { id: string; name: string; }
 export interface PosSupplier { id: string; name: string; contact?: string; phone?: string; email?: string; address?: string; }
-export interface PosProduct { id: string; reference: string; barcode?: string; isbn?: string; name: string; family?: 'Livre' | 'Fourniture'; categoryId?: string; brandId?: string; supplierId?: string; purchasePrice: number; sellingPrice: number; quantity: number; minStock: number; imageUrl?: string; description?: string; status?: 'Active' | 'Inactive'; isActive: boolean; unit?: string; createdAt?: string; updatedAt?: string; }
+export interface PosProduct { id: string; reference: string; barcode?: string; isbn?: string; name: string; family?: 'Livre' | 'Fourniture' | 'Service'; categoryId?: string; brandId?: string; supplierId?: string; purchasePrice: number; sellingPrice: number; quantity: number; minStock: number; imageUrl?: string; description?: string; status?: 'Active' | 'Inactive'; isActive: boolean; unit?: string; createdAt?: string; updatedAt?: string; }
 export interface PosStockEntryLine { id: string; productId: string; quantity: number; purchasePrice: number; total: number; }
 export interface PosStockEntry { id: string; reference: string; supplierId?: string; date: string; totalAmount: number; status: 'Brouillon' | 'Validé' | 'Annulé'; notes?: string; createdBy?: string; lines: PosStockEntryLine[]; }
 export interface PosInventoryLine { id: string; productId: string; expectedQty: number; countedQty: number; difference: number; }
@@ -293,6 +293,22 @@ export interface ExchangeLine { id: string; productId: string; description: stri
 export interface PosReturn { id: string; returnNumber: string; transactionId?: string; sessionId?: string; date: string; type: 'Retour simple' | 'Retour avec échange'; totalRefund: number; totalExchange: number; amountToPay: number; status: 'En attente' | 'Traité' | 'Annulé'; lines: PosReturnLine[]; exchangeLines?: ExchangeLine[]; notes?: string; createdBy?: string; }
 export interface PosCartItem { id: string; productId: string; name: string; reference: string; unitPrice: number; quantity: number; discountType: 'none' | 'percent' | 'amount'; discountPercent: number; discountAmount: number; total: number; }
 export interface SuspendedCart { id: string; reference?: string; date: string; cart: PosCartItem[]; }
+
+export const DEFAULT_SERVICE_CATEGORY: PosCategory = {
+  id: 'cat-service-impressions',
+  name: 'Impressions & Photocopies',
+  family: 'Service'
+};
+
+export const DEFAULT_SERVICE_PRODUCTS: PosProduct[] = [
+  { id: 'srv-photocopie-nb-recto', reference: 'SRV-COP-NB-R', name: 'Photocopie A4 N&B (Recto)', family: 'Service', categoryId: 'cat-service-impressions', purchasePrice: 0, sellingPrice: 25, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Photocopie monochrome noir & blanc simple face A4' },
+  { id: 'srv-photocopie-nb-rv', reference: 'SRV-COP-NB-RV', name: 'Photocopie A4 N&B (Recto-Verso)', family: 'Service', categoryId: 'cat-service-impressions', purchasePrice: 0, sellingPrice: 50, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Photocopie monochrome noir & blanc recto/verso A4' },
+  { id: 'srv-impression-nb', reference: 'SRV-IMP-NB', name: 'Impression A4 N&B', family: 'Service', categoryId: 'cat-service-impressions', purchasePrice: 0, sellingPrice: 50, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Impression document noir & blanc A4' },
+  { id: 'srv-impression-couleur', reference: 'SRV-IMP-COL', name: 'Impression A4 Couleur', family: 'Service', categoryId: 'cat-service-impressions', purchasePrice: 0, sellingPrice: 150, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Impression document couleur A4' },
+  { id: 'srv-scan-document', reference: 'SRV-SCAN-A4', name: 'Numérisation / Scan Document', family: 'Service', categoryId: 'cat-service-impressions', purchasePrice: 0, sellingPrice: 100, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Numérisation document vers PDF / Clé USB' },
+  { id: 'srv-plastification-a4', reference: 'SRV-PLAST-A4', name: 'Plastification Document A4', family: 'Service', categoryId: 'cat-service-impressions', purchasePrice: 0, sellingPrice: 200, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Plastification thermique haute protection A4' },
+  { id: 'srv-reliure-spirale', reference: 'SRV-RELIURE', name: 'Reliure Document (Spirale)', family: 'Service', categoryId: 'cat-service-impressions', purchasePrice: 0, sellingPrice: 500, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Reliure spirale plastique avec transparents' },
+];
 
 // Product Module Interfaces
 export interface PosStockMovement { id: string; productId: string; type: 'Vente' | 'Retour' | 'Approvisionnement' | 'Inventaire' | 'Ajustement Manuel'; quantity: number; reference?: string; date: string; createdBy?: string; notes?: string; }
@@ -623,32 +639,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (cachedServices) setServices(cachedServices);
       if (cachedPrestations) setPrestations(cachedPrestations);
       if (cachedSettings) setSettings(cachedSettings);
-      if (cachedPosCategories) setPosCategories(cachedPosCategories);
-      if (cachedPosBrands) setPosBrands(cachedPosBrands);
-      if (cachedPosSuppliers) setPosSuppliers(cachedPosSuppliers);
-      if (cachedPosProducts) setPosProducts(prev => prev.length > 0 ? prev : cachedPosProducts);
-      if (cachedPosStockEntries) setPosStockEntries(cachedPosStockEntries.filter(e => e.notes !== 'VENTE' && !e.reference?.startsWith('VENTE-')));
-      if (cachedPosStockMovements) setPosStockMovements(cachedPosStockMovements);
-      if (cachedPosInventories) setPosInventories(cachedPosInventories);
-      if (cachedPosCashSessions) setPosCashSessions(cachedPosCashSessions);
-      if (cachedPosTransactions) setPosTransactions(cachedPosTransactions);
-      if (cachedPosPayments) setPosPayments(cachedPosPayments);
-      if (cachedPosDiscounts) setPosDiscounts(cachedPosDiscounts);
-      if (cachedPosSettings) setPosSettingsState(cachedPosSettings);
-      if (cachedPosReturns) setPosReturns(cachedPosReturns);
-      if (cachedProductCompletions) setProductCompletions(cachedProductCompletions);
-      if (cachedImportSessions) setImportSessions(cachedImportSessions);
-
-      // Initialize default data if first launch
-      if (!cachedPosCategories || cachedPosCategories.length === 0) {
-        const defaultCategories = [
+      let categoriesToSet = cachedPosCategories || [];
+      if (categoriesToSet.length === 0) {
+        categoriesToSet = [
           { id: uuidv4(), name: 'Livres', family: 'Livre' as const },
           { id: uuidv4(), name: 'Fournitures scolaires', family: 'Fourniture' as const },
           { id: uuidv4(), name: 'Divers', family: 'Fourniture' as const },
+          DEFAULT_SERVICE_CATEGORY
         ];
-        setPosCategories(defaultCategories);
-        await db.posCategories.setItem('data', defaultCategories);
+      } else if (!categoriesToSet.some(c => c.family === 'Service')) {
+        categoriesToSet = [...categoriesToSet, DEFAULT_SERVICE_CATEGORY];
       }
+      setPosCategories(categoriesToSet);
+      if (!cachedPosCategories || cachedPosCategories.length === 0) {
+        await db.posCategories.setItem('data', categoriesToSet);
+      }
+
+      const productsWithServices = (cachedPosProducts && cachedPosProducts.length > 0)
+        ? (cachedPosProducts.some(p => p.family === 'Service') ? cachedPosProducts : [...cachedPosProducts, ...DEFAULT_SERVICE_PRODUCTS])
+        : DEFAULT_SERVICE_PRODUCTS;
+      setPosProducts(prev => {
+        if (prev.length === 0) return productsWithServices;
+        return prev.some(p => p.family === 'Service') ? prev : [...prev, ...DEFAULT_SERVICE_PRODUCTS];
+      });
 
       // 2. Fetch from Supabase (if online) and update Cache
       if (navigator.onLine) {
@@ -1143,8 +1156,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
               status: p.status || 'Active', isActive: p.is_active !== false, unit: p.unit, createdAt: p.created_at, updatedAt: p.updated_at
             };
           });
-          setPosProducts(parsed);
-          await db.posProducts.setItem('data', parsed);
+          const mergedWithServices = parsed.some((p: any) => p.family === 'Service')
+            ? parsed
+            : [...parsed, ...DEFAULT_SERVICE_PRODUCTS];
+          setPosProducts(mergedWithServices);
+          await db.posProducts.setItem('data', mergedWithServices);
         }
         if (posStockEntriesData && posStockEntriesData.length > 0) {
           const parsed = posStockEntriesData

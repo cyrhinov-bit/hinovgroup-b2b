@@ -7,7 +7,7 @@ export default function PosCategories() {
   const { posCategories, addPosCategory, updatePosCategory, deletePosCategory } = useAppContext();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState({ name: '', family: 'Fourniture' as 'Livre' | 'Fourniture' });
+  const [form, setForm] = useState({ name: '', family: 'Fourniture' as 'Livre' | 'Fourniture' | 'Service' });
 
   const handleSave = async () => {
     if (editing) {
@@ -35,7 +35,14 @@ export default function PosCategories() {
           <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>{editing ? 'Modifier' : 'Ajouter'} une catégorie</h3>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'end' }}>
             <div style={{ flex: 1 }}><div style={{ fontSize: '13px', marginBottom: '4px', fontWeight: 500 }}>Nom</div><input style={inputStyle} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
-            <div style={{ flex: 1 }}><div style={{ fontSize: '13px', marginBottom: '4px', fontWeight: 500 }}>Famille</div><select style={inputStyle} value={form.family} onChange={e => setForm({ ...form, family: e.target.value as any })}><option value="Fourniture">Fourniture</option><option value="Livre">Livre</option></select></div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '13px', marginBottom: '4px', fontWeight: 500 }}>Famille</div>
+              <select style={inputStyle} value={form.family} onChange={e => setForm({ ...form, family: e.target.value as any })}>
+                <option value="Fourniture">Fourniture</option>
+                <option value="Livre">Livre</option>
+                <option value="Service">Service / Impression</option>
+              </select>
+            </div>
             <button onClick={handleSave} style={{ padding: '10px 20px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 }}>Enregistrer</button>
             <button onClick={() => { setShowForm(false); setEditing(null); }} style={{ padding: '10px 20px', backgroundColor: 'var(--color-surface-alt)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>Annuler</button>
           </div>
@@ -49,7 +56,18 @@ export default function PosCategories() {
             {posCategories.map(c => (
               <tr key={c.id} style={{ borderBottom: '1px solid var(--color-surface-alt)' }}>
                 <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.name}</td>
-                <td style={{ padding: '12px 16px' }}><span style={{ padding: '4px 10px', borderRadius: 'var(--radius-lg)', fontSize: '12px', fontWeight: 500, background: c.family === 'Livre' ? 'var(--color-primary-tint)' : 'var(--color-success-tint)', color: c.family === 'Livre' ? 'var(--color-primary)' : 'var(--color-success)' }}>{c.family}</span></td>
+                <td style={{ padding: '12px 16px' }}>
+                  <span style={{ 
+                    padding: '4px 10px', 
+                    borderRadius: 'var(--radius-lg)', 
+                    fontSize: '12px', 
+                    fontWeight: 500, 
+                    background: c.family === 'Livre' ? 'var(--color-primary-tint)' : c.family === 'Service' ? '#f3e8ff' : 'var(--color-success-tint)', 
+                    color: c.family === 'Livre' ? 'var(--color-primary)' : c.family === 'Service' ? '#7c3aed' : 'var(--color-success)' 
+                  }}>
+                    {c.family === 'Service' ? '🖨️ Service' : c.family}
+                  </span>
+                </td>
                 <td style={{ padding: '12px 16px' }}>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={() => { setEditing(c); setForm({ name: c.name, family: c.family }); setShowForm(true); }} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}><Edit2 size={16} /></button>

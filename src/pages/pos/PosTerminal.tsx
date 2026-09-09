@@ -140,25 +140,31 @@ export default function PosTerminal() {
   const [showSuspendedList, setShowSuspendedList] = useState(false);
   const [selectedCartIndex, setSelectedCartIndex] = useState(0);
   
-  const [selectedFamily, setSelectedFamily] = useState<'all' | 'Livre' | 'Fourniture'>('all');
+  const [selectedFamily, setSelectedFamily] = useState<'all' | 'Livre' | 'Fourniture' | 'Service'>('all');
+  const [serviceModalProduct, setServiceModalProduct] = useState<typeof posProducts[0] | null>(null);
+  const [serviceQty, setServiceQty] = useState<number | ''>(1);
   const today = todayLocalKey();
   const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today && (s.cashierId === currentUser?.id || !s.cashierId));
 
-  const isLivre = (p: typeof posProducts[0]) => (p.family && p.family.toLowerCase().startsWith('livre')) || !!(p.isbn && p.isbn.trim());
+  const isService = (p: typeof posProducts[0]) => p.family === 'Service' || (p.reference && p.reference.startsWith('SRV-'));
+  const isLivre = (p: typeof posProducts[0]) => !isService(p) && ((p.family && p.family.toLowerCase().startsWith('livre')) || !!(p.isbn && p.isbn.trim()));
+  const isFourniture = (p: typeof posProducts[0]) => !isService(p) && !isLivre(p);
 
   const filteredProducts = posProducts.filter(p => {
     if (p.status === 'Inactive' || p.isActive === false) return false;
     if (selectedFamily === 'Livre' && !isLivre(p)) return false;
-    if (selectedFamily === 'Fourniture' && isLivre(p)) return false;
+    if (selectedFamily === 'Fourniture' && !isFourniture(p)) return false;
+    if (selectedFamily === 'Service' && !isService(p)) return false;
     if (!search || !search.trim()) return true;
     return matchesProductSearch(p, search);
   });
 
-  const addToCart = (product: typeof posProducts[0]) => {
+  const addToCart = (product: typeof posProducts[0], qtyToAdd: number = 1) => {
+    const quantityToAdd = Math.max(1, qtyToAdd);
     setCart(prev => {
       const existing = prev.find(c => c.productId === product.id);
       if (existing) {
-        const newQty = existing.quantity + 1;
+        const newQty = existing.quantity + quantityToAdd;
         let total: number;
         if (existing.discountType === 'percent') {
           total = newQty * existing.unitPrice * (1 - existing.discountPercent / 100);
@@ -169,9 +175,18 @@ export default function PosTerminal() {
         }
         return prev.map(c => c.productId === product.id ? { ...c, quantity: newQty, total } : c);
       }
-      return [...prev, { id: uuidv4(), productId: product.id, name: product.name, reference: product.reference, unitPrice: product.sellingPrice, quantity: 1, discountType: 'none' as const, discountPercent: 0, discountAmount: 0, total: product.sellingPrice }];
+      return [...prev, { id: uuidv4(), productId: product.id, name: product.name, reference: product.reference, unitPrice: product.sellingPrice, quantity: quantityToAdd, discountType: 'none' as const, discountPercent: 0, discountAmount: 0, total: product.sellingPrice * quantityToAdd }];
     });
     setSearch('');
+  };
+
+  const handleProductClick = (product: typeof posProducts[0]) => {
+    if (isService(product)) {
+      setServiceModalProduct(product);
+      setServiceQty(1);
+    } else {
+      addToCart(product, 1);
+    }
   };
 
   const handleAddAiItemsToCart = (items: { product: typeof posProducts[0]; quantity: number }[], replace = false) => {
@@ -640,7 +655,24 @@ export default function PosTerminal() {
                 transition: 'all 0.15s'
               }}
             >
-              ✏️ Fournitures ({posProducts.filter(p => p.status !== 'Inactive' && !isLivre(p)).length})
+              ✏️ Fournitures ({posProducts.filter(p => p.status !== 'Inactive' && isFourniture(p)).length})
+            </button>
+            <button
+              onClick={() => setSelectedFamily('Service')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 'var(--radius-full)',
+                border: '1px solid',
+                borderColor: selectedFamily === 'Service' ? '#7c3aed' : 'var(--color-border)',
+                background: selectedFamily === 'Service' ? '#7c3aed' : 'var(--color-surface-alt)',
+                color: selectedFamily === 'Service' ? 'white' : 'var(--color-text)',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s'
+              }}
+            >
+              🖨️ Impressions & Services ({posProducts.filter(p => p.status !== 'Inactive' && isService(p)).length})
             </button>
           </div>
         </div>
@@ -676,18 +708,19 @@ export default function PosTerminal() {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px', alignContent: 'start' }}>
               {filteredProducts.map(p => {
-                const isOutOfStock = p.quantity <= 0;
-                const isLowStock = p.quantity > 0 && p.quantity <= (p.minStock || 10);
+                const isItemService = isService(p);
+                const isOutOfStock = !isItemService && p.quantity <= 0;
+                const isLowStock = !isItemService && p.quantity > 0 && p.quantity <= (p.minStock || 10);
                 return (
                   <button 
                     key={p.id} 
-                    onClick={() => addToCart(p)} 
+                    onClick={() => handleProductClick(p)} 
                     disabled={isOutOfStock} 
                     style={{ 
                       padding: '12px', 
                       borderRadius: 'var(--radius-md)', 
-                      border: '1px solid var(--color-border)', 
-                      background: isOutOfStock ? 'var(--color-surface-alt)' : 'white', 
+                      border: isItemService ? '1px solid #e9d5ff' : '1px solid var(--color-border)', 
+                      background: isOutOfStock ? 'var(--color-surface-alt)' : isItemService ? '#faf5ff' : 'white', 
                       cursor: isOutOfStock ? 'not-allowed' : 'pointer', 
                       textAlign: 'left', 
                       opacity: isOutOfStock ? 0.6 : 1,
@@ -700,8 +733,18 @@ export default function PosTerminal() {
                     <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px', position: 'relative' }}>
                       <ProductImage product={p} size={56} rounded />
                       {p.family && (
-                        <span style={{ position: 'absolute', top: 0, right: 0, fontSize: '10px', background: p.family === 'Livre' ? 'var(--color-primary-tint)' : 'var(--color-success-tint)', color: p.family === 'Livre' ? 'var(--color-primary)' : 'var(--color-success)', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
-                          {p.family}
+                        <span style={{ 
+                          position: 'absolute', 
+                          top: 0, 
+                          right: 0, 
+                          fontSize: '10px', 
+                          background: p.family === 'Livre' ? 'var(--color-primary-tint)' : isItemService ? '#ede9fe' : 'var(--color-success-tint)', 
+                          color: p.family === 'Livre' ? 'var(--color-primary)' : isItemService ? '#6d28d9' : 'var(--color-success)', 
+                          padding: '2px 6px', 
+                          borderRadius: '4px', 
+                          fontWeight: 600 
+                        }}>
+                          {isItemService ? '🖨️ Service' : p.family}
                         </span>
                       )}
                     </div>
@@ -925,6 +968,118 @@ export default function PosTerminal() {
             </div>
           );
         })()}
+      </Modal>
+
+      {/* Service / Copie Quick Quantity Modal */}
+      <Modal
+        open={!!serviceModalProduct}
+        onClose={() => { setServiceModalProduct(null); setServiceQty(1); }}
+        title={`🖨️ ${serviceModalProduct?.name || 'Service d\'impression'}`}
+        width={460}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text)' }}>
+              Total : <span style={{ color: '#7c3aed', fontSize: '18px', fontWeight: 700 }}>
+                {((Number(serviceQty) || 0) * (serviceModalProduct?.sellingPrice || 0)).toLocaleString()} FCFA
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <Button variant="ghost" onClick={() => { setServiceModalProduct(null); setServiceQty(1); }}>Annuler</Button>
+              <Button 
+                variant="primary"
+                style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)', border: 'none', fontWeight: 600 }}
+                onClick={() => {
+                  if (serviceModalProduct) {
+                    const q = typeof serviceQty === 'number' && serviceQty > 0 ? serviceQty : 1;
+                    addToCart(serviceModalProduct, q);
+                    setServiceModalProduct(null);
+                    setServiceQty(1);
+                  }
+                }}
+              >
+                Ajouter au panier ↵
+              </Button>
+            </div>
+          </div>
+        }
+      >
+        {serviceModalProduct && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 'var(--radius-md)', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: '#6d28d9' }}>{serviceModalProduct.name}</div>
+                <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>{serviceModalProduct.description || 'Service bureautique'}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-text)' }}>{serviceModalProduct.sellingPrice.toLocaleString()} FCFA</div>
+                <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>par unité / page</div>
+              </div>
+            </div>
+
+            <div>
+              <label style={{ fontSize: '13px', marginBottom: '6px', display: 'block', fontWeight: 600, color: 'var(--color-text)' }}>
+                Nombre de copies / pages :
+              </label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                autoFocus
+                style={{ 
+                  width: '100%', 
+                  padding: '12px 14px', 
+                  fontSize: '20px', 
+                  fontWeight: 700, 
+                  textAlign: 'center', 
+                  border: '2px solid #7c3aed', 
+                  borderRadius: 'var(--radius-md)',
+                  outline: 'none'
+                }}
+                value={serviceQty}
+                onChange={e => setServiceQty(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1))}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (serviceModalProduct) {
+                      const q = typeof serviceQty === 'number' && serviceQty > 0 ? serviceQty : 1;
+                      addToCart(serviceModalProduct, q);
+                      setServiceModalProduct(null);
+                      setServiceQty(1);
+                    }
+                  }
+                }}
+              />
+            </div>
+
+            <div>
+              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '8px', fontWeight: 500 }}>
+                Touches rapides de quantité :
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                {[1, 5, 10, 20, 25, 50, 100, 200].map(val => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setServiceQty(val)}
+                    style={{
+                      padding: '8px 4px',
+                      borderRadius: 'var(--radius-md)',
+                      border: serviceQty === val ? '2px solid #7c3aed' : '1px solid var(--color-border)',
+                      background: serviceQty === val ? '#f3e8ff' : 'var(--color-surface-alt)',
+                      color: serviceQty === val ? '#7c3aed' : 'var(--color-text)',
+                      fontWeight: serviceQty === val ? 700 : 500,
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      transition: 'all 0.1s'
+                    }}
+                  >
+                    {val}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Open Cash Modal */}

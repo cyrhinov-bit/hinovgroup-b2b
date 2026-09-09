@@ -71,7 +71,7 @@ export interface ProductInput {
   name?: string;
   barcode?: string | null;
   isbn?: string | null;
-  family?: 'Livre' | 'Fourniture';
+  family?: 'Livre' | 'Fourniture' | 'Service';
   purchasePrice?: number;
   quantity?: number;
   sellingPrice?: number;

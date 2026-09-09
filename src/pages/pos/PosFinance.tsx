@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { 
   TrendingUp, ShoppingCart, RotateCcw, Wallet, CreditCard, 
   Smartphone, Layers, ChevronDown, ChevronRight, DollarSign,
-  Trash2, AlertTriangle, Calendar, X, Check
+  Trash2, AlertTriangle, Calendar, X, Check, Printer, BookOpen, PenTool
 } from 'lucide-react';
 import { todayLocalKey, toLocalDayKey } from '../../lib/dates';
 import { toast } from 'react-hot-toast';
@@ -66,6 +66,32 @@ export default function PosFinance() {
   const rangePayments = posPayments.filter(p => rangeValidTx.some(t => t.id === p.transactionId));
   const paymentTotals = { 'Espèces': 0, 'Carte': 0, 'Mobile Money': 0, 'Mixte': 0 };
   rangePayments.forEach(p => { paymentTotals[p.method] += p.amount; });
+
+  const isServiceProd = (p?: typeof posProducts[0], desc?: string) => 
+    (p && (p.family === 'Service' || (p.reference && p.reference.startsWith('SRV-')))) ||
+    (desc && (desc.toLowerCase().includes('photocopie') || desc.toLowerCase().includes('impression') || desc.toLowerCase().includes('scan') || desc.toLowerCase().includes('reliure') || desc.toLowerCase().includes('plastification')));
+
+  const isLivreProd = (p?: typeof posProducts[0]) => 
+    p && !isServiceProd(p) && ((p.family && p.family.toLowerCase().startsWith('livre')) || !!(p.isbn && p.isbn.trim()));
+
+  let periodLivresRev = 0;
+  let periodFournituresRev = 0;
+  let periodServicesRev = 0;
+  let periodServicesCopies = 0;
+
+  rangeValidTx.forEach(t => {
+    t.lines.forEach(l => {
+      const p = l.productId ? posProducts.find(x => x.id === l.productId) : undefined;
+      if (isServiceProd(p, l.description)) {
+        periodServicesRev += l.total;
+        periodServicesCopies += l.quantity;
+      } else if (isLivreProd(p)) {
+        periodLivresRev += l.total;
+      } else {
+        periodFournituresRev += l.total;
+      }
+    });
+  });
 
   const rangeSessions = posCashSessions.filter(s => inRange(s.openedAt));
   const closedSessions = rangeSessions.filter(s => s.status === 'Fermée');
@@ -264,6 +290,47 @@ export default function PosFinance() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ background: 'var(--color-success-tint)', borderRadius: 'var(--radius-md)', padding: '10px' }}><DollarSign size={22} color="var(--color-success)" /></div>
             <div><div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Marge brute</div><div style={{ fontSize: '22px', fontWeight: 700 }}>{totalMargin.toLocaleString()} FCFA</div></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Family CA Breakdown */}
+      <div style={{ ...cardStyle, marginBottom: '24px' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          📊 Répartition du Chiffre d'Affaires par Famille (Période sélectionnée)
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+          <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e40af' }}>📚 LIVRES</span>
+              <BookOpen size={16} color="#2563eb" />
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: '#1e3a8a' }}>{periodLivresRev.toLocaleString()} FCFA</div>
+            <div style={{ fontSize: '11px', color: '#3b82f6', marginTop: '2px' }}>
+              {totalRevenue > 0 ? ((periodLivresRev / totalRevenue) * 100).toFixed(1) : 0}% des ventes
+            </div>
+          </div>
+
+          <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#166534' }}>✏️ FOURNITURES</span>
+              <PenTool size={16} color="#16a34a" />
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: '#14532d' }}>{periodFournituresRev.toLocaleString()} FCFA</div>
+            <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '2px' }}>
+              {totalRevenue > 0 ? ((periodFournituresRev / totalRevenue) * 100).toFixed(1) : 0}% des ventes
+            </div>
+          </div>
+
+          <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', background: '#faf5ff', border: '1px solid #e9d5ff' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#6d28d9' }}>🖨️ IMPRESSIONS & SERVICES</span>
+              <Printer size={16} color="#7c3aed" />
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: '#581c87' }}>{periodServicesRev.toLocaleString()} FCFA</div>
+            <div style={{ fontSize: '11px', color: '#7c3aed', marginTop: '2px', fontWeight: 500 }}>
+              {totalRevenue > 0 ? ((periodServicesRev / totalRevenue) * 100).toFixed(1) : 0}% des ventes &bull; {periodServicesCopies} copies/actes
+            </div>
           </div>
         </div>
       </div>
