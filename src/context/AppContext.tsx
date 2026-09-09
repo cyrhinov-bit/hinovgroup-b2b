@@ -667,6 +667,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         );
         return missing.length > 0 ? [...prev, ...missing] : prev;
       });
+      if (missingDefaults.length > 0) {
+        await db.posProducts.setItem('data', productsWithServices);
+        for (const def of missingDefaults) {
+          await queueSyncAction('INSERT_POS_PRODUCT', def);
+        }
+      }
 
       // 2. Fetch from Supabase (if online) and update Cache
       if (navigator.onLine) {
@@ -1168,6 +1174,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const finalProducts = [...merged, ...missingDefaults];
           setPosProducts(finalProducts);
           await db.posProducts.setItem('data', finalProducts);
+          if (missingDefaults.length > 0) {
+            for (const def of missingDefaults) {
+              await queueSyncAction('INSERT_POS_PRODUCT', def);
+            }
+          }
         }
         if (posStockEntriesData && posStockEntriesData.length > 0) {
           const parsed = posStockEntriesData
@@ -1290,8 +1301,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   status: p.status || 'Active', isActive: p.is_active !== false, unit: p.unit, createdAt: p.created_at, updatedAt: p.updated_at
                 };
               });
-              setPosProducts(parsed);
-              await db.posProducts.setItem('data', parsed);
+              const merged = mergeData(cachedPosProducts, parsed);
+              setPosProducts(merged);
+              await db.posProducts.setItem('data', merged);
             }
 
             if (posCategoriesData.data && posCategoriesData.data.length > 0) {
@@ -2546,7 +2558,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       void db.posProducts.setItem('data', next);
       return next;
     });
-    await queueSyncAction('UPDATE_POS_PRODUCT', { id, ...data });
+    const mergedProd = oldProduct ? { ...oldProduct, ...data, id } : { id, ...data };
+    await queueSyncAction('UPDATE_POS_PRODUCT', mergedProd);
   };
   const deletePosProduct = async (id: string) => {
     setPosProducts(prev => {

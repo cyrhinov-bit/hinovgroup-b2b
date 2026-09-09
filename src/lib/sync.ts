@@ -1058,13 +1058,13 @@ export const processSyncQueue = async () => {
         }
         // === POS SYNC ===
         case 'INSERT_POS_CATEGORY': {
-          const { error } = await supabase.from('pos_categories').insert([{ id: action.payload.id, name: action.payload.name, family: action.payload.family }]);
+          const { error } = await supabase.from('pos_categories').upsert([{ id: action.payload.id, name: action.payload.name, family: action.payload.family }], { onConflict: 'id' });
           success = !error;
           break;
         }
         case 'UPDATE_POS_CATEGORY': {
           const { id, ...data } = action.payload;
-          const { error } = await supabase.from('pos_categories').update(data).eq('id', id);
+          const { error } = await supabase.from('pos_categories').upsert([{ id, ...data }], { onConflict: 'id' });
           success = !error;
           break;
         }
@@ -1074,13 +1074,13 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_POS_BRAND': {
-          const { error } = await supabase.from('pos_brands').insert([{ id: action.payload.id, name: action.payload.name }]);
+          const { error } = await supabase.from('pos_brands').upsert([{ id: action.payload.id, name: action.payload.name }], { onConflict: 'id' });
           success = !error;
           break;
         }
         case 'UPDATE_POS_BRAND': {
           const { id, ...data } = action.payload;
-          const { error } = await supabase.from('pos_brands').update(data).eq('id', id);
+          const { error } = await supabase.from('pos_brands').upsert([{ id, ...data }], { onConflict: 'id' });
           success = !error;
           break;
         }
@@ -1090,13 +1090,13 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_POS_SUPPLIER': {
-          const { error } = await supabase.from('pos_suppliers').insert([{ id: action.payload.id, name: action.payload.name, contact: action.payload.contact, phone: action.payload.phone, email: action.payload.email, address: action.payload.address }]);
+          const { error } = await supabase.from('pos_suppliers').upsert([{ id: action.payload.id, name: action.payload.name, contact: action.payload.contact, phone: action.payload.phone, email: action.payload.email, address: action.payload.address }], { onConflict: 'id' });
           success = !error;
           break;
         }
         case 'UPDATE_POS_SUPPLIER': {
           const { id, ...data } = action.payload;
-          const { error } = await supabase.from('pos_suppliers').update(data).eq('id', id);
+          const { error } = await supabase.from('pos_suppliers').upsert([{ id, ...data }], { onConflict: 'id' });
           success = !error;
           break;
         }
@@ -1106,7 +1106,7 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_POS_PRODUCT': {
-          const { error } = await supabase.from('pos_products').insert([{
+          const { error } = await supabase.from('pos_products').upsert([{
             id: action.payload.id,
             reference: action.payload.reference, 
             barcode: action.payload.barcode ? action.payload.barcode : null,
@@ -1121,17 +1121,18 @@ export const processSyncQueue = async () => {
             quantity: action.payload.quantity ?? 0,
             min_stock: action.payload.minStock ?? 0,
             image_url: action.payload.imageUrl || null,
+            description: action.payload.description || null,
             unit: action.payload.unit || null,
             is_active: action.payload.isActive !== false,
             updated_at: action.payload.updatedAt || new Date().toISOString()
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_POS_PRODUCT échoué :', error);
           success = !error;
           break;
         }
         case 'UPDATE_POS_PRODUCT': {
           const { id, ...data } = action.payload;
-          const mapped: any = {};
+          const mapped: any = { id };
           if (data.reference !== undefined) mapped.reference = data.reference;
           if (data.barcode !== undefined) mapped.barcode = data.barcode ? data.barcode : null;
           if (data.isbn !== undefined) mapped.isbn = data.isbn ? data.isbn : null;
@@ -1145,9 +1146,11 @@ export const processSyncQueue = async () => {
           if (data.quantity !== undefined) mapped.quantity = Math.max(0, data.quantity);
           if (data.minStock !== undefined) mapped.min_stock = data.minStock;
           if (data.imageUrl !== undefined) mapped.image_url = data.imageUrl || null;
+          if (data.description !== undefined) mapped.description = data.description || null;
           if (data.unit !== undefined) mapped.unit = data.unit || null;
           if (data.isActive !== undefined) mapped.is_active = data.isActive;
-          const { error } = await supabase.from('pos_products').update(mapped).eq('id', id);
+          mapped.updated_at = new Date().toISOString();
+          const { error } = await supabase.from('pos_products').upsert([mapped], { onConflict: 'id' });
           if (error) console.error('[Sync] UPDATE_POS_PRODUCT échoué :', error);
           success = !error;
           break;
