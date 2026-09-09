@@ -2,7 +2,7 @@ import { app, dialog } from 'electron';
 
 export class ErrorManager {
   static init(): void {
-    const isDev = !app.isPackaged && process.env.NODE_ENV === 'development';
+    const isDev = Boolean(!app?.isPackaged && process.env.NODE_ENV === 'development');
 
     process.on('uncaughtException', (error) => {
       console.error('Uncaught Exception:', error);

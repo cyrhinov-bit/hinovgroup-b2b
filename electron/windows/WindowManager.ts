@@ -1,11 +1,6 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { WindowStateService } from './WindowStateService.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const isDev = !app.isPackaged && process.env.NODE_ENV === 'development';
 
 export class WindowManager {
   private static mainWindow: BrowserWindow | null = null;
@@ -92,6 +87,7 @@ export class WindowManager {
       this.mainWindow = null;
     });
 
+    const isDev = Boolean(!app?.isPackaged && process.env.NODE_ENV === 'development');
     if (isDev) {
       this.mainWindow.loadURL('http://localhost:5173');
     } else {
