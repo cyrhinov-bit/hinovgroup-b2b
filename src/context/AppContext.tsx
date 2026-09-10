@@ -342,6 +342,7 @@ export interface CrmDocument {
   category?: 'Contrat / Devis signé' | 'Bon de Commande' | 'BAT / Maquette' | 'Facture / Reçu' | 'Rapport' | 'Autre';
   isShared?: boolean;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface AppNotification {
@@ -438,6 +439,7 @@ interface AppState {
   deleteV2WeeklyReport: (id: string) => Promise<void>;
   updateMyProfile: (data: Partial<Pick<User, 'photo' | 'name'>>) => Promise<void>;
   addCrmDocument: (file: File, options?: { uploaderId?: string; folderId?: string; affaireId?: string; clientId?: string; category?: CrmDocument['category']; isShared?: boolean } | string, folderIdParam?: string) => Promise<CrmDocument>;
+  updateCrmDocument: (id: string, updates: Partial<CrmDocument>, newFileBlob?: Blob) => Promise<void>;
   deleteCrmDocument: (id: string) => Promise<void>;
   downloadCrmDocument: (doc: CrmDocument) => Promise<void>;
   getCrmDocumentBlob: (doc: CrmDocument) => Promise<Blob | null>;
@@ -3243,6 +3245,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return newDoc;
   };
 
+  const updateCrmDocument = async (id: string, updates: Partial<CrmDocument>, newFileBlob?: Blob) => {
+    const doc = crmDocuments.find(d => d.id === id);
+    if (!doc) return;
+
+    let updatedSize = updates.sizeBytes ?? doc.sizeBytes;
+    let updatedType = updates.type ?? doc.type;
+
+    if (newFileBlob) {
+      updatedSize = newFileBlob.size;
+      if (newFileBlob.type) {
+        updatedType = newFileBlob.type;
+      }
+      await db.documentFiles.setItem(id, newFileBlob);
+    }
+
+    const updatedDoc: CrmDocument = {
+      ...doc,
+      ...updates,
+      type: updatedType,
+      sizeBytes: updatedSize,
+      updatedAt: new Date().toISOString()
+    };
+
+    const newDocs = crmDocuments.map(d => d.id === id ? updatedDoc : d);
+    setCrmDocuments(newDocs);
+    await db.documents.setItem('data', newDocs);
+
+    await queueSyncAction('UPDATE_DOCUMENT', {
+      id,
+      updates: updatedDoc,
+      hasNewFile: Boolean(newFileBlob)
+    });
+  };
+
   const deleteCrmDocument = async (id: string) => {
     const doc = crmDocuments.find(d => d.id === id);
     if (!doc) return;
@@ -3352,7 +3388,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AppContext.Provider value={{ users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, reviewV2WeeklyReport, deleteV2WeeklyReport, updateMyProfile, addCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData }}>
+    <AppContext.Provider value={{ users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, reviewV2WeeklyReport, deleteV2WeeklyReport, updateMyProfile, addCrmDocument, updateCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData }}>
       {children}
     </AppContext.Provider>
   );

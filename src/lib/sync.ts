@@ -43,7 +43,7 @@ export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT'
                               'INSERT_PRODUCT_COMPLETION' | 'UPDATE_PRODUCT_COMPLETION' | 'DELETE_PRODUCT_COMPLETION' |
                               'INSERT_IMPORT_SESSION' | 'UPDATE_IMPORT_SESSION' | 'DELETE_IMPORT_SESSION' |
                               'INSERT_IMPORT_ERROR' |
-                              'INSERT_DOCUMENT' | 'DELETE_DOCUMENT' |
+                              'INSERT_DOCUMENT' | 'UPDATE_DOCUMENT' | 'DELETE_DOCUMENT' |
                               'INSERT_CRM_FOLDER' | 'UPDATE_CRM_FOLDER' | 'DELETE_CRM_FOLDER' |
                               'MARK_NOTIFICATION_READ' | 'MARK_ALL_NOTIFICATIONS_READ';
 
@@ -983,6 +983,30 @@ export const processSyncQueue = async () => {
           } else {
             success = false;
           }
+          break;
+        }
+        case 'UPDATE_DOCUMENT': {
+          const { id, updates, hasNewFile } = action.payload;
+          if (hasNewFile) {
+            const fileData: Blob | null = await db.documentFiles.getItem(id);
+            if (fileData && updates.filePath) {
+              const { error: storageError } = await supabase.storage.from('crm_documents').upload(updates.filePath, fileData, { upsert: true });
+              if (storageError) console.error('[Sync] UPDATE_DOCUMENT Storage Error:', storageError);
+            }
+          }
+          const dbUpdates: any = {};
+          if (updates.name !== undefined) dbUpdates.name = updates.name;
+          if (updates.type !== undefined) dbUpdates.type = updates.type;
+          if (updates.sizeBytes !== undefined) dbUpdates.size_bytes = updates.sizeBytes;
+          if (updates.folderId !== undefined) dbUpdates.folder_id = updates.folderId || null;
+          if (updates.affaireId !== undefined) dbUpdates.affaire_id = updates.affaireId || null;
+          if (updates.clientId !== undefined) dbUpdates.client_id = updates.clientId || null;
+          if (updates.category !== undefined) dbUpdates.category = updates.category || 'Autre';
+          if (updates.isShared !== undefined) dbUpdates.is_shared = !!updates.isShared;
+
+          const { error } = await supabase.from('crm_documents').update(dbUpdates).eq('id', id);
+          if (error) console.error('[Sync] UPDATE_DOCUMENT DB Error:', error.message);
+          success = !error;
           break;
         }
         case 'DELETE_DOCUMENT': {

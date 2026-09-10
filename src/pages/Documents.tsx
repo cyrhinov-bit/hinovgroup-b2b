@@ -1,9 +1,10 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Upload, FileText, Download, Trash2, Folder, FolderPlus, ChevronRight, Eye, Edit2, Search, Filter, Share2, Briefcase, User as UserIcon, Building } from 'lucide-react';
+import { Upload, FileText, Download, Trash2, Folder, FolderPlus, ChevronRight, Eye, Edit2, Edit3, Settings, Search, Filter, Share2, Briefcase, User as UserIcon, Building, Image as ImageIcon, Table as TableIcon, Code } from 'lucide-react';
 import { useConfirm } from '../components/ConfirmModal';
 import { useAppContext, type CrmDocument, type CrmFolder } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
+import { DocumentEditorModal } from '../components/DocumentEditorModal';
 import './Documents.css';
 
 const FOLDER_COLORS = [
@@ -58,8 +59,9 @@ export function Documents() {
   const [uploadIsShared, setUploadIsShared] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Preview Modal
+  // Preview & Edit Modals
   const [previewDoc, setPreviewDoc] = useState<CrmDocument | null>(null);
+  const [editingDoc, setEditingDoc] = useState<CrmDocument | null>(null);
 
   const isAdmin = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
   const displayedUserId = isAdmin ? selectedUserId : (currentUser?.id || '');
@@ -419,13 +421,41 @@ export function Documents() {
               {currentLevelDocuments.map(doc => {
                 const clientName = getClientName(doc.clientId);
                 const affaireRef = getAffaireRef(doc.affaireId);
+                const fileName = doc.name.toLowerCase();
+                const fileType = doc.type.toLowerCase();
+                const isPdf = fileType.includes('pdf') || fileName.endsWith('.pdf');
+                const isImage = fileType.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg|bmp|ico)$/i.test(fileName);
+                const isCsv = fileType.includes('csv') || /\.(csv|tsv)$/i.test(fileName);
+                const isMarkdown = fileName.endsWith('.md') || fileName.endsWith('.markdown');
+                const isTextOrCode =
+                  isMarkdown ||
+                  isCsv ||
+                  fileType.startsWith('text/') ||
+                  fileType.includes('json') ||
+                  fileType.includes('xml') ||
+                  /\.(txt|json|xml|html|htm|css|js|jsx|ts|tsx|log|env|sql|yml|yaml|ini|config|sh|bat)$/i.test(fileName);
+                const isEditable = isTextOrCode || isCsv;
 
                 return (
                   <tr key={doc.id}>
                     <td data-label="Nom">
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <FileText size={18} color="#0D9488" />
-                        <span style={{ fontWeight: 600 }}>{doc.name}</span>
+                        {isPdf && <FileText size={18} color="#0D9488" />}
+                        {isImage && <ImageIcon size={18} color="#3B82F6" />}
+                        {isCsv && <TableIcon size={18} color="#10B981" />}
+                        {isTextOrCode && !isCsv && <Code size={18} color="#6366F1" />}
+                        {!isPdf && !isImage && !isTextOrCode && <FileText size={18} color="#64748B" />}
+
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => setPreviewDoc(doc)}>
+                            {doc.name}
+                          </span>
+                          {isEditable && (
+                            <span style={{ fontSize: '0.7rem', color: '#0D9488', fontWeight: 500 }}>
+                              • Modifiable en ligne
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
 
@@ -466,9 +496,17 @@ export function Documents() {
                         <button
                           className="icon-button text-teal-700"
                           onClick={() => setPreviewDoc(doc)}
-                          title="Aperçu du document"
+                          title={isEditable ? 'Aperçu et modification du contenu' : 'Aperçu du document'}
                         >
-                          <Eye size={16} />
+                          {isEditable ? <Edit3 size={16} /> : <Eye size={16} />}
+                        </button>
+
+                        <button
+                          className="icon-button text-indigo-600"
+                          onClick={() => setEditingDoc(doc)}
+                          title="Propriétés & Remplacement de fichier"
+                        >
+                          <Settings size={15} />
                         </button>
 
                         <button
@@ -723,11 +761,19 @@ export function Documents() {
         </div>
       )}
 
-      {/* Modal Preview */}
+      {/* Modal Preview & Content Editor */}
       {previewDoc && (
         <DocumentPreviewModal
           document={previewDoc}
           onClose={() => setPreviewDoc(null)}
+        />
+      )}
+
+      {/* Modal Properties & File Replacement */}
+      {editingDoc && (
+        <DocumentEditorModal
+          document={editingDoc}
+          onClose={() => setEditingDoc(null)}
         />
       )}
     </div>
