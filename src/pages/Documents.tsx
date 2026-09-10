@@ -425,15 +425,26 @@ export function Documents() {
                 const fileType = doc.type.toLowerCase();
                 const isPdf = fileType.includes('pdf') || fileName.endsWith('.pdf');
                 const isImage = fileType.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg|bmp|ico)$/i.test(fileName);
-                const isCsv = fileType.includes('csv') || /\.(csv|tsv)$/i.test(fileName);
+                const isDocx = fileName.endsWith('.docx') || fileType.includes('wordprocessingml');
+                const isDoc = (fileName.endsWith('.doc') || fileType === 'application/msword') && !isDocx;
+                const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileType.includes('spreadsheetml') || fileType.includes('excel');
+                const isCsv = (fileType.includes('csv') || /\.(csv|tsv)$/i.test(fileName)) && !isExcel;
                 const isMarkdown = fileName.endsWith('.md') || fileName.endsWith('.markdown');
                 const isTextOrCode =
-                  isMarkdown ||
-                  isCsv ||
-                  fileType.startsWith('text/') ||
-                  fileType.includes('json') ||
-                  fileType.includes('xml') ||
-                  /\.(txt|json|xml|html|htm|css|js|jsx|ts|tsx|log|env|sql|yml|yaml|ini|config|sh|bat)$/i.test(fileName);
+                  !isPdf &&
+                  !isImage &&
+                  !isDocx &&
+                  !isDoc &&
+                  !isExcel &&
+                  (
+                    isMarkdown ||
+                    isCsv ||
+                    fileType.startsWith('text/') ||
+                    fileType === 'application/json' ||
+                    fileType === 'application/xml' ||
+                    fileType === 'text/xml' ||
+                    /\.(txt|json|xml|html|htm|css|js|jsx|ts|tsx|log|env|sql|yml|yaml|ini|config|sh|bat)$/i.test(fileName)
+                  );
                 const isEditable = isTextOrCode || isCsv;
 
                 return (
@@ -442,14 +453,26 @@ export function Documents() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         {isPdf && <FileText size={18} color="#0D9488" />}
                         {isImage && <ImageIcon size={18} color="#3B82F6" />}
-                        {isCsv && <TableIcon size={18} color="#10B981" />}
+                        {(isDocx || isDoc) && <FileText size={18} color="#2563EB" />}
+                        {isExcel && <TableIcon size={18} color="#16A34A" />}
+                        {isCsv && !isExcel && <TableIcon size={18} color="#10B981" />}
                         {isTextOrCode && !isCsv && <Code size={18} color="#6366F1" />}
-                        {!isPdf && !isImage && !isTextOrCode && <FileText size={18} color="#64748B" />}
+                        {!isPdf && !isImage && !isDocx && !isDoc && !isExcel && !isTextOrCode && <FileText size={18} color="#64748B" />}
 
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                           <span style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => setPreviewDoc(doc)}>
                             {doc.name}
                           </span>
+                          {isDocx && (
+                            <span style={{ fontSize: '0.7rem', color: '#2563EB', fontWeight: 500 }}>
+                              • Document Word
+                            </span>
+                          )}
+                          {isExcel && (
+                            <span style={{ fontSize: '0.7rem', color: '#16A34A', fontWeight: 500 }}>
+                              • Feuille Excel
+                            </span>
+                          )}
                           {isEditable && (
                             <span style={{ fontSize: '0.7rem', color: '#0D9488', fontWeight: 500 }}>
                               • Modifiable en ligne

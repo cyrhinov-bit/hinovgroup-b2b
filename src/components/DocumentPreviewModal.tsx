@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { useAppContext, type CrmDocument } from '../context/AppContext';
 import { DocumentEditorModal } from './DocumentEditorModal';
+import mammoth from 'mammoth';
+import * as XLSX from 'xlsx';
 import './DocumentPreviewModal.css';
 
 interface DocumentPreviewModalProps {
@@ -130,9 +132,15 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
   const [isSavingContent, setIsSavingContent] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // CSV Tabular Data
+  // CSV & Excel Tabular Data
   const [csvGrid, setCsvGrid] = useState<string[][]>([]);
   const [csvSearch, setCsvSearch] = useState('');
+  const [excelSheetNames, setExcelSheetNames] = useState<string[]>([]);
+  const [activeExcelSheet, setActiveExcelSheet] = useState<string>('');
+  const [excelWorkbook, setExcelWorkbook] = useState<XLSX.WorkBook | null>(null);
+
+  // Word (.docx) HTML content
+  const [docxHtml, setDocxHtml] = useState<string>('');
 
   // File Type Classifications
   const fileName = doc.name.toLowerCase();
@@ -140,17 +148,30 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
 
   const isPdf = fileType.includes('pdf') || fileName.endsWith('.pdf');
   const isImage = fileType.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg|bmp|ico)$/i.test(fileName);
-  const isCsv = fileType.includes('csv') || /\.(csv|tsv)$/i.test(fileName);
+  const isDocx = fileName.endsWith('.docx') || fileType.includes('wordprocessingml');
+  const isDoc = (fileName.endsWith('.doc') || fileType === 'application/msword') && !isDocx;
+  const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileType.includes('spreadsheetml') || fileType.includes('excel');
+  const isCsv = (fileType.includes('csv') || /\.(csv|tsv)$/i.test(fileName)) && !isExcel;
   const isMarkdown = fileName.endsWith('.md') || fileName.endsWith('.markdown');
+
+  // isTextOrCode should NEVER include binary files like docx, doc, xlsx, xls, pdf, image
   const isTextOrCode =
-    isMarkdown ||
-    isCsv ||
-    fileType.startsWith('text/') ||
-    fileType.includes('json') ||
-    fileType.includes('xml') ||
-    fileType.includes('javascript') ||
-    fileType.includes('typescript') ||
-    /\.(txt|json|xml|html|htm|css|js|jsx|ts|tsx|log|env|sql|yml|yaml|ini|config|sh|bat)$/i.test(fileName);
+    !isPdf &&
+    !isImage &&
+    !isDocx &&
+    !isDoc &&
+    !isExcel &&
+    (
+      isMarkdown ||
+      isCsv ||
+      fileType.startsWith('text/') ||
+      fileType === 'application/json' ||
+      fileType === 'application/xml' ||
+      fileType === 'text/xml' ||
+      fileType === 'application/javascript' ||
+      fileType === 'application/typescript' ||
+      /\.(txt|json|xml|html|htm|css|js|jsx|ts|tsx|log|env|sql|yml|yaml|ini|config|sh|bat)$/i.test(fileName)
+    );
 
   const isEditable = isTextOrCode || isCsv;
 
@@ -176,8 +197,42 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
         url = URL.createObjectURL(blob);
         setBlobUrl(url);
 
-        // If file is text, code or CSV, read its text content
-        if (isTextOrCode) {
+        // 1. If Word .docx, convert to HTML via mammoth
+        if (isDocx) {
+          try {
+            const arrayBuffer = await blob.arrayBuffer();
+            const result = await mammoth.convertToHtml({ arrayBuffer });
+            if (!isCancelled) {
+              setDocxHtml(result.value || '<p><em>Ce document Word ne contient aucun texte visible.</em></p>');
+            }
+          } catch (mErr: any) {
+            console.error('Erreur conversion docx:', mErr);
+            if (!isCancelled) {
+              setDocxHtml(`<div style="color:#EF4444;padding:16px;"><strong>Erreur de lecture du document Word :</strong> ${mErr?.message || 'Fichier non standard'}</div>`);
+            }
+          }
+        }
+        // 2. If Excel .xlsx / .xls, parse sheets via XLSX
+        else if (isExcel) {
+          try {
+            const arrayBuffer = await blob.arrayBuffer();
+            const wb = XLSX.read(arrayBuffer, { type: 'array' });
+            if (!isCancelled) {
+              setExcelWorkbook(wb);
+              setExcelSheetNames(wb.SheetNames || []);
+              const firstSheet = wb.SheetNames[0];
+              setActiveExcelSheet(firstSheet || '');
+              if (firstSheet && wb.Sheets[firstSheet]) {
+                const sheetData: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[firstSheet], { header: 1, defval: '' });
+                setCsvGrid(sheetData.map(row => row.map(cell => String(cell ?? ''))));
+              }
+            }
+          } catch (xErr: any) {
+            console.error('Erreur lecture Excel:', xErr);
+          }
+        }
+        // 3. If file is text, code or CSV, read its text content safely
+        else if (isTextOrCode) {
           const text = await blob.text();
           if (!isCancelled) {
             setTextContent(text);
@@ -204,7 +259,7 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
       isCancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [doc, getCrmDocumentBlob, isTextOrCode, isCsv]);
+  }, [doc, getCrmDocumentBlob, isTextOrCode, isCsv, isDocx, isExcel]);
 
   // Dirty check for text/code/csv
   const isDirty = useMemo(() => {
@@ -304,9 +359,11 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
           <div className="doc-preview-title">
             {isPdf && <FileText size={18} color="#0D9488" />}
             {isImage && <ImageIcon size={18} color="#3B82F6" />}
-            {isCsv && <TableIcon size={18} color="#10B981" />}
+            {(isDocx || isDoc) && <FileText size={18} color="#2563EB" />}
+            {isExcel && <TableIcon size={18} color="#16A34A" />}
+            {isCsv && !isExcel && <TableIcon size={18} color="#10B981" />}
             {isTextOrCode && !isCsv && <Code size={18} color="#6366F1" />}
-            {!isPdf && !isImage && !isTextOrCode && <File size={18} color="#64748B" />}
+            {!isPdf && !isImage && !isDocx && !isDoc && !isExcel && !isTextOrCode && <File size={18} color="#64748B" />}
             <span title={doc.name}>{doc.name}</span>
           </div>
 
@@ -380,9 +437,9 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
         </div>
 
         {/* Body */}
-        <div className={`doc-preview-body ${isTextOrCode || isMarkdown ? 'light-mode' : ''}`}>
+        <div className={`doc-preview-body ${isTextOrCode || isMarkdown || isDocx || isExcel ? 'light-mode' : ''}`}>
           {loading && (
-            <div style={{ color: isTextOrCode ? '#0F172A' : '#FFFFFF', fontSize: '0.95rem' }}>
+            <div style={{ color: (isTextOrCode || isDocx || isExcel) ? '#0F172A' : '#FFFFFF', fontSize: '0.95rem' }}>
               Chargement du document en cours...
             </div>
           )}
@@ -443,8 +500,36 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
                 </div>
               )}
 
-              {/* 3. CSV TABULAR VIEWER & EDITOR */}
-              {isCsv && (
+              {/* 3. WORD (.docx) FORMATTED DOCUMENT VIEWER */}
+              {isDocx && (
+                <div className="doc-word-wrapper">
+                  <div
+                    className="doc-word-container"
+                    dangerouslySetInnerHTML={{ __html: docxHtml }}
+                  />
+                </div>
+              )}
+
+              {/* 4. WORD (.doc) LEGACY NOTICE */}
+              {isDoc && (
+                <div className="doc-preview-fallback">
+                  <FileText size={56} color="#2563EB" />
+                  <div style={{ maxWidth: '520px' }}>
+                    <h3 style={{ margin: '0 0 8px' }}>Document Microsoft Word (.doc)</h3>
+                    <p style={{ margin: 0, opacity: 0.9, fontSize: '0.9rem', lineHeight: 1.5 }}>
+                      Ce document utilise l'ancien format binaire <strong>Word 97-2003 (.doc)</strong>. 
+                      Pour le consulter en ligne dans le navigateur, veuillez l'enregistrer au format moderne <strong>.docx</strong> ou le télécharger ci-dessous.
+                    </p>
+                  </div>
+                  <button className="btn btn-primary" onClick={() => downloadCrmDocument(doc)}>
+                    <Download size={16} style={{ marginRight: '6px' }} />
+                    Télécharger et ouvrir dans Word
+                  </button>
+                </div>
+              )}
+
+              {/* 5. CSV & EXCEL TABULAR VIEWER & EDITOR */}
+              {(isCsv || isExcel) && (
                 <div className="doc-csv-container">
                   <div className="doc-csv-toolbar">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, maxWidth: '300px' }}>
@@ -458,11 +543,36 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
                         style={{ padding: '4px 8px', fontSize: '0.8rem', width: '100%' }}
                       />
                     </div>
+
+                    {/* Excel Sheet selector if multiple sheets */}
+                    {isExcel && excelSheetNames.length > 1 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>Feuille :</span>
+                        <select
+                          className="form-select"
+                          value={activeExcelSheet}
+                          onChange={e => {
+                            const sheet = e.target.value;
+                            setActiveExcelSheet(sheet);
+                            if (excelWorkbook && excelWorkbook.Sheets[sheet]) {
+                              const sheetData: any[][] = XLSX.utils.sheet_to_json(excelWorkbook.Sheets[sheet], { header: 1, defval: '' });
+                              setCsvGrid(sheetData.map(row => row.map(cell => String(cell ?? ''))));
+                            }
+                          }}
+                          style={{ padding: '3px 8px', fontSize: '0.8rem' }}
+                        >
+                          {excelSheetNames.map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <span style={{ fontSize: '0.8rem', color: '#64748B' }}>
                         {csvGrid.length} ligne(s) • {csvGrid[0]?.length || 0} colonne(s)
                       </span>
-                      {activeMode === 'EDIT' && (
+                      {activeMode === 'EDIT' && isCsv && (
                         <button
                           className="btn btn-secondary"
                           onClick={handleAddCsvRow}
@@ -557,7 +667,7 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
                 </div>
               )}
 
-              {/* 4. MARKDOWN VIEWER */}
+              {/* 6. MARKDOWN VIEWER */}
               {isMarkdown && activeMode === 'VIEW' && (
                 <div
                   className="doc-markdown-container"
@@ -565,7 +675,7 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
                 />
               )}
 
-              {/* 5. TEXT / CODE / RAW MARKDOWN EDITOR */}
+              {/* 7. TEXT / CODE / RAW MARKDOWN EDITOR */}
               {isTextOrCode && !isCsv && (activeMode === 'EDIT' || (!isMarkdown && activeMode === 'VIEW')) && (
                 <div className="doc-text-editor-container">
                   <div className="doc-text-editor-toolbar">
@@ -584,8 +694,8 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
                 </div>
               )}
 
-              {/* 6. UNSUPPORTED BINARY FALLBACK */}
-              {!isPdf && !isImage && !isTextOrCode && (
+              {/* 8. UNSUPPORTED BINARY FALLBACK */}
+              {!isPdf && !isImage && !isDocx && !isDoc && !isExcel && !isTextOrCode && (
                 <div className="doc-preview-fallback">
                   <File size={54} color="#94A3B8" />
                   <div>
