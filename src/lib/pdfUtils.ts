@@ -633,360 +633,558 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const margin = 16;
-  const contentW = pageW - margin * 2;
+  const contentW = pageW - margin * 2; // 178 mm
   const style = quote.style || 'Classique';
   const accent = parseHexColor(quote.accentColor || '#009688');
-  const accentLight = mixWithWhite(accent, 0.9);
-  const accentSoft = mixWithWhite(accent, 0.7);
+  const accentLight = mixWithWhite(accent, 0.92);
+  const accentSoft = mixWithWhite(accent, 0.75);
   const dark: [number, number, number] = [30, 34, 42];
-  const muted: [number, number, number] = [110, 120, 130];
-  const neutralLight: [number, number, number] = [245, 247, 249];
-  const neutralBorder: [number, number, number] = [220, 224, 228];
+  const muted: [number, number, number] = [100, 112, 125];
+  const neutralLight: [number, number, number] = [246, 248, 250];
+  const neutralBorder: [number, number, number] = [222, 226, 230];
   const isModerne = style === 'Moderne';
   const isMinimaliste = style === 'Minimaliste';
   const companyName = settings.companyName || 'Entreprise';
-  const validity = quote.validUntil 
-    ? `Ce devis est valable jusqu'au ${formatDateFr(quote.validUntil)}.`
-    : `Ce devis est valable pour une durée de ${settings.defaultValidity || 30} jours.`;
+  const validityText = quote.validUntil 
+    ? `Valable jusqu'au ${formatDateFr(quote.validUntil)}`
+    : `Valable ${settings.defaultValidity || 30} jours`;
   const dateFr = formatDateFr(quote.date);
   let y = 0;
 
-  // ============================ HEADER ============================
+  // ============================ 1. EN-TÊTE ============================
   if (settings.headerLogoBase64) {
-    const bannerH = 38;
+    const bannerH = 36;
     try {
       doc.addImage(settings.headerLogoBase64, 'PNG', 0, 0, pageW, bannerH);
     } catch {
       try {
         doc.addImage(settings.headerLogoBase64, 'JPEG', 0, 0, pageW, bannerH);
       } catch {
-        // fallback text if image fails
+        doc.setFillColor(...accent);
+        doc.rect(0, 0, pageW, 36, 'F');
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(16);
-        doc.setTextColor(...dark);
+        doc.setTextColor(255, 255, 255);
         doc.text(companyName.toUpperCase(), margin, 18);
       }
     }
-    y = bannerH + 6;
+
+    // Bandeau d'informations sous le logo pour ne jamais perdre le numéro et la date
+    y = bannerH + 4;
+    doc.setFillColor(...neutralLight);
+    doc.roundedRect(margin, y, contentW, 10, 1.5, 1.5, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(...accent);
+    doc.text(`DEVIS N° ${quote.quoteNumber}`, margin + 5, y + 6.5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...muted);
+    doc.text(`Émis le : ${dateFr}`, pageW - margin - 55, y + 6.5);
+    doc.text(validityText, pageW - margin - 5, y + 6.5, { align: 'right' });
+    y += 15;
   } else if (isModerne) {
     doc.setFillColor(...accent);
-    doc.rect(0, 0, pageW, 44, 'F');
-    doc.setFillColor(...mixWithWhite(accent, 0.15));
-    doc.rect(0, 44, pageW, 1.5, 'F');
+    doc.rect(0, 0, pageW, 40, 'F');
+    doc.setFillColor(...mixWithWhite(accent, 0.2));
+    doc.rect(0, 40, pageW, 1.5, 'F');
 
+    // Gauche : Société
     doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
-    doc.text(companyName, margin, 18);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(226, 240, 245);
-    doc.text(settings.companyAddress || '', margin, 25);
-    if (settings.companySiret) doc.text(`RCCM : ${settings.companySiret}`, margin, 30);
-
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(22);
-    doc.text('DEVIS', pageW - margin, 18, { align: 'right' });
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.text(`N° ${quote.quoteNumber}`, pageW - margin, 26, { align: 'right' });
-    doc.text(`Date : ${dateFr}`, pageW - margin, 31, { align: 'right' });
-    doc.setFontSize(8);
-    doc.setTextColor(226, 240, 245);
-    doc.text(validity, pageW - margin, 38, { align: 'right' });
-    y = 54;
-  } else {
-    // En-tête pleine largeur avec bandeau coloré classique
-    if (!isMinimaliste) {
-      doc.setFillColor(...accent);
-      doc.rect(0, 0, pageW, 38, 'F');
-      doc.setFillColor(...mixWithWhite(accent, 0.3));
-      doc.rect(0, 38, pageW, 1, 'F');
-    }
-    const headerTextY = isMinimaliste ? margin : 8;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(16);
-    doc.setTextColor(isMinimaliste ? dark[0] : 255, isMinimaliste ? dark[1] : 255, isMinimaliste ? dark[2] : 255);
-    doc.text(companyName.toUpperCase(), margin, headerTextY + 8);
+    doc.text(companyName, margin, 15);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.setTextColor(isMinimaliste ? muted[0] : 226, isMinimaliste ? muted[1] : 240, isMinimaliste ? muted[2] : 245);
-    doc.text(settings.companyAddress || '', margin, headerTextY + 13);
-    if (settings.companySiret) doc.text(`RCCM : ${settings.companySiret}`, margin, headerTextY + 18);
+    doc.setTextColor(230, 242, 245);
+    if (settings.companyAddress) doc.text(settings.companyAddress, margin, 21);
+    const taxInfo = [
+      settings.companySiret ? `RCCM : ${settings.companySiret}` : '',
+      settings.companyTva ? `IFU/TVA : ${settings.companyTva}` : ''
+    ].filter(Boolean).join(' • ');
+    if (taxInfo) doc.text(taxInfo, margin, 26);
 
-    // Titre DEVIS à droite
+    // Droite : Devis
+    doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(24);
-    doc.setTextColor(isMinimaliste ? dark[0] : 255, isMinimaliste ? dark[1] : 255, isMinimaliste ? dark[2] : 255);
-    doc.text('DEVIS', pageW - margin, headerTextY + 8, { align: 'right' });
-    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(20);
+    doc.text('DEVIS', pageW - margin, 15, { align: 'right' });
+    doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
-    doc.setTextColor(isMinimaliste ? muted[0] : 226, isMinimaliste ? muted[1] : 240, isMinimaliste ? muted[2] : 245);
-    doc.text(`N° ${quote.quoteNumber}`, pageW - margin, headerTextY + 15, { align: 'right' });
-    doc.text(`Date : ${dateFr}`, pageW - margin, headerTextY + 20, { align: 'right' });
+    doc.text(`N° ${quote.quoteNumber}`, pageW - margin, 22, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(230, 242, 245);
+    doc.text(`Date : ${dateFr}`, pageW - margin, 27, { align: 'right' });
+    doc.text(validityText, pageW - margin, 32, { align: 'right' });
+    y = 48;
+  } else if (isMinimaliste) {
+    // Gauche : Société
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(...dark);
+    doc.text(companyName.toUpperCase(), margin, 16);
+    doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.text(validity, pageW - margin, headerTextY + 25, { align: 'right' });
-    y = isMinimaliste ? headerTextY + 30 : 48;
+    doc.setTextColor(...muted);
+    if (settings.companyAddress) doc.text(settings.companyAddress, margin, 22);
+    const taxInfoMin = [
+      settings.companySiret ? `RCCM : ${settings.companySiret}` : '',
+      settings.companyTva ? `IFU/TVA : ${settings.companyTva}` : ''
+    ].filter(Boolean).join(' • ');
+    if (taxInfoMin) doc.text(taxInfoMin, margin, 27);
+
+    // Droite : Devis
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.setTextColor(...dark);
+    doc.text('DEVIS', pageW - margin, 16, { align: 'right' });
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(`N° ${quote.quoteNumber}`, pageW - margin, 22, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...muted);
+    doc.text(`Date : ${dateFr}`, pageW - margin, 27, { align: 'right' });
+    doc.text(validityText, pageW - margin, 32, { align: 'right' });
+
+    doc.setDrawColor(...neutralBorder);
+    doc.setLineWidth(0.4);
+    doc.line(margin, 37, pageW - margin, 37);
+    y = 44;
+  } else {
+    // Classique
+    doc.setFillColor(...accent);
+    doc.rect(0, 0, pageW, 38, 'F');
+    doc.setFillColor(...mixWithWhite(accent, 0.25));
+    doc.rect(0, 38, pageW, 1.2, 'F');
+
+    // Gauche
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text(companyName.toUpperCase(), margin, 14);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(230, 242, 245);
+    if (settings.companyAddress) doc.text(settings.companyAddress, margin, 20);
+    const taxInfoClass = [
+      settings.companySiret ? `RCCM : ${settings.companySiret}` : '',
+      settings.companyTva ? `IFU/TVA : ${settings.companyTva}` : ''
+    ].filter(Boolean).join(' • ');
+    if (taxInfoClass) doc.text(taxInfoClass, margin, 25);
+
+    // Droite
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.text('DEVIS', pageW - margin, 14, { align: 'right' });
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(`N° ${quote.quoteNumber}`, pageW - margin, 21, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(230, 242, 245);
+    doc.text(`Date : ${dateFr}`, pageW - margin, 26, { align: 'right' });
+    doc.text(validityText, pageW - margin, 31, { align: 'right' });
+    y = 46;
   }
 
-  // ====================== CLIENT + OBJET ======================
-  const cardW = 78;
-  const cardH = 26;
-  const cardX = margin;
+  // ====================== 2. CARTOUCHES CLIENT & OBJET / RÉFÉRENCES ======================
+  const cardGap = 8;
+  const cardW = (contentW - cardGap) / 2; // 85 mm chacun
+  const cardH = 28;
+  const cardLeftX = margin;
+  const cardRightX = margin + cardW + cardGap;
   const cardY = y;
+
+  // --- Cartouche Gauche : CLIENT ---
   if (!isMinimaliste) {
     doc.setFillColor(...(isModerne ? accentLight : neutralLight));
-    doc.roundedRect(cardX, cardY, cardW, cardH, 2, 2, 'F');
+    doc.roundedRect(cardLeftX, cardY, cardW, cardH, 2, 2, 'F');
     doc.setDrawColor(...(isModerne ? accentSoft : neutralBorder));
     doc.setLineWidth(0.3);
-    doc.roundedRect(cardX, cardY, cardW, cardH, 2, 2, 'S');
+    doc.roundedRect(cardLeftX, cardY, cardW, cardH, 2, 2, 'S');
+  } else {
+    doc.setDrawColor(...neutralBorder);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(cardLeftX, cardY, cardW, cardH, 1.5, 1.5, 'S');
   }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...(isMinimaliste ? dark : accent));
+  doc.text('DESTINATAIRE (CLIENT)', cardLeftX + 5, cardY + 5.5);
+
+  const clientName = client?.company || client?.name || 'Client comptant';
+  const clientLines = [
+    client?.contact && client.contact !== client.name && client.contact !== client.company ? `Attn : ${client.contact}` : '',
+    client?.phone ? `Tél : ${client.phone}` : '',
+    client?.email ? `Email : ${client.email}` : '',
+    client?.address || '',
+  ].filter(Boolean);
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  doc.setTextColor(...(isMinimaliste ? dark : accent));
-  doc.text('CLIENT', cardX + 5, cardY + 6);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
   doc.setTextColor(...dark);
-  const clientLines = [
-    client?.company || client?.name || 'Inconnu',
-    // Only show contact if it differs from name/company
-    client?.contact && client.contact !== client.name && client.contact !== client.company ? `Contact : ${client.contact}` : '',
-    client?.phone || '',
-    client?.email || '',
-  ].filter(Boolean);
-  clientLines.slice(0, 3).forEach((line, i) => {
-    doc.text(line, cardX + 5, cardY + 12 + i * 4.5);
+  const clientNameWrapped = doc.splitTextToSize(clientName, cardW - 10) as string[];
+  doc.text(clientNameWrapped[0], cardLeftX + 5, cardY + 11.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...muted);
+  let cOffsetY = cardY + 16.5;
+  clientLines.slice(0, 2).forEach((l) => {
+    const wrapped = doc.splitTextToSize(l, cardW - 10) as string[];
+    doc.text(wrapped[0], cardLeftX + 5, cOffsetY);
+    cOffsetY += 4.5;
   });
 
-  const objX = cardX + cardW + 10;
-  const objW = pageW - margin - objX;
-  if (quote.subject) {
-    if (!isMinimaliste) {
-      doc.setFillColor(...(isModerne ? accentLight : neutralLight));
-      doc.roundedRect(objX, cardY, objW, cardH, 2, 2, 'F');
-    }
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(...(isMinimaliste ? dark : accent));
-    doc.text('OBJET', objX + 5, cardY + 6);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...dark);
-    const subjectLines = doc.splitTextToSize(quote.subject, objW - 10) as string[];
-    subjectLines.slice(0, 3).forEach((line, i) => {
-      doc.text(line, objX + 5, cardY + 12 + i * 4.5);
-    });
+  // --- Cartouche Droit : OBJET DU DEVIS ou DÉTAILS ---
+  if (!isMinimaliste) {
+    doc.setFillColor(...(isModerne ? accentLight : neutralLight));
+    doc.roundedRect(cardRightX, cardY, cardW, cardH, 2, 2, 'F');
+    doc.setDrawColor(...(isModerne ? accentSoft : neutralBorder));
+    doc.setLineWidth(0.3);
+    doc.roundedRect(cardRightX, cardY, cardW, cardH, 2, 2, 'S');
+  } else {
+    doc.setDrawColor(...neutralBorder);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(cardRightX, cardY, cardW, cardH, 1.5, 1.5, 'S');
   }
-  y += cardH + 10;
 
-  // ====================== TABLEAU ======================
-  const colWidths = [contentW * 0.40, contentW * 0.13, contentW * 0.16, contentW * 0.10, contentW * 0.21];
-  const headers = ['DESCRIPTION', 'QTÉ / UNITÉ', 'PRIX UNITAIRE', 'REMISE', 'TOTAL'];
+  if (quote.subject) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...(isMinimaliste ? dark : accent));
+    doc.text('OBJET DU DEVIS', cardRightX + 5, cardY + 5.5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...dark);
+    const subjectLines = doc.splitTextToSize(quote.subject, cardW - 10) as string[];
+    subjectLines.slice(0, 4).forEach((line, i) => {
+      doc.text(line, cardRightX + 5, cardY + 11.5 + i * 4.5);
+    });
+  } else {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...(isMinimaliste ? dark : accent));
+    doc.text('INFORMATIONS DEVIS', cardRightX + 5, cardY + 5.5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...dark);
+    doc.text(`Réf. : ${quote.quoteNumber}`, cardRightX + 5, cardY + 11.5);
+    doc.text(`Date d'émission : ${dateFr}`, cardRightX + 5, cardY + 16.5);
+    doc.setTextColor(...muted);
+    doc.text(`Validité : ${validityText}`, cardRightX + 5, cardY + 21.5);
+  }
+
+  y += cardH + 7;
+
+  // ====================== 3. TABLEAU DES ARTICLES ======================
+  // Largeurs strictes totalisant 178 mm : [82, 22, 28, 18, 28]
+  const colW = {
+    desc: 82,
+    qty: 22,
+    unitPrice: 28,
+    discount: 18,
+    total: 28
+  };
   const tableX = margin;
 
   const drawTableHeader = () => {
+    const thH = 8.5;
     if (isModerne) {
       doc.setFillColor(...accent);
-      doc.rect(tableX, y, contentW, 9, 'F');
+      doc.rect(tableX, y, contentW, thH, 'F');
       doc.setTextColor(255, 255, 255);
     } else if (isMinimaliste) {
       doc.setFillColor(...dark);
-      doc.rect(tableX, y, contentW, 9, 'F');
+      doc.rect(tableX, y, contentW, thH, 'F');
       doc.setTextColor(255, 255, 255);
     } else {
       doc.setFillColor(...neutralLight);
-      doc.rect(tableX, y, contentW, 9, 'F');
+      doc.rect(tableX, y, contentW, thH, 'F');
       doc.setTextColor(...accent);
     }
+
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    let hx = tableX;
-    headers.forEach((h, i) => {
-      if (i === 0) {
-        doc.text(h, hx + 2, y + 6);
-      } else {
-        doc.text(h, hx + colWidths[i] - 2, y + 6, { align: 'right' });
-      }
-      hx += colWidths[i];
-    });
-    y += 9;
+    doc.setFontSize(8);
+
+    // Colonne 1 : Description (gauche + 3)
+    doc.text('DÉSIGNATION', tableX + 3, y + 5.5);
+    // Colonne 2 : Qté (centrée)
+    doc.text('QTÉ', tableX + colW.desc + colW.qty / 2, y + 5.5, { align: 'center' });
+    // Colonne 3 : Prix unitaire (droite - 3)
+    doc.text('P.U. (FCFA)', tableX + colW.desc + colW.qty + colW.unitPrice - 3, y + 5.5, { align: 'right' });
+    // Colonne 4 : Remise (centrée)
+    doc.text('REMISE', tableX + colW.desc + colW.qty + colW.unitPrice + colW.discount / 2, y + 5.5, { align: 'center' });
+    // Colonne 5 : Total (droite - 3)
+    doc.text('TOTAL (FCFA)', tableX + contentW - 3, y + 5.5, { align: 'right' });
+
+    y += thH;
   };
 
   drawTableHeader();
 
+  // Lignes du tableau avec hauteur dynamique pour multilignes
   quote.lines.forEach((line, idx) => {
-    if (y > pageH - 36) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    
+    // Découpage automatique de la description sans jamais perdre de texte
+    const descLines = doc.splitTextToSize(line.description || 'Article sans désignation', colW.desc - 6) as string[];
+    const rowH = Math.max(7.5, descLines.length * 4.2 + 3.5);
+
+    // Vérification de saut de page
+    if (y + rowH > pageH - 45) {
       doc.addPage();
-      y = margin;
+      y = margin + 4;
       drawTableHeader();
     }
-    const rowH = 8;
+
+    // Fond alterné pour style Moderne
     if (isModerne && idx % 2 === 1) {
       doc.setFillColor(...accentLight);
       doc.rect(tableX, y, contentW, rowH, 'F');
     }
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
+
+    // 1. Description (toutes les lignes affichées)
     doc.setTextColor(...dark);
-    const descLines = doc.splitTextToSize(line.description || '-', colWidths[0] - 4) as string[];
-    let cx = tableX;
-    doc.text(descLines[0], cx + 2, y + 5.5);
-    cx += colWidths[0];
-    
-    const qtyDisplay = line.unit ? `${line.quantity || 0} ${line.unit}` : String(line.quantity || 0);
-    const cells = [
-      qtyDisplay,
-      formatAmount(line.unitPrice || 0),
-      line.discountPercent && line.discountPercent > 0 ? `-${line.discountPercent}%` : '—',
-      formatAmount(line.total || 0),
-    ];
-    cells.forEach((cell, i) => {
-      const colIdx = i + 1;
-      cx += colWidths[colIdx];
-      drawAutoText(doc, cell, cx - 2, y + 5.5, colWidths[colIdx] - 4, 8);
+    descLines.forEach((dLine, dIdx) => {
+      doc.text(dLine, tableX + 3, y + 4.8 + dIdx * 4.2);
     });
-    y += rowH;
-    if (!isModerne) {
-      doc.setDrawColor(isMinimaliste ? 230 : 235);
-      doc.setLineWidth(0.2);
-      doc.line(tableX, y, pageW - margin, y);
-    }
-  });
 
-  y += 4;
+    // 2. Quantité (centrée)
+    const qtyDisplay = line.unit ? `${line.quantity || 0} ${line.unit}` : String(line.quantity || 0);
+    doc.text(qtyDisplay, tableX + colW.desc + colW.qty / 2, y + 4.8, { align: 'center' });
 
-  // ====================== TOTAUX ======================
-  const grossSubtotal = (quote.subtotal || 0) + (quote.discountAmount || 0);
-  const totalsW = 62;
-  const totalsX = pageW - margin - totalsW;
-  const totalRows = [
-    { label: 'Montant brut', value: formatAmount(grossSubtotal) },
-    ...(quote.discountPercent && quote.discountPercent > 0
-      ? [{ label: `Remise (${quote.discountPercent}%)`, value: `-${formatAmount(quote.discountAmount || 0)}` }]
-      : []),
-  ];
+    // 3. Prix unitaire (aligné à droite)
+    doc.text(formatAmount(line.unitPrice || 0), tableX + colW.desc + colW.qty + colW.unitPrice - 3, y + 4.8, { align: 'right' });
 
-  if (!isMinimaliste) {
-    doc.setFillColor(...(isModerne ? accentLight : neutralLight));
-    const boxH = totalRows.length * 7 + 13;
-    doc.roundedRect(totalsX, y - 3, totalsW, boxH, 2, 2, 'F');
-  }
+    // 4. Remise (centrée)
+    const discountText = line.discountPercent && line.discountPercent > 0 ? `-${line.discountPercent}%` : '—';
+    doc.setTextColor(...(line.discountPercent && line.discountPercent > 0 ? accent : muted));
+    doc.text(discountText, tableX + colW.desc + colW.qty + colW.unitPrice + colW.discount / 2, y + 4.8, { align: 'center' });
 
-  totalRows.forEach((r) => {
+    // 5. Total (aligné à droite, gras)
+    doc.setTextColor(...dark);
+    doc.setFont('helvetica', 'bold');
+    doc.text(formatAmount(line.total || 0), tableX + contentW - 3, y + 4.8, { align: 'right' });
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(...muted);
-    doc.text(r.label, totalsX + 5, y + 2);
-    doc.setTextColor(...dark);
-    doc.text(r.value, pageW - margin - 5, y + 2, { align: 'right' });
-    y += 6;
+
+    y += rowH;
+
+    // Bordure de séparation horizontale
+    doc.setDrawColor(...neutralBorder);
+    doc.setLineWidth(0.2);
+    doc.line(tableX, y, tableX + contentW, y);
   });
-  y += 1;
 
-  if (isModerne) {
-    doc.setFillColor(...accent);
-    doc.roundedRect(totalsX, y - 3, totalsW, 10, 2, 2, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.text('TOTAL', totalsX + 5, y + 3);
-    doc.text(formatAmount(quote.total || 0), pageW - margin - 5, y + 3, { align: 'right' });
-    y += 10;
-  } else {
-    doc.setDrawColor(isMinimaliste ? 0 : accent[0], isMinimaliste ? 0 : accent[1], isMinimaliste ? 0 : accent[2]);
-    doc.setLineWidth(0.6);
-    doc.line(totalsX, y, pageW - margin, y);
-    y += 4;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(...dark);
-    doc.text('TOTAL', totalsX + 5, y);
-    doc.text(formatAmount(quote.total || 0), pageW - margin - 5, y, { align: 'right' });
-    y += 8;
-  }
+  y += 5;
 
-  // ====================== CONDITIONS & MODALITÉS ======================
-  y += 6;
-  if (y > pageH - 55) {
+  // ====================== 4. TOTAUX & RÉSUMÉ ======================
+  if (y > pageH - 65) {
     doc.addPage();
-    y = margin + 6;
+    y = margin + 4;
   }
-  if (!isMinimaliste) {
+
+  const totalsW = 74;
+  const totalsX = pageW - margin - totalsW;
+  const notesW = contentW - totalsW - 8;
+  const notesX = margin;
+
+  const grossSubtotal = (quote.subtotal || 0) + (quote.discountAmount || 0);
+  const hasDiscount = Boolean(quote.discountPercent && quote.discountPercent > 0);
+
+  // Bloc gauche : Notes ou Arrêté de devis
+  if (quote.notes || quote.paymentTerms) {
     doc.setFillColor(...neutralLight);
-    doc.rect(margin, y, contentW, 7, 'F');
+    doc.roundedRect(notesX, y, notesW, 28, 1.5, 1.5, 'F');
+    doc.setDrawColor(...neutralBorder);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(notesX, y, notesW, 28, 1.5, 1.5, 'S');
+
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(...accent);
-    doc.text('CONDITIONS & MODALITÉS DE RÈGLEMENT', margin + 5, y + 5);
-    y += 7 + 4;
-  } else {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
+    doc.text('NOTES & RÈGLEMENT', notesX + 4, y + 5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
     doc.setTextColor(...dark);
-    doc.text('CONDITIONS & MODALITÉS DE RÈGLEMENT', margin, y);
-    doc.setDrawColor(0);
+    let noteOffsetY = y + 10;
+    if (quote.paymentTerms) {
+      doc.text(`Modalités : ${quote.paymentTerms}`, notesX + 4, noteOffsetY);
+      noteOffsetY += 4.5;
+    }
+    if (quote.notes) {
+      const noteLines = doc.splitTextToSize(quote.notes, notesW - 8) as string[];
+      noteLines.slice(0, 3).forEach(nl => {
+        doc.text(nl, notesX + 4, noteOffsetY);
+        noteOffsetY += 4;
+      });
+    }
+  }
+
+  // Bloc droit : Totaux
+  const totBoxH = hasDiscount ? 30 : 22;
+  if (!isMinimaliste) {
+    doc.setFillColor(...(isModerne ? accentLight : neutralLight));
+    doc.roundedRect(totalsX, y, totalsW, totBoxH, 2, 2, 'F');
+    doc.setDrawColor(...(isModerne ? accentSoft : neutralBorder));
     doc.setLineWidth(0.3);
-    doc.line(margin, y + 2, pageW - margin, y + 2);
-    y += 7;
+    doc.roundedRect(totalsX, y, totalsW, totBoxH, 2, 2, 'S');
+  } else {
+    doc.setDrawColor(...neutralBorder);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(totalsX, y, totalsW, totBoxH, 1.5, 1.5, 'S');
   }
 
-  // Lignes de conditions
-  const conditionsList: string[] = [];
-  conditionsList.push(`• Validité de l'offre : ${validity}`);
-  if (quote.paymentTerms) {
-    conditionsList.push(`• Modalités de paiement : ${quote.paymentTerms}`);
-  }
-  if (quote.notes) {
-    conditionsList.push(`• Remarques : ${quote.notes}`);
-  }
-  if (settings.defaultTerms) {
-    conditionsList.push(`• Conditions générales : ${settings.defaultTerms}`);
+  let totY = y + 5.5;
+  if (hasDiscount) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...muted);
+    doc.text('Total brut :', totalsX + 4, totY);
+    doc.setTextColor(...dark);
+    doc.text(formatAmount(grossSubtotal), pageW - margin - 4, totY, { align: 'right' });
+    totY += 5.5;
+
+    doc.setTextColor(...muted);
+    doc.text(`Remise (${quote.discountPercent}%) :`, totalsX + 4, totY);
+    doc.setTextColor(...accent);
+    doc.text(`-${formatAmount(quote.discountAmount || 0)}`, pageW - margin - 4, totY, { align: 'right' });
+    totY += 5.5;
+
+    doc.setDrawColor(...neutralBorder);
+    doc.setLineWidth(0.2);
+    doc.line(totalsX + 4, totY - 1, pageW - margin - 4, totY - 1);
+    totY += 2;
+  } else {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...muted);
+    doc.text('Sous-total HT :', totalsX + 4, totY);
+    doc.setTextColor(...dark);
+    doc.text(formatAmount(quote.subtotal || 0), pageW - margin - 4, totY, { align: 'right' });
+    totY += 6;
   }
 
-  const termsText = conditionsList.join('\n');
-  const termLines = doc.splitTextToSize(termsText, contentW) as string[];
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(...muted);
-  doc.text(termLines, margin, y);
-  y += termLines.length * 4 + 4;
+  // Ligne TOTAL NET mise en valeur
+  const totalBannerH = 8.5;
+  if (isModerne) {
+    doc.setFillColor(...accent);
+    doc.roundedRect(totalsX, y + totBoxH - totalBannerH, totalsW, totalBannerH, 2, 2, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.text('NET À PAYER', totalsX + 4, y + totBoxH - 2.8);
+    doc.text(formatAmount(quote.total || 0), pageW - margin - 4, y + totBoxH - 2.8, { align: 'right' });
+  } else {
+    doc.setFillColor(...accent);
+    doc.roundedRect(totalsX, y + totBoxH - totalBannerH, totalsW, totalBannerH, 1.5, 1.5, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.text('TOTAL NET', totalsX + 4, y + totBoxH - 2.8);
+    doc.text(formatAmount(quote.total || 0), pageW - margin - 4, y + totBoxH - 2.8, { align: 'right' });
+  }
 
-  // ====================== SIGNATURES ======================
-  y += 4;
-  if (y > pageH - 35) {
+  y += totBoxH + 6;
+
+  // ====================== 5. CONDITIONS & MODALITÉS ======================
+  if (y > pageH - 52) {
     doc.addPage();
-    y = margin + 10;
+    y = margin + 4;
   }
+
+  const condH = 6;
+  doc.setFillColor(...neutralLight);
+  doc.rect(margin, y, contentW, condH, 'F');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
+  doc.setTextColor(...accent);
+  doc.text('CONDITIONS & MODALITÉS DE RÈGLEMENT', margin + 4, y + 4.2);
+  y += condH + 3.5;
+
+  const conditionsList: string[] = [
+    `• Validité de l'offre : ${validityText}.`,
+    quote.paymentTerms ? `• Modalités de paiement : ${quote.paymentTerms}.` : '',
+    quote.notes ? `• Remarques : ${quote.notes}.` : '',
+    settings.defaultTerms ? `• Conditions générales : ${settings.defaultTerms}.` : '• Les marchandises demeurent la propriété de l\'entreprise jusqu\'au paiement intégral du montant facturé.'
+  ].filter(Boolean);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
   doc.setTextColor(...dark);
-  
+  conditionsList.forEach(cond => {
+    const wrapped = doc.splitTextToSize(cond, contentW - 8) as string[];
+    wrapped.forEach(wl => {
+      doc.text(wl, margin + 4, y);
+      y += 3.8;
+    });
+  });
+
+  y += 4;
+
+  // ====================== 6. SIGNATURES ======================
+  if (y > pageH - 36) {
+    doc.addPage();
+    y = margin + 4;
+  }
+
+  const sigW = (contentW - cardGap) / 2; // 85 mm chacun
+  const sigH = 24;
+  const sigLeftX = margin;
+  const sigRightX = margin + sigW + cardGap;
+
+  // Cadre Signature Entreprise
+  doc.setDrawColor(...neutralBorder);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(sigLeftX, y, sigW, sigH, 1.5, 1.5, 'S');
+
   const signatoryTitle = quote.signatoryRole || 'Pour l\'entreprise';
   const signatoryName = quote.signatoryName ? `${signatoryTitle} : ${quote.signatoryName}` : signatoryTitle;
-  doc.text(signatoryName, margin, y);
-  doc.text('Bon pour accord (Client) :', pageW - margin, y, { align: 'right' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...muted);
-  doc.text('Date, signature & cachet', pageW - margin, y + 4, { align: 'right' });
-
-  doc.setDrawColor(...muted);
-  doc.setLineWidth(0.3);
-  doc.setLineDashPattern([1.5, 1.5], 0);
-  doc.line(margin, y + 12, margin + 55, y + 12);
-  doc.line(pageW - margin - 55, y + 12, pageW - margin, y + 12);
-  doc.setLineDashPattern([], 0);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...(isMinimaliste ? dark : accent));
+  doc.text(signatoryName, sigLeftX + 4, y + 5);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
   doc.setTextColor(...muted);
-  doc.text(
-    `Document généré le ${new Date().toLocaleDateString('fr-FR')} — ${companyName}${settings.companySiret ? ` — RCCM : ${settings.companySiret}` : ''}`,
-    pageW / 2,
-    pageH - 8,
-    { align: 'center' }
-  );
+  doc.text('Signature autorisée & Cachet', sigLeftX + 4, y + 9);
+
+  // Cadre Signature Client
+  doc.roundedRect(sigRightX, y, sigW, sigH, 1.5, 1.5, 'S');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...(isMinimaliste ? dark : accent));
+  doc.text('BON POUR ACCORD (CLIENT)', sigRightX + 4, y + 5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(...muted);
+  doc.text('Date, cachet & signature précédés de "Bon pour accord"', sigRightX + 4, y + 9);
+
+  // ====================== 7. PIED DE PAGE ======================
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(...muted);
+    doc.text(
+      `Document généré le ${new Date().toLocaleDateString('fr-FR')} — ${companyName}${settings.companySiret ? ` — RCCM : ${settings.companySiret}` : ''} — Page ${p}/${totalPages}`,
+      pageW / 2,
+      pageH - 6,
+      { align: 'center' }
+    );
+  }
 
   const blob = doc.output('blob');
   return blob;
