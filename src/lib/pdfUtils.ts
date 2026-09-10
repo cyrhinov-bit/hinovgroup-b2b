@@ -618,14 +618,26 @@ function formatDateFr(d: string): string {
   return d;
 }
 
+function cleanPdfText(text: string | null | undefined): string {
+  if (!text) return '';
+  return String(text)
+    .replace(/[\u2014\u2013]/g, '-')
+    .replace(/[\u2022\u25E6\u2023]/g, '-')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u00A0\u202F]/g, ' ')
+    .replace(/[^\x00-\xFF]/g, '');
+}
+
 function drawAutoText(doc: jsPDF, text: string, x: number, y: number, maxWidth: number, baseSize: number, align: 'left' | 'right' = 'right') {
   let size = baseSize;
   doc.setFontSize(size);
-  while (size > 5 && doc.getTextWidth(text) > maxWidth) {
+  const clean = cleanPdfText(text);
+  while (size > 5 && doc.getTextWidth(clean) > maxWidth) {
     size -= 0.5;
     doc.setFontSize(size);
   }
-  doc.text(text, x, y, { align });
+  doc.text(clean, x, y, { align });
 }
 
 export function generateQuotePdf(quote: Quote, client: Client | undefined, settings: AppSettings): Blob {
@@ -930,59 +942,96 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
 
   drawTableHeader();
 
-  // Lignes du tableau avec hauteur dynamique pour multilignes
-  quote.lines.forEach((line, idx) => {
-    doc.setFont('helvetica', 'normal');
+  // Extraire et normaliser les lignes du devis avec support de tous les alias possibles
+  const rawLines: any[] = Array.isArray(quote.lines)
+    ? quote.lines
+    : Array.isArray((quote as any).quote_lines)
+      ? (quote as any).quote_lines
+      : Array.isArray((quote as any).items)
+        ? (quote as any).items
+        : [];
+
+  if (rawLines.length === 0) {
+    doc.setFont('helvetica', 'italic');
     doc.setFontSize(8);
-    
-    // Découpage automatique de la description sans jamais perdre de texte
-    const descLines = doc.splitTextToSize(line.description || 'Article sans désignation', colW.desc - 6) as string[];
-    const rowH = Math.max(7.5, descLines.length * 4.2 + 3.5);
-
-    // Vérification de saut de page
-    if (y + rowH > pageH - 45) {
-      doc.addPage();
-      y = margin + 4;
-      drawTableHeader();
-    }
-
-    // Fond alterné pour style Moderne
-    if (isModerne && idx % 2 === 1) {
-      doc.setFillColor(...accentLight);
-      doc.rect(tableX, y, contentW, rowH, 'F');
-    }
-
-    // 1. Description (toutes les lignes affichées)
-    doc.setTextColor(...dark);
-    descLines.forEach((dLine, dIdx) => {
-      doc.text(dLine, tableX + 3, y + 4.8 + dIdx * 4.2);
-    });
-
-    // 2. Quantité (centrée)
-    const qtyDisplay = line.unit ? `${line.quantity || 0} ${line.unit}` : String(line.quantity || 0);
-    doc.text(qtyDisplay, tableX + colW.desc + colW.qty / 2, y + 4.8, { align: 'center' });
-
-    // 3. Prix unitaire (aligné à droite)
-    doc.text(formatAmount(line.unitPrice || 0), tableX + colW.desc + colW.qty + colW.unitPrice - 3, y + 4.8, { align: 'right' });
-
-    // 4. Remise (centrée)
-    const discountText = line.discountPercent && line.discountPercent > 0 ? `-${line.discountPercent}%` : '—';
-    doc.setTextColor(...(line.discountPercent && line.discountPercent > 0 ? accent : muted));
-    doc.text(discountText, tableX + colW.desc + colW.qty + colW.unitPrice + colW.discount / 2, y + 4.8, { align: 'center' });
-
-    // 5. Total (aligné à droite, gras)
-    doc.setTextColor(...dark);
-    doc.setFont('helvetica', 'bold');
-    doc.text(formatAmount(line.total || 0), tableX + contentW - 3, y + 4.8, { align: 'right' });
-    doc.setFont('helvetica', 'normal');
-
-    y += rowH;
-
-    // Bordure de séparation horizontale
+    doc.setTextColor(...muted);
+    doc.text('Aucun article ou prestation spécifié dans ce devis.', tableX + 3, y + 6);
+    y += 10;
     doc.setDrawColor(...neutralBorder);
     doc.setLineWidth(0.2);
     doc.line(tableX, y, tableX + contentW, y);
-  });
+  } else {
+    rawLines.forEach((line: any, idx: number) => {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+
+      const descRaw = line.description || line.designation || line.name || line.prestation_name || line.label || 'Article sans désignation';
+      const descClean = cleanPdfText(descRaw) || 'Article sans désignation';
+      const qty = Number(line.quantity ?? line.qte ?? line.qty ?? 1);
+      const unit = cleanPdfText(line.unit || line.unite || '');
+      const unitPrice = Number(line.unitPrice ?? line.unit_price ?? line.price ?? line.pu ?? 0);
+      const discountPercent = Number(line.discountPercent ?? line.discount_percent ?? line.remise ?? 0);
+
+      let totalVal = line.total !== undefined && line.total !== null ? Number(line.total) : undefined;
+      if (totalVal === undefined || isNaN(totalVal)) {
+        if (line.total_price !== undefined) totalVal = Number(line.total_price);
+        else if (line.totalPrice !== undefined) totalVal = Number(line.totalPrice);
+        else {
+          const rawTotal = qty * unitPrice;
+          const lineDiscount = Math.round((rawTotal * discountPercent) / 100);
+          totalVal = Math.max(0, rawTotal - lineDiscount);
+        }
+      }
+
+      // Découpage automatique de la description sans jamais perdre de texte
+      const descLines = doc.splitTextToSize(descClean, colW.desc - 6) as string[];
+      const rowH = Math.max(7.5, descLines.length * 4.2 + 3.5);
+
+      // Vérification de saut de page
+      if (y + rowH > pageH - 45) {
+        doc.addPage();
+        y = margin + 4;
+        drawTableHeader();
+      }
+
+      // Fond alterné pour style Moderne
+      if (isModerne && idx % 2 === 1) {
+        doc.setFillColor(...accentLight);
+        doc.rect(tableX, y, contentW, rowH, 'F');
+      }
+
+      // 1. Description (toutes les lignes affichées)
+      doc.setTextColor(...dark);
+      descLines.forEach((dLine, dIdx) => {
+        doc.text(dLine, tableX + 3, y + 4.8 + dIdx * 4.2);
+      });
+
+      // 2. Quantité (centrée)
+      const qtyDisplay = unit ? `${qty} ${unit}` : String(qty);
+      doc.text(qtyDisplay, tableX + colW.desc + colW.qty / 2, y + 4.8, { align: 'center' });
+
+      // 3. Prix unitaire (aligné à droite)
+      doc.text(formatAmount(unitPrice), tableX + colW.desc + colW.qty + colW.unitPrice - 3, y + 4.8, { align: 'right' });
+
+      // 4. Remise (centrée)
+      const discountText = discountPercent > 0 ? `-${discountPercent}%` : '-';
+      doc.setTextColor(...(discountPercent > 0 ? accent : muted));
+      doc.text(discountText, tableX + colW.desc + colW.qty + colW.unitPrice + colW.discount / 2, y + 4.8, { align: 'center' });
+
+      // 5. Total (aligné à droite, gras)
+      doc.setTextColor(...dark);
+      doc.setFont('helvetica', 'bold');
+      doc.text(formatAmount(totalVal), tableX + contentW - 3, y + 4.8, { align: 'right' });
+      doc.setFont('helvetica', 'normal');
+
+      y += rowH;
+
+      // Bordure de séparation horizontale
+      doc.setDrawColor(...neutralBorder);
+      doc.setLineWidth(0.2);
+      doc.line(tableX, y, tableX + contentW, y);
+    });
+  }
 
   y += 5;
 
@@ -1018,11 +1067,11 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
     doc.setTextColor(...dark);
     let noteOffsetY = y + 10;
     if (quote.paymentTerms) {
-      doc.text(`Modalités : ${quote.paymentTerms}`, notesX + 4, noteOffsetY);
+      doc.text(`Modalités : ${cleanPdfText(quote.paymentTerms)}`, notesX + 4, noteOffsetY);
       noteOffsetY += 4.5;
     }
     if (quote.notes) {
-      const noteLines = doc.splitTextToSize(quote.notes, notesW - 8) as string[];
+      const noteLines = doc.splitTextToSize(cleanPdfText(quote.notes), notesW - 8) as string[];
       noteLines.slice(0, 3).forEach(nl => {
         doc.text(nl, notesX + 4, noteOffsetY);
         noteOffsetY += 4;
@@ -1112,10 +1161,10 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
   y += condH + 3.5;
 
   const conditionsList: string[] = [
-    `• Validité de l'offre : ${validityText}.`,
-    quote.paymentTerms ? `• Modalités de paiement : ${quote.paymentTerms}.` : '',
-    quote.notes ? `• Remarques : ${quote.notes}.` : '',
-    settings.defaultTerms ? `• Conditions générales : ${settings.defaultTerms}.` : '• Les marchandises demeurent la propriété de l\'entreprise jusqu\'au paiement intégral du montant facturé.'
+    `- Validité de l'offre : ${cleanPdfText(validityText)}.`,
+    quote.paymentTerms ? `- Modalités de paiement : ${cleanPdfText(quote.paymentTerms)}.` : '',
+    quote.notes ? `- Remarques : ${cleanPdfText(quote.notes)}.` : '',
+    settings.defaultTerms ? `- Conditions générales : ${cleanPdfText(settings.defaultTerms)}.` : "- Les marchandises demeurent la propriété de l'entreprise jusqu'au paiement intégral du montant facturé."
   ].filter(Boolean);
 
   doc.setFont('helvetica', 'normal');
@@ -1152,7 +1201,7 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(...(isMinimaliste ? dark : accent));
-  doc.text(signatoryName, sigLeftX + 4, y + 5);
+  doc.text(cleanPdfText(signatoryName), sigLeftX + 4, y + 5);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
@@ -1178,8 +1227,9 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(...muted);
+    const siretInfo = settings.companySiret ? ` - RCCM : ${cleanPdfText(settings.companySiret)}` : '';
     doc.text(
-      `Document généré le ${new Date().toLocaleDateString('fr-FR')} — ${companyName}${settings.companySiret ? ` — RCCM : ${settings.companySiret}` : ''} — Page ${p}/${totalPages}`,
+      `Document généré le ${new Date().toLocaleDateString('fr-FR')} - ${cleanPdfText(companyName)}${siretInfo} - Page ${p}/${totalPages}`,
       pageW / 2,
       pageH - 6,
       { align: 'center' }
