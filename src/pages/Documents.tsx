@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Upload, FileText, Download, Trash2, Folder, FolderPlus, ChevronRight, Eye, Edit2, Edit3, Settings, Search, Filter, Share2, Briefcase, User as UserIcon, Building, Image as ImageIcon, Table as TableIcon, Code } from 'lucide-react';
 import { useConfirm } from '../components/ConfirmModal';
 import { useAppContext, type CrmDocument, type CrmFolder } from '../context/AppContext';
@@ -66,6 +66,13 @@ export function Documents() {
   const isAdmin = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
   const displayedUserId = isAdmin ? selectedUserId : (currentUser?.id || '');
 
+  // Synchronize selectedUserId when currentUser loads
+  useEffect(() => {
+    if (currentUser?.id && !selectedUserId && !isAdmin) {
+      setSelectedUserId(currentUser.id);
+    }
+  }, [currentUser, selectedUserId, isAdmin]);
+
   // Filter folders & documents based on current tab
   const scopedFolders = useMemo(() => {
     if (activeTab === 'SHARED') {
@@ -74,8 +81,11 @@ export function Documents() {
     if (activeTab === 'AFFAIRES') {
       return []; // Flat view for business files
     }
-    return crmFolders.filter(f => f.ownerId === displayedUserId && !f.isShared);
-  }, [crmFolders, displayedUserId, activeTab]);
+    if (isAdmin && !displayedUserId) {
+      return crmFolders.filter(f => !f.isShared);
+    }
+    return crmFolders.filter(f => (f.ownerId === displayedUserId || (!f.ownerId && displayedUserId === currentUser?.id)) && !f.isShared);
+  }, [crmFolders, displayedUserId, isAdmin, currentUser, activeTab]);
 
   const scopedDocuments = useMemo(() => {
     if (activeTab === 'SHARED') {
@@ -84,8 +94,11 @@ export function Documents() {
     if (activeTab === 'AFFAIRES') {
       return crmDocuments.filter(d => d.affaireId || d.clientId);
     }
-    return crmDocuments.filter(d => d.uploaderId === displayedUserId && !d.isShared && !d.affaireId);
-  }, [crmDocuments, displayedUserId, activeTab]);
+    if (isAdmin && !displayedUserId) {
+      return crmDocuments.filter(d => !d.isShared && !d.affaireId);
+    }
+    return crmDocuments.filter(d => (d.uploaderId === displayedUserId || (!d.uploaderId && (!displayedUserId || displayedUserId === currentUser?.id))) && !d.isShared && !d.affaireId);
+  }, [crmDocuments, displayedUserId, isAdmin, currentUser, activeTab]);
 
   // Current level folders & files
   const currentLevelFolders = useMemo(() => {
@@ -247,7 +260,7 @@ export function Documents() {
               onChange={e => { setSelectedUserId(e.target.value); setCurrentFolderId(undefined); }}
               style={{ minWidth: '190px' }}
             >
-              <option value="">Sélectionner un utilisateur...</option>
+              <option value="">Tous les collaborateurs</option>
               {users.map(u => (
                 <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
               ))}

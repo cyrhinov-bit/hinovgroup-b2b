@@ -791,18 +791,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
             id: d.id,
             name: d.name,
             type: d.type,
-            sizeBytes: d.size_bytes,
-            filePath: d.file_path,
-            uploaderId: d.uploader_id,
-            folderId: d.folder_id,
-            createdAt: d.created_at
+            sizeBytes: d.size_bytes ?? d.sizeBytes ?? 0,
+            filePath: d.file_path || d.filePath,
+            uploaderId: d.uploader_id || d.uploaderId,
+            folderId: d.folder_id || d.folderId || undefined,
+            affaireId: d.affaire_id || d.affaireId || undefined,
+            clientId: d.client_id || d.clientId || undefined,
+            category: d.category || 'Autre',
+            isShared: d.is_shared !== undefined ? !!d.is_shared : !!d.isShared,
+            createdAt: d.created_at || d.createdAt,
+            updatedAt: d.updated_at || d.updatedAt
           }));
           const mergedCrmDocuments = mergeData(cachedCrmDocuments, parsedCrmDocuments);
           setCrmDocuments(mergedCrmDocuments); await db.documents.setItem('data', mergedCrmDocuments);
         }
 
         if (crmFoldersData && crmFoldersData.length > 0) {
-          const mergedFolders = mergeData(cachedCrmFolders, crmFoldersData);
+          const parsedFolders = crmFoldersData.map((f: any) => ({
+            id: f.id,
+            name: f.name,
+            ownerId: f.owner_id || f.ownerId,
+            parentId: f.parent_id || f.parentId || undefined,
+            color: f.color || '#0D9488',
+            isShared: f.is_shared !== undefined ? !!f.is_shared : !!f.isShared,
+            createdAt: f.created_at || f.createdAt
+          }));
+          const mergedFolders = mergeData(cachedCrmFolders, parsedFolders);
           setCrmFolders(mergedFolders); await db.crmFolders.setItem('data', mergedFolders);
         }
 
