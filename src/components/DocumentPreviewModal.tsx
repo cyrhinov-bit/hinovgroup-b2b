@@ -190,6 +190,12 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
 
   const isEditable = isTextOrCode || isCsv || isDocx;
 
+  // Mobile Detection
+  const isMobile = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+  }, []);
+
   // Load Document Data & Blob
   useEffect(() => {
     let url: string | null = null;
@@ -517,7 +523,46 @@ ${currentHtml}
             <>
               {/* 1. PDF VIEWER */}
               {isPdf && blobUrl && (
-                <iframe src={blobUrl} title={doc.name} className="doc-preview-iframe" />
+                <div className="doc-pdf-container">
+                  {isMobile && (
+                    <div className="doc-mobile-pdf-banner">
+                      <div className="doc-mobile-pdf-banner-info">
+                        <FileText size={18} color="#0D9488" />
+                        <span>Visualisation PDF optimisée pour mobile</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-primary doc-mobile-pdf-btn"
+                        onClick={() => window.open(blobUrl, '_blank')}
+                      >
+                        <Maximize2 size={14} style={{ marginRight: '6px' }} />
+                        Ouvrir en plein écran
+                      </button>
+                    </div>
+                  )}
+                  <object
+                    data={blobUrl}
+                    type="application/pdf"
+                    className="doc-preview-iframe"
+                  >
+                    <iframe src={blobUrl} title={doc.name} className="doc-preview-iframe">
+                      <div className="doc-preview-fallback">
+                        <FileText size={52} color="#0D9488" />
+                        <p>Votre navigateur mobile ne peut pas afficher directement ce fichier PDF intégré.</p>
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                          <button className="btn btn-primary" onClick={() => window.open(blobUrl, '_blank')}>
+                            <Eye size={16} style={{ marginRight: '6px' }} />
+                            Ouvrir le PDF en plein écran
+                          </button>
+                          <button className="btn btn-secondary" onClick={() => downloadCrmDocument(doc)}>
+                            <Download size={16} style={{ marginRight: '6px' }} />
+                            Télécharger le fichier
+                          </button>
+                        </div>
+                      </div>
+                    </iframe>
+                  </object>
+                </div>
               )}
 
               {/* 2. IMAGE VIEWER WITH CONTROLS */}

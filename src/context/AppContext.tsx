@@ -3292,10 +3292,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const getCrmDocumentBlob = async (doc: CrmDocument): Promise<Blob | null> => {
     let blob = await db.documentFiles.getItem<Blob>(doc.id);
     if (!blob) {
-      const { data, error } = await supabase.storage.from('crm_documents').download(doc.filePath);
-      if (!error && data) {
-        blob = data;
-        await db.documentFiles.setItem(doc.id, blob);
+      try {
+        const { data, error } = await supabase.storage.from('crm_documents').download(doc.filePath);
+        if (!error && data) {
+          blob = data;
+          await db.documentFiles.setItem(doc.id, blob);
+        } else {
+          // Fallback: try signed URL if direct download had an issue
+          const { data: signedData } = await supabase.storage.from('crm_documents').createSignedUrl(doc.filePath, 3600);
+          if (signedData?.signedUrl) {
+            const resp = await fetch(signedData.signedUrl);
+            if (resp.ok) {
+              blob = await resp.blob();
+              await db.documentFiles.setItem(doc.id, blob);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[GED] Erreur récupération document blob:', err);
       }
     }
     return blob || null;
@@ -3304,17 +3318,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const downloadCrmDocument = async (doc: CrmDocument) => {
     const blob = await getCrmDocumentBlob(doc);
     if (!blob) {
-      alert('Impossible de charger ce document.');
+      alert('Impossible de charger ce document depuis le stockage.');
       return;
     }
+    const isMobileDevice = typeof navigator !== 'undefined' && (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = doc.name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    if (isMobileDevice) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.name;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+        window.open(url, '_blank');
+      }
+    } else {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   };
 
   const addCrmFolder = async (
