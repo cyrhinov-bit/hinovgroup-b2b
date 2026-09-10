@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   X,
   Download,
@@ -20,7 +20,20 @@ import {
   Trash2,
   Search,
   Table as TableIcon,
-  Code
+  Code,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
+  List,
+  ListOrdered,
+  Undo,
+  Redo,
+  Minus
 } from 'lucide-react';
 import { useAppContext, type CrmDocument } from '../context/AppContext';
 import { DocumentEditorModal } from './DocumentEditorModal';
@@ -141,6 +154,8 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
 
   // Word (.docx) HTML content
   const [docxHtml, setDocxHtml] = useState<string>('');
+  const [initialDocxHtml, setInitialDocxHtml] = useState<string>('');
+  const wordEditorRef = useRef<HTMLDivElement>(null);
 
   // File Type Classifications
   const fileName = doc.name.toLowerCase();
@@ -173,7 +188,7 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
       /\.(txt|json|xml|html|htm|css|js|jsx|ts|tsx|log|env|sql|yml|yaml|ini|config|sh|bat)$/i.test(fileName)
     );
 
-  const isEditable = isTextOrCode || isCsv;
+  const isEditable = isTextOrCode || isCsv || isDocx;
 
   // Load Document Data & Blob
   useEffect(() => {
@@ -203,7 +218,9 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
             const arrayBuffer = await blob.arrayBuffer();
             const result = await mammoth.convertToHtml({ arrayBuffer });
             if (!isCancelled) {
-              setDocxHtml(result.value || '<p><em>Ce document Word ne contient aucun texte visible.</em></p>');
+              const htmlVal = result.value || '<p><em>Ce document Word ne contient aucun texte visible.</em></p>';
+              setDocxHtml(htmlVal);
+              setInitialDocxHtml(htmlVal);
             }
           } catch (mErr: any) {
             console.error('Erreur conversion docx:', mErr);
@@ -261,15 +278,26 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
     };
   }, [doc, getCrmDocumentBlob, isTextOrCode, isCsv, isDocx, isExcel]);
 
-  // Dirty check for text/code/csv
+  // Dirty check for text/code/csv/word
   const isDirty = useMemo(() => {
+    if (isDocx) {
+      return docxHtml !== initialDocxHtml;
+    }
     if (isCsv) {
       return stringifyCsv(csvGrid) !== initialTextContent;
     }
     return textContent !== initialTextContent;
-  }, [isCsv, csvGrid, textContent, initialTextContent]);
+  }, [isDocx, docxHtml, initialDocxHtml, isCsv, csvGrid, textContent, initialTextContent]);
 
-  // Save Text / Code / CSV Modifications
+  // Word Rich Text Commands
+  const executeWordCommand = (command: string, value: string = '') => {
+    document.execCommand(command, false, value);
+    if (wordEditorRef.current) {
+      setDocxHtml(wordEditorRef.current.innerHTML);
+    }
+  };
+
+  // Save Text / Code / CSV / Word Modifications
   const handleSaveContent = async () => {
     if (!isEditable) return;
     setIsSavingContent(true);
@@ -277,11 +305,34 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
 
     try {
       let finalContent = textContent;
+      let mimeType = doc.type || 'text/plain';
+
       if (isCsv) {
         finalContent = stringifyCsv(csvGrid);
+        mimeType = 'text/csv';
+      } else if (isDocx) {
+        const currentHtml = wordEditorRef.current ? wordEditorRef.current.innerHTML : docxHtml;
+        finalContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${doc.name}</title>
+  <style>
+    body { font-family: 'Calibri', 'Segoe UI', Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #1E293B; margin: 40px; }
+    h1, h2, h3, h4 { color: #0F172A; }
+    table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+    td, th { border: 1px solid #CBD5E1; padding: 8px 12px; }
+  </style>
+</head>
+<body>
+${currentHtml}
+</body>
+</html>`;
+        mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      } else if (isMarkdown) {
+        mimeType = 'text/markdown';
       }
 
-      const mimeType = isCsv ? 'text/csv' : isMarkdown ? 'text/markdown' : doc.type || 'text/plain';
       const updatedBlob = new Blob([finalContent], { type: mimeType });
 
       await updateCrmDocument(
@@ -293,7 +344,14 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
         updatedBlob
       );
 
-      setInitialTextContent(finalContent);
+      if (isDocx) {
+        const currentHtml = wordEditorRef.current ? wordEditorRef.current.innerHTML : docxHtml;
+        setInitialDocxHtml(currentHtml);
+        setDocxHtml(currentHtml);
+      } else {
+        setInitialTextContent(finalContent);
+      }
+
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
 
@@ -500,13 +558,158 @@ export function DocumentPreviewModal({ document: initialDoc, onClose, onDocument
                 </div>
               )}
 
-              {/* 3. WORD (.docx) FORMATTED DOCUMENT VIEWER */}
+              {/* 3. WORD (.docx) FORMATTED DOCUMENT VIEWER & RICH TEXT EDITOR */}
               {isDocx && (
-                <div className="doc-word-wrapper">
-                  <div
-                    className="doc-word-container"
-                    dangerouslySetInnerHTML={{ __html: docxHtml }}
-                  />
+                <div className="doc-word-editor-wrapper">
+                  {activeMode === 'EDIT' && (
+                    <div className="doc-word-toolbar">
+                      <div className="doc-word-toolbar-group">
+                        <select
+                          className="doc-word-select"
+                          onChange={e => executeWordCommand('formatBlock', e.target.value)}
+                          defaultValue="p"
+                        >
+                          <option value="p">Texte normal</option>
+                          <option value="h1">Titre 1 (Principal)</option>
+                          <option value="h2">Titre 2 (Section)</option>
+                          <option value="h3">Titre 3 (Sous-section)</option>
+                          <option value="blockquote">Citation</option>
+                          <option value="pre">Bloc de code</option>
+                        </select>
+                      </div>
+
+                      <div className="doc-word-toolbar-group">
+                        <button
+                          type="button"
+                          className="doc-word-btn"
+                          onClick={() => executeWordCommand('bold')}
+                          title="Gras (Ctrl+B)"
+                        >
+                          <Bold size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="doc-word-btn"
+                          onClick={() => executeWordCommand('italic')}
+                          title="Italique (Ctrl+I)"
+                        >
+                          <Italic size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="doc-word-btn"
+                          onClick={() => executeWordCommand('underline')}
+                          title="Souligné (Ctrl+U)"
+                        >
+                          <Underline size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="doc-word-btn"
+                          onClick={() => executeWordCommand('strikeThrough')}
+                          title="Barré"
+                        >
+                          <Strikethrough size={15} />
+                        </button>
+                      </div>
+
+                      <div className="doc-word-toolbar-group">
+                        <button
+                          type="button"
+                          className="doc-word-btn"
+                          onClick={() => executeWordCommand('justifyLeft')}
+                          title="Aligner à gauche"
+                        >
+                          <AlignLeft size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="doc-word-btn"
+                          onClick={() => executeWordCommand('justifyCenter')}
+                          title="Centrer"
+                        >
+                          <AlignCenter size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="doc-word-btn"
+                          onClick={() => executeWordCommand('justifyRight')}
+                          title="Aligner à droite"
+                        >
+                          <AlignRight size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="doc-word-btn"
+                          onClick={() => executeWordCommand('justifyFull')}
+                          title="Justifier"
+                        >
+                          <AlignJustify size={15} />
+                        </button>
+                      </div>
+
+                      <div className="doc-word-toolbar-group">
+                        <button
+                          type="button"
+                          className="doc-word-btn"
+                          onClick={() => executeWordCommand('insertUnorderedList')}
+                          title="Liste à puces"
+                        >
+                          <List size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="doc-word-btn"
+                          onClick={() => executeWordCommand('insertOrderedList')}
+                          title="Liste numérotée"
+                        >
+                          <ListOrdered size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="doc-word-btn"
+                          onClick={() => executeWordCommand('insertHorizontalRule')}
+                          title="Insérer une ligne de séparation"
+                        >
+                          <Minus size={15} />
+                        </button>
+                      </div>
+
+                      <div className="doc-word-toolbar-group">
+                        <button
+                          type="button"
+                          className="doc-word-btn"
+                          onClick={() => executeWordCommand('undo')}
+                          title="Annuler (Ctrl+Z)"
+                        >
+                          <Undo size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="doc-word-btn"
+                          onClick={() => executeWordCommand('redo')}
+                          title="Rétablir (Ctrl+Y)"
+                        >
+                          <Redo size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="doc-word-wrapper">
+                    <div
+                      ref={wordEditorRef}
+                      className="doc-word-container"
+                      contentEditable={activeMode === 'EDIT'}
+                      suppressContentEditableWarning
+                      onInput={() => {
+                        if (wordEditorRef.current) {
+                          setDocxHtml(wordEditorRef.current.innerHTML);
+                        }
+                      }}
+                      dangerouslySetInnerHTML={{ __html: docxHtml }}
+                    />
+                  </div>
                 </div>
               )}
 
