@@ -1,13 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Save, FileText, Trash2, Percent, ArrowLeft, TrendingUp, 
-  Calendar, ShieldCheck, CreditCard, Clock, FileCheck2, UserCheck
+  Calendar, ShieldCheck, CreditCard, Clock, FileCheck2, UserCheck, Eye
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import type { QuoteLine } from '../context/AppContext';
-import { generateQuotePdf } from '../lib/pdfUtils';
+import { generateQuotePdf, downloadBlob } from '../lib/pdfUtils';
+import { ReportPdfPreview, type ReportPdfPreviewData } from '../components/ReportPdfPreview';
 import './QuoteCreation.css';
 
 const COMMON_UNITS = [
@@ -80,6 +81,7 @@ export function QuoteCreation() {
   const [style, setStyle] = useState<'Classique' | 'Moderne' | 'Minimaliste'>(sourceQuote?.style as any || 'Classique');
   const [accentColor, setAccentColor] = useState(sourceQuote?.accentColor || '#009688');
   const [discountPercent, setDiscountPercent] = useState<number>(sourceQuote?.discountPercent || 0);
+  const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
 
   // Date and Validity
   const todayStr = new Date().toISOString().split('T')[0];
@@ -258,7 +260,53 @@ export function QuoteCreation() {
   const globalMargin = total - totalCost;
   const getMarginColor = (margin: number) => margin >= 0 ? 'var(--color-success)' : 'var(--color-error)';
 
-  const handleSave = async (status: 'Brouillon' | 'Envoyé', preview: boolean = false) => {
+  const buildCurrentQuoteData = (statusOverride?: any) => {
+    const newId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
+    const quoteNumber = sourceQuote?.quoteNumber || nextSequentialNumber;
+
+    return {
+      id: sourceQuote?.id || newId,
+      quoteNumber,
+      clientId,
+      commercialId: currentUser?.id || '',
+      serviceId: currentUser?.role === 'Directeur' ? serviceId : (currentUser?.serviceId || ''),
+      affaireId: affaireId || undefined,
+      subject,
+      lines: lines.map((l, idx) => ({ ...l, id: (l as any).id || (crypto.randomUUID ? crypto.randomUUID() : `ql-${Date.now()}-${idx}`) })),
+      subtotal: netSubtotal,
+      discountPercent: discountPercent || 0,
+      discountAmount,
+      total,
+      status: statusOverride || (sourceQuote ? sourceQuote.status : status),
+      date: quoteDate || todayStr,
+      validUntil: validUntil || undefined,
+      paymentTerms: paymentTerms || undefined,
+      notes: notes || undefined,
+      signatoryName: signatoryName || undefined,
+      signatoryRole: signatoryRole || undefined,
+      style,
+      accentColor
+    };
+  };
+
+  const handleInstantPreview = () => {
+    if (lines.length === 0) {
+      alert("Veuillez ajouter au moins une ligne d'article ou prestation pour prévisualiser le devis.");
+      return;
+    }
+    const quoteData = buildCurrentQuoteData();
+    const client = clients.find(c => c.id === clientId);
+    const pdfBlob = generateQuotePdf(quoteData, client, settings);
+    const blobUrl = URL.createObjectURL(pdfBlob);
+    setPreview({
+      blobUrl,
+      filename: `Devis_${quoteData.quoteNumber}.pdf`,
+      title: `Aperçu en direct : Devis N° ${quoteData.quoteNumber}`,
+      onDownload: () => downloadBlob(pdfBlob, `Devis_${quoteData.quoteNumber}.pdf`)
+    });
+  };
+
+  const handleSave = async (statusToSet: 'Brouillon' | 'Envoyé', openPreviewModal: boolean = false) => {
     if (!clientId) {
       alert("Veuillez sélectionner un client");
       return;
@@ -274,32 +322,7 @@ export function QuoteCreation() {
       return;
     }
 
-    const newId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
-    const quoteNumber = sourceQuote?.quoteNumber || nextSequentialNumber;
-
-    const quoteData = {
-      id: sourceQuote?.id || newId,
-      quoteNumber,
-      clientId,
-      commercialId: currentUser?.id || '',
-      serviceId: currentUser?.role === 'Directeur' ? serviceId : (currentUser?.serviceId || ''),
-      affaireId: affaireId || undefined,
-      subject,
-      lines: lines.map((l) => ({ ...l, id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString() })),
-      subtotal: netSubtotal,
-      discountPercent: discountPercent || 0,
-      discountAmount,
-      total,
-      status: sourceQuote ? sourceQuote.status : status,
-      date: quoteDate || todayStr,
-      validUntil: validUntil || undefined,
-      paymentTerms: paymentTerms || undefined,
-      notes: notes || undefined,
-      signatoryName: signatoryName || undefined,
-      signatoryRole: signatoryRole || undefined,
-      style,
-      accentColor
-    };
+    const quoteData = buildCurrentQuoteData(statusToSet);
 
     try {
       if (sourceQuote) {
@@ -308,14 +331,21 @@ export function QuoteCreation() {
         await addQuote(quoteData);
       }
 
-      if (preview) {
+      localStorage.removeItem(draftKey);
+
+      if (openPreviewModal) {
         const client = clients.find(c => c.id === clientId);
         const pdfBlob = generateQuotePdf(quoteData, client, settings);
-        const pdfUrl = URL.createObjectURL(pdfBlob);
-        window.open(pdfUrl, '_blank');
+        const blobUrl = URL.createObjectURL(pdfBlob);
+        setPreview({
+          blobUrl,
+          filename: `Devis_${quoteData.quoteNumber}.pdf`,
+          title: `Devis enregistré N° ${quoteData.quoteNumber}`,
+          onDownload: () => downloadBlob(pdfBlob, `Devis_${quoteData.quoteNumber}.pdf`)
+        });
+      } else {
+        navigate('/devis');
       }
-      localStorage.removeItem(draftKey);
-      navigate('/devis');
     } catch (err) {
       console.error('Erreur lors de la sauvegarde du devis:', err);
       alert('Une erreur est survenue lors de la sauvegarde du devis.');
@@ -759,14 +789,24 @@ export function QuoteCreation() {
           }} style={{ marginRight: '8px' }}>
             <Trash2 size={16} style={{ marginRight: '4px' }} /> Réinitialiser
           </button>
+          <button type="button" className="btn btn-secondary" onClick={handleInstantPreview} style={{ marginRight: '8px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <Eye size={16} /> Aperçu en direct
+          </button>
           <button className="btn btn-secondary" onClick={() => handleSave('Brouillon')}>
             <Save size={16} style={{ marginRight: '8px' }} /> Sauvegarder (Brouillon)
           </button>
           <button className="btn btn-primary" onClick={() => handleSave('Brouillon', true)} style={{ marginLeft: '8px' }}>
-            <FileText size={16} style={{ marginRight: '8px' }} /> Générer & Prévisualiser le PDF
+            <FileText size={16} style={{ marginRight: '8px' }} /> Enregistrer & Prévisualiser PDF
           </button>
         </div>
       </div>
+      <ReportPdfPreview 
+        preview={preview} 
+        onClose={() => {
+          if (preview?.blobUrl) URL.revokeObjectURL(preview.blobUrl);
+          setPreview(null);
+        }} 
+      />
     </div>
   );
 }

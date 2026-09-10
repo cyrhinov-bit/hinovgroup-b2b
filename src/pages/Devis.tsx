@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Download, Send, MessageCircle, CheckCircle2, Edit2, Trash2, MoreVertical, Briefcase } from 'lucide-react';
+import { Plus, Download, Send, MessageCircle, CheckCircle2, Edit2, Trash2, MoreVertical, Briefcase, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -7,6 +7,7 @@ import { useConfirm } from '../components/ConfirmModal';
 import { generateQuotePdf, downloadBlob } from '../lib/pdfUtils';
 import { SendModal } from '../components/SendModal';
 import { SaleModal } from '../components/SaleModal';
+import { ReportPdfPreview, type ReportPdfPreviewData } from '../components/ReportPdfPreview';
 import type { Quote } from '../context/AppContext';
 
 export function Devis() {
@@ -18,6 +19,7 @@ export function Devis() {
   const [statusFilter, setStatusFilter] = useState('');
   const [activeSendQuote, setActiveSendQuote] = useState<Quote | null>(null);
   const [activeSaleQuote, setActiveSaleQuote] = useState<Quote | null>(null);
+  const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
 
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Inconnu';
 
@@ -46,6 +48,18 @@ export function Devis() {
 
   const handleSend = (q: Quote) => {
     setActiveSendQuote(q);
+  };
+
+  const handlePreview = (q: Quote) => {
+    const client = clients.find(c => c.id === q.clientId);
+    const blob = generateQuotePdf(q, client, settings);
+    const blobUrl = URL.createObjectURL(blob);
+    setPreview({
+      blobUrl,
+      filename: `Devis_${q.quoteNumber}.pdf`,
+      title: `Aperçu du Devis N° ${q.quoteNumber}`,
+      onDownload: () => downloadBlob(blob, `Devis_${q.quoteNumber}.pdf`)
+    });
   };
 
   return (
@@ -140,6 +154,9 @@ export function Devis() {
                     <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => navigate(`/devis/nouveau?editId=${q.id}`)} title="Modifier">
                       <Edit2 size={18} />
                     </button>
+                    <button className="icon-button" style={{ color: '#0D9488' }} onClick={() => handlePreview(q)} title="Aperçu PDF">
+                      <Eye size={18} />
+                    </button>
                     <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => {
                       const client = clients.find(c => c.id === q.clientId);
                       const blob = generateQuotePdf(q, client, settings);
@@ -206,6 +223,13 @@ export function Devis() {
           onClose={() => setActiveSaleQuote(null)}
         />
       )}
+      <ReportPdfPreview 
+        preview={preview} 
+        onClose={() => {
+          if (preview?.blobUrl) URL.revokeObjectURL(preview.blobUrl);
+          setPreview(null);
+        }} 
+      />
     </div>
   );
 }
