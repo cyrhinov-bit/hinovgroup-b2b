@@ -13,7 +13,12 @@ export default function PosInventory() {
   const [viewingInventory, setViewingInventory] = useState<IPosInventory | null>(null);
   const [productSearch, setProductSearch] = useState('');
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; inventoryId: string | null }>({ isOpen: false, inventoryId: null });
-  const [form, setForm] = useState({ notes: '', lines: posProducts.map(p => ({ id: uuidv4(), productId: p.id, expectedQty: p.quantity, countedQty: p.quantity, difference: 0 })) });
+  const [form, setForm] = useState({ 
+    notes: '', 
+    lines: posProducts
+      .filter(p => p.family !== 'Service')
+      .map(p => ({ id: uuidv4(), productId: p.id, expectedQty: p.quantity, countedQty: p.quantity, difference: 0 })) 
+  });
 
   const updateLine = (id: string, field: string, value: any) => {
     const lines = form.lines.map(l => {
@@ -36,7 +41,12 @@ export default function PosInventory() {
     };
     await addPosInventory(inventory);
     setShowForm(false);
-    setForm({ notes: '', lines: posProducts.map(p => ({ id: uuidv4(), productId: p.id, expectedQty: p.quantity, countedQty: p.quantity, difference: 0 })) });
+    setForm({ 
+      notes: '', 
+      lines: posProducts
+        .filter(p => p.family !== 'Service')
+        .map(p => ({ id: uuidv4(), productId: p.id, expectedQty: p.quantity, countedQty: p.quantity, difference: 0 })) 
+    });
   };
 
   const confirmDelete = async () => {
@@ -62,7 +72,12 @@ export default function PosInventory() {
         </div>
         <button onClick={() => { 
           setViewingInventory(null); 
-          setForm({ notes: '', lines: posProducts.map(p => ({ id: uuidv4(), productId: p.id, expectedQty: p.quantity, countedQty: p.quantity, difference: 0 })) });
+          setForm({ 
+            notes: '', 
+            lines: posProducts
+              .filter(p => p.family !== 'Service')
+              .map(p => ({ id: uuidv4(), productId: p.id, expectedQty: p.quantity, countedQty: p.quantity, difference: 0 })) 
+          });
           setShowForm(true); 
         }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 }}>
           <Plus size={16} /> Nouvel inventaire

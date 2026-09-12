@@ -8,12 +8,13 @@ export default function DashboardPos() {
   const navigate = useNavigate();
 
   const totalProducts = posProducts.length;
-  const totalPurchaseStockValue = posProducts.reduce((sum, p) => sum + (p.purchasePrice || 0) * (p.quantity || 0), 0);
-  const totalSellingStockValue = posProducts.reduce((sum, p) => sum + (p.sellingPrice || 0) * (p.quantity || 0), 0);
+  const physicalProducts = posProducts.filter(p => p.family !== 'Service');
+  const totalPurchaseStockValue = physicalProducts.reduce((sum, p) => sum + (p.purchasePrice || 0) * (p.quantity || 0), 0);
+  const totalSellingStockValue = physicalProducts.reduce((sum, p) => sum + (p.sellingPrice || 0) * (p.quantity || 0), 0);
   const globalStockMargin = totalSellingStockValue - totalPurchaseStockValue;
   const globalStockMarginRate = totalSellingStockValue > 0 ? ((globalStockMargin / totalSellingStockValue) * 100).toFixed(1) : '0';
 
-  const lowStockProducts = posProducts.filter(p => p.quantity <= p.minStock && p.minStock > 0);
+  const lowStockProducts = physicalProducts.filter(p => p.quantity <= p.minStock && p.minStock > 0);
   const today = todayLocalKey();
   const todayTransactions = posTransactions.filter(t => toLocalDayKey(t.date) === today && t.status === 'Validée');
   const todayRevenue = todayTransactions.reduce((sum, t) => sum + t.total, 0);

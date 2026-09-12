@@ -64,11 +64,13 @@ export class StockService {
   }
 
   calculateStockValue(products: PosProduct[]): number {
-    return products.reduce((sum, p) => sum + (p.purchasePrice * p.quantity), 0);
+    return products
+      .filter(p => p.family !== 'Service')
+      .reduce((sum, p) => sum + ((p.purchasePrice || 0) * (p.quantity || 0)), 0);
   }
 
   getLowStockProducts(products: PosProduct[]): PosProduct[] {
-    return products.filter(p => p.quantity <= p.minStock && p.minStock > 0);
+    return products.filter(p => p.family !== 'Service' && p.quantity <= p.minStock && p.minStock > 0);
   }
 }
 

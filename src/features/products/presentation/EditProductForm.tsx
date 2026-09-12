@@ -44,7 +44,13 @@ export default function EditProductForm({ product, categories, brands, suppliers
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onComplete(product.id, formData, imageDataUri);
+    const isService = formData.family === 'Service';
+    const payload = {
+      ...formData,
+      quantity: isService ? 0 : (formData.quantity ?? 0),
+      minStock: isService ? 0 : (formData.minStock ?? 0),
+    };
+    onComplete(product.id, payload, imageDataUri);
   };
 
   const previewSrc = imageDataUri || getImageUrl(product);
@@ -148,16 +154,6 @@ export default function EditProductForm({ product, categories, brands, suppliers
       </div>
 
       <div>
-        <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>Stock (Quantité)</label>
-        <input
-          type="number"
-          className="table-input"
-          value={formData.quantity ?? 0}
-          onChange={e => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
-        />
-      </div>
-
-      <div>
         <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>Famille</label>
         <select
           className="table-input"
@@ -167,6 +163,8 @@ export default function EditProductForm({ product, categories, brands, suppliers
             if (newFamily === 'Livre' && (formData.sellingPrice || 0) > 0) {
               const sp = formData.sellingPrice || 0;
               setFormData({ ...formData, family: newFamily, purchasePrice: Math.round(sp * 0.75) });
+            } else if (newFamily === 'Service') {
+              setFormData({ ...formData, family: newFamily, quantity: 0 });
             } else {
               setFormData({ ...formData, family: newFamily });
             }
@@ -176,6 +174,27 @@ export default function EditProductForm({ product, categories, brands, suppliers
           <option value="Fourniture">Fourniture</option>
           <option value="Service">Service / Impression</option>
         </select>
+      </div>
+
+      <div>
+        {formData.family === 'Service' ? (
+          <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 'var(--radius-md)', padding: '10px 12px', marginTop: '4px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#7c3aed' }}>Prestation non stockée</div>
+            <div style={{ fontSize: '11px', color: '#6d28d9', marginTop: '2px' }}>
+              Quantité non comptabilisée dans le stock.
+            </div>
+          </div>
+        ) : (
+          <>
+            <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>Stock (Quantité)</label>
+            <input
+              type="number"
+              className="table-input"
+              value={formData.quantity ?? 0}
+              onChange={e => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
+            />
+          </>
+        )}
       </div>
 
       <div>

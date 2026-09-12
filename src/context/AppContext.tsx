@@ -301,13 +301,13 @@ export const DEFAULT_SERVICE_CATEGORY: PosCategory = {
 };
 
 export const DEFAULT_SERVICE_PRODUCTS: PosProduct[] = [
-  { id: '11111111-0000-0000-0000-000000000001', reference: 'SRV-COP-NB-R', name: 'Photocopie A4 N&B (Recto)', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 25, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Photocopie monochrome noir & blanc simple face A4' },
-  { id: '11111111-0000-0000-0000-000000000002', reference: 'SRV-COP-NB-RV', name: 'Photocopie A4 N&B (Recto-Verso)', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 50, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Photocopie monochrome noir & blanc recto/verso A4' },
-  { id: '11111111-0000-0000-0000-000000000003', reference: 'SRV-IMP-NB', name: 'Impression A4 N&B', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 50, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Impression document noir & blanc A4' },
-  { id: '11111111-0000-0000-0000-000000000004', reference: 'SRV-IMP-COL', name: 'Impression A4 Couleur', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 150, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Impression document couleur A4' },
-  { id: '11111111-0000-0000-0000-000000000005', reference: 'SRV-SCAN-A4', name: 'Numérisation / Scan Document', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 100, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Numérisation document vers PDF / Clé USB' },
-  { id: '11111111-0000-0000-0000-000000000006', reference: 'SRV-PLAST-A4', name: 'Plastification Document A4', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 200, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Plastification thermique haute protection A4' },
-  { id: '11111111-0000-0000-0000-000000000007', reference: 'SRV-RELIURE', name: 'Reliure Document (Spirale)', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 500, quantity: 99999, minStock: 0, isActive: true, status: 'Active', description: 'Reliure spirale plastique avec transparents' },
+  { id: '11111111-0000-0000-0000-000000000001', reference: 'SRV-COP-NB-R', name: 'Photocopie A4 N&B (Recto)', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 25, quantity: 0, minStock: 0, isActive: true, status: 'Active', description: 'Photocopie monochrome noir & blanc simple face A4' },
+  { id: '11111111-0000-0000-0000-000000000002', reference: 'SRV-COP-NB-RV', name: 'Photocopie A4 N&B (Recto-Verso)', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 50, quantity: 0, minStock: 0, isActive: true, status: 'Active', description: 'Photocopie monochrome noir & blanc recto/verso A4' },
+  { id: '11111111-0000-0000-0000-000000000003', reference: 'SRV-IMP-NB', name: 'Impression A4 N&B', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 50, quantity: 0, minStock: 0, isActive: true, status: 'Active', description: 'Impression document noir & blanc A4' },
+  { id: '11111111-0000-0000-0000-000000000004', reference: 'SRV-IMP-COL', name: 'Impression A4 Couleur', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 150, quantity: 0, minStock: 0, isActive: true, status: 'Active', description: 'Impression document couleur A4' },
+  { id: '11111111-0000-0000-0000-000000000005', reference: 'SRV-SCAN-A4', name: 'Numérisation / Scan Document', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 100, quantity: 0, minStock: 0, isActive: true, status: 'Active', description: 'Numérisation document vers PDF / Clé USB' },
+  { id: '11111111-0000-0000-0000-000000000006', reference: 'SRV-PLAST-A4', name: 'Plastification Document A4', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 200, quantity: 0, minStock: 0, isActive: true, status: 'Active', description: 'Plastification thermique haute protection A4' },
+  { id: '11111111-0000-0000-0000-000000000007', reference: 'SRV-RELIURE', name: 'Reliure Document (Spirale)', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 500, quantity: 0, minStock: 0, isActive: true, status: 'Active', description: 'Reliure spirale plastique avec transparents' },
 ];
 
 // Product Module Interfaces
@@ -2767,6 +2767,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const map = new Map<string, number>();
     for (const d of deltas) {
       if (!d.productId) continue;
+      const product = posProducts.find(p => p.id === d.productId);
+      if (product && product.family === 'Service') continue; // Les services (photocopies, scans...) ne sont pas stockés
       map.set(d.productId, (map.get(d.productId) || 0) + d.quantity);
     }
     if (map.size === 0) return;

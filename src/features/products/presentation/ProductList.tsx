@@ -54,6 +54,10 @@ export default function ProductList() {
   const getMissingFields = (product: any) => {
     const missing: string[] = [];
     if (!product.family) missing.push('Famille');
+    if (product.family === 'Service') {
+      // Services only need name, reference and selling price
+      return missing;
+    }
     if (!product.categoryId) missing.push('Catégorie');
     if (!product.brandId) missing.push('Marque');
     if (!product.supplierId) missing.push('Fournisseur');
@@ -148,8 +152,12 @@ export default function ProductList() {
                       <ProductImage product={product} size={40} />
                       <div>
                         <div style={{ fontSize: '14px', fontWeight: 500 }}>{product.name}</div>
-                        <span style={{ fontSize: '12px', color: product.family === 'Livre' ? 'var(--color-primary)' : 'var(--color-success)' }}>
-                          {product.family}
+                        <span style={{ 
+                          fontSize: '12px', 
+                          color: product.family === 'Livre' ? 'var(--color-primary)' : product.family === 'Service' ? '#7c3aed' : 'var(--color-success)',
+                          fontWeight: 500
+                        }}>
+                          {product.family === 'Service' ? '🖨️ Service' : product.family}
                         </span>
                       </div>
                     </div>
@@ -165,10 +173,18 @@ export default function ProductList() {
                     </div>
                   </td>
                   <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: '13px' }}>
-                    <span style={{ fontWeight: product.quantity <= product.minStock ? 'bold' : 'normal', color: product.quantity <= product.minStock ? 'var(--color-error)' : 'var(--color-text)' }}>
-                      {product.quantity}
-                    </span>
-                    {product.minStock > 0 && <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}> / {product.minStock}</span>}
+                    {product.family === 'Service' ? (
+                      <span style={{ padding: '3px 8px', borderRadius: '12px', background: '#f5f3ff', color: '#7c3aed', fontSize: '11px', fontWeight: 600 }}>
+                        Non stocké
+                      </span>
+                    ) : (
+                      <>
+                        <span style={{ fontWeight: product.quantity <= product.minStock ? 'bold' : 'normal', color: product.quantity <= product.minStock ? 'var(--color-error)' : 'var(--color-text)' }}>
+                          {product.quantity}
+                        </span>
+                        {product.minStock > 0 && <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}> / {product.minStock}</span>}
+                      </>
+                    )}
                   </td>
                   <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right', fontWeight: 600 }}>{product.sellingPrice.toLocaleString()} FCFA</td>
                   <td style={{ padding: '12px 16px', textAlign: 'center' }}>

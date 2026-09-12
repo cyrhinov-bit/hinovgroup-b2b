@@ -182,9 +182,15 @@ export default function PosProducts() {
                         '-'
                       )}
                     </td>
-                    <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right' }}>{product.purchasePrice.toLocaleString()} FCFA</td>
-                    <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right', fontWeight: 600 }}>{product.sellingPrice.toLocaleString()} FCFA</td>
-                    <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right' }}>{product.quantity}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right' }}>
+                      {product.family === 'Service' ? (
+                        <span style={{ padding: '2px 8px', borderRadius: '10px', background: '#f5f3ff', color: '#7c3aed', fontSize: '11px', fontWeight: 600 }}>
+                          Non stocké
+                        </span>
+                      ) : (
+                        product.quantity
+                      )}
+                    </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                       <button
                         onClick={() => setStudioProduct(product)}

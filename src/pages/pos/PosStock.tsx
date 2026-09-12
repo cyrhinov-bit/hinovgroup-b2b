@@ -8,12 +8,13 @@ export default function PosStock() {
   const { posProducts } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
 
-  const lowStock = posProducts.filter(p => p.quantity <= p.minStock && p.minStock > 0);
-  const outOfStock = posProducts.filter(p => p.quantity === 0);
+  const physicalProducts = posProducts.filter(p => p.family !== 'Service');
+  const lowStock = physicalProducts.filter(p => p.quantity <= p.minStock && p.minStock > 0);
+  const outOfStock = physicalProducts.filter(p => p.quantity === 0);
   
   // Rendre les calculs robustes si un produit n'a pas de prix défini
-  const totalStockValue = posProducts.reduce((sum, p) => sum + (p.purchasePrice || 0) * (p.quantity || 0), 0);
-  const totalSellingValue = posProducts.reduce((sum, p) => sum + (p.sellingPrice || 0) * (p.quantity || 0), 0);
+  const totalStockValue = physicalProducts.reduce((sum, p) => sum + (p.purchasePrice || 0) * (p.quantity || 0), 0);
+  const totalSellingValue = physicalProducts.reduce((sum, p) => sum + (p.sellingPrice || 0) * (p.quantity || 0), 0);
 
   const filteredProducts = posProducts.filter(p => {
     if (!searchTerm || !searchTerm.trim()) return true;
@@ -106,18 +107,20 @@ export default function PosStock() {
                         <ProductImage product={p} size={36} />
                         <div>
                           <div style={{ fontSize: '14px', fontWeight: 500 }}>{p.name}</div>
-                          <span style={{ fontSize: '12px', color: p.family === 'Livre' ? 'var(--color-primary)' : 'var(--color-success)' }}>
+                          <span style={{ fontSize: '12px', color: p.family === 'Livre' ? 'var(--color-primary)' : p.family === 'Service' ? '#8b5cf6' : 'var(--color-success)' }}>
                             {p.family}
                           </span>
                         </div>
                       </div>
                     </td>
                     <td style={{ padding: '10px 12px', fontSize: '14px', fontFamily: 'monospace', color: 'var(--color-text-muted)' }}>{p.reference}</td>
-                    <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', fontWeight: 500, color: p.quantity <= p.minStock ? 'var(--color-error)' : 'inherit' }}>{p.quantity}</td>
+                    <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', fontWeight: 500, color: p.family === 'Service' ? '#8b5cf6' : p.quantity <= p.minStock ? 'var(--color-error)' : 'inherit' }}>
+                      {p.family === 'Service' ? 'Non stocké' : p.quantity}
+                    </td>
                     <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right' }}>{p.purchasePrice ? p.purchasePrice.toLocaleString() + ' FCFA' : '-'}</td>
-                    <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', fontWeight: 600 }}>{rowValue.toLocaleString()} FCFA</td>
+                    <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', fontWeight: 600 }}>{p.family === 'Service' ? '-' : `${rowValue.toLocaleString()} FCFA`}</td>
                     <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right' }}>{p.sellingPrice ? p.sellingPrice.toLocaleString() + ' FCFA' : '-'}</td>
-                    <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', fontWeight: 600 }}>{sellingRowValue.toLocaleString()} FCFA</td>
+                    <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', fontWeight: 600 }}>{p.family === 'Service' ? '-' : `${sellingRowValue.toLocaleString()} FCFA`}</td>
                   </tr>
                 );
               })}

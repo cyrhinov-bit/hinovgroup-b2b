@@ -119,6 +119,7 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
     
     if (initialProduct) {
       // Edit mode
+      const isService = formData.family === 'Service';
       await updatePosProduct(initialProduct.id, {
         reference,
         barcode: formData.barcode || '',
@@ -126,7 +127,7 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
         name: formData.name || reference,
         purchasePrice: Number(formData.purchasePrice) || 0,
         sellingPrice: Number(formData.sellingPrice) || 0,
-        quantity: Number(formData.quantity) || 0,
+        quantity: isService ? 0 : (Number(formData.quantity) || 0),
         family: formData.family,
       });
 
@@ -139,8 +140,8 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
     } else {
       // Create mode
       const id = uuidv4();
-
-      const initialQuantity = Number(formData.quantity) || 0;
+      const isService = formData.family === 'Service';
+      const initialQuantity = isService ? 0 : (Number(formData.quantity) || 0);
 
       const newProduct: PosProduct = {
         id,
@@ -154,7 +155,7 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
         purchasePrice: Number(formData.purchasePrice) || 0,
         sellingPrice: Number(formData.sellingPrice) || 0,
         quantity: initialQuantity,
-        minStock: 10,
+        minStock: isService ? 0 : 10,
         imageUrl: '',
         isActive: true,
         family: formData.family,
@@ -166,7 +167,7 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
         await setProductImage(newProduct, imageDataUri);
       }
 
-      if (initialQuantity > 0) {
+      if (initialQuantity > 0 && !isService) {
         await addPosStockMovement({
           productId: id,
           type: 'Ajustement Manuel',
@@ -344,10 +345,15 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
               <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
-                <span>Prix d'achat unitaire *</span>
+                <span>Prix d'achat unitaire {formData.family === 'Service' ? '(optionnel)' : '*'}</span>
                 {formData.family === 'Livre' && (
                   <span style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 500 }}>
                     (Auto: 75% du prix de vente)
+                  </span>
+                )}
+                {formData.family === 'Service' && (
+                  <span style={{ fontSize: '11px', color: '#7c3aed', fontWeight: 500 }}>
+                    (Prestation de service)
                   </span>
                 )}
               </label>
@@ -358,24 +364,33 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
                 placeholder="0 FCFA"
                 value={formData.purchasePrice}
                 onChange={(e) => setFormData({ ...formData, purchasePrice: e.target.value === '' ? '' : parseFloat(e.target.value) })}
-                required
+                required={formData.family !== 'Service'}
               />
             </div>
 
-            <div>
-              <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
-                Quantité *
-              </label>
-              <input
-                type="number"
-                className="table-input"
-                placeholder="0"
-                min="0"
-                value={formData.quantity}
-                onChange={(e) => setFormData({ ...formData, quantity: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value)) })}
-                required
-              />
-            </div>
+            {formData.family === 'Service' ? (
+              <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 'var(--radius-md)', padding: '10px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#7c3aed' }}>Prestation non stockée</div>
+                <div style={{ fontSize: '11px', color: '#6d28d9', marginTop: '2px' }}>
+                  Ce service n'a pas de stock physique et ne sera pas comptabilisé dans la valorisation du stock.
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
+                  Quantité en stock *
+                </label>
+                <input
+                  type="number"
+                  className="table-input"
+                  placeholder="0"
+                  min="0"
+                  value={formData.quantity}
+                  onChange={(e) => setFormData({ ...formData, quantity: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value)) })}
+                  required
+                />
+              </div>
+            )}
 
             <div>
               <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
