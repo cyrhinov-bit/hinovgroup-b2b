@@ -512,6 +512,22 @@ interface AppState {
 
   const defaultSettings: AppSettings = { companyName: 'Hinov', companyLogo: '', companyAddress: '', companySiret: '', companyTva: '', defaultTerms: '', commissionRate: 10 };
 
+// Helper pour éviter tout blocage réseau infini sur les requêtes asynchrones
+const withTimeout = async <T,>(promiseOrThenable: any, ms: number = 15000): Promise<T> => {
+  let timer: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Délai dépassé')), ms);
+  });
+  try {
+    return await Promise.race([
+      Promise.resolve(promiseOrThenable),
+      timeoutPromise
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 const AppContext = createContext<AppState | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -546,10 +562,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [loading, setLoading] = useState(true);
   // POS state
-  const [posCategories, setPosCategories] = useState<PosCategory[]>([]);
+  const [posCategories, setPosCategories] = useState<PosCategory[]>([DEFAULT_SERVICE_CATEGORY]);
   const [posBrands, setPosBrands] = useState<PosBrand[]>([]);
   const [posSuppliers, setPosSuppliers] = useState<PosSupplier[]>([]);
-  const [posProducts, setPosProducts] = useState<PosProduct[]>([]);
+  const [posProducts, setPosProducts] = useState<PosProduct[]>(DEFAULT_SERVICE_PRODUCTS);
   const [posStockEntries, setPosStockEntries] = useState<PosStockEntry[]>([]);
   const [posStockMovements, setPosStockMovements] = useState<PosStockMovement[]>([]);
   const [posInventories, setPosInventories] = useState<PosInventory[]>([]);
@@ -568,50 +584,90 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refreshData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Load from IndexedDB (Offline Cache)
-      const cachedUsers = await db.profiles.getItem<User[]>('data');
-      const cachedClients = await db.clients.getItem<Client[]>('data');
-      const cachedAffaires = await db.affaires.getItem<Affaire[]>('data');
-      const cachedFacturePaiements = await db.facturePaiements.getItem<FacturePaiement[]>('data');
-      const cachedCouts = await db.couts.getItem<Cout[]>('data');
-      const cachedScoringRules = await db.scoringRules.getItem<ScoringRule[]>('data');
-      const cachedObjectifs = await db.objectifs.getItem<Objectif[]>('data');
-      const cachedClassements = await db.classements.getItem<Classement[]>('data');
-      const cachedPrimes = await db.primes.getItem<Prime[]>('data');
-      const cachedPrimeAuditLogs = await db.primeAuditLogs.getItem<PrimeAuditLog[]>('data');
-      const cachedQuotes = await db.quotes.getItem<Quote[]>('data');
-      const cachedSales = await db.sales.getItem<Sale[]>('data');
-      const cachedCommissions = await db.commissions.getItem<Commission[]>('data');
-      const cachedInstallments = await db.installments.getItem<Installment[]>('data');
-      const cachedProspects = await db.prospects.getItem<Prospect[]>('data');
-      const cachedProspectActivities = await db.prospectActivities.getItem<ProspectActivity[]>('data');
-      const cachedProspectFollowUps = await db.prospectFollowUps.getItem<ProspectFollowUp[]>('data');
-      const cachedActivityReports = await db.activityReports.getItem<ActivityReport[]>('data');
-      const cachedWeeklyReports = await db.weeklyReports.getItem<WeeklyReport[]>('data');
-      const cachedV2DailyReports = await db.v2DailyReports.getItem<V2DailyReport[]>('data');
-      const cachedV2WeeklyReports = await db.v2WeeklyReports.getItem<V2WeeklyReport[]>('data');
-      const cachedCrmDocuments = await db.documents.getItem<CrmDocument[]>('data');
-      const cachedCrmFolders = await db.crmFolders.getItem<CrmFolder[]>('data');
-      const cachedNotifications = await db.notifications.getItem<AppNotification[]>('data');
-      const cachedCategories = await db.categories.getItem<Category[]>('data');
-      const cachedServices = await db.services.getItem<Service[]>('data');
-      const cachedPrestations = await db.prestations.getItem<Prestation[]>('data');
-      const cachedSettings = await db.settings.getItem<AppSettings>('data');
-      const cachedPosCategories = await db.posCategories.getItem<PosCategory[]>('data');
-      const cachedPosBrands = await db.posBrands.getItem<PosBrand[]>('data');
-      const cachedPosSuppliers = await db.posSuppliers.getItem<PosSupplier[]>('data');
-      const cachedPosProducts = await db.posProducts.getItem<PosProduct[]>('data');
-      const cachedPosStockEntries = await db.posStockEntries.getItem<PosStockEntry[]>('data');
-      const cachedPosStockMovements = await db.posStockMovements.getItem<PosStockMovement[]>('data');
-      const cachedPosInventories = await db.posInventories.getItem<PosInventory[]>('data');
-      const cachedPosCashSessions = await db.posCashSessions.getItem<PosCashSession[]>('data');
-      const cachedPosTransactions = await db.posTransactions.getItem<PosTransaction[]>('data');
-      const cachedPosPayments = await db.posPayments.getItem<PosPayment[]>('data');
-      const cachedPosDiscounts = await db.posDiscounts.getItem<PosDiscount[]>('data');
-      const cachedPosSettings = await db.posSettings.getItem<PosSettings>('data');
-      const cachedPosReturns = await db.posReturns ? await db.posReturns.getItem<PosReturn[]>('data') : null;
-      const cachedProductCompletions = await db.productCompletions ? await db.productCompletions.getItem<ProductCompletion[]>('data') : null;
-      const cachedImportSessions = await db.importSessions ? await db.importSessions.getItem<ImportSession[]>('data') : null;
+      // 1. Load from IndexedDB (Offline Cache) de façon sécurisée (anti-crash IO / Quota)
+      const safeGet = async <T,>(store: any): Promise<T | null> => {
+        try {
+          if (!store || typeof store.getItem !== 'function') return null;
+          return await withTimeout<T | null>(store.getItem('data'), 2000);
+        } catch (e) {
+          console.warn('[Cache] Erreur lecture store :', e);
+          return null;
+        }
+      };
+
+      // Anti-Data Loss Cache Guard : empêche d'écraser un cache non-vide par un tableau vide
+      const safeSet = async <T,>(store: any, data: T): Promise<void> => {
+        try {
+          if (!store || typeof store.setItem !== 'function') return;
+          if (Array.isArray(data) && data.length === 0) {
+            const existing = await safeGet<any[]>(store);
+            if (existing && existing.length > 0) {
+              console.warn('[CacheGuard] Refus d\'écraser un store existant avec un tableau vide');
+              return;
+            }
+          }
+          await withTimeout(store.setItem('data', data), 3000);
+        } catch (e) {
+          console.warn('[Cache] Erreur écriture store :', e);
+        }
+      };
+
+      const [
+        cachedUsers, cachedClients, cachedAffaires, cachedFacturePaiements, cachedCouts,
+        cachedScoringRules, cachedObjectifs, cachedClassements, cachedPrimes, cachedPrimeAuditLogs,
+        cachedQuotes, cachedSales, cachedCommissions, cachedInstallments, cachedProspects,
+        cachedProspectActivities, cachedProspectFollowUps, cachedActivityReports, cachedWeeklyReports,
+        cachedV2DailyReports, cachedV2WeeklyReports, cachedCrmDocuments, cachedCrmFolders,
+        cachedNotifications, cachedCategories, cachedServices, cachedPrestations, cachedSettings,
+        cachedPosCategories, cachedPosBrands, cachedPosSuppliers, cachedPosProducts,
+        cachedPosStockEntries, cachedPosStockMovements, cachedPosInventories, cachedPosCashSessions,
+        cachedPosTransactions, cachedPosPayments, cachedPosDiscounts, cachedPosSettings,
+        cachedPosReturns, cachedProductCompletions, cachedImportSessions
+      ] = await Promise.all([
+        safeGet<User[]>(db.profiles),
+        safeGet<Client[]>(db.clients),
+        safeGet<Affaire[]>(db.affaires),
+        safeGet<FacturePaiement[]>(db.facturePaiements),
+        safeGet<Cout[]>(db.couts),
+        safeGet<ScoringRule[]>(db.scoringRules),
+        safeGet<Objectif[]>(db.objectifs),
+        safeGet<Classement[]>(db.classements),
+        safeGet<Prime[]>(db.primes),
+        safeGet<PrimeAuditLog[]>(db.primeAuditLogs),
+        safeGet<Quote[]>(db.quotes),
+        safeGet<Sale[]>(db.sales),
+        safeGet<Commission[]>(db.commissions),
+        safeGet<Installment[]>(db.installments),
+        safeGet<Prospect[]>(db.prospects),
+        safeGet<ProspectActivity[]>(db.prospectActivities),
+        safeGet<ProspectFollowUp[]>(db.prospectFollowUps),
+        safeGet<ActivityReport[]>(db.activityReports),
+        safeGet<WeeklyReport[]>(db.weeklyReports),
+        safeGet<V2DailyReport[]>(db.v2DailyReports),
+        safeGet<V2WeeklyReport[]>(db.v2WeeklyReports),
+        safeGet<CrmDocument[]>(db.documents),
+        safeGet<CrmFolder[]>(db.crmFolders),
+        safeGet<AppNotification[]>(db.notifications),
+        safeGet<Category[]>(db.categories),
+        safeGet<Service[]>(db.services),
+        safeGet<Prestation[]>(db.prestations),
+        safeGet<AppSettings>(db.settings),
+        safeGet<PosCategory[]>(db.posCategories),
+        safeGet<PosBrand[]>(db.posBrands),
+        safeGet<PosSupplier[]>(db.posSuppliers),
+        safeGet<PosProduct[]>(db.posProducts),
+        safeGet<PosStockEntry[]>(db.posStockEntries),
+        safeGet<PosStockMovement[]>(db.posStockMovements),
+        safeGet<PosInventory[]>(db.posInventories),
+        safeGet<PosCashSession[]>(db.posCashSessions),
+        safeGet<PosTransaction[]>(db.posTransactions),
+        safeGet<PosPayment[]>(db.posPayments),
+        safeGet<PosDiscount[]>(db.posDiscounts),
+        safeGet<PosSettings>(db.posSettings),
+        safeGet<PosReturn[]>(db.posReturns),
+        safeGet<ProductCompletion[]>(db.productCompletions),
+        safeGet<ImportSession[]>(db.importSessions),
+      ]);
 
       if (cachedUsers) setUsers(cachedUsers);
       if (cachedClients) setClients(cachedClients);
@@ -662,48 +718,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
         !cachedProducts.some(m => m.id === def.id || (m.reference && m.reference === def.reference))
       );
       const productsWithServices = [...cachedProducts, ...missingDefaults];
-      setPosProducts(prev => {
-        if (prev.length === 0) return productsWithServices;
-        const missing = DEFAULT_SERVICE_PRODUCTS.filter(def => 
-          !prev.some(p => p.id === def.id || (p.reference && p.reference === def.reference))
-        );
-        return missing.length > 0 ? [...prev, ...missing] : prev;
-      });
+      setPosProducts(productsWithServices);
+      setLoading(false);
+
       if (missingDefaults.length > 0) {
-        await db.posProducts.setItem('data', productsWithServices);
+        db.posProducts.setItem('data', productsWithServices).catch(() => {});
         for (const def of missingDefaults) {
-          await queueSyncAction('INSERT_POS_PRODUCT', def);
+          queueSyncAction('INSERT_POS_PRODUCT', def).catch(() => {});
         }
       }
 
       // 2. Fetch from Supabase (if online) and update Cache
       if (navigator.onLine) {
         if (currentUser) {
-          // Process any pending offline mutations before fetching to avoid overwriting local changes with stale data
-          await processSyncQueue();
+          // Process any pending offline mutations with a timeout so it doesn't block refreshData
+          try {
+            await Promise.race([
+              processSyncQueue(),
+              new Promise(res => setTimeout(res, 3000))
+            ]);
+          } catch (err) {
+            console.warn('[refreshData] Sync queue non bloquante :', err);
+          }
+        }
 
-          const lastSyncTime = await db.syncMetadata.getItem<string>('lastSyncTime');
-          const syncTimestamp = new Date().toISOString();
+        const lastSyncTime = await db.syncMetadata.getItem<string>('lastSyncTime');
+        const syncTimestamp = new Date().toISOString();
 
-        // Chaque table est récupérée isolément : l'échec d'une table ne bloque plus le reste du refresh
+        // Chaque table est récupérée isolément avec timeout
         const safeFetch = async (queryFn: () => any, allowDelta: boolean = false): Promise<any> => {
           try {
             let query = queryFn();
             if (allowDelta && lastSyncTime) {
-               // Only apply delta if explicitly allowed and lastSyncTime exists
                query = query.gt('updated_at', lastSyncTime);
             }
-            const { data, error } = await query;
-            if (error) {
-              console.error('[refreshData] Table ignorée :', error.message);
+            const res = await withTimeout<any>(query, 15000);
+            if (res && res.error) {
+              console.warn('[refreshData] Table ignorée :', res.error.message);
               return null;
             }
-            return data;
+            return res ? res.data : null;
           } catch (e) {
-            console.error('[refreshData] Table ignorée :', e);
+            console.warn('[refreshData] Table ignorée ou délai dépassé :', e);
             return null;
           }
         };
+
         const [
           profilesData, clientsData, servicesData,
           prestationsData, settingsData, quotesData,
@@ -721,30 +781,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
           posReturnsData
         ] = await Promise.all([
           safeFetch(() => supabase.from('profiles').select('*')),
-          safeFetch(() => supabase.from('clients').select('*')),
+          currentUser ? safeFetch(() => supabase.from('clients').select('*')) : Promise.resolve(null),
           safeFetch(() => supabase.from('services').select('*')),
           safeFetch(() => supabase.from('prestations').select('*')),
           safeFetch(() => supabase.from('settings').select('*').single()),
-          safeFetch(() => supabase.from('quotes').select('*, quote_lines(*)')),
-          safeFetch(() => supabase.from('ventes').select('*, vente_lines(*)')),
-          safeFetch(() => supabase.from('commissions').select('*')),
-          safeFetch(() => supabase.from('vente_echeances').select('*')),
-          safeFetch(() => supabase.from('affaires').select('*')),
-          safeFetch(() => supabase.from('facture_paiements').select('*')),
-          safeFetch(() => supabase.from('couts').select('*')),
-          safeFetch(() => supabase.from('scoring_rules').select('*')),
-          safeFetch(() => supabase.from('objectifs').select('*')),
-          safeFetch(() => supabase.from('classements').select('*')),
-          safeFetch(() => supabase.from('primes').select('*')),
-          safeFetch(() => supabase.from('prime_audit_logs').select('*')),
-          safeFetch(() => supabase.from('prospects').select('*')),
-          safeFetch(() => supabase.from('prospect_activities').select('*')),
-          safeFetch(() => supabase.from('prospect_follow_ups').select('*')),
+          currentUser ? safeFetch(() => supabase.from('quotes').select('*, quote_lines(*)')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('ventes').select('*, vente_lines(*)')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('commissions').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('vente_echeances').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('affaires').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('facture_paiements').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('couts').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('scoring_rules').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('objectifs').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('classements').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('primes').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('prime_audit_logs').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('prospects').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('prospect_activities').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('prospect_follow_ups').select('*')) : Promise.resolve(null),
           safeFetch(() => supabase.from('categories').select('*')),
-          safeFetch(() => supabase.from('activity_reports').select('*')),
-          safeFetch(() => supabase.from('weekly_reports').select('*')),
-          safeFetch(() => supabase.from('v2_daily_reports').select('*')),
-          safeFetch(() => supabase.from('v2_weekly_reports').select('*')),
+          currentUser ? safeFetch(() => supabase.from('activity_reports').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('weekly_reports').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('v2_daily_reports').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('v2_weekly_reports').select('*')) : Promise.resolve(null),
           safeFetch(() => supabase.from('pos_categories').select('*')),
           safeFetch(() => supabase.from('pos_brands').select('*')),
           safeFetch(() => supabase.from('pos_suppliers').select('*')),
@@ -757,9 +817,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           safeFetch(() => supabase.from('pos_payments').select('*')),
           safeFetch(() => supabase.from('pos_discounts').select('*')),
           safeFetch(() => supabase.from('pos_settings').select('*').single()),
-          safeFetch(() => supabase.from('crm_documents').select('*')),
-          safeFetch(() => supabase.from('crm_folders').select('*')),
-          safeFetch(() => supabase.from('notifications').select('*')),
+          currentUser ? safeFetch(() => supabase.from('crm_documents').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('crm_folders').select('*')) : Promise.resolve(null),
+          currentUser ? safeFetch(() => supabase.from('notifications').select('*')) : Promise.resolve(null),
           safeFetch(() => supabase.from('pos_returns').select('*, pos_return_lines(*)')),
         ]);
 
@@ -1157,17 +1217,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (posCategoriesData && posCategoriesData.length > 0) {
           const parsed = posCategoriesData.map((c: any) => ({ id: c.id, name: c.name, family: c.family }));
           const merged = mergeData(cachedPosCategories, parsed);
-          setPosCategories(merged); await db.posCategories.setItem('data', merged);
+          setPosCategories(merged); await safeSet(db.posCategories, merged);
         }
         if (posBrandsData && posBrandsData.length > 0) {
           const parsed = posBrandsData.map((b: any) => ({ id: b.id, name: b.name }));
           const merged = mergeData(cachedPosBrands, parsed);
-          setPosBrands(merged); await db.posBrands.setItem('data', merged);
+          setPosBrands(merged); await safeSet(db.posBrands, merged);
         }
         if (posSuppliersData && posSuppliersData.length > 0) {
           const parsed = posSuppliersData.map((s: any) => ({ id: s.id, name: s.name, contact: s.contact, phone: s.phone, email: s.email, address: s.address }));
           const merged = mergeData(cachedPosSuppliers, parsed);
-          setPosSuppliers(merged); await db.posSuppliers.setItem('data', merged);
+          setPosSuppliers(merged); await safeSet(db.posSuppliers, merged);
         }
         if (posProductsData && posProductsData.length > 0) {
           const parsed = posProductsData.map((p: any) => {
@@ -1189,7 +1249,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           );
           const finalProducts = [...merged, ...missingDefaults];
           setPosProducts(finalProducts);
-          await db.posProducts.setItem('data', finalProducts);
+          await safeSet(db.posProducts, finalProducts);
           if (missingDefaults.length > 0) {
             for (const def of missingDefaults) {
               await queueSyncAction('INSERT_POS_PRODUCT', def);
@@ -1290,85 +1350,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setPosReturns(parsed); await db.posReturns.setItem('data', parsed);
         }
 
-          // Update last sync time for next delta fetch
-          await db.syncMetadata.setItem('lastSyncTime', syncTimestamp);
-        } else {
-          // Visiteur public non connecté (Catalogue en ligne)
-          try {
-            const [posProductsData, posCategoriesData, posBrandsData, posSettingsData, profilesData] = await Promise.all([
-              supabase.from('pos_products').select('*'),
-              supabase.from('pos_categories').select('*'),
-              supabase.from('pos_brands').select('*'),
-              supabase.from('pos_settings').select('*').maybeSingle(),
-              supabase.from('profiles').select('*'),
-            ]);
-
-            if (posProductsData.data && posProductsData.data.length > 0) {
-              const parsed = posProductsData.data.map((p: any) => {
-                let purchasePrice = p.purchase_price;
-                if (p.family === 'Livre' && (!purchasePrice || purchasePrice === 0) && p.selling_price > 0) {
-                  purchasePrice = Math.round(p.selling_price * 0.75);
-                }
-                return {
-                  id: p.id, reference: p.reference, barcode: p.barcode, isbn: p.isbn, name: p.name,
-                  family: p.family, categoryId: p.category_id, brandId: p.brand_id, supplierId: p.supplier_id,
-                  purchasePrice: purchasePrice ?? 0, sellingPrice: p.selling_price ?? 0, quantity: p.quantity ?? 0,
-                  minStock: (p.min_stock !== null && p.min_stock !== undefined && p.min_stock > 0) ? p.min_stock : 10, imageUrl: p.image_url, description: p.description,
-                  status: p.status || 'Active', isActive: p.is_active !== false, unit: p.unit, createdAt: p.created_at, updatedAt: p.updated_at
-                };
-              });
-              const merged = mergeData(cachedPosProducts, parsed);
-              setPosProducts(merged);
-              await db.posProducts.setItem('data', merged);
-            }
-
-            if (posCategoriesData.data && posCategoriesData.data.length > 0) {
-              const parsed = posCategoriesData.data.map((c: any) => ({ id: c.id, name: c.name, family: c.family || 'Fourniture' }));
-              setPosCategories(parsed);
-              await db.posCategories.setItem('data', parsed);
-            }
-
-            if (posBrandsData.data && posBrandsData.data.length > 0) {
-              const parsed = posBrandsData.data.map((b: any) => ({ id: b.id, name: b.name }));
-              setPosBrands(parsed);
-              await db.posBrands.setItem('data', parsed);
-            }
-
-            if (posSettingsData.data) {
-              const ps = posSettingsData.data;
-              const mapped = {
-                libraryName: ps.library_name || 'Hinov Group',
-                address: ps.address || '',
-                phone: ps.phone || '',
-                email: ps.email || '',
-                currency: ps.currency || 'FCFA',
-                ticketMessage: ps.ticket_message || '',
-                printerType: ps.printer_type || 'Thermique 80mm',
-                whatsappOrderPhone: ps.whatsapp_order_phone || '',
-                catalogBannerText: ps.catalog_banner_text || '',
-                themeColor: ps.theme_color || ''
-              };
-              setPosSettingsState(mapped);
-              await db.posSettings.setItem('data', mapped);
-            }
-
-            if (profilesData.data && profilesData.data.length > 0) {
-              const parsed: User[] = profilesData.data.map((p: any) => ({
-                id: p.id,
-                name: p.name || p.full_name || '',
-                email: p.email || '',
-                role: p.role as User['role'],
-                serviceId: p.service_id,
-                pin: p.pin || '',
-                active: p.active !== false,
-                photo: p.photo || undefined,
-              }));
-              setUsers(parsed);
-            }
-          } catch (err) {
-            console.error('[PublicSync] Erreur chargement public:', err);
-          }
-        }
+        // Update last sync time for next delta fetch
+        await db.syncMetadata.setItem('lastSyncTime', syncTimestamp);
       }
     } catch (error) {
       console.error('Error fetching data:', error);

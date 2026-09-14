@@ -109,6 +109,13 @@ export default function PosTerminal() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (posProducts.length <= 7) {
+      refreshData();
+    }
+  }, [posProducts.length, refreshData]);
+
   const [cart, setCart] = useState<CartItem[]>(() => {
     if (!currentUser) return [];
     try { const saved = localStorage.getItem(`pos_active_cart_${currentUser.id}`); return saved ? JSON.parse(saved) : []; } catch { return []; }
@@ -679,12 +686,7 @@ export default function PosTerminal() {
 
         {/* Product grid / List */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
-          {loading && posProducts.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--color-text-muted)' }}>
-              <RefreshCw size={28} style={{ animation: 'spin 1s linear infinite', margin: '0 auto 12px', display: 'block', color: 'var(--color-primary)' }} />
-              <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text)' }}>Chargement des produits...</div>
-            </div>
-          ) : filteredProducts.length === 0 ? (
+          {filteredProducts.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--color-text-muted)' }}>
               <div style={{ background: 'var(--color-surface-alt)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                 <Package size={32} color="var(--color-text-muted)" />
@@ -700,7 +702,7 @@ export default function PosTerminal() {
                   Réinitialiser la recherche
                 </Button>
               ) : (
-                <Button variant="secondary" icon={<RefreshCw size={14} />} onClick={() => refreshData()}>
+                <Button variant="secondary" icon={<RefreshCw size={14} />} onClick={() => { toast.loading('Actualisation...', { duration: 1000 }); refreshData(); }}>
                   Actualiser le catalogue
                 </Button>
               )}

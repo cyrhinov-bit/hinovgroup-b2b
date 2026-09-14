@@ -4,29 +4,49 @@ import { ErrorManager } from '../errors/ErrorManager.js';
 import { MenuManager } from '../menu/MenuManager.js';
 import { WindowManager } from '../windows/WindowManager.js';
 
-// Initialisation de la capture globale des erreurs
-ErrorManager.init();
+// Empêcher plusieurs instances concurrentes de verrouiller les caches et bases de données SQLite/IndexedDB
+const gotTheLock = app.requestSingleInstanceLock();
 
-app.whenReady().then(() => {
-  // Enregistrement des Handlers IPC
-  registerIpcHandlers();
-
-  // Configuration du Menu Applicatif
-  MenuManager.init();
-
-  // Création du Splash Screen et de la Fenêtre Principale
-  WindowManager.init();
-
-  // Gestion spécifique macOS
-  app.on('activate', () => {
-    if (!WindowManager.getMainWindow()) {
-      WindowManager.init();
+if (!gotTheLock) {
+  console.log('[Electron] Une autre instance est déjà en cours d\'exécution. Fermeture.');
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const mainWindow = WindowManager.getMainWindow();
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
     }
   });
-});
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
+  // Initialisation de la capture globale des erreurs
+  ErrorManager.init();
+
+  // Éviter les collisions et erreurs de verrouillage de cache disque Chromium sur Windows (Accès refusé / Gpu Cache Creation failed)
+  app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+
+  app.whenReady().then(() => {
+    // Enregistrement des Handlers IPC
+    registerIpcHandlers();
+
+    // Configuration du Menu Applicatif
+    MenuManager.init();
+
+    // Création du Splash Screen et de la Fenêtre Principale
+    WindowManager.init();
+
+    // Gestion spécifique macOS
+    app.on('activate', () => {
+      if (!WindowManager.getMainWindow()) {
+        WindowManager.init();
+      }
+    });
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
+}
+
