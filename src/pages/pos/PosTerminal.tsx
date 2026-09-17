@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Search, Trash2, Plus, Minus, Clock, ArrowLeft, Package, Layers, RefreshCw, Sparkles, Mic, MicOff, AlertTriangle, TrendingUp, TrendingDown, Info, ShieldCheck } from 'lucide-react';
+import { Search, Trash2, Plus, Minus, Clock, ArrowLeft, Package, Layers, RefreshCw, Sparkles, Mic, MicOff, AlertTriangle, TrendingUp, TrendingDown, Info, ShieldCheck, Printer } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { barcodeScannerService } from '../../features/products/services/BarcodeScannerService';
@@ -384,31 +384,8 @@ export default function PosTerminal() {
       localStorage.removeItem(`pos_active_discount_value_${currentUser.id}`);
     }
 
-    if (import.meta.env.DEV) {
-      setShowPreviewModal(true);
-    } else {
-      // Clear form and local storage
-      setCart([]);
-      setDiscountType('none');
-      setDiscountValue(0);
-      setPaymentMethod('Espèces');
-      setCashAmount('');
-      setMobileAmount('');
-      setShowPayment(false);
-
-      toast.success('Paiement validé avec succès !');
-      setTimeout(async () => {
-        if (platform.isDesktop) {
-          try {
-            await platform.pos.printReceipt(currentReceiptData);
-          } catch (e: any) {
-            toast.error("Erreur d'impression: " + (e.message || e));
-          }
-        } else {
-          window.print();
-        }
-      }, 100);
-    }
+    toast.success('Paiement validé avec succès !');
+    setShowPreviewModal(true);
   };
 
   const handleSuspendCart = () => {
@@ -1191,21 +1168,25 @@ export default function PosTerminal() {
           </div>
         )}
       </Modal>
-      {/* Preview Modal (Mode Test) */}
+      {/* Modal d'aperçu du Ticket avant impression */}
       <Modal
         open={showPreviewModal}
         onClose={() => setShowPreviewModal(false)}
-        title="Prévisualisation du ticket (Mode Test)"
-        width={400}
+        title="Aperçu du ticket de caisse"
+        width={420}
         footer={
-          <>
-            <Button variant="primary" onClick={async () => { 
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', width: '100%' }}>
+            <Button variant="secondary" onClick={() => setShowPreviewModal(false)}>
+              Fermer sans imprimer
+            </Button>
+            <Button variant="primary" icon={<Printer size={16} />} onClick={async () => { 
               if (platform.isDesktop) {
                 try {
                   await platform.pos.printReceipt({
                     ...receiptData,
                     settings: posSettings
                   });
+                  toast.success('Ticket envoyé à l\'imprimante');
                 } catch (e: any) {
                   toast.error("Erreur d'impression: " + (e.message || e));
                 }
@@ -1213,12 +1194,13 @@ export default function PosTerminal() {
                 setTimeout(() => { window.print(); }, 100); 
               }
               setShowPreviewModal(false); 
-            }}>Imprimer</Button>
-            <Button variant="ghost" onClick={() => setShowPreviewModal(false)}>Fermer</Button>
-          </>
+            }}>
+              Imprimer le ticket (Entrée)
+            </Button>
+          </div>
         }
       >
-        <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '16px', background: '#f5f5f5', maxHeight: '60vh', overflowY: 'auto' }}>
+        <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px', background: '#f8fafc', maxHeight: '65vh', overflowY: 'auto' }}>
           <ReceiptTicket data={receiptData} settings={posSettings} crmSettings={crmSettings} preview={true} />
         </div>
       </Modal>
