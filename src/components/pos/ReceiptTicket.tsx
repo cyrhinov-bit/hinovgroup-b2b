@@ -49,7 +49,7 @@ export default function ReceiptTicket({ data, settings, crmSettings, preview = f
       {/* Lignes de commande en DataTable */}
       <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '8px 0', marginBottom: '12px' }}>
         <div className="table-responsive">
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', tableLayout: 'fixed' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #000' }}>
                 <th style={{ textAlign: 'left', paddingBottom: '4px', width: '38%' }}>Désignation</th>
@@ -69,22 +69,22 @@ export default function ReceiptTicket({ data, settings, crmSettings, preview = f
                 return (
                   <React.Fragment key={i}>
                     <tr>
-                      <td style={{ verticalAlign: 'top', paddingTop: '5px', wordBreak: 'break-word' }}>
+                      <td style={{ verticalAlign: 'top', paddingTop: '5px', wordBreak: 'break-word', overflowWrap: 'break-word', whiteSpace: 'normal' }}>
                         {name}
                       </td>
-                      <td style={{ verticalAlign: 'top', paddingTop: '5px', textAlign: 'center' }}>
+                      <td style={{ verticalAlign: 'top', paddingTop: '5px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         {qty}
                       </td>
-                      <td style={{ verticalAlign: 'top', paddingTop: '5px', textAlign: 'right' }}>
+                      <td style={{ verticalAlign: 'top', paddingTop: '5px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                         {unitPrice.toLocaleString('fr-FR')}
                       </td>
-                      <td style={{ verticalAlign: 'top', paddingTop: '5px', textAlign: 'right', fontWeight: 600 }}>
+                      <td style={{ verticalAlign: 'top', paddingTop: '5px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
                         {lineTotal.toLocaleString('fr-FR')}
                       </td>
                     </tr>
                     {hasDiscount && (
                       <tr>
-                        <td colSpan={4} style={{ fontSize: '9px', color: '#555', paddingLeft: '8px', paddingBottom: '2px' }}>
+                        <td colSpan={4} style={{ fontSize: '9px', color: '#555', paddingLeft: '8px', paddingBottom: '2px', wordBreak: 'break-word' }}>
                           └ Remise : {item.discountPercent ? `-${item.discountPercent}%` : `-${Number(item.discountAmount).toLocaleString('fr-FR')} ${settings.currency}`}
                         </td>
                       </tr>

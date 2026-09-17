@@ -78,12 +78,12 @@ export class ReceiptEngine {
   .dash { border-top: 1px dashed #000; margin: 6px 0; }
   table { width: 100%; border-collapse: collapse; }
   .items-table { table-layout: fixed; width: 100%; }
-  .items-table th, .items-table td { word-wrap: break-word; padding: 2px 0; }
+  .items-table th, .items-table td { padding: 2px 0; }
   .items-table th { border-bottom: 1px solid #000; font-size: 11px; }
-  .items-table th:nth-child(1), .items-table td:nth-child(1) { width: 38%; text-align: left; }
-  .items-table th:nth-child(2), .items-table td:nth-child(2) { width: 14%; text-align: center; }
-  .items-table th:nth-child(3), .items-table td:nth-child(3) { width: 24%; text-align: right; }
-  .items-table th:nth-child(4), .items-table td:nth-child(4) { width: 24%; text-align: right; }
+  .items-table th:nth-child(1), .items-table td:nth-child(1) { width: 38%; text-align: left; word-break: break-word; overflow-wrap: break-word; white-space: normal; }
+  .items-table th:nth-child(2), .items-table td:nth-child(2) { width: 14%; text-align: center; white-space: nowrap; }
+  .items-table th:nth-child(3), .items-table td:nth-child(3) { width: 24%; text-align: right; white-space: nowrap; }
+  .items-table th:nth-child(4), .items-table td:nth-child(4) { width: 24%; text-align: right; white-space: nowrap; }
   td { vertical-align: top; }
 </style>
 </head>
