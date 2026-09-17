@@ -46,33 +46,55 @@ export default function ReceiptTicket({ data, settings, crmSettings, preview = f
         <div>Date : {formatDate(transaction.date)}</div>
       </div>
 
-      {/* Lignes de commande */}
+      {/* Lignes de commande en DataTable */}
       <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '8px 0', marginBottom: '12px' }}>
         <div className="table-responsive">
-<table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={{ textAlign: 'left', paddingBottom: '4px' }}>Qté</th>
-              <th style={{ textAlign: 'left', paddingBottom: '4px' }}>Désignation</th>
-              <th style={{ textAlign: 'right', paddingBottom: '4px' }}>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cart.map((item, i) => (
-              <tr key={i}>
-                <td style={{ verticalAlign: 'top', paddingTop: '4px', width: '30px' }}>{item.quantity}x</td>
-                <td style={{ verticalAlign: 'top', paddingTop: '4px' }}>
-                  {item.name}
-                  <div style={{ fontSize: '10px' }}>{item.unitPrice.toLocaleString()} {settings.currency}</div>
-                </td>
-                <td style={{ verticalAlign: 'top', paddingTop: '4px', textAlign: 'right' }}>
-                  {item.total.toLocaleString()}
-                </td>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #000' }}>
+                <th style={{ textAlign: 'left', paddingBottom: '4px', width: '38%' }}>Désignation</th>
+                <th style={{ textAlign: 'center', paddingBottom: '4px', width: '14%' }}>Qté</th>
+                <th style={{ textAlign: 'right', paddingBottom: '4px', width: '24%' }}>P.U.</th>
+                <th style={{ textAlign: 'right', paddingBottom: '4px', width: '24%' }}>Montant</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-</div>
+            </thead>
+            <tbody>
+              {cart.map((item, i) => {
+                const name = item.name || item.description || item.productName || 'Article';
+                const qty = Number(item.quantity ?? item.qty ?? 1);
+                const unitPrice = Number(item.unitPrice ?? item.unit_price ?? (item.total && qty ? Math.round(item.total / qty) : 0));
+                const lineTotal = Number(item.total ?? (qty * unitPrice));
+                const hasDiscount = (item.discountPercent && item.discountPercent > 0) || (item.discountAmount && item.discountAmount > 0);
+
+                return (
+                  <React.Fragment key={i}>
+                    <tr>
+                      <td style={{ verticalAlign: 'top', paddingTop: '5px', wordBreak: 'break-word' }}>
+                        {name}
+                      </td>
+                      <td style={{ verticalAlign: 'top', paddingTop: '5px', textAlign: 'center' }}>
+                        {qty}
+                      </td>
+                      <td style={{ verticalAlign: 'top', paddingTop: '5px', textAlign: 'right' }}>
+                        {unitPrice.toLocaleString('fr-FR')}
+                      </td>
+                      <td style={{ verticalAlign: 'top', paddingTop: '5px', textAlign: 'right', fontWeight: 600 }}>
+                        {lineTotal.toLocaleString('fr-FR')}
+                      </td>
+                    </tr>
+                    {hasDiscount && (
+                      <tr>
+                        <td colSpan={4} style={{ fontSize: '9px', color: '#555', paddingLeft: '8px', paddingBottom: '2px' }}>
+                          └ Remise : {item.discountPercent ? `-${item.discountPercent}%` : `-${Number(item.discountAmount).toLocaleString('fr-FR')} ${settings.currency}`}
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Totaux */}

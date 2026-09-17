@@ -1,21 +1,28 @@
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
-import { Search, RotateCcw, XCircle, ArrowLeft, Trash2, Calendar, Archive, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, RotateCcw, XCircle, ArrowLeft, Trash2, Calendar, Archive, ChevronDown, ChevronRight, Printer } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
+import { Modal } from '../../components/ui/Modal';
+import ReceiptTicket from '../../components/pos/ReceiptTicket';
+import type { ReceiptData } from '../../components/pos/ReceiptTicket';
 import type { PosTransaction } from '../../context/AppContext';
 import { matchesSearchQuery } from '../../lib/searchUtils';
 import { getWeekKey, formatWeekLabel, isCurrentWeek } from '../../lib/dates';
+import { platform } from '../../platform';
+import { toast } from 'react-hot-toast';
 
 export default function PosTransactions() {
-  const { posTransactions, posCashSessions, voidPosTransaction, clearPosSalesHistory } = useAppContext();
+  const { posTransactions, posCashSessions, voidPosTransaction, clearPosSalesHistory, posSettings, settings: crmSettings } = useAppContext();
   const { currentUser } = useAuth();
   const { confirm } = useConfirm();
   const [search, setSearch] = useState('');
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>('all');
+  const [selectedReceiptData, setSelectedReceiptData] = useState<ReceiptData | null>(null);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
   const navigate = useNavigate();
 
   const currentWeekKey = getWeekKey(new Date());
@@ -130,6 +137,47 @@ export default function PosTransactions() {
         await voidPosTransaction(t.id);
       },
     });
+  };
+
+  const handleReprint = (t: PosTransaction) => {
+    const data: ReceiptData = {
+      transaction: t,
+      cart: (t.lines || []).map(l => ({
+        id: l.id,
+        productId: l.productId,
+        name: l.description,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        discountPercent: l.discountPercent || 0,
+        discountAmount: l.discountAmount || 0,
+        total: l.total
+      })),
+      paymentMethod: t.payments?.[0]?.method || 'Espèces',
+      cashAmount: t.payments?.[0]?.amount || t.total,
+      changeAmount: 0,
+      total: t.total,
+      subtotal: t.subtotal || t.total,
+      globalDiscount: t.discountAmount || 0
+    };
+    setSelectedReceiptData(data);
+    setShowReceiptModal(true);
+  };
+
+  const handlePrintAction = async () => {
+    if (!selectedReceiptData) return;
+    if (platform.isDesktop) {
+      try {
+        await platform.pos.printReceipt({
+          ...selectedReceiptData,
+          settings: posSettings
+        });
+        toast.success('Ticket envoyé à l\'imprimante');
+      } catch (err: any) {
+        toast.error("Erreur d'impression: " + (err.message || err));
+      }
+    } else {
+      window.print();
+    }
   };
 
   const handleClearHistory = () => {
@@ -340,6 +388,9 @@ export default function PosTransactions() {
                             <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right', fontWeight: 600 }}>{t.total.toLocaleString()} FCFA</td>
                             <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                <button onClick={() => handleReprint(t)} style={{ padding: '4px 8px', background: 'var(--color-primary-tint)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--color-primary)', fontWeight: 500 }}>
+                                  <Printer size={12} /> Ticket
+                                </button>
                                 {canReturn(t) && (
                                   <button onClick={() => navigate('/pos/returns', { state: { selectedTxId: t.id } })} style={{ padding: '4px 8px', background: 'var(--color-warning-tint)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--color-warning-strong)' }}>
                                     <RotateCcw size={12} /> Retour
@@ -362,6 +413,29 @@ export default function PosTransactions() {
             );
           })}
         </div>
+      )}
+
+      {/* Modal d'aperçu / réimpression du Ticket */}
+      {showReceiptModal && selectedReceiptData && (
+        <Modal
+          open={showReceiptModal}
+          onClose={() => setShowReceiptModal(false)}
+          title={`Ticket ${selectedReceiptData.transaction?.transactionNumber || ''}`}
+          footer={
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', width: '100%' }}>
+              <Button variant="secondary" onClick={() => setShowReceiptModal(false)}>
+                Fermer
+              </Button>
+              <Button variant="primary" icon={<Printer size={16} />} onClick={handlePrintAction}>
+                Imprimer le ticket
+              </Button>
+            </div>
+          }
+        >
+          <div style={{ maxHeight: '70vh', overflowY: 'auto', background: '#f8fafc', padding: '16px', borderRadius: 'var(--radius-md)' }}>
+            <ReceiptTicket data={selectedReceiptData} settings={posSettings} crmSettings={crmSettings} preview={true} />
+          </div>
+        </Modal>
       )}
     </div>
   );

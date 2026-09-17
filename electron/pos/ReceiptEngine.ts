@@ -39,28 +39,51 @@ export class ReceiptEngine {
     const date = tx?.date ? new Date(tx.date).toLocaleString('fr-FR') : new Date().toLocaleString('fr-FR');
 
     const header = data?.settings?.libraryName || 'LIBRAIRIE';
-    const lines = cart.map((item: any) => `
-      <tr>
-        <td>${ReceiptEngine.esc(item.quantity ?? 1)}x</td>
-        <td>${ReceiptEngine.esc(item.name || item.description || item.productName || 'Article')}</td>
-        <td style="text-align:right">${ReceiptEngine.fmt(item.total ?? (item.quantity ?? 1) * (item.unitPrice ?? 0))}</td>
-      </tr>`).join('');
+    const lines = cart.map((item: any) => {
+      const name = item.name || item.description || item.productName || 'Article';
+      const qty = Number(item.quantity ?? item.qty ?? 1);
+      const unitPrice = Number(item.unitPrice ?? item.unit_price ?? (item.total && qty ? Math.round(item.total / qty) : 0));
+      const lineTotal = Number(item.total ?? (qty * unitPrice));
+      const hasDiscount = (item.discountPercent && item.discountPercent > 0) || (item.discountAmount && item.discountAmount > 0);
+
+      let row = `
+        <tr>
+          <td>${ReceiptEngine.esc(name)}</td>
+          <td style="text-align:center">${ReceiptEngine.esc(qty)}</td>
+          <td style="text-align:right">${ReceiptEngine.fmt(unitPrice)}</td>
+          <td style="text-align:right;font-weight:bold">${ReceiptEngine.fmt(lineTotal)}</td>
+        </tr>`;
+
+      if (hasDiscount) {
+        const discountText = item.discountPercent ? `-${item.discountPercent}%` : `-${ReceiptEngine.fmt(item.discountAmount)} ${ReceiptEngine.esc(currency)}`;
+        row += `
+        <tr>
+          <td colspan="4" style="font-size:10px;color:#555;padding-left:6px;padding-bottom:2px">
+            └ Remise : ${ReceiptEngine.esc(discountText)}
+          </td>
+        </tr>`;
+      }
+
+      return row;
+    }).join('');
 
     return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8" />
 <style>
-  body { font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; color: #000; margin: 0; padding: 4px; width: 72mm; box-sizing: border-box; }
+  body { font-family: 'Consolas', 'Courier New', monospace; font-size: 11px; color: #000; margin: 0; padding: 4px; width: 72mm; box-sizing: border-box; }
   .center { text-align: center; }
   h2 { font-size: 15px; margin: 0 0 4px 0; text-transform: uppercase; }
   .dash { border-top: 1px dashed #000; margin: 6px 0; }
   table { width: 100%; border-collapse: collapse; }
-  .items-table { table-layout: fixed; }
-  .items-table th, .items-table td { word-wrap: break-word; }
-  .items-table th:nth-child(1), .items-table td:nth-child(1) { width: 15%; }
-  .items-table th:nth-child(2), .items-table td:nth-child(2) { width: 55%; }
-  .items-table th:nth-child(3), .items-table td:nth-child(3) { width: 30%; text-align: right; }
+  .items-table { table-layout: fixed; width: 100%; }
+  .items-table th, .items-table td { word-wrap: break-word; padding: 2px 0; }
+  .items-table th { border-bottom: 1px solid #000; font-size: 11px; }
+  .items-table th:nth-child(1), .items-table td:nth-child(1) { width: 38%; text-align: left; }
+  .items-table th:nth-child(2), .items-table td:nth-child(2) { width: 14%; text-align: center; }
+  .items-table th:nth-child(3), .items-table td:nth-child(3) { width: 24%; text-align: right; }
+  .items-table th:nth-child(4), .items-table td:nth-child(4) { width: 24%; text-align: right; }
   td { vertical-align: top; }
 </style>
 </head>
@@ -69,26 +92,36 @@ export class ReceiptEngine {
     <h2>${ReceiptEngine.esc(header)}</h2>
     ${data?.settings?.address ? `<div>${ReceiptEngine.esc(data.settings.address)}</div>` : ''}
     ${data?.settings?.phone ? `<div>Tel: ${ReceiptEngine.esc(data.settings.phone)}</div>` : ''}
-    <div>TICKET : ${ReceiptEngine.esc(tx?.transactionNumber || tx?.id || '')}</div>
+    ${data?.settings?.email ? `<div>Email: ${ReceiptEngine.esc(data.settings.email)}</div>` : ''}
+    <div style="margin-top:4px">TICKET : ${ReceiptEngine.esc(tx?.transactionNumber || tx?.id || '')}</div>
     <div>Date : ${ReceiptEngine.esc(date)}</div>
   </div>
   <div class="dash"></div>
   <table class="items-table">
-    <thead><tr><th style="text-align:left">Qté</th><th style="text-align:left">Désignation</th><th style="text-align:right">Total</th></tr></thead>
+    <thead>
+      <tr>
+        <th style="text-align:left">Désignation</th>
+        <th style="text-align:center">Qté</th>
+        <th style="text-align:right">P.U.</th>
+        <th style="text-align:right">Montant</th>
+      </tr>
+    </thead>
     <tbody>${lines}</tbody>
   </table>
   <div class="dash"></div>
   <table>
     <tr><td>Sous-total</td><td style="text-align:right">${ReceiptEngine.fmt(subtotal)} ${ReceiptEngine.esc(currency)}</td></tr>
     ${data?.globalDiscount ? `<tr><td>Remise</td><td style="text-align:right">-${ReceiptEngine.fmt(data.globalDiscount)} ${ReceiptEngine.esc(currency)}</td></tr>` : ''}
-    <tr><td style="font-weight:bold">TOTAL</td><td style="text-align:right;font-weight:bold">${ReceiptEngine.fmt(total)} ${ReceiptEngine.esc(currency)}</td></tr>
+    <tr style="font-size:13px;font-weight:bold"><td>TOTAL</td><td style="text-align:right">${ReceiptEngine.fmt(total)} ${ReceiptEngine.esc(currency)}</td></tr>
   </table>
   <div class="dash"></div>
   <table>
     <tr><td>Payé en (${ReceiptEngine.esc(paymentMethod)})</td><td style="text-align:right">${ReceiptEngine.fmt(cashAmount)} ${ReceiptEngine.esc(currency)}</td></tr>
     ${changeAmount > 0 ? `<tr><td>Rendu</td><td style="text-align:right">${ReceiptEngine.fmt(changeAmount)} ${ReceiptEngine.esc(currency)}</td></tr>` : ''}
   </table>
-  <div class="center" style="margin-top:8px">${ReceiptEngine.esc(data?.settings?.ticketMessage || 'Merci de votre visite !')}</div>
+  <div class="center" style="margin-top:10px;border-top:1px dashed #000;padding-top:6px">
+    ${ReceiptEngine.esc(data?.settings?.ticketMessage || 'Merci de votre visite !')}
+  </div>
 </body>
 </html>`;
   }
