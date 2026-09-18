@@ -325,7 +325,8 @@ export default function PosTerminal() {
 
     const outOfStock = cart.filter(c => {
       const product = posProducts.find(p => p.id === c.productId);
-      return product && c.quantity > product.quantity;
+      if (!product || isService(product)) return false;
+      return c.quantity > product.quantity;
     });
     if (outOfStock.length > 0) {
       alert(`Stock insuffisant pour : ${outOfStock.map(c => c.name).join(', ')}`);

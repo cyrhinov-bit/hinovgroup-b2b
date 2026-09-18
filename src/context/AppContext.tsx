@@ -2751,7 +2751,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     for (const d of deltas) {
       if (!d.productId) continue;
       const product = posProducts.find(p => p.id === d.productId);
-      if (product && product.family === 'Service') continue; // Les services (photocopies, scans...) ne sont pas stockés
+      if (product && (product.family === 'Service' || (product.reference && product.reference.startsWith('SRV-')))) continue; // Les services (photocopies, scans...) ne sont pas stockés
       map.set(d.productId, (map.get(d.productId) || 0) + d.quantity);
     }
     if (map.size === 0) return;
