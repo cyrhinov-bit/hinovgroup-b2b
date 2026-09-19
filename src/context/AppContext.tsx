@@ -713,6 +713,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await db.posCategories.setItem('data', categoriesToSet);
       }
 
+      if (cachedPosBrands) setPosBrands(cachedPosBrands);
+      if (cachedPosSuppliers) setPosSuppliers(cachedPosSuppliers);
+      if (cachedPosStockEntries) setPosStockEntries(cachedPosStockEntries);
+      if (cachedPosStockMovements) setPosStockMovements(cachedPosStockMovements);
+      if (cachedPosInventories) setPosInventories(cachedPosInventories);
+      if (cachedPosCashSessions) setPosCashSessions(cachedPosCashSessions);
+      if (cachedPosTransactions) setPosTransactions(cachedPosTransactions);
+      if (cachedPosPayments) setPosPayments(cachedPosPayments);
+      if (cachedPosDiscounts) setPosDiscounts(cachedPosDiscounts);
+      if (cachedPosSettings) setPosSettingsState(cachedPosSettings);
+      if (cachedPosReturns) setPosReturns(cachedPosReturns);
+      if (cachedProductCompletions) setProductCompletions(cachedProductCompletions);
+      if (cachedImportSessions) setImportSessions(cachedImportSessions);
+
       const cachedProducts = cachedPosProducts || [];
       const missingDefaults = DEFAULT_SERVICE_PRODUCTS.filter(def => 
         !cachedProducts.some(m => m.id === def.id || (m.reference && m.reference === def.reference))

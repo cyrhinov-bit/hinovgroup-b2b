@@ -1306,21 +1306,35 @@ export const processSyncQueue = async () => {
           const { lines, payments, ...txData } = action.payload;
           
           const p_transaction = {
-            id: txData.id, transaction_number: txData.transactionNumber, cashier_id: txData.cashierId,
-            session_id: txData.sessionId, date: txData.date, subtotal: txData.subtotal,
-            discount_amount: txData.discountAmount, total: txData.total,
+            id: txData.id || uuidv4(),
+            transaction_number: txData.transactionNumber,
+            cashier_id: isUuid(txData.cashierId) ? txData.cashierId : null,
+            session_id: isUuid(txData.sessionId) ? txData.sessionId : null,
+            date: txData.date,
+            subtotal: txData.subtotal,
+            discount_amount: txData.discountAmount,
+            total: txData.total,
             status: txData.status
           };
 
           const p_lines = (lines || []).map((l: any) => ({
-            id: l.id, transaction_id: txData.id, product_id: l.productId,
-            description: l.description, quantity: l.quantity, unit_price: l.unitPrice,
-            discount_percent: l.discountPercent, discount_amount: l.discountAmount, total: l.total
+            id: l.id || uuidv4(),
+            transaction_id: p_transaction.id,
+            product_id: isUuid(l.productId) ? l.productId : null,
+            description: l.description,
+            quantity: l.quantity,
+            unit_price: l.unitPrice,
+            discount_percent: l.discountPercent,
+            discount_amount: l.discountAmount,
+            total: l.total
           }));
 
           const p_payments = (payments || []).map((p: any) => ({
-            id: p.id, transaction_id: txData.id, method: p.method,
-            amount: p.amount, reference: p.reference
+            id: p.id || uuidv4(),
+            transaction_id: p_transaction.id,
+            method: p.method,
+            amount: p.amount,
+            reference: p.reference
           }));
 
           let p_stock_entry = null;
