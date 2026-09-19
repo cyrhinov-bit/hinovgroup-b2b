@@ -188,9 +188,9 @@ export const processSyncQueue = async () => {
             id: payment.id,
             payment_number: payment.paymentNumber,
             payment_type: payment.paymentType,
-            vente_id: payment.venteId,
-            echeance_id: payment.echeanceId || null,
-            client_id: payment.clientId,
+            vente_id: isUuid(payment.venteId) ? payment.venteId : null,
+            echeance_id: isUuid(payment.echeanceId) ? payment.echeanceId : null,
+            client_id: isUuid(payment.clientId) ? payment.clientId : null,
             payment_date: payment.paymentDate,
             amount: payment.amount,
             payment_method: payment.paymentMethod,
@@ -198,7 +198,7 @@ export const processSyncQueue = async () => {
             proof_document_id: payment.proofDocumentId || null,
             notes: payment.notes || null,
             status: payment.status || 'VALIDE',
-            recorded_by: payment.recordedBy || null,
+            recorded_by: isUuid(payment.recordedBy) ? payment.recordedBy : null,
             created_at: payment.createdAt || new Date().toISOString()
           }]);
           if (error) console.error('[Sync] INSERT_FACTURE_PAIEMENT échoué :', error.message);
@@ -1193,12 +1193,12 @@ export const processSyncQueue = async () => {
         case 'INSERT_POS_STOCK_MOVEMENT': {
           const { error } = await supabase.from('pos_stock_movements').insert([{
             id: action.payload.id,
-            product_id: action.payload.productId,
+            product_id: isUuid(action.payload.productId) ? action.payload.productId : null,
             type: action.payload.type,
             quantity: action.payload.quantity,
             reference: action.payload.reference || null,
             date: action.payload.date || new Date().toISOString(),
-            created_by: action.payload.createdBy || null,
+            created_by: isUuid(action.payload.createdBy) ? action.payload.createdBy : null,
             notes: action.payload.notes || null
           }]);
           if (error) console.error('[Sync] INSERT_POS_STOCK_MOVEMENT échoué :', error);
@@ -1283,7 +1283,7 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_POS_CASH_SESSION': {
           const { error } = await supabase.from('pos_cash_sessions').insert([{
-            id: action.payload.id, cashier_id: action.payload.cashierId,
+            id: action.payload.id, cashier_id: isUuid(action.payload.cashierId) ? action.payload.cashierId : null,
             opened_at: action.payload.openedAt, initial_fund: action.payload.initialFund,
             status: action.payload.status
           }]);
@@ -1409,9 +1409,11 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_POS_PAYMENT': {
           const { error } = await supabase.from('pos_payments').insert([{
-            id: action.payload.id, transaction_id: action.payload.transactionId,
-            method: action.payload.method, amount: action.payload.amount,
-            reference: action.payload.reference
+            id: action.payload.id,
+            transaction_id: isUuid(action.payload.transactionId) ? action.payload.transactionId : null,
+            method: action.payload.method,
+            amount: action.payload.amount,
+            reference: action.payload.reference || null
           }]);
           success = !error;
           break;
@@ -1512,7 +1514,7 @@ export const processSyncQueue = async () => {
         case 'INSERT_PRODUCT_COMPLETION': {
           const { error } = await supabase.from('product_completions').insert([{
             id: action.payload.id,
-            product_id: action.payload.productId,
+            product_id: isUuid(action.payload.productId) ? action.payload.productId : null,
             missing_field: action.payload.missingField,
             current_value: action.payload.currentValue,
             suggested_value: action.payload.suggestedValue,
