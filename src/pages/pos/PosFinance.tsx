@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { 
-  TrendingUp, ShoppingCart, RotateCcw, Wallet, CreditCard, 
+  TrendingUp, ShoppingCart, RotateCcw, Wallet, 
   Smartphone, Layers, ChevronDown, ChevronRight, DollarSign,
   Trash2, AlertTriangle, Calendar, X, Check, Printer, BookOpen, PenTool
 } from 'lucide-react';
@@ -64,8 +64,12 @@ export default function PosFinance() {
   const avgBasket = totalTxCount > 0 ? Math.round(totalRevenue / totalTxCount) : 0;
 
   const rangePayments = posPayments.filter(p => rangeValidTx.some(t => t.id === p.transactionId));
-  const paymentTotals = { 'Espèces': 0, 'Carte': 0, 'Mobile Money': 0, 'Mixte': 0 };
-  rangePayments.forEach(p => { paymentTotals[p.method] += p.amount; });
+  const paymentTotals = { 'Espèces': 0, 'Mobile Money': 0, 'Mixte': 0 };
+  rangePayments.forEach(p => { 
+    if (p.method === 'Espèces' || p.method === 'Mobile Money' || p.method === 'Mixte') {
+      paymentTotals[p.method] = (paymentTotals[p.method] || 0) + p.amount;
+    }
+  });
 
   const isServiceProd = (p?: typeof posProducts[0], desc?: string) => 
     (p && (p.family === 'Service' || (p.reference && p.reference.startsWith('SRV-')))) ||
@@ -142,7 +146,7 @@ export default function PosFinance() {
   const dEnd = new Date(`${end}T00:00:00`);
   for (let d = new Date(dStart); d <= dEnd; d.setDate(d.getDate() + 1)) {
     const key = toLocalDayKey(d);
-    dailyMap.set(key, { ventes: 0, retours: 0, nbVentes: 0, nbRetours: 0, payments: { 'Espèces': 0, 'Carte': 0, 'Mobile Money': 0, 'Mixte': 0 } });
+    dailyMap.set(key, { ventes: 0, retours: 0, nbVentes: 0, nbRetours: 0, payments: { 'Espèces': 0, 'Mobile Money': 0, 'Mixte': 0 } });
   }
   rangeValidTx.forEach(t => {
     const key = toLocalDayKey(t.date);
@@ -338,10 +342,9 @@ export default function PosFinance() {
       {/* Payment methods */}
       <div style={{ ...cardStyle, marginBottom: '24px' }}>
         <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>Répartition par mode de paiement</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
           {[
             { label: 'Espèces', value: paymentTotals['Espèces'], icon: <Wallet size={18} />, color: 'var(--color-success)', bg: 'var(--color-success-tint)' },
-            { label: 'Carte', value: paymentTotals['Carte'], icon: <CreditCard size={18} />, color: 'var(--color-primary)', bg: 'var(--color-primary-tint)' },
             { label: 'Mobile Money', value: paymentTotals['Mobile Money'], icon: <Smartphone size={18} />, color: 'var(--color-warning)', bg: 'var(--color-warning-tint)' },
             { label: 'Mixte', value: paymentTotals['Mixte'], icon: <Layers size={18} />, color: 'var(--color-secondary)', bg: 'var(--color-secondary-tint)' },
           ].map(p => (
@@ -368,8 +371,7 @@ export default function PosFinance() {
               <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Retours</th>
               <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>CA Net</th>
               <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Espèces</th>
-              <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Carte</th>
-              <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Mobile</th>
+              <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Mobile Money</th>
               <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}></th>
             </tr>
           </thead>
@@ -378,20 +380,19 @@ export default function PosFinance() {
               const daySessions = rangeSessions.filter(s => toLocalDayKey(s.openedAt) === date);
               const isExpanded = expandedDay === date;
               return (
-                <>
-                  <tr key={date} style={{ borderBottom: '1px solid var(--color-surface-alt)', cursor: 'pointer' }} onClick={() => setExpandedDay(isExpanded ? null : date)}>
+                <React.Fragment key={date}>
+                  <tr style={{ borderBottom: '1px solid var(--color-surface-alt)', cursor: 'pointer' }} onClick={() => setExpandedDay(isExpanded ? null : date)}>
                     <td style={{ padding: '10px 12px', fontSize: '14px', fontWeight: 500 }}>{formatDate(date)}</td>
                     <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', color: 'var(--color-success)' }}>{data.ventes.toLocaleString()} FCFA</td>
                     <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', color: data.retours > 0 ? 'var(--color-error)' : 'var(--color-text-muted)' }}>{data.retours > 0 ? `-${data.retours.toLocaleString()} FCFA` : '—'}</td>
                     <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', fontWeight: 600 }}>{(data.ventes - data.retours).toLocaleString()} FCFA</td>
                     <td style={{ padding: '10px 12px', fontSize: '13px', color: 'var(--color-text-muted)' }}>{data.payments['Espèces'].toLocaleString()}</td>
-                    <td style={{ padding: '10px 12px', fontSize: '13px', color: 'var(--color-text-muted)' }}>{data.payments['Carte'].toLocaleString()}</td>
                     <td style={{ padding: '10px 12px', fontSize: '13px', color: 'var(--color-text-muted)' }}>{data.payments['Mobile Money'].toLocaleString()}</td>
                     <td style={{ padding: '10px 12px' }}>{isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</td>
                   </tr>
                   {isExpanded && (
                     <tr key={`${date}-detail`}>
-                      <td colSpan={8} style={{ padding: '0 12px 12px 12px', background: 'var(--color-surface-alt)' }}>
+                      <td colSpan={7} style={{ padding: '0 12px 12px 12px', background: 'var(--color-surface-alt)' }}>
                         <div style={{ padding: '12px', borderRadius: 'var(--radius-md)', background: 'white', border: '1px solid var(--color-border)' }}>
                           <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '8px' }}>Transactions du jour ({data.nbVentes} vente{data.nbVentes > 1 ? 's' : ''})</div>
                           {daySessions.length > 0 && (
@@ -413,13 +414,13 @@ export default function PosFinance() {
                             </div>
                           )}
                           <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
-                            Espèces: {data.payments['Espèces'].toLocaleString()} | Carte: {data.payments['Carte'].toLocaleString()} | Mobile: {data.payments['Mobile Money'].toLocaleString()}
+                            Espèces: {data.payments['Espèces'].toLocaleString()} | Mobile: {data.payments['Mobile Money'].toLocaleString()}
                           </div>
                         </div>
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               );
             })}
             {dailyEntries.length === 0 && (

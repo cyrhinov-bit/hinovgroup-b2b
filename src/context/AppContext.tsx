@@ -286,7 +286,7 @@ export interface PosInventory { id: string; reference: string; date: string; sta
 export interface PosCashSession { id: string; cashierId?: string; openedAt: string; closedAt?: string; initialFund: number; finalAmount?: number; expectedAmount?: number; difference?: number; status: 'Ouverte' | 'Fermée'; }
 export interface PosTransactionLine { id: string; productId?: string; description: string; quantity: number; unitPrice: number; discountPercent: number; discountAmount: number; total: number; }
 export interface PosTransaction { id: string; transactionNumber: string; cashierId?: string; sessionId?: string; date: string; subtotal: number; vat: number; discountAmount: number; total: number; status: 'Validée' | 'Annulée' | 'Retournée'; lines: PosTransactionLine[]; payments: PosPayment[]; }
-export interface PosPayment { id: string; transactionId?: string; method: 'Espèces' | 'Carte' | 'Mobile Money' | 'Mixte'; amount: number; reference?: string; }
+export interface PosPayment { id: string; transactionId?: string; method: 'Espèces' | 'Mobile Money' | 'Mixte'; amount: number; reference?: string; }
 export interface PosDiscount { id: string; name: string; type: 'Pourcentage' | 'Montant'; value: number; maxPercent?: number; maxAmount?: number; active: boolean; }
 export interface PosReturnLine { id: string; productId?: string; description: string; quantity: number; unitPrice: number; total: number; reason: string; }
 export interface ExchangeLine { id: string; productId: string; description: string; quantity: number; unitPrice: number; total: number; }

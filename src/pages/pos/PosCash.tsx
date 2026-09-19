@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Wallet, Plus, AlertTriangle, CheckCircle2, Calendar, Archive, ChevronDown, ChevronRight } from 'lucide-react';
+import { Wallet, Plus, AlertTriangle, CheckCircle2, Calendar, Archive, ChevronDown, ChevronRight, Smartphone, Layers } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/Button';
@@ -27,19 +27,27 @@ export default function PosCash() {
   const validTx = posTransactions.filter(t => t.status === 'Validée');
 
   // Seule la part encaissée en espèces (ou mixte) doit apparaître dans la caisse physique.
-  // Les paiements Carte / Mobile Money ne passent pas par le tiroir-caisse.
+  // Les paiements Mobile Money ne passent pas par le tiroir-caisse physique.
   const cashOfTransaction = (t: typeof posTransactions[number]) => {
-    const cashPayments = t.payments
+    const cashPayments = (t.payments || [])
       .filter(p => p.method === 'Espèces' || p.method === 'Mixte')
       .reduce((a, p) => a + p.amount, 0);
-    return cashPayments > 0 ? cashPayments : (t.payments.length === 0 ? t.total : 0);
+    return cashPayments > 0 ? cashPayments : (t.payments?.length === 0 ? t.total : 0);
+  };
+
+  const mobileOfTransaction = (t: typeof posTransactions[number]) => {
+    return (t.payments || [])
+      .filter(p => p.method === 'Mobile Money')
+      .reduce((a, p) => a + p.amount, 0);
   };
 
   const sessionReturns = openSession ? posReturns
     .filter(r => r.status === 'Traité' && r.sessionId === openSession.id)
     .reduce((s, r) => s + r.totalRefund, 0) : 0;
-  const sessionSales = openSession ? validTx.filter(t => t.sessionId === openSession.id).reduce((s, t) => s + cashOfTransaction(t), 0) : 0;
-  const expectedAmount = openSession ? openSession.initialFund + sessionSales - sessionReturns : 0;
+  const sessionCashSales = openSession ? validTx.filter(t => t.sessionId === openSession.id).reduce((s, t) => s + cashOfTransaction(t), 0) : 0;
+  const sessionMobileSales = openSession ? validTx.filter(t => t.sessionId === openSession.id).reduce((s, t) => s + mobileOfTransaction(t), 0) : 0;
+  const sessionGrandTotal = sessionCashSales + sessionMobileSales;
+  const expectedAmount = openSession ? openSession.initialFund + sessionCashSales - sessionReturns : 0;
   const diffPreview = Number(finalAmount || 0) - expectedAmount;
 
   const handleCloseStale = async (staleSession: typeof posCashSessions[number]) => {
@@ -225,22 +233,36 @@ export default function PosCash() {
               <Badge variant="warning">En cours</Badge>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', marginBottom: '16px' }}>
               <div style={{ background: 'var(--color-surface-alt)', borderRadius: 'var(--radius-md)', padding: '12px' }}>
                 <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Fond initial</div>
                 <div style={{ fontSize: '18px', fontWeight: 700 }}>{formatMoney(openSession.initialFund)}</div>
               </div>
-              <div style={{ background: 'var(--color-surface-alt)', borderRadius: 'var(--radius-md)', padding: '12px' }}>
-                <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Ventes</div>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--color-success)' }}>+{formatMoney(sessionSales)}</div>
+              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 'var(--radius-md)', padding: '12px' }}>
+                <div style={{ fontSize: '12px', color: '#166534', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Wallet size={14} /> Espèces (Tiroir)
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--color-success)' }}>+{formatMoney(sessionCashSales)}</div>
+              </div>
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 'var(--radius-md)', padding: '12px' }}>
+                <div style={{ fontSize: '12px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Smartphone size={14} /> Mobile Money
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--color-warning-strong)' }}>+{formatMoney(sessionMobileSales)}</div>
               </div>
               <div style={{ background: 'var(--color-surface-alt)', borderRadius: 'var(--radius-md)', padding: '12px' }}>
-                <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Retours</div>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--color-error)' }}>-{formatMoney(sessionReturns)}</div>
+                <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Total Chiffre d'Affaires</div>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--color-primary)' }}>{formatMoney(sessionGrandTotal)}</div>
               </div>
-              <div style={{ background: 'var(--color-surface-alt)', borderRadius: 'var(--radius-md)', padding: '12px' }}>
-                <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Attendu en caisse</div>
-                <div style={{ fontSize: '18px', fontWeight: 700 }}>{formatMoney(expectedAmount)}</div>
+              {sessionReturns > 0 && (
+                <div style={{ background: 'var(--color-surface-alt)', borderRadius: 'var(--radius-md)', padding: '12px' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Retours déduits</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--color-error)' }}>-{formatMoney(sessionReturns)}</div>
+                </div>
+              )}
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)', padding: '12px' }}>
+                <div style={{ fontSize: '12px', color: '#1e40af', fontWeight: 600 }}>Attendu physique tiroir</div>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: '#1e40af' }}>{formatMoney(expectedAmount)}</div>
               </div>
             </div>
 

@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Search, Trash2, Plus, Minus, Clock, ArrowLeft, Package, Layers, RefreshCw, Sparkles, Mic, MicOff, AlertTriangle, TrendingUp, TrendingDown, Info, ShieldCheck, Printer } from 'lucide-react';
+import { Search, Trash2, Plus, Minus, Clock, ArrowLeft, Package, Layers, RefreshCw, Sparkles, Mic, MicOff, AlertTriangle, TrendingUp, TrendingDown, Info, ShieldCheck, Printer, Wallet, Smartphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { barcodeScannerService } from '../../features/products/services/BarcodeScannerService';
@@ -21,7 +21,7 @@ interface CartItem { id: string; productId: string; name: string; reference: str
 
 export default function PosTerminal() {
   const navigate = useNavigate();
-  const { posProducts, posSettings, posCashSessions, addPosTransaction, addPosCashSession, suspendedCarts, addSuspendedCart, removeSuspendedCart, settings: crmSettings, loading, refreshData } = useAppContext();
+  const { posProducts, posSettings, posCashSessions, posTransactions, posReturns, addPosTransaction, addPosCashSession, suspendedCarts, addSuspendedCart, removeSuspendedCart, settings: crmSettings, loading, refreshData } = useAppContext();
   const { currentUser } = useAuth();
   const [search, setSearch] = useState('');
   const [showVoiceAiModal, setShowVoiceAiModal] = useState(false);
@@ -150,8 +150,43 @@ export default function PosTerminal() {
   const [selectedFamily, setSelectedFamily] = useState<'all' | 'Livre' | 'Fourniture' | 'Service'>('all');
   const [serviceModalProduct, setServiceModalProduct] = useState<typeof posProducts[0] | null>(null);
   const [serviceQty, setServiceQty] = useState<number | ''>(1);
+  const [showCashierBreakdownModal, setShowCashierBreakdownModal] = useState(false);
   const today = todayLocalKey();
   const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today && (s.cashierId === currentUser?.id || !s.cashierId));
+
+  const sessionTxs = useMemo(() => {
+    if (!openSession) return [];
+    return posTransactions.filter(t => t.sessionId === openSession.id && t.status === 'Validée');
+  }, [posTransactions, openSession]);
+
+  const sessionCashSales = useMemo(() => {
+    return sessionTxs.reduce((sum, t) => {
+      const cash = (t.payments || [])
+        .filter(p => p.method === 'Espèces' || p.method === 'Mixte')
+        .reduce((a, p) => a + p.amount, 0);
+      return sum + (cash > 0 ? cash : (t.payments?.length === 0 ? t.total : 0));
+    }, 0);
+  }, [sessionTxs]);
+
+  const sessionMobileSales = useMemo(() => {
+    return sessionTxs.reduce((sum, t) => {
+      const mob = (t.payments || [])
+        .filter(p => p.method === 'Mobile Money')
+        .reduce((a, p) => a + p.amount, 0);
+      return sum + mob;
+    }, 0);
+  }, [sessionTxs]);
+
+  const sessionGrandTotal = sessionCashSales + sessionMobileSales;
+
+  const sessionReturns = useMemo(() => {
+    if (!openSession) return 0;
+    return posReturns
+      .filter(r => r.sessionId === openSession.id && r.status === 'Traité')
+      .reduce((sum, r) => sum + r.totalRefund, 0);
+  }, [posReturns, openSession]);
+
+  const expectedDrawerCash = (openSession?.initialFund || 0) + sessionCashSales - sessionReturns;
 
   const isService = (p: typeof posProducts[0]) => p.family === 'Service' || (p.reference && p.reference.startsWith('SRV-'));
   const isLivre = (p: typeof posProducts[0]) => !isService(p) && ((p.family && p.family.toLowerCase().startsWith('livre')) || !!(p.isbn && p.isbn.trim()));
@@ -587,6 +622,32 @@ export default function PosTerminal() {
               <span>Commande IA</span>
               <Mic size={14} style={{ opacity: 0.9 }} />
             </button>
+
+            {openSession && (
+              <button
+                type="button"
+                onClick={() => setShowCashierBreakdownModal(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '0 14px',
+                  borderRadius: 'var(--radius-md)',
+                  background: '#f0fdf4',
+                  border: '1px solid #86efac',
+                  color: '#166534',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.2s'
+                }}
+                title="Consulter la répartition financière de la session de caisse"
+              >
+                <Wallet size={16} color="#16a34a" />
+                <span>Ma Caisse : {sessionGrandTotal.toLocaleString()} FCFA</span>
+              </button>
+            )}
           </div>
 
           {/* Family selection tabs */}
@@ -1303,6 +1364,127 @@ export default function PosTerminal() {
               </div>
             </div>
           )}
+        </div>
+      </Modal>
+
+      {/* Cashier Financial Breakdown Modal */}
+      <Modal
+        open={showCashierBreakdownModal}
+        onClose={() => setShowCashierBreakdownModal(false)}
+        title="Répartition Financière de la Caisse"
+        width={640}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+            <Button variant="primary" onClick={() => setShowCashierBreakdownModal(false)}>Fermer</Button>
+          </div>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Header Info */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-surface-alt)', padding: '12px 16px', borderRadius: 'var(--radius-md)', fontSize: '13px', flexWrap: 'wrap', gap: '8px' }}>
+            <div>
+              <span style={{ color: 'var(--color-text-muted)' }}>Caissier(ère) : </span>
+              <strong>{currentUser?.name || 'Caissier'}</strong>
+            </div>
+            <div>
+              <span style={{ color: 'var(--color-text-muted)' }}>Session ouverte le : </span>
+              <strong>{openSession ? new Date(openSession.openedAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</strong>
+            </div>
+          </div>
+
+          {/* Cards Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+            <div style={{ background: '#f8fafc', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '14px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>Fonds initial d'ouverture</div>
+              <div style={{ fontSize: '18px', fontWeight: 700 }}>{(openSession?.initialFund || 0).toLocaleString()} FCFA</div>
+            </div>
+
+            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)', padding: '14px' }}>
+              <div style={{ fontSize: '12px', color: '#1e40af', fontWeight: 600, marginBottom: '4px' }}>Attendu physique dans le tiroir</div>
+              <div style={{ fontSize: '20px', fontWeight: 800, color: '#1e40af' }}>{expectedDrawerCash.toLocaleString()} FCFA</div>
+              <div style={{ fontSize: '11px', color: '#3b82f6', marginTop: '2px' }}>Fonds initial + Espèces - Retours</div>
+            </div>
+
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 'var(--radius-md)', padding: '14px' }}>
+              <div style={{ fontSize: '12px', color: '#166534', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                <Wallet size={15} /> Ventes en Espèces
+              </div>
+              <div style={{ fontSize: '20px', fontWeight: 800, color: '#15803d' }}>+{sessionCashSales.toLocaleString()} FCFA</div>
+            </div>
+
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 'var(--radius-md)', padding: '14px' }}>
+              <div style={{ fontSize: '12px', color: '#92400e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                <Smartphone size={15} /> Ventes Mobile Money
+              </div>
+              <div style={{ fontSize: '20px', fontWeight: 800, color: '#b45309' }}>+{sessionMobileSales.toLocaleString()} FCFA</div>
+            </div>
+          </div>
+
+          {sessionReturns > 0 && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+              <span style={{ color: '#991b1b', fontWeight: 500 }}>Remboursements / Retours déduits du tiroir :</span>
+              <strong style={{ color: '#b91c1c' }}>-{sessionReturns.toLocaleString()} FCFA</strong>
+            </div>
+          )}
+
+          {/* Grand Total Bar */}
+          <div style={{ background: 'var(--color-primary-tint)', border: '1px solid var(--color-primary)', borderRadius: 'var(--radius-md)', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: 600, color: 'var(--color-primary-strong)', fontSize: '14px' }}>Chiffre d'Affaires Total de la Session :</span>
+            <strong style={{ fontSize: '20px', color: 'var(--color-primary-strong)' }}>{sessionGrandTotal.toLocaleString()} FCFA</strong>
+          </div>
+
+          {/* Recent Sales List */}
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '8px', color: 'var(--color-text)' }}>
+              Ventes de la session ({sessionTxs.length} ticket{sessionTxs.length > 1 ? 's' : ''})
+            </div>
+            {sessionTxs.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--color-text-muted)', fontSize: '13px' }}>
+                Aucune vente réalisée dans cette session pour l'instant.
+              </div>
+            ) : (
+              <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--color-surface-alt)', borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                      <th style={{ padding: '8px 12px' }}>Heure</th>
+                      <th style={{ padding: '8px 12px' }}>Ticket</th>
+                      <th style={{ padding: '8px 12px' }}>Mode de règlement</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'right' }}>Montant</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sessionTxs.map(t => {
+                      const payMethod = t.payments?.[0]?.method || 'Espèces';
+                      return (
+                        <tr key={t.id} style={{ borderBottom: '1px solid var(--color-surface-alt)' }}>
+                          <td style={{ padding: '8px 12px', color: 'var(--color-text-muted)' }}>
+                            {new Date(t.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td style={{ padding: '8px 12px', fontWeight: 500 }}>{t.transactionNumber}</td>
+                          <td style={{ padding: '8px 12px' }}>
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              background: payMethod === 'Espèces' ? '#dcfce7' : payMethod === 'Mobile Money' ? '#fef3c7' : '#e0e7ff',
+                              color: payMethod === 'Espèces' ? '#166534' : payMethod === 'Mobile Money' ? '#92400e' : '#3730a3'
+                            }}>
+                              {payMethod}
+                            </span>
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>
+                            {t.total.toLocaleString()} FCFA
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       </Modal>
       </div>
