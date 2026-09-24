@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Search, Trash2, Plus, Minus, Clock, ArrowLeft, Package, RefreshCw, Sparkles, Mic, MicOff, AlertTriangle, Info, ShieldCheck, Printer, Wallet, Smartphone } from 'lucide-react';
+import { Search, Trash2, Plus, Minus, Clock, ArrowLeft, Package, RefreshCw, AlertTriangle, Info, ShieldCheck, Printer, Wallet, Smartphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { barcodeScannerService } from '../../features/products/services/BarcodeScannerService';
@@ -13,8 +13,7 @@ import { Modal } from '../../components/ui/Modal';
 import { toast } from 'react-hot-toast';
 import { platform } from '../../platform';
 import { todayLocalKey, toLocalDayKey } from '../../lib/dates';
-import { matchesProductSearch, formatVoiceTranscription } from '../../lib/searchUtils';
-import PosVoiceAiModal from '../../components/pos/PosVoiceAiModal';
+import { matchesProductSearch } from '../../lib/searchUtils';
 import { calculateCartMargin } from '../../features/pos/services/PosAiService';
 
 interface CartItem { id: string; productId: string; name: string; reference: string; unitPrice: number; quantity: number; discountType: 'none' | 'percent' | 'amount'; discountPercent: number; discountAmount: number; total: number; }
@@ -24,91 +23,6 @@ export default function PosTerminal() {
   const { posProducts, posSettings, posCashSessions, posTransactions, posReturns, addPosTransaction, addPosCashSession, suspendedCarts, addSuspendedCart, removeSuspendedCart, settings: crmSettings, refreshData } = useAppContext();
   const { currentUser } = useAuth();
   const [search, setSearch] = useState('');
-  const [showVoiceAiModal, setShowVoiceAiModal] = useState(false);
-  const [showMarginAdviceModal, setShowMarginAdviceModal] = useState(false);
-  const [isDirectListening, setIsDirectListening] = useState(false);
-  const directRecognitionRef = useRef<any>(null);
-  const shouldDirectListenRef = useRef(false);
-
-  const toggleDirectListening = async () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      toast.error('Reconnaissance vocale non disponible sur ce navigateur.');
-      return;
-    }
-
-    if (isDirectListening) {
-      shouldDirectListenRef.current = false;
-      setIsDirectListening(false);
-      if (directRecognitionRef.current) {
-        try { directRecognitionRef.current.stop(); } catch {}
-      }
-      toast('Micro désactivé.', { icon: '🔇' });
-      return;
-    }
-
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        await navigator.mediaDevices.getUserMedia({ audio: true });
-      }
-
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'fr-FR';
-
-      recognition.onstart = () => {
-        setIsDirectListening(true);
-      };
-
-      recognition.onresult = (event: any) => {
-        let full = '';
-        for (let i = 0; i < event.results.length; i++) {
-          full += event.results[i][0].transcript + ' ';
-        }
-        const formatted = formatVoiceTranscription(full);
-        if (formatted) {
-          setSearch(formatted);
-        }
-      };
-
-      recognition.onerror = (e: any) => {
-        console.warn('Direct Speech error:', e);
-        if (e.error === 'not-allowed') {
-          toast.error("Accès microphone refusé.");
-          shouldDirectListenRef.current = false;
-          setIsDirectListening(false);
-        }
-      };
-
-      recognition.onend = () => {
-        if (shouldDirectListenRef.current) {
-          try { recognition.start(); } catch {}
-        } else {
-          setIsDirectListening(false);
-        }
-      };
-
-      directRecognitionRef.current = recognition;
-      shouldDirectListenRef.current = true;
-      setIsDirectListening(true);
-      recognition.start();
-      toast.success('Micro actif en permanence ! Parlez pour rechercher.');
-    } catch (err: any) {
-      toast.error("Erreur micro : " + (err.message || err));
-      setIsDirectListening(false);
-      shouldDirectListenRef.current = false;
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      shouldDirectListenRef.current = false;
-      if (directRecognitionRef.current) {
-        try { directRecognitionRef.current.stop(); } catch {}
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (posProducts.length <= 7) {
@@ -229,40 +143,6 @@ export default function PosTerminal() {
     } else {
       addToCart(product, 1);
     }
-  };
-
-  const handleAddAiItemsToCart = (items: { product: typeof posProducts[0]; quantity: number }[], replace = false) => {
-    setCart(prev => {
-      let newCart = replace ? [] : [...prev];
-      for (const { product, quantity } of items) {
-        const existingIndex = newCart.findIndex(c => c.productId === product.id);
-        if (existingIndex >= 0) {
-          const existing = newCart[existingIndex];
-          const newQty = existing.quantity + quantity;
-          let itemTotal = newQty * existing.unitPrice;
-          if (existing.discountType === 'percent') {
-            itemTotal = newQty * existing.unitPrice * (1 - existing.discountPercent / 100);
-          } else if (existing.discountType === 'amount') {
-            itemTotal = newQty * existing.unitPrice - existing.discountAmount;
-          }
-          newCart[existingIndex] = { ...existing, quantity: newQty, total: Math.max(0, itemTotal) };
-        } else {
-          newCart.push({
-            id: uuidv4(),
-            productId: product.id,
-            name: product.name,
-            reference: product.reference,
-            unitPrice: product.sellingPrice,
-            quantity,
-            discountType: 'none',
-            discountPercent: 0,
-            discountAmount: 0,
-            total: product.sellingPrice * quantity
-          });
-        }
-      }
-      return newCart;
-    });
   };
 
   useEffect(() => {
@@ -555,8 +435,8 @@ export default function PosTerminal() {
               <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
               <input 
                 autoFocus 
-                style={{ ...inputStyle, paddingLeft: '36px', paddingRight: '72px', fontSize: '16px', border: isDirectListening ? '2px solid #22c55e' : '1px solid var(--color-border)', background: isDirectListening ? '#f0fdf4' : 'white' }} 
-                placeholder={isDirectListening ? "🎙️ Écoute continue active... parlez !" : "Scanner code-barres ou rechercher par nom, réf, ISBN..."} 
+                style={{ ...inputStyle, paddingLeft: '36px', paddingRight: '36px', fontSize: '16px' }} 
+                placeholder="Scanner code-barres ou rechercher par nom, réf, ISBN..." 
                 value={search} 
                 onChange={e => setSearch(e.target.value)} 
                 onKeyDown={e => { 
@@ -575,8 +455,8 @@ export default function PosTerminal() {
                   } 
                 }} 
               />
-              <div style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                {search && (
+              {search && (
+                <div style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center' }}>
                   <button 
                     type="button"
                     onClick={() => setSearch('')} 
@@ -585,53 +465,9 @@ export default function PosTerminal() {
                   >
                     ✕
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={toggleDirectListening}
-                  style={{
-                    background: isDirectListening ? '#22c55e' : 'var(--color-surface-alt)',
-                    color: isDirectListening ? 'white' : 'var(--color-text)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-sm)',
-                    cursor: 'pointer',
-                    padding: '5px 7px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.2s'
-                  }}
-                  title={isDirectListening ? "Désactiver le micro de recherche" : "Activer le micro de recherche en continu"}
-                >
-                  {isDirectListening ? <MicOff size={15} className="animate-pulse" /> : <Mic size={15} />}
-                </button>
-              </div>
+                </div>
+              )}
             </div>
-            <button
-              type="button"
-              onClick={() => setShowVoiceAiModal(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '0 16px',
-                borderRadius: 'var(--radius-md)',
-                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-                color: 'white',
-                border: 'none',
-                fontWeight: 600,
-                fontSize: '14px',
-                cursor: 'pointer',
-                boxShadow: '0 2px 4px rgba(79, 70, 229, 0.25)',
-                transition: 'all 0.2s',
-                whiteSpace: 'nowrap'
-              }}
-              title="Commande rapide vocale ou texte par IA"
-            >
-              <Sparkles size={16} />
-              <span>Commande IA</span>
-              <Mic size={14} style={{ opacity: 0.9 }} />
-            </button>
 
             {openSession && (
               <button
@@ -903,22 +739,6 @@ export default function PosTerminal() {
                   {marginInfo.isLoss ? <AlertTriangle size={14} /> : marginInfo.isLowMargin ? <Info size={14} /> : <ShieldCheck size={14} />}
                   <span>{marginInfo.isLoss ? 'Alerte : Vente à perte !' : marginInfo.isLowMargin ? 'Marge faible' : 'Rentabilité saine'}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowMarginAdviceModal(true)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    color: 'var(--color-primary)',
-                    cursor: 'pointer',
-                    textDecoration: 'underline',
-                    padding: 0
-                  }}
-                >
-                  Conseil IA Remise
-                </button>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
@@ -1274,106 +1094,6 @@ export default function PosTerminal() {
       >
         <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px', background: '#f8fafc', maxHeight: '65vh', overflowY: 'auto' }}>
           <ReceiptTicket data={receiptData} settings={posSettings} crmSettings={crmSettings} preview={true} />
-        </div>
-      </Modal>
-
-      {/* Voice / Natural Language AI Order Modal */}
-      <PosVoiceAiModal
-        open={showVoiceAiModal}
-        onClose={() => setShowVoiceAiModal(false)}
-        posProducts={posProducts}
-        userId={currentUser?.id}
-        onAddItemsToCart={handleAddAiItemsToCart}
-      />
-
-      {/* Margin & Profitability Advice Modal */}
-      <Modal
-        open={showMarginAdviceModal}
-        onClose={() => setShowMarginAdviceModal(false)}
-        title="Assistant IA : Analyse de Rentabilité & Remise"
-        width={480}
-        footer={
-          <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-            <Button variant="ghost" onClick={() => setShowMarginAdviceModal(false)}>Fermer</Button>
-            {marginInfo.recommendedMaxDiscountAmount > 0 && (
-              <Button
-                variant="primary"
-                onClick={() => {
-                  setDiscountType('amount');
-                  setDiscountValue(marginInfo.recommendedMaxDiscountAmount);
-                  setShowMarginAdviceModal(false);
-                  toast.success(`Remise ajustée à ${marginInfo.recommendedMaxDiscountAmount.toLocaleString()} FCFA (marge cible 20%).`);
-                }}
-              >
-                Appliquer remise conseillée ({marginInfo.recommendedMaxDiscountPercent}%)
-              </Button>
-            )}
-          </div>
-        }
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{
-            padding: '12px 16px',
-            borderRadius: 'var(--radius-md)',
-            background: marginInfo.isLoss ? '#fef2f2' : marginInfo.isLowMargin ? '#fffbeb' : '#f0fdf4',
-            border: `1px solid ${marginInfo.isLoss ? '#fecaca' : marginInfo.isLowMargin ? '#fde68a' : '#bbf7d0'}`,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px'
-          }}>
-            {marginInfo.isLoss ? <AlertTriangle size={24} color="#b91c1c" /> : marginInfo.isLowMargin ? <Info size={24} color="#b45309" /> : <ShieldCheck size={24} color="#15803d" />}
-            <div>
-              <div style={{ fontWeight: 700, fontSize: '15px', color: marginInfo.isLoss ? '#b91c1c' : marginInfo.isLowMargin ? '#b45309' : '#15803d' }}>
-                {marginInfo.isLoss ? 'Vente à perte détectée !' : marginInfo.isLowMargin ? 'Marge sous le seuil d’alerte' : 'Rentabilité saine & protégée'}
-              </div>
-              <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                {marginInfo.isLoss 
-                  ? 'Le prix net de vente est inférieur au coût d’achat fournisseur des articles.'
-                  : marginInfo.isLowMargin
-                  ? 'La marge actuelle est inférieure à 15%. Soyez vigilant sur les remises supplémentaires.'
-                  : 'La marge commerciale est conforme aux objectifs de rentabilité (≥ 20%).'}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ background: 'var(--color-surface-alt)', padding: '12px 16px', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--color-text-muted)' }}>Coût d’achat total (fournisseur) :</span>
-              <strong>{marginInfo.totalPurchaseCost.toLocaleString()} FCFA</strong>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--color-text-muted)' }}>Prix de vente catalogue :</span>
-              <strong>{marginInfo.subtotal.toLocaleString()} FCFA</strong>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--color-text-muted)' }}>Remise totale accordée :</span>
-              <strong style={{ color: marginInfo.totalDiscount > 0 ? '#dc2626' : 'inherit' }}>
-                {marginInfo.totalDiscount > 0 ? `-${marginInfo.totalDiscount.toLocaleString()} FCFA` : '0 FCFA'}
-              </strong>
-            </div>
-            <div style={{ height: '1px', background: 'var(--color-border)', margin: '4px 0' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-              <span>Total net client :</span>
-              <strong>{marginInfo.netRevenue.toLocaleString()} FCFA</strong>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-              <span>Marge brute nette :</span>
-              <strong style={{ color: marginInfo.isLoss ? '#dc2626' : marginInfo.isLowMargin ? '#d97706' : '#16a34a' }}>
-                {marginInfo.grossMarginAmount > 0 ? '+' : ''}{marginInfo.grossMarginAmount.toLocaleString()} FCFA ({marginInfo.grossMarginRate.toFixed(1)}%)
-              </strong>
-            </div>
-          </div>
-
-          {marginInfo.totalPurchaseCost > 0 && (
-            <div style={{ border: '1px dashed var(--color-primary)', background: 'var(--color-primary-tint)', padding: '12px 16px', borderRadius: 'var(--radius-md)', fontSize: '13px', color: 'var(--color-primary-strong)' }}>
-              <div style={{ fontWeight: 600, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Sparkles size={15} /> Recommandation de négociation :
-              </div>
-              <div>
-                Pour maintenir une <b>marge minimale de 20%</b>, la remise maximale accordable sur ce panier est de <b>{marginInfo.recommendedMaxDiscountAmount.toLocaleString()} FCFA</b> ({marginInfo.recommendedMaxDiscountPercent}%).
-              </div>
-            </div>
-          )}
         </div>
       </Modal>
 
