@@ -1386,22 +1386,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { refreshData(); }, [refreshData]);
 
-  // Realtime delta sync
+  // Realtime delta sync & live POS subscriptions
   useEffect(() => {
     if (!currentUser) return;
-    const channel = supabase.channel('public-all')
-      .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-        // Trigger a delta refresh whenever any table changes remotely
+
+    let refreshTimeout: any = null;
+    const debouncedRefresh = () => {
+      if (refreshTimeout) clearTimeout(refreshTimeout);
+      refreshTimeout = setTimeout(() => {
         refreshData();
-      })
+      }, 500);
+    };
+
+    const channel = supabase.channel('pos-realtime-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pos_transactions' }, debouncedRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pos_cash_sessions' }, debouncedRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pos_payments' }, debouncedRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pos_returns' }, debouncedRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pos_products' }, debouncedRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pos_stock_entries' }, debouncedRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pos_stock_movements' }, debouncedRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public' }, debouncedRefresh)
       .subscribe();
+
+    // Heartbeat polling (toutes les 15s) pour garantir un affichage instantané pour l'admin
+    const heartbeatInterval = setInterval(() => {
+      if (navigator.onLine && document.visibilityState === 'visible') {
+        refreshData();
+      }
+    }, 15000);
       
     return () => {
+      if (refreshTimeout) clearTimeout(refreshTimeout);
+      clearInterval(heartbeatInterval);
       supabase.removeChannel(channel);
     };
   }, [currentUser, refreshData]);
 
-  // Auto-retry: relance la sync queue toutes les 5 minutes si des actions sont en attente
+  // Auto-retry: relance la sync queue toutes les 60 secondes si des actions sont en attente
   useEffect(() => {
     const interval = setInterval(async () => {
       if (!navigator.onLine) return;
@@ -1410,7 +1432,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.log(`[AutoSync] ${queue.length} action(s) en attente. Tentative de synchronisation...`);
         processSyncQueue();
       }
-    }, 5 * 60 * 1000); // toutes les 5 minutes
+    }, 60 * 1000); // toutes les 60s
     return () => clearInterval(interval);
   }, []);
 

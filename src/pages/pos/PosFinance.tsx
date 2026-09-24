@@ -1,20 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { 
   TrendingUp, ShoppingCart, RotateCcw, Wallet, 
   Smartphone, Layers, ChevronDown, ChevronRight, DollarSign,
-  Trash2, AlertTriangle, Calendar, X, Check, Printer, BookOpen, PenTool
+  Trash2, AlertTriangle, Calendar, X, Check, Printer, BookOpen, PenTool, RefreshCw
 } from 'lucide-react';
 import { todayLocalKey, toLocalDayKey } from '../../lib/dates';
 import { toast } from 'react-hot-toast';
+import { Button } from '../../components/ui/Button';
 
 type Period = 'today' | '7days' | '30days' | 'custom';
 
 export default function PosFinance() {
   const { 
     posTransactions, posCashSessions, posPayments, posProducts, 
-    posReturns, deletePosMovementsByDateRange 
+    posReturns, deletePosMovementsByDateRange, refreshData 
   } = useAppContext();
   const { currentUser } = useAuth();
 
@@ -22,6 +23,23 @@ export default function PosFinance() {
   const [startDate, setStartDate] = useState(todayLocalKey());
   const [endDate, setEndDate] = useState(todayLocalKey());
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    refreshData().catch(() => {});
+  }, [refreshData]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshData();
+      toast.success('Données financières actualisées');
+    } catch {
+      toast.error('Erreur de synchronisation');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Modal Purge Période
   const [showPurgeModal, setShowPurgeModal] = useState(false);
@@ -216,15 +234,25 @@ export default function PosFinance() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>Finance POS</h1>
         
-        {isAuthorized && (
-          <button
-            type="button"
-            onClick={() => {
-              setPurgeStartDate('2026-08-09');
-              setPurgeEndDate('2026-08-31');
-              setConfirmPurgeCheck(false);
-              setShowPurgeModal(true);
-            }}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <Button 
+            variant="secondary" 
+            icon={<RefreshCw size={16} className={isRefreshing ? "animate-spin" : ""} />}
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+          >
+            {isRefreshing ? 'Actualisation...' : 'Actualiser'}
+          </Button>
+
+          {isAuthorized && (
+            <button
+              type="button"
+              onClick={() => {
+                setPurgeStartDate('2026-08-09');
+                setPurgeEndDate('2026-08-31');
+                setConfirmPurgeCheck(false);
+                setShowPurgeModal(true);
+              }}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -245,6 +273,7 @@ export default function PosFinance() {
             <span>Purger une période (ex: 9 au 31 août)</span>
           </button>
         )}
+        </div>
       </div>
 
       {/* Period filter */}

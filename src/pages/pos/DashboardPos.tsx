@@ -1,11 +1,31 @@
+import { useState, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useNavigate } from 'react-router-dom';
-import { Package, Warehouse, TrendingUp, AlertTriangle, DollarSign, RotateCcw, ShoppingBag, Percent } from 'lucide-react';
+import { Package, Warehouse, TrendingUp, AlertTriangle, DollarSign, RotateCcw, ShoppingBag, RefreshCw } from 'lucide-react';
 import { todayLocalKey, toLocalDayKey } from '../../lib/dates';
+import { Button } from '../../components/ui/Button';
+import { toast } from 'react-hot-toast';
 
 export default function DashboardPos() {
-  const { posProducts, posTransactions, posCashSessions, posReturns } = useAppContext();
+  const { posProducts, posTransactions, posCashSessions, posReturns, refreshData } = useAppContext();
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    refreshData().catch(() => {});
+  }, [refreshData]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshData();
+      toast.success('Données synchronisées avec succès');
+    } catch {
+      toast.error('Erreur lors de la synchronisation');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const totalProducts = posProducts.length;
   const physicalProducts = posProducts.filter(p => p.family !== 'Service');
@@ -25,7 +45,17 @@ export default function DashboardPos() {
 
   return (
     <div className="pos-page">
-      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '20px' }}>Dashboard POS</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>Dashboard POS</h1>
+        <Button 
+          variant="secondary" 
+          icon={<RefreshCw size={16} className={isRefreshing ? "animate-spin" : ""} />}
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+        >
+          {isRefreshing ? 'Actualisation...' : 'Actualiser'}
+        </Button>
+      </div>
       <div className="pos-kpi-grid">
         <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>

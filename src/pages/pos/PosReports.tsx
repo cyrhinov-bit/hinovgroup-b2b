@@ -1,8 +1,28 @@
+import { useState, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { BarChart3, TrendingUp, ShoppingCart, Printer, BookOpen, PenTool } from 'lucide-react';
+import { BarChart3, TrendingUp, ShoppingCart, Printer, BookOpen, PenTool, RefreshCw } from 'lucide-react';
+import { Button } from '../../components/ui/Button';
+import { toast } from 'react-hot-toast';
 
 export default function PosReports() {
-  const { posTransactions, posProducts } = useAppContext();
+  const { posTransactions, posProducts, refreshData } = useAppContext();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    refreshData().catch(() => {});
+  }, [refreshData]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshData();
+      toast.success('Rapports actualisés');
+    } catch {
+      toast.error('Erreur de synchronisation');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const validTransactions = posTransactions.filter(t => t.status === 'Validée');
   const totalRevenue = validTransactions.reduce((sum, t) => sum + t.total, 0);
@@ -76,6 +96,14 @@ export default function PosReports() {
             Suivi des ventes globales, ventilation par famille et prestations de reprographie.
           </p>
         </div>
+        <Button 
+          variant="secondary" 
+          icon={<RefreshCw size={16} className={isRefreshing ? "animate-spin" : ""} />}
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+        >
+          {isRefreshing ? 'Actualisation...' : 'Actualiser'}
+        </Button>
       </div>
 
       {/* Main KPIs */}

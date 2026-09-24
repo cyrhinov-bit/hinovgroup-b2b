@@ -1,7 +1,7 @@
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
-import { Search, RotateCcw, XCircle, ArrowLeft, Trash2, Calendar, Archive, ChevronDown, ChevronRight, Printer } from 'lucide-react';
+import { Search, RotateCcw, XCircle, ArrowLeft, Trash2, Calendar, Archive, ChevronDown, ChevronRight, Printer, RefreshCw } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
@@ -16,14 +16,31 @@ import { platform } from '../../platform';
 import { toast } from 'react-hot-toast';
 
 export default function PosTransactions() {
-  const { posTransactions, posCashSessions, voidPosTransaction, clearPosSalesHistory, posSettings, settings: crmSettings, users } = useAppContext();
+  const { posTransactions, posCashSessions, voidPosTransaction, clearPosSalesHistory, posSettings, settings: crmSettings, users, refreshData } = useAppContext();
   const { currentUser } = useAuth();
   const { confirm } = useConfirm();
   const [search, setSearch] = useState('');
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>('all');
   const [selectedReceiptData, setSelectedReceiptData] = useState<ReceiptData | null>(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    refreshData().catch(() => {});
+  }, [refreshData]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshData();
+      toast.success('Historique actualisé');
+    } catch {
+      toast.error('Erreur de synchronisation');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const currentWeekKey = getWeekKey(new Date());
 
@@ -212,11 +229,21 @@ export default function PosTransactions() {
             </div>
           </div>
         </div>
-        {(role === 'Directeur' || role === 'Gerant') && posTransactions.length > 0 && (
-          <Button variant="danger" icon={<Trash2 size={16} />} onClick={handleClearHistory}>
-            Vider l'historique des ventes
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <Button 
+            variant="secondary" 
+            icon={<RefreshCw size={16} className={isRefreshing ? "animate-spin" : ""} />}
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+          >
+            {isRefreshing ? 'Actualisation...' : 'Actualiser'}
           </Button>
-        )}
+          {(role === 'Directeur' || role === 'Gerant') && posTransactions.length > 0 && (
+            <Button variant="danger" icon={<Trash2 size={16} />} onClick={handleClearHistory}>
+              Vider l'historique des ventes
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Barre de recherche et filtres de semaine */}
