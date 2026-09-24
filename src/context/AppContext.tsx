@@ -513,13 +513,13 @@ interface AppState {
   deleteImportSession: (id: string) => Promise<void>;
   addImportError: (error: ImportError) => Promise<void>;
   completeProduct: (productId: string, updates: Partial<PosProduct>) => Promise<void>;
-  refreshData: () => Promise<void>;
+  refreshData: (isBackground?: boolean) => Promise<void>;
 }
 
   const defaultSettings: AppSettings = { companyName: 'Hinov', companyLogo: '', companyAddress: '', companySiret: '', companyTva: '', defaultTerms: '', commissionRate: 10 };
 
-// Helper pour éviter tout blocage réseau infini sur les requêtes asynchrones
-const withTimeout = async <T,>(promiseOrThenable: any, ms: number = 15000): Promise<T> => {
+// Helper pour éviter tout blocage réseau infini sur les requêtes asynchrones (3.5s max)
+const withTimeout = async <T,>(promiseOrThenable: any, ms: number = 3500): Promise<T> => {
   let timer: any;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error('Délai dépassé')), ms);
@@ -615,8 +615,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [posWorkspace, setPosWorkspace] = useState<PosWorkspace>({ active: false });
 
   // Load from offline cache first, then fetch from Supabase if online
-  const refreshData = useCallback(async () => {
-    setLoading(true);
+  const refreshData = useCallback(async (isBackground: boolean = false) => {
+    if (!isBackground) {
+      setLoading(true);
+    }
     try {
       const [
         cachedUsers, cachedClients, cachedAffaires, cachedFacturePaiements, cachedCouts,
@@ -765,21 +767,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const lastSyncTime = await db.syncMetadata.getItem<string>('lastSyncTime');
         const syncTimestamp = new Date().toISOString();
 
-        // Chaque table est récupérée isolément avec timeout
+        // Chaque table est récupérée isolément avec timeout court (3.5s)
         const safeFetch = async (queryFn: () => any, allowDelta: boolean = false): Promise<any> => {
           try {
             let query = queryFn();
             if (allowDelta && lastSyncTime) {
                query = query.gt('updated_at', lastSyncTime);
             }
-            const res = await withTimeout<any>(query, 15000);
+            const res = await withTimeout<any>(query, 3500);
             if (res && res.error) {
-              console.warn('[refreshData] Table ignorée :', res.error.message);
               return null;
             }
             return res ? res.data : null;
-          } catch (e) {
-            console.warn('[refreshData] Table ignorée ou délai dépassé :', e);
+          } catch {
             return null;
           }
         };
@@ -1400,7 +1400,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const debouncedRefresh = () => {
       if (refreshTimeout) clearTimeout(refreshTimeout);
       refreshTimeout = setTimeout(() => {
-        refreshData();
+        refreshData(true);
       }, 500);
     };
 
@@ -1415,10 +1415,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .on('postgres_changes', { event: '*', schema: 'public' }, debouncedRefresh)
       .subscribe();
 
-    // Heartbeat polling (toutes les 15s) pour garantir un affichage instantané pour l'admin
+    // Heartbeat polling (toutes les 15s) en tâche de fond transparente
     const heartbeatInterval = setInterval(() => {
       if (navigator.onLine && document.visibilityState === 'visible') {
-        refreshData();
+        refreshData(true);
       }
     }, 15000);
       
@@ -1449,13 +1449,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const handleWakeup = () => {
       if (navigator.onLine) {
         processSyncQueue();
-        refreshData();
+        refreshData(true);
       }
     };
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible' && navigator.onLine) {
-        refreshData();
+        refreshData(true);
       }
     };
 

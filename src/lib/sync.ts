@@ -73,6 +73,19 @@ export const queueSyncAction = async (type: SyncActionType, payload: any) => {
   }
 };
 
+// Helper de timeout pour éviter qu'une action réseau ne bloque la file en cas de coupure
+const withSyncTimeout = async <T,>(promise: Promise<T>, ms: number = 4500): Promise<T> => {
+  let timer: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Délai réseau dépassé lors de la synchronisation')), ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 // Verrou anti-réentrance : empêche deux processSyncQueue simultanés
 let syncLock = false;
 
@@ -90,7 +103,8 @@ export const processSyncQueue = async () => {
     try {
       let success = false;
       
-      switch (action.type) {
+      const executeAction = async (): Promise<boolean> => {
+        switch (action.type) {
         case 'INSERT_CLIENT': {
           const { error } = await supabase.from('clients').insert([{
             id: action.payload.id,
@@ -1647,7 +1661,11 @@ export const processSyncQueue = async () => {
         }
         default:
           success = true; // Ignore unknown actions
-      }
+        }
+        return success;
+      };
+
+      success = await withSyncTimeout(executeAction(), 4500);
 
       // Qu'il y ait succès ou échec logique (rejet de la DB), on retire l'action pour éviter le syndrome de la Poison Pill.
       // Les vraies pannes réseau (fetch failed) lèveront une exception et tomberont dans le catch.

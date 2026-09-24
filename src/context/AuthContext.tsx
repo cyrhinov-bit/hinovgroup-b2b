@@ -17,9 +17,43 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
+const AUTH_STORAGE_KEY = 'auth_last_user';
+
+// Helper de timeout pour éviter les blocages réseau infinis
+const withAuthTimeout = async <T = any,>(promiseOrThenable: any, ms: number = 2500): Promise<T> => {
+  let timer: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Délai réseau dépassé')), ms);
+  });
+  try {
+    return await Promise.race([
+      Promise.resolve(promiseOrThenable),
+      timeoutPromise
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Récupération synchrone immédiate du dernier profil connecté pour un démarrage 0ms
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem(AUTH_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  
+  // Si un profil était déjà en cache, l'application est immédiatement interactive
+  const [loading, setLoading] = useState<boolean>(() => {
+    try {
+      return !localStorage.getItem(AUTH_STORAGE_KEY);
+    } catch {
+      return true;
+    }
+  });
 
   // Appliquer automatiquement le thème de l'utilisateur connecté
   useEffect(() => {
@@ -28,44 +62,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [currentUser?.id]);
 
   useEffect(() => {
-    // Check active sessions and sets the user
-    supabase.auth.getSession().then((result) => {
-      const { session } = result.data;
-      if (session) {
-        fetchUserProfile(session.user.id);
-      } else {
-        setLoading(false);
-      }
-    });
+    let isMounted = true;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: { user: { id: string } } | null) => {
+    const initAuth = async () => {
+      try {
+        // Tentative de récupération de la session Supabase avec timeout de 2.5s
+        const result = await withAuthTimeout(supabase.auth.getSession(), 2500);
+        const session = result?.data?.session;
+        if (session && isMounted) {
+          await fetchUserProfile(session.user.id);
+        } else if (isMounted) {
+          // Si aucune session active Supabase et pas d'utilisateur en cache local
+          if (!localStorage.getItem(AUTH_STORAGE_KEY)) {
+            setCurrentUser(null);
+          }
+          setLoading(false);
+        }
+      } catch {
+        // Hors-ligne au démarrage : on conserve l'utilisateur en cache s'il existe
+        console.warn('[AuthContext] Mode hors-ligne détecté au démarrage.');
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: { user: { id: string } } | null) => {
+      if (!isMounted) return;
       if (session) {
-        fetchUserProfile(session.user.id);
-      } else {
+        await fetchUserProfile(session.user.id);
+      } else if (event === 'SIGNED_OUT') {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
         setCurrentUser(null);
         setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const fetchUserProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-        
-      if (data && !error) {
-        const geminiKey = (data.gemini_api_key || '').trim();
-        if (geminiKey) {
-          localStorage.setItem(`gemini_key_${data.id}`, geminiKey);
-          localStorage.setItem(`gemini_api_key_${data.id}`, geminiKey);
-        }
+      // 1. Tenter la récupération en ligne avec un timeout court de 2.5s
+      const response = await withAuthTimeout(
+        supabase.from('profiles').select('*').eq('id', userId).single(),
+        2500
+      );
+      
+      const data = response?.data;
+      const error = response?.error;
 
-        setCurrentUser({
+      if (data && !error) {
+        const userObj: User = {
           id: data.id,
           name: data.name,
           email: data.email,
@@ -75,22 +128,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           lastLogin: data.last_login,
           active: data.active !== false,
           photo: data.photo || undefined,
-          geminiApiKey: geminiKey || undefined,
+          geminiApiKey: data.gemini_api_key || undefined,
           posReturnsEnabled: data.pos_returns_enabled === true,
           posCatalogueEnabled: data.pos_catalogue_enabled === true,
           posSupplyEnabled: data.pos_supply_enabled === true,
           posInventoryEnabled: data.pos_inventory_enabled === true,
           posStockEnabled: data.pos_stock_enabled === true,
           posRole: data.pos_role || null
-        });
+        };
+
+        setCurrentUser(userObj);
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userObj));
         setLoading(false);
         return;
       }
-    } catch (err) {
-      console.warn('Erreur réseau lors de la récupération du profil, tentative de chargement depuis le cache...');
+    } catch {
+      console.warn('[AuthContext] Échec réseau lors du chargement du profil, bascule sur le cache local.');
     }
 
-    // Fallback: Read from local cache if offline or error
+    // 2. Fallback Hors-Ligne immédiat : Lecture depuis IndexedDB ou LocalStorage
     try {
       const { db } = await import('../lib/db');
       const cachedUsers = await db.profiles.getItem<User[]>('data');
@@ -98,49 +154,129 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const cachedUser = cachedUsers.find(u => u.id === userId);
         if (cachedUser) {
           setCurrentUser(cachedUser);
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(cachedUser));
+          setLoading(false);
+          return;
         }
       }
     } catch (cacheErr) {
-      console.error('Erreur lors de la lecture du cache utilisateur', cacheErr);
+      console.error('[AuthContext] Erreur lecture cache profil :', cacheErr);
     }
     
     setLoading(false);
   };
 
   const login = async (emailInput: string, pinInput: string): Promise<{ success: boolean; error?: string }> => {
-    setLoading(true);
     const cleanEmail = normalizeEmail(emailInput);
     const cleanPin = pinInput.trim();
 
     if (!isValidPin(cleanPin)) {
-      setLoading(false);
-      return { success: false, error: 'Le mot de passe ne peut pas être vide.' };
+      return { success: false, error: 'Le mot de passe / code PIN ne peut pas être vide.' };
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({ 
-      email: cleanEmail, 
-      password: cleanPin 
-    });
-    
-    if (error || !data.user) {
-      console.error('[AuthContext] Connexion échouée :', error?.message);
-      setLoading(false);
-      return { success: false, error: error?.message || 'Utilisateur introuvable.' };
+    // Fonction interne d'authentification hors-ligne de secours
+    const attemptOfflineLogin = async (): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const { db } = await import('../lib/db');
+        const cachedUsers = await db.profiles.getItem<User[]>('data');
+        if (cachedUsers && cachedUsers.length > 0) {
+          const matchedUser = cachedUsers.find(u => 
+            normalizeEmail(u.email) === cleanEmail || 
+            u.name.toLowerCase() === cleanEmail.toLowerCase()
+          );
+
+          if (!matchedUser) {
+            return { success: false, error: 'Utilisateur introuvable dans la base locale hors-ligne.' };
+          }
+
+          if (matchedUser.active === false) {
+            return { success: false, error: 'Ce compte a été désactivé.' };
+          }
+
+          if (matchedUser.pin && matchedUser.pin === cleanPin) {
+            console.log('[AuthContext] Connexion hors-ligne réussie pour :', matchedUser.name);
+            setCurrentUser(matchedUser);
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(matchedUser));
+            setLoading(false);
+            return { success: true };
+          } else {
+            return { success: false, error: 'Code PIN incorrect (mode hors-ligne).' };
+          }
+        }
+      } catch (err) {
+        console.error('[AuthContext] Erreur vérification login hors-ligne :', err);
+      }
+      return { success: false, error: 'Impossible de se connecter hors-ligne (aucun utilisateur en cache).' };
+    };
+
+    // 1. Si déconnecté d'Internet de manière évidente, tenter directement le login hors-ligne
+    if (!navigator.onLine) {
+      return await attemptOfflineLogin();
     }
-    
-    // Check active status
-    const { data: profile } = await supabase.from('profiles').select('active').eq('id', data.user.id).single();
-    if (profile && profile.active === false) {
-      await supabase.auth.signOut();
+
+    // 2. Tentative de connexion en ligne avec timeout de 3.5s
+    try {
+      const signInPromise = supabase.auth.signInWithPassword({ 
+        email: cleanEmail, 
+        password: cleanPin 
+      });
+
+      const { data, error } = await withAuthTimeout(signInPromise, 3500);
+
+      if (error || !data?.user) {
+        // Si erreur d'identifiants côté serveur
+        if (error && (error.message.includes('Invalid login credentials') || error.message.includes('Email not confirmed'))) {
+          return { success: false, error: 'Identifiants ou code PIN incorrects.' };
+        }
+        // Pour les autres erreurs, tenter le repli hors-ligne
+        return await attemptOfflineLogin();
+      }
+
+      // Vérifier si le compte est actif
+      const profileRes = await withAuthTimeout(
+        supabase.from('profiles').select('*').eq('id', data.user.id).single(),
+        2500
+      ).catch(() => null);
+
+      const profile = profileRes?.data;
+      if (profile && profile.active === false) {
+        await supabase.auth.signOut().catch(() => {});
+        return { success: false, error: 'Votre compte a été désactivé par le Directeur.' };
+      }
+
+      // Mettre à jour last_login en tâche de fond non-bloquante
+      void supabase.from('profiles').update({ last_login: new Date().toISOString() }).eq('id', data.user.id);
+      
+      if (profile) {
+        const userObj: User = {
+          id: profile.id,
+          name: profile.name,
+          email: profile.email,
+          role: profile.role as User['role'],
+          serviceId: profile.service_id,
+          pin: profile.pin,
+          lastLogin: new Date().toISOString(),
+          active: profile.active !== false,
+          photo: profile.photo || undefined,
+          geminiApiKey: profile.gemini_api_key || undefined,
+          posReturnsEnabled: profile.pos_returns_enabled === true,
+          posCatalogueEnabled: profile.pos_catalogue_enabled === true,
+          posSupplyEnabled: profile.pos_supply_enabled === true,
+          posInventoryEnabled: profile.pos_inventory_enabled === true,
+          posStockEnabled: profile.pos_stock_enabled === true,
+          posRole: profile.pos_role || null
+        };
+        setCurrentUser(userObj);
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userObj));
+      }
+
       setLoading(false);
-      return { success: false, error: 'Votre compte a été désactivé par le Directeur.' };
+      return { success: true };
+    } catch {
+      // Si timeout ou défaillance réseau -> bascule automatique sur le mode hors-ligne
+      console.warn('[AuthContext] Connexion en ligne indisponible, tentative hors-ligne...');
+      return await attemptOfflineLogin();
     }
-    
-    // Update last_login
-    await supabase.from('profiles').update({ last_login: new Date().toISOString() }).eq('id', data.user.id);
-    
-    // fetchUserProfile is triggered by onAuthStateChange
-    return { success: true };
   };
 
   const loginAsTestUser = (role: User['role']) => {
@@ -152,15 +288,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       pin: '000000',
       lastLogin: new Date().toISOString(),
       active: true,
-      posReturnsEnabled: true, // test user has everything enabled by default
+      posReturnsEnabled: true,
       posCatalogueEnabled: true,
     };
     setCurrentUser(testUser);
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(testUser));
     setLoading(false);
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    setCurrentUser(null);
+    try {
+      await withAuthTimeout(supabase.auth.signOut(), 2000);
+    } catch {
+      // Ignorer les erreurs réseau à la déconnexion
+    }
   };
 
   const updatePin = async (currentPin: string, newPin: string): Promise<{ success: boolean; error?: string }> => {
@@ -168,21 +311,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isValidPin(newPin)) return { success: false, error: 'Le nouveau PIN doit contenir exactement 6 chiffres.' };
     if (currentPin !== currentUser.pin) return { success: false, error: 'Code PIN actuel incorrect.' };
 
-    // Update Supabase Auth password
-    const { error: authError } = await supabase.auth.updateUser({ password: newPin });
-    if (authError) return { success: false, error: authError.message };
+    const updatedUser = { ...currentUser, pin: newPin };
+    setCurrentUser(updatedUser);
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updatedUser));
 
-    // Update pin field in profiles table
-    const { error: profileError } = await supabase.from('profiles').update({ pin: newPin }).eq('id', currentUser.id);
-    if (profileError) return { success: false, error: profileError.message };
+    // Mettre à jour en local dans db.profiles
+    try {
+      const { db } = await import('../lib/db');
+      const cached = (await db.profiles.getItem<User[]>('data')) || [];
+      const updated = cached.map(u => u.id === currentUser.id ? updatedUser : u);
+      await db.profiles.setItem('data', updated);
+    } catch {}
 
-    // Refresh local user
-    await fetchUserProfile(currentUser.id);
+    // Synchronisation en ligne si disponible
+    if (navigator.onLine) {
+      try {
+        await supabase.auth.updateUser({ password: newPin });
+        await supabase.from('profiles').update({ pin: newPin }).eq('id', currentUser.id);
+      } catch (err) {
+        console.warn('[AuthContext] Synchro nouveau PIN serveur en attente :', err);
+      }
+    }
     return { success: true };
   };
 
   const updateCurrentUser = (updates: Partial<User>) => {
-    setCurrentUser(prev => (prev ? { ...prev, ...updates } : null));
+    setCurrentUser(prev => {
+      if (!prev) return null;
+      const next = { ...prev, ...updates };
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
   };
 
   return (
