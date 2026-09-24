@@ -183,6 +183,12 @@ export default function PosProducts() {
                       )}
                     </td>
                     <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right' }}>
+                      {product.family === 'Service' ? (product.purchasePrice ? `${product.purchasePrice.toLocaleString()} FCFA` : '-') : (product.purchasePrice ? `${product.purchasePrice.toLocaleString()} FCFA` : '-')}
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right', fontWeight: 600 }}>
+                      {product.sellingPrice ? `${product.sellingPrice.toLocaleString()} FCFA` : '-'}
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right' }}>
                       {product.family === 'Service' ? (
                         <span style={{ padding: '2px 8px', borderRadius: '10px', background: '#f5f3ff', color: '#7c3aed', fontSize: '11px', fontWeight: 600 }}>
                           Non stocké

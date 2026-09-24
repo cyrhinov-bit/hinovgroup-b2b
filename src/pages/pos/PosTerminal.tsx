@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Search, Trash2, Plus, Minus, Clock, ArrowLeft, Package, Layers, RefreshCw, Sparkles, Mic, MicOff, AlertTriangle, TrendingUp, TrendingDown, Info, ShieldCheck, Printer, Wallet, Smartphone } from 'lucide-react';
+import { Search, Trash2, Plus, Minus, Clock, ArrowLeft, Package, RefreshCw, Sparkles, Mic, MicOff, AlertTriangle, Info, ShieldCheck, Printer, Wallet, Smartphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { barcodeScannerService } from '../../features/products/services/BarcodeScannerService';
@@ -13,15 +13,15 @@ import { Modal } from '../../components/ui/Modal';
 import { toast } from 'react-hot-toast';
 import { platform } from '../../platform';
 import { todayLocalKey, toLocalDayKey } from '../../lib/dates';
-import { matchesProductSearch, parseNumericInput, formatVoiceTranscription } from '../../lib/searchUtils';
+import { matchesProductSearch, formatVoiceTranscription } from '../../lib/searchUtils';
 import PosVoiceAiModal from '../../components/pos/PosVoiceAiModal';
-import { calculateCartMargin, type CartMarginInfo } from '../../features/pos/services/PosAiService';
+import { calculateCartMargin } from '../../features/pos/services/PosAiService';
 
 interface CartItem { id: string; productId: string; name: string; reference: string; unitPrice: number; quantity: number; discountType: 'none' | 'percent' | 'amount'; discountPercent: number; discountAmount: number; total: number; }
 
 export default function PosTerminal() {
   const navigate = useNavigate();
-  const { posProducts, posSettings, posCashSessions, posTransactions, posReturns, addPosTransaction, addPosCashSession, suspendedCarts, addSuspendedCart, removeSuspendedCart, settings: crmSettings, loading, refreshData } = useAppContext();
+  const { posProducts, posSettings, posCashSessions, posTransactions, posReturns, addPosTransaction, addPosCashSession, suspendedCarts, addSuspendedCart, removeSuspendedCart, settings: crmSettings, refreshData } = useAppContext();
   const { currentUser } = useAuth();
   const [search, setSearch] = useState('');
   const [showVoiceAiModal, setShowVoiceAiModal] = useState(false);
