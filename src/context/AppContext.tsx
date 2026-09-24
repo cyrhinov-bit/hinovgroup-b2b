@@ -14,10 +14,16 @@ import { toLocalDayKey } from '../lib/dates';
 const isUuid = (value?: string) => !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
 const mergeData = <T extends { id: string }>(oldData: T[] | null | undefined, newData: T[]): T[] => {
-  if (!oldData || oldData.length === 0) return newData;
+  if (!oldData || oldData.length === 0) return newData || [];
+  if (!newData || newData.length === 0) return oldData;
   const map = new Map(oldData.map(item => [item.id, item]));
   for (const item of newData) {
-    map.set(item.id, item);
+    const existing = map.get(item.id);
+    if (existing) {
+      map.set(item.id, { ...existing, ...item });
+    } else {
+      map.set(item.id, item);
+    }
   }
   return Array.from(map.values());
 };
@@ -1435,6 +1441,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }, 60 * 1000); // toutes les 60s
     return () => clearInterval(interval);
   }, []);
+
+  // Écouteurs de réveil automatique : reconnexion réseau, focus de fenêtre et visibilité d'onglet
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const handleWakeup = () => {
+      if (navigator.onLine) {
+        processSyncQueue();
+        refreshData();
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        refreshData();
+      }
+    };
+
+    window.addEventListener('online', handleWakeup);
+    window.addEventListener('focus', handleWakeup);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener('online', handleWakeup);
+      window.removeEventListener('focus', handleWakeup);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [currentUser, refreshData]);
 
   // Écoute les erreurs critiques de synchronisation et les affiche comme toast
   useEffect(() => {
