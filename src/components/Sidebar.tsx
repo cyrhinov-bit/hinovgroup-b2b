@@ -47,37 +47,19 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     }
   };
 
-  // CRM nav items avec couleurs distinctives
+  // CRM nav items (Recentré sur les Devis, Clients, Services & Prestations, Documents, Utilisateurs, Paramètres)
   const crmNavItems: NavItemConfig[] = [
     { label: 'Dashboard', icon: Home, path: '/', color: '#2563EB', bg: '#EFF6FF', roles: ['Directeur', 'Responsable'] },
-    { label: 'Clients', icon: Users, path: '/clients', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Directeur', 'Responsable'] },
-    { label: 'Affaires', icon: Briefcase, path: '/affaires', color: '#0D9488', bg: '#F0FDFA', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'] },
-    { label: 'Services', icon: Briefcase, path: '/services', color: '#4F46E5', bg: '#EEF2FF', roles: ['Directeur'] },
-    { label: 'Prestations', icon: FileText, path: '/prestations', color: '#6366F1', bg: '#EEF2FF', roles: ['Directeur'] },
-    { label: 'Devis', icon: FileText, path: '/devis', color: '#D97706', bg: '#FFFBEB', roles: ['Directeur', 'Responsable'] },
-    { label: 'Ventes', icon: Receipt, path: '/ventes', color: '#10B981', bg: '#ECFDF5', roles: ['Directeur', 'Responsable'] },
-    { label: 'Coûts & Dépenses', icon: DollarSign, path: '/couts', color: '#F43F5E', bg: '#FFF1F2', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'] },
-    { label: 'Commissions', icon: Coins, path: '/commissions', color: '#EAB308', bg: '#FEFCE8', roles: ['Directeur', 'Responsable'] },
-    { label: 'Performance & Primes', icon: Trophy, path: '/performance', color: '#F97316', bg: '#FFF7ED', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
-    { label: 'Mes Commissions', icon: Coins, path: '/mes-commissions', color: '#EAB308', bg: '#FEFCE8', roles: ['Responsable'] },
-    { label: 'Mon Rapport Hebdo (IA)', icon: Sparkles, path: '/mon-rapport-hebdo', color: '#A855F7', bg: '#FAF5FF', roles: ['Commercial', 'Responsable', 'Directeur', 'Directeur adjoint', 'SuperAdmin'] },
-    { label: 'Historique Rapports', icon: History, path: '/mes-rapports', color: '#0284C7', bg: '#F0F9FF', roles: ['Commercial', 'Responsable', 'Directeur', 'Directeur adjoint', 'SuperAdmin'] },
-    { label: 'Rapports d\'Équipe', icon: ClipboardList, path: '/rapports-equipe', color: '#06B6D4', bg: '#ECFEFF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
-    { label: 'Documents (GED)', icon: Folder, path: '/documents', color: '#0284C7', bg: '#F0F9FF', roles: ['Directeur', 'Responsable'] },
+    { label: 'Devis', icon: FileText, path: '/devis', color: '#D97706', bg: '#FFFBEB', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
+    { label: 'Clients', icon: Users, path: '/clients', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
+    { label: 'Services', icon: Briefcase, path: '/services', color: '#4F46E5', bg: '#EEF2FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
+    { label: 'Prestations', icon: FileText, path: '/prestations', color: '#6366F1', bg: '#EEF2FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
+    { label: 'Documents (GED)', icon: Folder, path: '/documents', color: '#0284C7', bg: '#F0F9FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Utilisateurs', icon: Shield, path: '/utilisateurs', color: '#475569', bg: '#F8FAFC', roles: ['Directeur', 'SuperAdmin'] },
-    { label: 'Rapports', icon: PieChart, path: '/rapports', color: '#3B82F6', bg: '#EFF6FF', roles: ['Directeur'] },
     { label: 'Paramètres Gemini IA', icon: Bot, path: '/parametres-ia', color: '#D946EF', bg: '#FDF4FF', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin', 'Commercial', 'Caissier', 'Gerant'] },
     { label: 'Paramètres', icon: Settings, path: '/parametres', color: '#64748B', bg: '#F1F5F9', roles: ['Directeur'] },
-    // Commercial routes
-    { label: 'Dashboard', icon: Home, path: '/commercial', color: '#2563EB', bg: '#EFF6FF', roles: ['Commercial', 'SuperAdmin'] },
-    { label: 'Prospects', icon: Target, path: '/commercial/prospects', color: '#EC4899', bg: '#FDF2F8', roles: ['Commercial', 'SuperAdmin'] },
-    { label: 'Mes Affaires', icon: Briefcase, path: '/affaires', color: '#0D9488', bg: '#F0FDFA', roles: ['Commercial', 'SuperAdmin'] },
-    { label: 'Clients Apportés', icon: Users, path: '/commercial/clients', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Commercial', 'SuperAdmin'] },
-    { label: 'Mes Commissions', icon: Coins, path: '/commercial/commissions', color: '#EAB308', bg: '#FEFCE8', roles: ['Commercial', 'SuperAdmin'] },
-    { label: 'Mon Rapport Hebdo (IA)', icon: Sparkles, path: '/mon-rapport-hebdo', color: '#A855F7', bg: '#FAF5FF', roles: ['Commercial', 'SuperAdmin'] },
-    { label: 'Historique Rapports', icon: History, path: '/commercial/mes-rapports', color: '#0284C7', bg: '#F0F9FF', roles: ['Commercial', 'SuperAdmin'] },
-    { label: 'Paramètres Gemini IA', icon: Bot, path: '/parametres-ia', color: '#D946EF', bg: '#FDF4FF', roles: ['Commercial', 'SuperAdmin'] },
-    { label: 'Documents (GED)', icon: Folder, path: '/commercial/documents', color: '#0284C7', bg: '#F0F9FF', roles: ['Commercial', 'SuperAdmin'] },
+    // Espace Commercial
+    { label: 'Dashboard', icon: Home, path: '/commercial', color: '#2563EB', bg: '#EFF6FF', roles: ['Commercial'] },
   ];
 
   // POS nav items avec couleurs distinctives
