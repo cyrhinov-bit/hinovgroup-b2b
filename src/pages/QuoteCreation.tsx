@@ -277,7 +277,7 @@ export function QuoteCreation() {
       discountPercent: discountPercent || 0,
       discountAmount,
       total,
-      status: statusOverride || (sourceQuote ? sourceQuote.status : status),
+      status: statusOverride || (sourceQuote ? sourceQuote.status : 'Accepté'),
       date: quoteDate || todayStr,
       validUntil: validUntil || undefined,
       paymentTerms: paymentTerms || undefined,
@@ -294,7 +294,7 @@ export function QuoteCreation() {
       alert("Veuillez ajouter au moins une ligne d'article ou prestation pour prévisualiser le devis.");
       return;
     }
-    const quoteData = buildCurrentQuoteData();
+    const quoteData = buildCurrentQuoteData('Accepté');
     const client = clients.find(c => c.id === clientId);
     const pdfBlob = generateQuotePdf(quoteData, client, settings);
     const blobUrl = URL.createObjectURL(pdfBlob);
@@ -306,7 +306,7 @@ export function QuoteCreation() {
     });
   };
 
-  const handleSave = async (statusToSet: 'Brouillon' | 'Envoyé', openPreviewModal: boolean = false) => {
+  const handleSave = async (statusToSet: 'Accepté' | 'Brouillon' | 'Envoyé' = 'Accepté', openPreviewModal: boolean = false) => {
     if (!clientId) {
       alert("Veuillez sélectionner un client");
       return;
@@ -793,10 +793,13 @@ export function QuoteCreation() {
             <Eye size={16} /> Aperçu en direct
           </button>
           <button className="btn btn-secondary" onClick={() => handleSave('Brouillon')}>
-            <Save size={16} style={{ marginRight: '8px' }} /> Sauvegarder (Brouillon)
+            <Save size={16} style={{ marginRight: '8px' }} /> Brouillon
           </button>
-          <button className="btn btn-primary" onClick={() => handleSave('Brouillon', true)} style={{ marginLeft: '8px' }}>
-            <FileText size={16} style={{ marginRight: '8px' }} /> Enregistrer & Prévisualiser PDF
+          <button className="btn btn-primary" onClick={() => handleSave('Accepté')}>
+            <Save size={16} style={{ marginRight: '8px' }} /> Valider le devis (Accepté)
+          </button>
+          <button className="btn btn-primary" onClick={() => handleSave('Accepté', true)} style={{ marginLeft: '8px', background: '#0D9488', borderColor: '#0D9488' }}>
+            <FileText size={16} style={{ marginRight: '8px' }} /> Valider & Prévisualiser PDF
           </button>
         </div>
       </div>
