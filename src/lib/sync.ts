@@ -1207,7 +1207,7 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_POS_STOCK_ENTRY': {
           const { lines, ...entryData } = action.payload;
-          const { error } = await supabase.from('pos_stock_entries').insert([{
+          const { error } = await supabase.from('pos_stock_entries').upsert([{
             id: entryData.id,
             reference: entryData.reference,
             supplier_id: isUuid(entryData.supplierId) ? entryData.supplierId : null,
@@ -1216,13 +1216,13 @@ export const processSyncQueue = async () => {
             status: entryData.status,
             notes: entryData.notes || null,
             created_by: isUuid(entryData.createdBy) ? entryData.createdBy : null
-          }]);
+          }], { onConflict: 'id' });
           if (!error && lines && lines.length > 0) {
             const linesData = lines.map((l: any) => ({
               id: l.id, entry_id: entryData.id, product_id: l.productId,
               quantity: l.quantity, purchase_price: l.purchasePrice, total: l.total
             }));
-            await supabase.from('pos_stock_entry_lines').insert(linesData);
+            await supabase.from('pos_stock_entry_lines').upsert(linesData, { onConflict: 'id' });
           }
           success = !error;
           break;
@@ -1253,17 +1253,17 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_POS_INVENTORY': {
           const { lines, ...invData } = action.payload;
-          const { error } = await supabase.from('pos_inventories').insert([{
+          const { error } = await supabase.from('pos_inventories').upsert([{
             id: invData.id, reference: invData.reference, date: invData.date,
             status: invData.status, notes: invData.notes,
             created_by: isUuid(invData.createdBy) ? invData.createdBy : null
-          }]);
+          }], { onConflict: 'id' });
           if (!error && lines && lines.length > 0) {
             const linesData = lines.map((l: any) => ({
               id: l.id || uuidv4(), inventory_id: invData.id, product_id: isUuid(l.productId) ? l.productId : null,
               expected_qty: l.expectedQty, counted_qty: l.countedQty, difference: l.difference
             }));
-            await supabase.from('pos_inventory_lines').insert(linesData);
+            await supabase.from('pos_inventory_lines').upsert(linesData, { onConflict: 'id' });
           }
           success = !error;
           break;
@@ -1282,11 +1282,11 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_POS_CASH_SESSION': {
-          const { error } = await supabase.from('pos_cash_sessions').insert([{
+          const { error } = await supabase.from('pos_cash_sessions').upsert([{
             id: action.payload.id, cashier_id: isUuid(action.payload.cashierId) ? action.payload.cashierId : null,
             opened_at: action.payload.openedAt, initial_fund: action.payload.initialFund,
             status: action.payload.status
-          }]);
+          }], { onConflict: 'id' });
           success = !error;
           break;
         }
@@ -1344,7 +1344,24 @@ export const processSyncQueue = async () => {
             p_transaction, p_lines, p_payments, p_stock_entry, p_stock_entry_lines
           });
 
-          success = !error;
+          if (error) {
+            console.warn('[Sync] RPC process_pos_transaction échoué, repli sur insertion directe :', error.message);
+            const { error: txErr } = await supabase.from('pos_transactions').upsert([p_transaction], { onConflict: 'id' });
+            if (!txErr) {
+              if (p_lines.length > 0) {
+                await supabase.from('pos_transaction_lines').upsert(p_lines, { onConflict: 'id' });
+              }
+              if (p_payments.length > 0) {
+                await supabase.from('pos_payments').upsert(p_payments, { onConflict: 'id' });
+              }
+              success = true;
+            } else {
+              console.error('[Sync] Insertion directe pos_transactions échouée :', txErr.message);
+              success = false;
+            }
+          } else {
+            success = true;
+          }
           break;
         }
         case 'UPDATE_POS_TRANSACTION': {
@@ -1408,22 +1425,22 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_POS_PAYMENT': {
-          const { error } = await supabase.from('pos_payments').insert([{
+          const { error } = await supabase.from('pos_payments').upsert([{
             id: action.payload.id,
             transaction_id: isUuid(action.payload.transactionId) ? action.payload.transactionId : null,
             method: action.payload.method,
             amount: action.payload.amount,
             reference: action.payload.reference || null
-          }]);
+          }], { onConflict: 'id' });
           success = !error;
           break;
         }
         case 'INSERT_POS_DISCOUNT': {
-          const { error } = await supabase.from('pos_discounts').insert([{
+          const { error } = await supabase.from('pos_discounts').upsert([{
             id: action.payload.id, name: action.payload.name, type: action.payload.type,
             value: action.payload.value, max_percent: action.payload.maxPercent,
             max_amount: action.payload.maxAmount, active: action.payload.active
-          }]);
+          }], { onConflict: 'id' });
           success = !error;
           break;
         }
@@ -1457,7 +1474,7 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_POS_RETURN': {
           const { lines, exchangeLines, ...returnData } = action.payload;
-          const { error } = await supabase.from('pos_returns').insert([{
+          const { error } = await supabase.from('pos_returns').upsert([{
             id: returnData.id, return_number: returnData.returnNumber,
             transaction_id: isUuid(returnData.transactionId) ? returnData.transactionId : null,
             date: returnData.date,
@@ -1465,7 +1482,7 @@ export const processSyncQueue = async () => {
             total_exchange: returnData.totalExchange ?? 0, status: returnData.status,
             notes: returnData.notes || null,
             created_by: isUuid(returnData.createdBy) ? returnData.createdBy : null
-          }]);
+          }], { onConflict: 'id' });
           if (!error) {
             const allLinesData: any[] = [];
             if (lines && lines.length > 0) {
@@ -1497,7 +1514,7 @@ export const processSyncQueue = async () => {
               });
             }
             if (allLinesData.length > 0) {
-              await supabase.from('pos_return_lines').insert(allLinesData);
+              await supabase.from('pos_return_lines').upsert(allLinesData, { onConflict: 'id' });
             }
           }
           success = !error;
