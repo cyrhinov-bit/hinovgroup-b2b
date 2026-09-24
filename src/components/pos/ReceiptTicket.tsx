@@ -25,9 +25,23 @@ interface ReceiptTicketProps {
 export default function ReceiptTicket({ data, settings, crmSettings, preview = false }: ReceiptTicketProps) {
   if (!data) return null;
 
-  const { transaction, cart, paymentMethod, cashAmount, changeAmount, total, subtotal, globalDiscount, cashierName } = data;
+  const { transaction, paymentMethod, cashAmount, changeAmount, total, subtotal, globalDiscount, cashierName } = data;
   const activeSettings = settings || data.settings || { libraryName: 'Ma Librairie', currency: 'FCFA' };
   const activeCrmSettings = crmSettings || data.crmSettings;
+
+  const rawCart = data.cart;
+  const cart = (rawCart && Array.isArray(rawCart) && rawCart.length > 0)
+    ? rawCart
+    : (transaction?.lines?.map((l: any) => ({
+        id: l.id,
+        productId: l.productId,
+        name: l.description || l.name,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        discountPercent: l.discountPercent || 0,
+        discountAmount: l.discountAmount || 0,
+        total: l.total
+      })) || []);
 
   const formatDate = (isoString?: string) => {
     if (!isoString) return new Date().toLocaleString('fr-FR');
@@ -38,7 +52,7 @@ export default function ReceiptTicket({ data, settings, crmSettings, preview = f
     });
   };
 
-  const totalUnits = (cart || []).reduce((sum, item) => sum + Number(item.quantity ?? item.qty ?? 1), 0);
+  const totalUnits = (cart || []).reduce((sum: number, item: any) => sum + Number(item.quantity ?? item.qty ?? 1), 0);
   const totalArticles = (cart || []).length;
 
   const paymentsList = (transaction?.payments && Array.isArray(transaction.payments) && transaction.payments.length > 0)
@@ -76,7 +90,7 @@ export default function ReceiptTicket({ data, settings, crmSettings, preview = f
               </tr>
             </thead>
             <tbody>
-              {(cart || []).map((item, i) => {
+              {(cart || []).map((item: any, i: number) => {
                 const name = item.name || item.description || item.productName || 'Article';
                 const qty = Number(item.quantity ?? item.qty ?? 1);
                 const unitPrice = Number(item.unitPrice ?? item.unit_price ?? (item.total && qty ? Math.round(item.total / qty) : 0));

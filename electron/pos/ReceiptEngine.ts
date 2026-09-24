@@ -29,7 +29,7 @@ export class ReceiptEngine {
 
   private static buildReceiptHtml(data: any): string {
     const tx = data?.transaction || data;
-    const cart = Array.isArray(data?.cart) ? data.cart : (tx?.lines || []);
+    const cart = (Array.isArray(data?.cart) && data.cart.length > 0) ? data.cart : (tx?.lines || []);
     const total = data?.total ?? tx?.total ?? 0;
     const subtotal = data?.subtotal ?? tx?.subtotal ?? total;
     const currency = data?.currency ?? data?.settings?.currency ?? 'FCFA';
