@@ -383,9 +383,18 @@ export default function PosTerminal() {
     }
 
     const tx = {
-      id: uuidv4(), transactionNumber: txNumber, cashierId: currentUser?.id, sessionId: openSession.id,
-      date: new Date().toISOString(), subtotal, vat: 0, discountAmount: cartDiscount + globalDiscount,
-      total, status: 'Validée' as const,
+      id: uuidv4(),
+      transactionNumber: txNumber,
+      cashierId: currentUser?.id,
+      sessionId: openSession.id,
+      date: new Date().toISOString(),
+      subtotal,
+      vat: 0,
+      discountAmount: cartDiscount + globalDiscount,
+      total,
+      receivedAmount: receivedCash > 0 ? receivedCash : (paymentMethod === 'Espèces' ? total : 0),
+      changeAmount,
+      status: 'Validée' as const,
       lines: cart.map(c => ({ id: uuidv4(), productId: c.productId, description: c.name, quantity: c.quantity, unitPrice: c.unitPrice, discountPercent: c.discountPercent, discountAmount: c.discountAmount, total: c.total })),
       payments
     };

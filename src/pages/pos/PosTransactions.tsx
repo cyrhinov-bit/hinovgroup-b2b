@@ -155,8 +155,8 @@ export default function PosTransactions() {
         total: l.total
       })),
       paymentMethod: t.payments?.[0]?.method || 'Espèces',
-      cashAmount: t.payments?.[0]?.amount || t.total,
-      changeAmount: 0,
+      cashAmount: t.receivedAmount ?? (t.payments?.find(p => p.method === 'Espèces')?.amount || (t.payments?.[0]?.method === 'Espèces' ? t.total : 0)),
+      changeAmount: t.changeAmount ?? 0,
       total: t.total,
       subtotal: t.subtotal || t.total,
       globalDiscount: t.discountAmount || 0,
