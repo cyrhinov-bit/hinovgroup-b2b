@@ -528,6 +528,34 @@ const withTimeout = async <T,>(promiseOrThenable: any, ms: number = 15000): Prom
   }
 };
 
+// Safe reading from LocalForage
+const safeGet = async <T,>(store: any): Promise<T | null> => {
+  try {
+    if (!store || typeof store.getItem !== 'function') return null;
+    return await withTimeout<T | null>(store.getItem('data'), 2000);
+  } catch (e) {
+    console.warn('[Cache] Erreur lecture store :', e);
+    return null;
+  }
+};
+
+// Anti-Data Loss Cache Guard : empêche d'écraser un cache non-vide par un tableau vide
+const safeSet = async <T,>(store: any, data: T): Promise<void> => {
+  try {
+    if (!store || typeof store.setItem !== 'function') return;
+    if (Array.isArray(data) && data.length === 0) {
+      const existing = await safeGet<any[]>(store);
+      if (existing && existing.length > 0) {
+        console.warn('[CacheGuard] Refus d\'écraser un store existant avec un tableau vide');
+        return;
+      }
+    }
+    await withTimeout(store.setItem('data', data), 3000);
+  } catch (e) {
+    console.warn('[Cache] Erreur écriture store :', e);
+  }
+};
+
 const AppContext = createContext<AppState | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -584,34 +612,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refreshData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Load from IndexedDB (Offline Cache) de façon sécurisée (anti-crash IO / Quota)
-      const safeGet = async <T,>(store: any): Promise<T | null> => {
-        try {
-          if (!store || typeof store.getItem !== 'function') return null;
-          return await withTimeout<T | null>(store.getItem('data'), 2000);
-        } catch (e) {
-          console.warn('[Cache] Erreur lecture store :', e);
-          return null;
-        }
-      };
-
-      // Anti-Data Loss Cache Guard : empêche d'écraser un cache non-vide par un tableau vide
-      const safeSet = async <T,>(store: any, data: T): Promise<void> => {
-        try {
-          if (!store || typeof store.setItem !== 'function') return;
-          if (Array.isArray(data) && data.length === 0) {
-            const existing = await safeGet<any[]>(store);
-            if (existing && existing.length > 0) {
-              console.warn('[CacheGuard] Refus d\'écraser un store existant avec un tableau vide');
-              return;
-            }
-          }
-          await withTimeout(store.setItem('data', data), 3000);
-        } catch (e) {
-          console.warn('[Cache] Erreur écriture store :', e);
-        }
-      };
-
       const [
         cachedUsers, cachedClients, cachedAffaires, cachedFacturePaiements, cachedCouts,
         cachedScoringRules, cachedObjectifs, cachedClassements, cachedPrimes, cachedPrimeAuditLogs,
@@ -2732,19 +2732,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     const newSession = { ...session, id: session.id || uuidv4() };
-    setPosCashSessions(prev => {
-      const next = [...prev, newSession];
-      void db.posCashSessions.setItem('data', next);
-      return next;
-    });
+    const nextSessions = [...posCashSessions, newSession];
+    setPosCashSessions(nextSessions);
+    await safeSet(db.posCashSessions, nextSessions);
     await queueSyncAction('INSERT_POS_CASH_SESSION', newSession);
   };
   const updatePosCashSession = async (id: string, data: Partial<PosCashSession>) => {
-    setPosCashSessions(prev => {
-      const next = prev.map(s => s.id === id ? { ...s, ...data } : s);
-      void db.posCashSessions.setItem('data', next);
-      return next;
-    });
+    const nextSessions = posCashSessions.map(s => s.id === id ? { ...s, ...data } : s);
+    setPosCashSessions(nextSessions);
+    await safeSet(db.posCashSessions, nextSessions);
     await queueSyncAction('UPDATE_POS_CASH_SESSION', { id, ...data });
   };
 
@@ -2848,25 +2844,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addPosTransaction = async (tx: PosTransaction) => {
     const newTx = { ...tx, id: tx.id || uuidv4(), lines: tx.lines.map(l => ({ ...l, id: l.id || uuidv4() })), payments: tx.payments.map(p => ({ ...p, id: p.id || uuidv4() })) };
-    setPosTransactions(prev => {
-      const next = [...prev, newTx];
-      void db.posTransactions.setItem('data', next);
-      return next;
-    });
-    await queueSyncAction('INSERT_POS_TRANSACTION', newTx);
+    const nextTxs = [newTx, ...posTransactions.filter(t => t.id !== newTx.id)];
+    setPosTransactions(nextTxs);
+    await safeSet(db.posTransactions, nextTxs);
+
     // Alimenter le registre local des paiements (répartition Finance à jour immédiatement)
     const newPayments = [...posPayments, ...newTx.payments.map(p => ({ ...p, transactionId: newTx.id }))];
     setPosPayments(newPayments);
-    await db.posPayments.setItem('data', newPayments);
+    await safeSet(db.posPayments, newPayments);
+
+    await queueSyncAction('INSERT_POS_TRANSACTION', newTx);
     // Update local product quantities (le serveur est décrémenté par INSERT_POS_TRANSACTION)
     await adjustProductStock(newTx.lines.map(l => ({ productId: l.productId, quantity: -l.quantity })), false, { type: 'Vente', reference: newTx.transactionNumber, createdBy: currentUser?.name });
   };
   const updatePosTransaction = async (id: string, data: Partial<PosTransaction>) => {
-    setPosTransactions(prev => {
-      const next = prev.map(t => t.id === id ? { ...t, ...data } : t);
-      void db.posTransactions.setItem('data', next);
-      return next;
-    });
+    const nextTxs = posTransactions.map(t => t.id === id ? { ...t, ...data } : t);
+    setPosTransactions(nextTxs);
+    await safeSet(db.posTransactions, nextTxs);
     await queueSyncAction('UPDATE_POS_TRANSACTION', { id, ...data });
   };
 
@@ -2975,11 +2969,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       lines: ret.lines.map(l => ({ ...l, id: l.id || uuidv4() })),
       exchangeLines: ret.exchangeLines?.map(l => ({ ...l, id: l.id || uuidv4() }))
     };
-    setPosReturns(prev => {
-      const next = [...prev, newReturn];
-      void db.posReturns.setItem('data', next);
-      return next;
-    });
+    const nextReturns = [...posReturns, newReturn];
+    setPosReturns(nextReturns);
+    await safeSet(db.posReturns, nextReturns);
     await queueSyncAction('INSERT_POS_RETURN', newReturn);
     
     // Restore product quantities for returned items (stock + qty) with movement tracking
@@ -3004,11 +2996,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
   const updatePosReturn = async (id: string, data: Partial<PosReturn>) => {
-    setPosReturns(prev => {
-      const next = prev.map(r => r.id === id ? { ...r, ...data } : r);
-      void db.posReturns.setItem('data', next);
-      return next;
-    });
+    const nextReturns = posReturns.map(r => r.id === id ? { ...r, ...data } : r);
+    setPosReturns(nextReturns);
+    await safeSet(db.posReturns, nextReturns);
     await queueSyncAction('UPDATE_POS_RETURN', { id, ...data });
   };
 
