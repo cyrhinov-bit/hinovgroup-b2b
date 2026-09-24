@@ -385,13 +385,13 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_QUOTE': {
           const { lines, ...quoteData } = action.payload;
-          const { error } = await supabase.from('quotes').insert([{
+          const { error } = await supabase.from('quotes').upsert([{
             id: quoteData.id,
             quote_number: quoteData.quoteNumber,
-            client_id: quoteData.clientId,
-            commercial_id: quoteData.commercialId,
-            service_id: quoteData.serviceId || null,
-            affaire_id: quoteData.affaireId || null,
+            client_id: isUuid(quoteData.clientId) ? quoteData.clientId : quoteData.clientId,
+            commercial_id: isUuid(quoteData.commercialId) ? quoteData.commercialId : null,
+            service_id: isUuid(quoteData.serviceId) ? quoteData.serviceId : null,
+            affaire_id: isUuid(quoteData.affaireId) ? quoteData.affaireId : null,
             subject: quoteData.subject,
             subtotal: quoteData.subtotal,
             vat: quoteData.vat ?? 0,
@@ -408,13 +408,13 @@ export const processSyncQueue = async () => {
             discount_percent: quoteData.discountPercent || 0,
             discount_amount: quoteData.discountAmount || 0,
             client_comment: quoteData.clientComment || null
-          }]);
+          }], { onConflict: 'id' });
           
           if (!error && lines && lines.length > 0) {
             const linesData = lines.map((l: any) => ({
-              id: l.id,
+              id: isUuid(l.id) ? l.id : uuidv4(),
               quote_id: quoteData.id,
-              prestation_id: l.prestationId,
+              prestation_id: isUuid(l.prestationId) ? l.prestationId : null,
               description: l.description,
               quantity: l.quantity,
               unit: l.unit || null,
@@ -422,10 +422,12 @@ export const processSyncQueue = async () => {
               discount_percent: l.discountPercent || 0,
               total: l.total
             }));
-            await supabase.from('quote_lines').insert(linesData);
+            await supabase.from('quote_lines').upsert(linesData, { onConflict: 'id' });
             success = true;
           } else if (!error) {
             success = true;
+          } else {
+            console.error('[Sync] INSERT_QUOTE échoué :', error.message);
           }
           break;
         }
@@ -433,10 +435,10 @@ export const processSyncQueue = async () => {
           const { lines, ...quoteData } = action.payload;
           const { error } = await supabase.from('quotes').update({
             quote_number: quoteData.quoteNumber,
-            client_id: quoteData.clientId,
-            commercial_id: quoteData.commercialId,
-            service_id: quoteData.serviceId || null,
-            affaire_id: quoteData.affaireId !== undefined ? quoteData.affaireId : null,
+            client_id: isUuid(quoteData.clientId) ? quoteData.clientId : quoteData.clientId,
+            commercial_id: isUuid(quoteData.commercialId) ? quoteData.commercialId : null,
+            service_id: isUuid(quoteData.serviceId) ? quoteData.serviceId : null,
+            affaire_id: isUuid(quoteData.affaireId) ? quoteData.affaireId : null,
             subject: quoteData.subject,
             subtotal: quoteData.subtotal,
             vat: quoteData.vat ?? 0,
@@ -459,9 +461,9 @@ export const processSyncQueue = async () => {
             await supabase.from('quote_lines').delete().eq('quote_id', quoteData.id);
             if (lines && lines.length > 0) {
               const linesData = lines.map((l: any) => ({
-                id: l.id,
+                id: isUuid(l.id) ? l.id : uuidv4(),
                 quote_id: quoteData.id,
-                prestation_id: l.prestationId,
+                prestation_id: isUuid(l.prestationId) ? l.prestationId : null,
                 description: l.description,
                 quantity: l.quantity,
                 unit: l.unit || null,
@@ -472,6 +474,8 @@ export const processSyncQueue = async () => {
               await supabase.from('quote_lines').insert(linesData);
             }
             success = true;
+          } else {
+            console.error('[Sync] UPDATE_QUOTE échoué :', error.message);
           }
           break;
         }
@@ -482,14 +486,14 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_SALE': {
           const { lines, ...saleData } = action.payload;
-          const { error } = await supabase.from('ventes').insert([{
+          const { error } = await supabase.from('ventes').upsert([{
             id: saleData.id,
             sale_number: saleData.saleNumber,
-            quote_id: saleData.quoteId || null,
-            affaire_id: saleData.affaireId || null,
-            client_id: saleData.clientId,
-            service_id: saleData.serviceId || null,
-            commercial_id: saleData.commercialId || null,
+            quote_id: isUuid(saleData.quoteId) ? saleData.quoteId : null,
+            affaire_id: isUuid(saleData.affaireId) ? saleData.affaireId : null,
+            client_id: isUuid(saleData.clientId) ? saleData.clientId : saleData.clientId,
+            service_id: isUuid(saleData.serviceId) ? saleData.serviceId : null,
+            commercial_id: isUuid(saleData.commercialId) ? saleData.commercialId : null,
             due_date: saleData.dueDate || null,
             subtotal: saleData.subtotal,
             vat: saleData.vat ?? 0,
@@ -497,11 +501,11 @@ export const processSyncQueue = async () => {
             status: saleData.status,
             date: saleData.date,
             notes: saleData.notes || null
-          }]);
+          }], { onConflict: 'id' });
           
           if (!error && lines && lines.length > 0) {
             const linesData = lines.map((l: any) => ({
-              id: l.id,
+              id: isUuid(l.id) ? l.id : uuidv4(),
               vente_id: saleData.id,
               description: l.description,
               quantity: l.quantity,
@@ -509,7 +513,7 @@ export const processSyncQueue = async () => {
               cost_price: l.costPrice || 0,
               total: l.total
             }));
-            await supabase.from('vente_lines').insert(linesData);
+            await supabase.from('vente_lines').upsert(linesData, { onConflict: 'id' });
             success = true;
           } else if (!error) {
             success = true;
@@ -522,11 +526,11 @@ export const processSyncQueue = async () => {
           const { lines, ...saleData } = action.payload;
           const { error } = await supabase.from('ventes').update({
             sale_number: saleData.saleNumber,
-            quote_id: saleData.quoteId || null,
-            affaire_id: saleData.affaireId !== undefined ? saleData.affaireId : null,
-            client_id: saleData.clientId,
-            service_id: saleData.serviceId || null,
-            commercial_id: saleData.commercialId !== undefined ? saleData.commercialId : null,
+            quote_id: isUuid(saleData.quoteId) ? saleData.quoteId : null,
+            affaire_id: isUuid(saleData.affaireId) ? saleData.affaireId : null,
+            client_id: isUuid(saleData.clientId) ? saleData.clientId : saleData.clientId,
+            service_id: isUuid(saleData.serviceId) ? saleData.serviceId : null,
+            commercial_id: isUuid(saleData.commercialId) ? saleData.commercialId : null,
             due_date: saleData.dueDate !== undefined ? saleData.dueDate : null,
             subtotal: saleData.subtotal,
             vat: saleData.vat ?? 0,
@@ -540,7 +544,7 @@ export const processSyncQueue = async () => {
             await supabase.from('vente_lines').delete().eq('vente_id', saleData.id);
             if (lines && lines.length > 0) {
               const linesData = lines.map((l: any) => ({
-                id: l.id,
+                id: isUuid(l.id) ? l.id : uuidv4(),
                 vente_id: saleData.id,
                 description: l.description,
                 quantity: l.quantity,
