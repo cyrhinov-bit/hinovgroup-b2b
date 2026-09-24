@@ -16,7 +16,7 @@ import { platform } from '../../platform';
 import { toast } from 'react-hot-toast';
 
 export default function PosTransactions() {
-  const { posTransactions, posCashSessions, voidPosTransaction, clearPosSalesHistory, posSettings, settings: crmSettings } = useAppContext();
+  const { posTransactions, posCashSessions, voidPosTransaction, clearPosSalesHistory, posSettings, settings: crmSettings, users } = useAppContext();
   const { currentUser } = useAuth();
   const { confirm } = useConfirm();
   const [search, setSearch] = useState('');
@@ -140,6 +140,8 @@ export default function PosTransactions() {
   };
 
   const handleReprint = (t: PosTransaction) => {
+    const cashier = users?.find(u => u.id === t.cashierId);
+    const cashierName = cashier ? cashier.name : (t.cashierId === currentUser?.id ? currentUser?.name : undefined);
     const data: ReceiptData = {
       transaction: t,
       cart: (t.lines || []).map(l => ({
@@ -157,7 +159,10 @@ export default function PosTransactions() {
       changeAmount: 0,
       total: t.total,
       subtotal: t.subtotal || t.total,
-      globalDiscount: t.discountAmount || 0
+      globalDiscount: t.discountAmount || 0,
+      cashierName,
+      settings: posSettings,
+      crmSettings
     };
     setSelectedReceiptData(data);
     setShowReceiptModal(true);
@@ -169,7 +174,8 @@ export default function PosTransactions() {
       try {
         await platform.pos.printReceipt({
           ...selectedReceiptData,
-          settings: posSettings
+          settings: posSettings,
+          crmSettings
         });
         toast.success('Ticket envoyé à l\'imprimante');
       } catch (err: any) {

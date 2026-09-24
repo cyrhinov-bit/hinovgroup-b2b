@@ -10,6 +10,9 @@ export interface ReceiptData {
   total: number;
   subtotal: number;
   globalDiscount: number;
+  cashierName?: string;
+  settings?: PosSettings;
+  crmSettings?: AppSettings;
 }
 
 interface ReceiptTicketProps {
@@ -22,9 +25,12 @@ interface ReceiptTicketProps {
 export default function ReceiptTicket({ data, settings, crmSettings, preview = false }: ReceiptTicketProps) {
   if (!data) return null;
 
-  const { transaction, cart, paymentMethod, cashAmount, changeAmount, total, subtotal, globalDiscount } = data;
+  const { transaction, cart, paymentMethod, cashAmount, changeAmount, total, subtotal, globalDiscount, cashierName } = data;
+  const activeSettings = settings || data.settings || { libraryName: 'Ma Librairie', currency: 'FCFA' };
+  const activeCrmSettings = crmSettings || data.crmSettings;
 
-  const formatDate = (isoString: string) => {
+  const formatDate = (isoString?: string) => {
+    if (!isoString) return new Date().toLocaleString('fr-FR');
     const d = new Date(isoString);
     return d.toLocaleString('fr-FR', {
       day: '2-digit', month: '2-digit', year: 'numeric',
@@ -32,22 +38,33 @@ export default function ReceiptTicket({ data, settings, crmSettings, preview = f
     });
   };
 
+  const totalUnits = (cart || []).reduce((sum, item) => sum + Number(item.quantity ?? item.qty ?? 1), 0);
+  const totalArticles = (cart || []).length;
+
+  const paymentsList = (transaction?.payments && Array.isArray(transaction.payments) && transaction.payments.length > 0)
+    ? transaction.payments
+    : [{ method: paymentMethod || 'Espèces', amount: total }];
+
   return (
     <div className={preview ? "" : "receipt-print-zone"} style={{ width: '80mm', padding: '10px', fontSize: '12px', fontFamily: 'monospace', color: '#000', margin: '0 auto', background: '#fff' }}>
       {/* En-tête */}
-      <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-        <h2 style={{ fontSize: '16px', margin: '0 0 4px 0', textTransform: 'uppercase' }}>{settings.libraryName}</h2>
-        {settings.address && <div style={{ marginBottom: '2px' }}>{settings.address}</div>}
-        {settings.phone && <div style={{ marginBottom: '2px' }}>Tel: {settings.phone}</div>}
-        {settings.email && <div style={{ marginBottom: '2px' }}>Email: {settings.email}</div>}
-        <div style={{ marginTop: '8px', borderTop: '1px dashed #000', paddingTop: '8px' }}>
-          TICKET : {transaction.transactionNumber}
+      <div style={{ textAlign: 'center', marginBottom: '14px' }}>
+        <h2 style={{ fontSize: '16px', margin: '0 0 4px 0', textTransform: 'uppercase', fontWeight: 700 }}>{activeSettings.libraryName}</h2>
+        {activeSettings.address && <div style={{ marginBottom: '2px' }}>{activeSettings.address}</div>}
+        {activeSettings.phone && <div style={{ marginBottom: '2px' }}>Tel: {activeSettings.phone}</div>}
+        {activeSettings.email && <div style={{ marginBottom: '2px' }}>Email: {activeSettings.email}</div>}
+        {activeCrmSettings?.companySiret && <div style={{ fontSize: '10px', color: '#444' }}>RCCM/SIRET: {activeCrmSettings.companySiret}</div>}
+        {activeCrmSettings?.companyTva && <div style={{ fontSize: '10px', color: '#444' }}>TVA/IFU: {activeCrmSettings.companyTva}</div>}
+        
+        <div style={{ marginTop: '8px', borderTop: '1px dashed #000', paddingTop: '6px', fontWeight: 600 }}>
+          TICKET : {transaction?.transactionNumber || transaction?.id || 'TICKET'}
         </div>
-        <div>Date : {formatDate(transaction.date)}</div>
+        <div>Date : {formatDate(transaction?.date)}</div>
+        {cashierName && <div>Caissier : {cashierName}</div>}
       </div>
 
       {/* Lignes de commande en DataTable */}
-      <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '8px 0', marginBottom: '12px' }}>
+      <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '8px 0', marginBottom: '10px' }}>
         <div className="table-responsive">
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', tableLayout: 'fixed' }}>
             <thead>
@@ -59,7 +76,7 @@ export default function ReceiptTicket({ data, settings, crmSettings, preview = f
               </tr>
             </thead>
             <tbody>
-              {cart.map((item, i) => {
+              {(cart || []).map((item, i) => {
                 const name = item.name || item.description || item.productName || 'Article';
                 const qty = Number(item.quantity ?? item.qty ?? 1);
                 const unitPrice = Number(item.unitPrice ?? item.unit_price ?? (item.total && qty ? Math.round(item.total / qty) : 0));
@@ -69,23 +86,23 @@ export default function ReceiptTicket({ data, settings, crmSettings, preview = f
                 return (
                   <React.Fragment key={i}>
                     <tr>
-                      <td style={{ verticalAlign: 'top', paddingTop: '5px', wordBreak: 'break-word', overflowWrap: 'break-word', whiteSpace: 'normal' }}>
+                      <td style={{ verticalAlign: 'top', paddingTop: '4px', wordBreak: 'break-word', overflowWrap: 'break-word', whiteSpace: 'normal' }}>
                         {name}
                       </td>
-                      <td style={{ verticalAlign: 'top', paddingTop: '5px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <td style={{ verticalAlign: 'top', paddingTop: '4px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         {qty}
                       </td>
-                      <td style={{ verticalAlign: 'top', paddingTop: '5px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <td style={{ verticalAlign: 'top', paddingTop: '4px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                         {unitPrice.toLocaleString('fr-FR')}
                       </td>
-                      <td style={{ verticalAlign: 'top', paddingTop: '5px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      <td style={{ verticalAlign: 'top', paddingTop: '4px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
                         {lineTotal.toLocaleString('fr-FR')}
                       </td>
                     </tr>
                     {hasDiscount && (
                       <tr>
-                        <td colSpan={4} style={{ fontSize: '9px', color: '#555', paddingLeft: '8px', paddingBottom: '2px', wordBreak: 'break-word' }}>
-                          └ Remise : {item.discountPercent ? `-${item.discountPercent}%` : `-${Number(item.discountAmount).toLocaleString('fr-FR')} ${settings.currency}`}
+                        <td colSpan={4} style={{ fontSize: '9px', color: '#555', paddingLeft: '6px', paddingBottom: '2px', wordBreak: 'break-word' }}>
+                          └ Remise : {item.discountPercent ? `-${item.discountPercent}%` : `-${Number(item.discountAmount).toLocaleString('fr-FR')} ${activeSettings.currency}`}
                         </td>
                       </tr>
                     )}
@@ -95,45 +112,54 @@ export default function ReceiptTicket({ data, settings, crmSettings, preview = f
             </tbody>
           </table>
         </div>
+        <div style={{ fontSize: '10px', color: '#555', marginTop: '6px', textAlign: 'right' }}>
+          {totalArticles} article(s) &bull; {totalUnits} unité(s)
+        </div>
       </div>
 
       {/* Totaux */}
-      <div style={{ marginBottom: '16px' }}>
+      <div style={{ marginBottom: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-          <span>Sous-total:</span>
-          <span>{subtotal.toLocaleString()} {settings.currency}</span>
+          <span>Sous-total :</span>
+          <span>{Number(subtotal || total).toLocaleString('fr-FR')} {activeSettings.currency}</span>
         </div>
         {globalDiscount > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-            <span>Remise:</span>
-            <span>-{globalDiscount.toLocaleString()} {settings.currency}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px', color: '#555' }}>
+            <span>Remise globale :</span>
+            <span>-{Number(globalDiscount).toLocaleString('fr-FR')} {activeSettings.currency}</span>
           </div>
         )}
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '16px', fontWeight: 'bold' }}>
-          <span>TOTAL:</span>
-          <span>{total.toLocaleString()} {settings.currency}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '15px', fontWeight: 'bold' }}>
+          <span>NET À PAYER :</span>
+          <span>{Number(total).toLocaleString('fr-FR')} {activeSettings.currency}</span>
         </div>
       </div>
 
       {/* Paiement */}
-      <div style={{ borderTop: '1px dashed #000', paddingTop: '8px', marginBottom: '16px' }}>
-        {transaction.payments && transaction.payments.map((p: any, idx: number) => (
+      <div style={{ borderTop: '1px dashed #000', paddingTop: '8px', marginBottom: '14px' }}>
+        {paymentsList.map((p: any, idx: number) => (
           <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-            <span>Payé en ({p.method}):</span>
-            <span>{p.amount.toLocaleString()} {settings.currency}</span>
+            <span>Payé en ({p.method || paymentMethod}) :</span>
+            <span>{Number(p.amount || 0).toLocaleString('fr-FR')} {activeSettings.currency}</span>
           </div>
         ))}
+        {cashAmount > 0 && paymentMethod !== 'Mobile Money' && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px', color: '#555' }}>
+            <span>Espèces reçues :</span>
+            <span>{Number(cashAmount).toLocaleString('fr-FR')} {activeSettings.currency}</span>
+          </div>
+        )}
         {changeAmount > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-            <span>Rendu:</span>
-            <span>{changeAmount.toLocaleString()} {settings.currency}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px', fontWeight: 600 }}>
+            <span>Monnaie rendue :</span>
+            <span>{Number(changeAmount).toLocaleString('fr-FR')} {activeSettings.currency}</span>
           </div>
         )}
       </div>
 
       {/* Message de fin */}
-      <div style={{ textAlign: 'center', marginTop: '16px', borderTop: '1px dashed #000', paddingTop: '16px', whiteSpace: 'pre-wrap' }}>
-        {settings.ticketMessage || 'Merci de votre visite !'}
+      <div style={{ textAlign: 'center', marginTop: '12px', borderTop: '1px dashed #000', paddingTop: '10px', whiteSpace: 'pre-wrap', fontSize: '11px' }}>
+        {activeSettings.ticketMessage || 'Merci de votre visite !'}
       </div>
     </div>
   );

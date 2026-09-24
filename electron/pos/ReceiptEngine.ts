@@ -32,13 +32,28 @@ export class ReceiptEngine {
     const cart = Array.isArray(data?.cart) ? data.cart : (tx?.lines || []);
     const total = data?.total ?? tx?.total ?? 0;
     const subtotal = data?.subtotal ?? tx?.subtotal ?? total;
-    const currency = data?.currency ?? 'FCFA';
+    const currency = data?.currency ?? data?.settings?.currency ?? 'FCFA';
     const paymentMethod = data?.paymentMethod ?? 'Espèces';
     const cashAmount = data?.cashAmount ?? total;
     const changeAmount = data?.changeAmount ?? 0;
+    const cashierName = data?.cashierName || tx?.cashierName || '';
     const date = tx?.date ? new Date(tx.date).toLocaleString('fr-FR') : new Date().toLocaleString('fr-FR');
 
     const header = data?.settings?.libraryName || 'LIBRAIRIE';
+    const address = data?.settings?.address;
+    const phone = data?.settings?.phone;
+    const email = data?.settings?.email;
+    const companySiret = data?.crmSettings?.companySiret;
+    const companyTva = data?.crmSettings?.companyTva;
+
+    const totalUnits = cart.reduce((sum: number, item: any) => sum + Number(item.quantity ?? item.qty ?? 1), 0);
+    const totalArticles = cart.length;
+    const globalDiscount = Number(data?.globalDiscount ?? tx?.discountAmount ?? 0);
+
+    const paymentsList = (tx?.payments && Array.isArray(tx.payments) && tx.payments.length > 0)
+      ? tx.payments
+      : [{ method: paymentMethod || 'Espèces', amount: total }];
+
     const lines = cart.map((item: any) => {
       const name = item.name || item.description || item.productName || 'Article';
       const qty = Number(item.quantity ?? item.qty ?? 1);
@@ -90,11 +105,14 @@ export class ReceiptEngine {
 <body>
   <div class="center">
     <h2>${ReceiptEngine.esc(header)}</h2>
-    ${data?.settings?.address ? `<div>${ReceiptEngine.esc(data.settings.address)}</div>` : ''}
-    ${data?.settings?.phone ? `<div>Tel: ${ReceiptEngine.esc(data.settings.phone)}</div>` : ''}
-    ${data?.settings?.email ? `<div>Email: ${ReceiptEngine.esc(data.settings.email)}</div>` : ''}
-    <div style="margin-top:4px">TICKET : ${ReceiptEngine.esc(tx?.transactionNumber || tx?.id || '')}</div>
+    ${address ? `<div>${ReceiptEngine.esc(address)}</div>` : ''}
+    ${phone ? `<div>Tel: ${ReceiptEngine.esc(phone)}</div>` : ''}
+    ${email ? `<div>Email: ${ReceiptEngine.esc(email)}</div>` : ''}
+    ${companySiret ? `<div style="font-size:10px;color:#444">RCCM/SIRET: ${ReceiptEngine.esc(companySiret)}</div>` : ''}
+    ${companyTva ? `<div style="font-size:10px;color:#444">TVA/IFU: ${ReceiptEngine.esc(companyTva)}</div>` : ''}
+    <div style="margin-top:6px;border-top:1px dashed #000;padding-top:4px;font-weight:bold">TICKET : ${ReceiptEngine.esc(tx?.transactionNumber || tx?.id || '')}</div>
     <div>Date : ${ReceiptEngine.esc(date)}</div>
+    ${cashierName ? `<div>Caissier : ${ReceiptEngine.esc(cashierName)}</div>` : ''}
   </div>
   <div class="dash"></div>
   <table class="items-table">
@@ -108,16 +126,20 @@ export class ReceiptEngine {
     </thead>
     <tbody>${lines}</tbody>
   </table>
+  <div style="font-size:10px;color:#555;margin-top:4px;text-align:right">
+    ${totalArticles} article(s) &bull; ${totalUnits} unité(s)
+  </div>
   <div class="dash"></div>
   <table>
     <tr><td>Sous-total</td><td style="text-align:right">${ReceiptEngine.fmt(subtotal)} ${ReceiptEngine.esc(currency)}</td></tr>
-    ${data?.globalDiscount ? `<tr><td>Remise</td><td style="text-align:right">-${ReceiptEngine.fmt(data.globalDiscount)} ${ReceiptEngine.esc(currency)}</td></tr>` : ''}
+    ${globalDiscount > 0 ? `<tr><td>Remise globale</td><td style="text-align:right">-${ReceiptEngine.fmt(globalDiscount)} ${ReceiptEngine.esc(currency)}</td></tr>` : ''}
     <tr style="font-size:13px;font-weight:bold"><td>TOTAL</td><td style="text-align:right">${ReceiptEngine.fmt(total)} ${ReceiptEngine.esc(currency)}</td></tr>
   </table>
   <div class="dash"></div>
   <table>
-    <tr><td>Payé en (${ReceiptEngine.esc(paymentMethod)})</td><td style="text-align:right">${ReceiptEngine.fmt(cashAmount)} ${ReceiptEngine.esc(currency)}</td></tr>
-    ${changeAmount > 0 ? `<tr><td>Rendu</td><td style="text-align:right">${ReceiptEngine.fmt(changeAmount)} ${ReceiptEngine.esc(currency)}</td></tr>` : ''}
+    ${paymentsList.map((p: any) => `<tr><td>Payé en (${ReceiptEngine.esc(p.method || paymentMethod)})</td><td style="text-align:right">${ReceiptEngine.fmt(p.amount || 0)} ${ReceiptEngine.esc(currency)}</td></tr>`).join('')}
+    ${cashAmount > 0 && paymentMethod !== 'Mobile Money' ? `<tr><td>Espèces reçues</td><td style="text-align:right">${ReceiptEngine.fmt(cashAmount)} ${ReceiptEngine.esc(currency)}</td></tr>` : ''}
+    ${changeAmount > 0 ? `<tr style="font-weight:bold"><td>Monnaie rendue</td><td style="text-align:right">${ReceiptEngine.fmt(changeAmount)} ${ReceiptEngine.esc(currency)}</td></tr>` : ''}
   </table>
   <div class="center" style="margin-top:10px;border-top:1px dashed #000;padding-top:6px">
     ${ReceiptEngine.esc(data?.settings?.ticketMessage || 'Merci de votre visite !')}

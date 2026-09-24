@@ -401,6 +401,7 @@ export default function PosTerminal() {
       total,
       subtotal,
       globalDiscount,
+      cashierName: currentUser?.name || 'Caissier',
       settings: posSettings,
       crmSettings: crmSettings
     };
