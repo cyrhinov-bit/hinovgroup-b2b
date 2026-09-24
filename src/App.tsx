@@ -161,14 +161,12 @@ function App() {
                     <Route path="devis/nouveau" element={<QuoteCreation />} />
                     <Route path="documents" element={<Documents />} />
                     <Route path="utilisateurs" element={<Utilisateurs />} />
-                    <Route path="parametres-ia" element={<GeminiSettings />} />
                     <Route path="parametres" element={<Parametres />} />
 
                     {/* Commercial routes */}
                     <Route path="commercial" element={<DashboardCommercial />} />
                     <Route path="commercial/clients" element={<CommercialClients />} />
                     <Route path="commercial/documents" element={<Documents />} />
-                    <Route path="commercial/parametres-ia" element={<GeminiSettings />} />
 
                     {/* POS routes */}
                     <Route path="pos" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><DashboardPos /></Suspense>} />

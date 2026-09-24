@@ -1,18 +1,16 @@
 import React, { useState, useMemo } from 'react';
-import { Save, Upload, Bot, Palette, Check } from 'lucide-react';
+import { Save, Upload, Palette, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
-import { getUserGeminiKey, setUserGeminiKey } from '../lib/geminiKey';
 import { THEME_PRESETS, THEME_CATEGORIES, DEFAULT_THEME_COLOR, getUserThemeColor, setUserThemeColor, applyTheme } from '../lib/theme';
 
 export function Parametres() {
   const { settings, updateSettings } = useAppContext();
-  const { currentUser, updateCurrentUser } = useAuth();
+  const { currentUser } = useAuth();
   const { confirm } = useConfirm();
   const [localSettings, setLocalSettings] = useState(settings);
-  const [geminiKey, setGeminiKey] = useState(() => currentUser?.geminiApiKey || getUserGeminiKey(currentUser?.id));
   const [selectedThemeColor, setSelectedThemeColor] = useState(() => getUserThemeColor(currentUser?.id));
   const [themeCategory, setThemeCategory] = useState<string>('Tous');
 
@@ -45,9 +43,7 @@ export function Parametres() {
       variant: 'info',
       onConfirm: async () => {
         if (currentUser?.id) {
-          setUserGeminiKey(currentUser.id, geminiKey);
           setUserThemeColor(currentUser.id, selectedThemeColor);
-          updateCurrentUser({ geminiApiKey: geminiKey.trim() });
         }
         await updateSettings(localSettings);
       }
@@ -126,23 +122,6 @@ export function Parametres() {
               <label>Mentions légales par défaut</label>
               <textarea className="table-input" rows={4} value={localSettings.defaultTerms} onChange={e => setLocalSettings({...localSettings, defaultTerms: e.target.value})} />
             </div>
-          </div>
-        </section>
-
-        <section style={{ marginBottom: '32px' }}>
-          <h3 style={{ color: 'var(--color-primary)', borderBottom: '1px solid var(--color-border)', paddingBottom: '8px', marginBottom: '16px' }}>Paramètres IA (Personnel)</h3>
-          <div className="form-group">
-            <label>Clé API Gemini Personnelle</label>
-            <input 
-              type="password" 
-              className="table-input" 
-              placeholder="Ex: AIzaSy..." 
-              value={geminiKey} 
-              onChange={e => setGeminiKey(e.target.value)} 
-            />
-            <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-              Cette clé est stockée localement sur votre appareil. Elle sera utilisée pour générer vos rapports d'activités, ce qui permet à chaque utilisateur de gérer sa propre consommation.
-            </p>
           </div>
         </section>
 
