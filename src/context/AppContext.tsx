@@ -1302,15 +1302,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const merged = mergeData(cachedPosInventories, parsed);
           setPosInventories(merged); await db.posInventories.setItem('data', merged);
         }
-        if (posCashSessionsData) {
+        if (posCashSessionsData && posCashSessionsData.length > 0) {
           const parsed = posCashSessionsData.map((s: any) => ({
             id: s.id, cashierId: s.cashier_id, openedAt: s.opened_at, closedAt: s.closed_at,
             initialFund: s.initial_fund, finalAmount: s.final_amount, expectedAmount: s.expected_amount,
             difference: s.difference, status: s.status
           }));
-          setPosCashSessions(parsed); await db.posCashSessions.setItem('data', parsed);
+          const latestLocalSessions = (await safeGet<PosCashSession[]>(db.posCashSessions)) || cachedPosCashSessions;
+          const merged = mergeData(latestLocalSessions, parsed);
+          setPosCashSessions(merged); await safeSet(db.posCashSessions, merged);
         }
-        if (posTransactionsData) {
+        if (posTransactionsData && posTransactionsData.length > 0) {
           const parsed = posTransactionsData.map((t: any) => ({
             id: t.id, transactionNumber: t.transaction_number, cashierId: t.cashier_id,
             sessionId: t.session_id, date: t.date, subtotal: t.subtotal, vat: t.vat ?? 0,
@@ -1323,22 +1325,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
               id: p.id, transactionId: p.transaction_id, method: p.method, amount: p.amount, reference: p.reference
             }))
           }));
-          setPosTransactions(parsed); await db.posTransactions.setItem('data', parsed);
+          const latestLocalTxs = (await safeGet<PosTransaction[]>(db.posTransactions)) || cachedPosTransactions;
+          const merged = mergeData(latestLocalTxs, parsed);
+          setPosTransactions(merged); await safeSet(db.posTransactions, merged);
         }
-        if (posPaymentsData) {
+        if (posPaymentsData && posPaymentsData.length > 0) {
           const parsed = posPaymentsData.map((p: any) => ({ id: p.id, transactionId: p.transaction_id, method: p.method, amount: p.amount, reference: p.reference }));
-          setPosPayments(parsed); await db.posPayments.setItem('data', parsed);
+          const latestLocalPayments = (await safeGet<PosPayment[]>(db.posPayments)) || cachedPosPayments;
+          const merged = mergeData(latestLocalPayments, parsed);
+          setPosPayments(merged); await safeSet(db.posPayments, merged);
         }
-        if (posDiscountsData) {
+        if (posDiscountsData && posDiscountsData.length > 0) {
           const parsed = posDiscountsData.map((d: any) => ({ id: d.id, name: d.name, type: d.type, value: d.value, maxPercent: d.max_percent, maxAmount: d.max_amount, active: d.active }));
-          setPosDiscounts(parsed); await db.posDiscounts.setItem('data', parsed);
+          const latestLocalDiscounts = (await safeGet<PosDiscount[]>(db.posDiscounts)) || cachedPosDiscounts;
+          const merged = mergeData(latestLocalDiscounts, parsed);
+          setPosDiscounts(merged); await safeSet(db.posDiscounts, merged);
         }
         if (posSettingsData) {
           const parsed: PosSettings = { libraryName: posSettingsData.library_name, address: posSettingsData.address, phone: posSettingsData.phone, email: posSettingsData.email, currency: posSettingsData.currency, ticketMessage: posSettingsData.ticket_message, printerType: posSettingsData.printer_type };
           setPosSettingsState(parsed); await db.posSettings.setItem('data', parsed);
         }
         
-        if (posReturnsData) {
+        if (posReturnsData && posReturnsData.length > 0) {
           const parsed: PosReturn[] = posReturnsData.map((r: any) => ({
             id: r.id,
             returnNumber: r.return_number,
@@ -1361,7 +1369,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             })),
             exchangeLines: []
           }));
-          setPosReturns(parsed); await db.posReturns.setItem('data', parsed);
+          const latestLocalReturns = (await safeGet<PosReturn[]>(db.posReturns)) || cachedPosReturns;
+          const merged = mergeData(latestLocalReturns, parsed);
+          setPosReturns(merged); await safeSet(db.posReturns, merged);
         }
 
         // Update last sync time for next delta fetch
