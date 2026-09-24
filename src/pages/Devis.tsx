@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { Plus, Download, Send, MessageCircle, Edit2, Trash2, Check, X, Clock, Eye } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Plus, Download, Send, MessageCircle, Edit2, Trash2, Check, X, Clock, Eye, User } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
@@ -11,27 +11,43 @@ import type { Quote } from '../context/AppContext';
 
 export function Devis() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { currentUser } = useAuth();
-  const { quotes, clients, settings, updateQuoteStatus, deleteQuote, services } = useAppContext();
+  const { quotes, clients, settings, updateQuoteStatus, deleteQuote, services, users } = useAppContext();
   const { confirm } = useConfirm();
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [serviceFilter, setServiceFilter] = useState('');
+  const [authorFilter, setAuthorFilter] = useState<string>(searchParams.get('authorId') || '');
   const [activeSendQuote, setActiveSendQuote] = useState<Quote | null>(null);
   const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
 
+  useEffect(() => {
+    const authorParam = searchParams.get('authorId');
+    if (authorParam) {
+      setAuthorFilter(authorParam);
+    }
+  }, [searchParams]);
+
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Inconnu';
   const getServiceName = (id?: string) => services.find(s => s.id === id)?.name || '-';
+  const getUserName = (id?: string) => users.find(u => u.id === id)?.name || 'Non assigné';
 
-  const allowedQuotes = currentUser?.role === 'Directeur' || currentUser?.role === 'SuperAdmin' || currentUser?.role === 'Directeur adjoint'
+  const isDirector = currentUser?.role === 'Directeur' || currentUser?.role === 'SuperAdmin' || currentUser?.role === 'Directeur adjoint';
+
+  const allowedQuotes = isDirector
     ? quotes
     : quotes.filter(q => q.serviceId === currentUser?.serviceId || q.commercialId === currentUser?.id);
 
   const filteredQuotes = allowedQuotes.filter(q => {
-    const matchClient = getClientName(q.clientId).toLowerCase().includes(filter.toLowerCase()) || q.quoteNumber.toLowerCase().includes(filter.toLowerCase()) || q.subject.toLowerCase().includes(filter.toLowerCase());
+    const matchClient = getClientName(q.clientId).toLowerCase().includes(filter.toLowerCase()) || 
+      q.quoteNumber.toLowerCase().includes(filter.toLowerCase()) || 
+      q.subject.toLowerCase().includes(filter.toLowerCase()) ||
+      getUserName(q.commercialId).toLowerCase().includes(filter.toLowerCase());
     const matchStatus = statusFilter ? q.status.toLowerCase() === statusFilter.toLowerCase() : true;
     const matchService = serviceFilter ? q.serviceId === serviceFilter : true;
-    return matchClient && matchStatus && matchService;
+    const matchAuthor = authorFilter ? q.commercialId === authorFilter : true;
+    return matchClient && matchStatus && matchService && matchAuthor;
   }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const getBadgeColor = (status: string) => {
@@ -103,18 +119,32 @@ export function Devis() {
             <option value="Refusé">Refusé</option>
           </select>
 
-          {currentUser?.role === 'Directeur' && (
-            <select 
-              className="table-input" 
-              style={{ maxWidth: '200px' }}
-              value={serviceFilter}
-              onChange={e => setServiceFilter(e.target.value)}
-            >
-              <option value="">Tous les services</option>
-              {services.map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
+          {isDirector && (
+            <>
+              <select 
+                className="table-input" 
+                style={{ maxWidth: '200px' }}
+                value={serviceFilter}
+                onChange={e => setServiceFilter(e.target.value)}
+              >
+                <option value="">Tous les services</option>
+                {services.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+
+              <select 
+                className="table-input" 
+                style={{ maxWidth: '220px' }}
+                value={authorFilter}
+                onChange={e => setAuthorFilter(e.target.value)}
+              >
+                <option value="">Tous les responsables</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                ))}
+              </select>
+            </>
           )}
         </div>
 
@@ -124,6 +154,7 @@ export function Devis() {
               <tr>
                 <th>N° Devis</th>
                 <th>Client</th>
+                {isDirector && <th>Auteur / Responsable</th>}
                 <th>Service</th>
                 <th>Sujet</th>
                 <th style={{ textAlign: 'right' }}>Montant Total</th>
@@ -141,6 +172,14 @@ export function Devis() {
                   <td data-label="Client">
                     <strong>{getClientName(q.clientId)}</strong>
                   </td>
+                  {isDirector && (
+                    <td data-label="Auteur">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <User size={14} style={{ color: 'var(--color-text-muted)' }} />
+                        <span style={{ fontWeight: 500 }}>{getUserName(q.commercialId)}</span>
+                      </div>
+                    </td>
+                  )}
                   <td data-label="Service" style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
                     {getServiceName(q.serviceId)}
                   </td>
@@ -217,7 +256,7 @@ export function Devis() {
               ))}
               {filteredQuotes.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
+                  <td colSpan={isDirector ? 9 : 8} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
                     Aucun devis trouvé.
                   </td>
                 </tr>
