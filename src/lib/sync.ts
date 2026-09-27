@@ -85,6 +85,13 @@ export const isNetworkOrTransientError = (err: any): boolean => {
   return false;
 };
 
+export const isForeignKeyError = (err: any): boolean => {
+  if (!err) return false;
+  const msg = (typeof err === 'string' ? err : err.message || err.details || JSON.stringify(err)).toLowerCase();
+  const code = err.code || err.status;
+  return code === '23503' || msg.includes('foreign key') || msg.includes('violates foreign key constraint') || msg.includes('clé étrangère');
+};
+
 // Vérifie si le retour Supabase est une erreur réseau (lance exception) ou logique (renvoie false)
 const checkResult = (error: any): boolean => {
   if (!error) return true;
@@ -173,8 +180,8 @@ export const queueSyncAction = async (type: SyncActionType, payload: any) => {
   }
 };
 
-// Helper de timeout pour éviter qu'une action réseau ne bloque la file en cas de coupure
-const withSyncTimeout = async <T,>(promise: Promise<T>, ms: number = 7000): Promise<T> => {
+// Helper de timeout adaptatif pour éviter qu'une action réseau ne bloque la file en cas de coupure
+const withSyncTimeout = async <T,>(promise: Promise<T>, ms: number = 20000): Promise<T> => {
   let timer: any;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error('[NetworkError] Délai réseau dépassé lors de la synchronisation')), ms);
@@ -239,7 +246,7 @@ export const processSyncQueue = async () => {
     const currentQueue: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
     if (currentQueue.length === 0) return;
 
-    // Tri ordonné selon les dépendances (ex: sessions avant transactions)
+    // Tri ordonné selon les dépendances (ex: configurations et sessions avant transactions)
     const sortedQueue = [...currentQueue].sort((a, b) => {
       const pA = ACTION_PRIORITY[a.type] || 10;
       const pB = ACTION_PRIORITY[b.type] || 10;
@@ -1092,7 +1099,7 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_CRM_FOLDER': {
           const folder = action.payload;
-          const { error } = await supabase.from('crm_folders').upsert([{
+          let { error } = await supabase.from('crm_folders').upsert([{
             id: folder.id,
             name: folder.name,
             owner_id: isUuid(folder.ownerId) ? folder.ownerId : null,
@@ -1100,25 +1107,49 @@ export const processSyncQueue = async () => {
             color: folder.color || '#0D9488',
             is_shared: !!folder.isShared
           }], { onConflict: 'id' });
+          if (error && isForeignKeyError(error)) {
+            console.warn('[Sync] INSERT_CRM_FOLDER violation FK détectée, auto-réparation avec relations nulles');
+            const fallback = await supabase.from('crm_folders').upsert([{
+              id: folder.id,
+              name: folder.name,
+              owner_id: null,
+              parent_id: null,
+              color: folder.color || '#0D9488',
+              is_shared: !!folder.isShared
+            }], { onConflict: 'id' });
+            error = fallback.error;
+          }
           if (error) console.error('[Sync] INSERT_CRM_FOLDER échoué :', error.message);
           success = checkResult(error);
           break;
         }
         case 'UPDATE_CRM_FOLDER': {
-          const { error } = await supabase.from('crm_folders').update({
+          let { error } = await supabase.from('crm_folders').update({
             name: action.payload.name,
             parent_id: isUuid(action.payload.parentId) ? action.payload.parentId : null,
             color: action.payload.color,
             is_shared: action.payload.isShared,
             updated_at: new Date().toISOString()
           }).eq('id', action.payload.id);
+          if (error && isForeignKeyError(error)) {
+            console.warn('[Sync] UPDATE_CRM_FOLDER violation FK détectée, auto-réparation');
+            const fallback = await supabase.from('crm_folders').update({
+              name: action.payload.name,
+              parent_id: null,
+              color: action.payload.color,
+              is_shared: action.payload.isShared,
+              updated_at: new Date().toISOString()
+            }).eq('id', action.payload.id);
+            error = fallback.error;
+          }
           if (error) console.error('[Sync] UPDATE_CRM_FOLDER échoué :', error.message);
           success = checkResult(error);
           break;
         }
         case 'DELETE_CRM_FOLDER': {
-          // Détacher d'abord les documents liés pour éviter les erreurs de clé étrangère
+          // Détacher d'abord les documents et sous-dossiers liés pour éviter les erreurs de clé étrangère
           await supabase.from('crm_documents').update({ folder_id: null }).eq('folder_id', action.payload.id);
+          await supabase.from('crm_folders').update({ parent_id: null }).eq('parent_id', action.payload.id);
           const { error } = await supabase.from('crm_folders').delete().eq('id', action.payload.id);
           if (error) console.error('[Sync] DELETE_CRM_FOLDER échoué :', error.message);
           success = checkResult(error);
@@ -1139,11 +1170,11 @@ export const processSyncQueue = async () => {
               }
             } catch (err: any) {
               if (isNetworkOrTransientError(err)) throw err;
-              console.warn('[Sync] INSERT_DOCUMENT Non-blocking storage error:', err);
+              console.warn('[Sync] INSERT_DOCUMENT Non-blocking storage warning:', err);
             }
           }
 
-          const { error } = await supabase.from('crm_documents').upsert([{
+          let { error } = await supabase.from('crm_documents').upsert([{
             id,
             name,
             type,
@@ -1156,6 +1187,25 @@ export const processSyncQueue = async () => {
             category: category || 'Autre',
             is_shared: !!isShared
           }], { onConflict: 'id' });
+
+          if (error && isForeignKeyError(error)) {
+            console.warn('[Sync] INSERT_DOCUMENT violation FK détectée, auto-réparation avec relations nulles');
+            const fallback = await supabase.from('crm_documents').upsert([{
+              id,
+              name,
+              type,
+              size_bytes: sizeBytes,
+              file_path: filePath,
+              uploader_id: null,
+              folder_id: null,
+              affaire_id: null,
+              client_id: null,
+              category: category || 'Autre',
+              is_shared: !!isShared
+            }], { onConflict: 'id' });
+            error = fallback.error;
+          }
+
           if (error) console.error('[Sync] INSERT_DOCUMENT DB Error:', error.message);
           success = checkResult(error);
           break;
@@ -1172,7 +1222,7 @@ export const processSyncQueue = async () => {
                 }
               } catch (err: any) {
                 if (isNetworkOrTransientError(err)) throw err;
-                console.warn('[Sync] UPDATE_DOCUMENT Non-blocking storage error:', err);
+                console.warn('[Sync] UPDATE_DOCUMENT Non-blocking storage warning:', err);
               }
             }
           }
@@ -1186,7 +1236,22 @@ export const processSyncQueue = async () => {
           if (updates.category !== undefined) dbUpdates.category = updates.category || 'Autre';
           if (updates.isShared !== undefined) dbUpdates.is_shared = !!updates.isShared;
 
-          const { error } = await supabase.from('crm_documents').update(dbUpdates).eq('id', id);
+          let { error } = await supabase.from('crm_documents').update(dbUpdates).eq('id', id);
+          if (error && isForeignKeyError(error)) {
+            console.warn('[Sync] UPDATE_DOCUMENT violation FK détectée, repli sans les relations');
+            const fallback = await supabase.from('crm_documents').update({
+              name: updates.name,
+              type: updates.type,
+              size_bytes: updates.sizeBytes,
+              folder_id: null,
+              affaire_id: null,
+              client_id: null,
+              category: updates.category || 'Autre',
+              is_shared: !!updates.isShared,
+              updated_at: new Date().toISOString()
+            }).eq('id', id);
+            error = fallback.error;
+          }
           if (error) console.error('[Sync] UPDATE_DOCUMENT DB Error:', error.message);
           success = checkResult(error);
           break;
@@ -1865,7 +1930,8 @@ export const processSyncQueue = async () => {
       };
 
       try {
-        success = await withSyncTimeout(executeAction(), 7000);
+        const actionTimeout = (action.type === 'INSERT_DOCUMENT' || action.type === 'UPDATE_DOCUMENT') ? 90000 : 25000;
+        success = await withSyncTimeout(executeAction(), actionTimeout);
       } catch (e: any) {
         if (isNetworkOrTransientError(e) || e?.message?.includes('[NetworkError]')) {
           console.warn(`[Sync] Coupure ou instabilité réseau détectée lors de l'action ${action.type}. L'action reste en file d'attente.`);
@@ -1925,12 +1991,41 @@ export const processSyncQueue = async () => {
   }
 };
 
-// Ecouter les retours de connexion
+// Démon de surveillance automatique et résilience en tâche de fond (Watchdog)
 if (typeof window !== 'undefined') {
+  // 1. Déclencheur au retour réseau
   window.addEventListener('online', () => {
-    console.log('Connexion rétablie. Synchronisation en cours...');
+    console.log('[SyncWatchdog] Connexion rétablie. Lancement immédiat de la synchronisation...');
     processSyncQueue();
   });
+
+  // 2. Déclencheur au focus de la fenêtre (reprise d'activité de l'utilisateur)
+  window.addEventListener('focus', () => {
+    if (navigator.onLine) {
+      processSyncQueue();
+    }
+  });
+
+  // 3. Déclencheur au changement de visibilité de l'onglet
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && navigator.onLine) {
+      processSyncQueue();
+    }
+  });
+
+  // 4. Heartbeat récurrent toutes les 20 secondes pour vider la file et auto-réparer
+  setInterval(async () => {
+    if (navigator.onLine && !syncLock) {
+      try {
+        const queue = (await db.syncQueue.getItem<SyncAction[]>('queue')) || [];
+        if (queue.length > 0) {
+          processSyncQueue();
+        }
+      } catch (err) {
+        console.warn('[SyncWatchdog] Erreur vérification périodique :', err);
+      }
+    }
+  }, 20000);
 }
 
 export interface ReconciliationResult {
