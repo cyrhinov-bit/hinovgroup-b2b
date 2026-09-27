@@ -96,10 +96,12 @@ const checkResult = (error: any): boolean => {
 
 // Ordre de priorité topologique pour respecter les dépendances de clés étrangères
 const ACTION_PRIORITY: Record<string, number> = {
-  // 1. Paramètres, Catégories, Marques, Fournisseurs
+  // 1. Paramètres, Catégories, Marques, Fournisseurs, Dossiers CRM
   'UPDATE_SETTINGS': 1,
   'INSERT_CATEGORY': 1,
   'INSERT_SERVICE': 1,
+  'INSERT_CRM_FOLDER': 1,
+  'UPDATE_CRM_FOLDER': 1,
   'INSERT_POS_CATEGORY': 1,
   'UPDATE_POS_CATEGORY': 1,
   'INSERT_POS_BRAND': 1,
@@ -116,7 +118,7 @@ const ACTION_PRIORITY: Record<string, number> = {
   // 3. Sessions de caisse (indispensable avant les transactions POS)
   'INSERT_POS_CASH_SESSION': 3,
   'UPDATE_POS_CASH_SESSION': 3,
-  // 4. Affaires, Devis, Ventes, Transactions
+  // 4. Affaires, Devis, Ventes, Transactions, Documents CRM
   'INSERT_AFFAIRE': 4,
   'UPDATE_AFFAIRE': 4,
   'INSERT_QUOTE': 4,
@@ -125,6 +127,8 @@ const ACTION_PRIORITY: Record<string, number> = {
   'UPDATE_SALE': 4,
   'INSERT_POS_TRANSACTION': 4,
   'UPDATE_POS_TRANSACTION': 4,
+  'INSERT_DOCUMENT': 4,
+  'UPDATE_DOCUMENT': 4,
   // 5. Paiements, Retours, Mouvements de stock, Inventaires
   'INSERT_POS_PAYMENT': 5,
   'INSERT_FACTURE_PAIEMENT': 5,
@@ -1074,14 +1078,15 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_CRM_FOLDER': {
-          const { error } = await supabase.from('crm_folders').insert([{
-            id: action.payload.id,
-            name: action.payload.name,
-            owner_id: action.payload.ownerId,
-            parent_id: action.payload.parentId || null,
-            color: action.payload.color || '#0D9488',
-            is_shared: !!action.payload.isShared
-          }]);
+          const folder = action.payload;
+          const { error } = await supabase.from('crm_folders').upsert([{
+            id: folder.id,
+            name: folder.name,
+            owner_id: isUuid(folder.ownerId) ? folder.ownerId : null,
+            parent_id: isUuid(folder.parentId) ? folder.parentId : null,
+            color: folder.color || '#0D9488',
+            is_shared: !!folder.isShared
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_CRM_FOLDER échoué :', error.message);
           success = checkResult(error);
           break;
@@ -1089,51 +1094,57 @@ export const processSyncQueue = async () => {
         case 'UPDATE_CRM_FOLDER': {
           const { error } = await supabase.from('crm_folders').update({
             name: action.payload.name,
-            parent_id: action.payload.parentId || null,
+            parent_id: isUuid(action.payload.parentId) ? action.payload.parentId : null,
             color: action.payload.color,
-            is_shared: action.payload.isShared
+            is_shared: action.payload.isShared,
+            updated_at: new Date().toISOString()
           }).eq('id', action.payload.id);
           if (error) console.error('[Sync] UPDATE_CRM_FOLDER échoué :', error.message);
           success = checkResult(error);
           break;
         }
         case 'DELETE_CRM_FOLDER': {
+          // Détacher d'abord les documents liés pour éviter les erreurs de clé étrangère
+          await supabase.from('crm_documents').update({ folder_id: null }).eq('folder_id', action.payload.id);
           const { error } = await supabase.from('crm_folders').delete().eq('id', action.payload.id);
+          if (error) console.error('[Sync] DELETE_CRM_FOLDER échoué :', error.message);
           success = checkResult(error);
           break;
         }
         case 'INSERT_DOCUMENT': {
           const { id, name, type, sizeBytes, filePath, uploaderId, folderId, affaireId, clientId, category, isShared } = action.payload;
           const fileData: Blob | null = await db.documentFiles.getItem(id);
-          let storageSuccess = true;
           
           if (fileData && filePath) {
-            const { error: storageError } = await supabase.storage.from('crm_documents').upload(filePath, fileData, { upsert: true });
-            if (storageError) {
-              console.error('[Sync] INSERT_DOCUMENT Storage Error:', storageError);
-              storageSuccess = false;
+            try {
+              const { error: storageError } = await supabase.storage.from('crm_documents').upload(filePath, fileData, { upsert: true });
+              if (storageError) {
+                console.error('[Sync] INSERT_DOCUMENT Storage Error:', storageError);
+                if (isNetworkOrTransientError(storageError)) {
+                  throw new Error(`[NetworkError] Storage upload failed: ${storageError.message}`);
+                }
+              }
+            } catch (err: any) {
+              if (isNetworkOrTransientError(err)) throw err;
+              console.warn('[Sync] INSERT_DOCUMENT Non-blocking storage error:', err);
             }
           }
 
-          if (storageSuccess) {
-            const { error } = await supabase.from('crm_documents').insert([{
-              id,
-              name,
-              type,
-              size_bytes: sizeBytes,
-              file_path: filePath,
-              uploader_id: uploaderId,
-              folder_id: folderId || null,
-              affaire_id: affaireId || null,
-              client_id: clientId || null,
-              category: category || 'Autre',
-              is_shared: !!isShared
-            }]);
-            if (error) console.error('[Sync] INSERT_DOCUMENT DB Error:', error.message);
-            success = checkResult(error);
-          } else {
-            success = false;
-          }
+          const { error } = await supabase.from('crm_documents').upsert([{
+            id,
+            name,
+            type,
+            size_bytes: sizeBytes,
+            file_path: filePath,
+            uploader_id: isUuid(uploaderId) ? uploaderId : null,
+            folder_id: isUuid(folderId) ? folderId : null,
+            affaire_id: isUuid(affaireId) ? affaireId : null,
+            client_id: isUuid(clientId) ? clientId : null,
+            category: category || 'Autre',
+            is_shared: !!isShared
+          }], { onConflict: 'id' });
+          if (error) console.error('[Sync] INSERT_DOCUMENT DB Error:', error.message);
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_DOCUMENT': {
@@ -1141,17 +1152,24 @@ export const processSyncQueue = async () => {
           if (hasNewFile) {
             const fileData: Blob | null = await db.documentFiles.getItem(id);
             if (fileData && updates.filePath) {
-              const { error: storageError } = await supabase.storage.from('crm_documents').upload(updates.filePath, fileData, { upsert: true });
-              if (storageError) console.error('[Sync] UPDATE_DOCUMENT Storage Error:', storageError);
+              try {
+                const { error: storageError } = await supabase.storage.from('crm_documents').upload(updates.filePath, fileData, { upsert: true });
+                if (storageError && isNetworkOrTransientError(storageError)) {
+                  throw new Error(`[NetworkError] Storage update failed: ${storageError.message}`);
+                }
+              } catch (err: any) {
+                if (isNetworkOrTransientError(err)) throw err;
+                console.warn('[Sync] UPDATE_DOCUMENT Non-blocking storage error:', err);
+              }
             }
           }
-          const dbUpdates: any = {};
+          const dbUpdates: any = { updated_at: new Date().toISOString() };
           if (updates.name !== undefined) dbUpdates.name = updates.name;
           if (updates.type !== undefined) dbUpdates.type = updates.type;
           if (updates.sizeBytes !== undefined) dbUpdates.size_bytes = updates.sizeBytes;
-          if (updates.folderId !== undefined) dbUpdates.folder_id = updates.folderId || null;
-          if (updates.affaireId !== undefined) dbUpdates.affaire_id = updates.affaireId || null;
-          if (updates.clientId !== undefined) dbUpdates.client_id = updates.clientId || null;
+          if (updates.folderId !== undefined) dbUpdates.folder_id = isUuid(updates.folderId) ? updates.folderId : null;
+          if (updates.affaireId !== undefined) dbUpdates.affaire_id = isUuid(updates.affaireId) ? updates.affaireId : null;
+          if (updates.clientId !== undefined) dbUpdates.client_id = isUuid(updates.clientId) ? updates.clientId : null;
           if (updates.category !== undefined) dbUpdates.category = updates.category || 'Autre';
           if (updates.isShared !== undefined) dbUpdates.is_shared = !!updates.isShared;
 
@@ -1163,7 +1181,11 @@ export const processSyncQueue = async () => {
         case 'DELETE_DOCUMENT': {
           const { error } = await supabase.from('crm_documents').delete().eq('id', action.payload.id);
           if (action.payload.filePath) {
-            await supabase.storage.from('crm_documents').remove([action.payload.filePath]);
+            try {
+              await supabase.storage.from('crm_documents').remove([action.payload.filePath]);
+            } catch (err) {
+              console.warn('[Sync] DELETE_DOCUMENT Storage remove warning:', err);
+            }
           }
           success = checkResult(error);
           break;
