@@ -96,8 +96,9 @@ const checkResult = (error: any): boolean => {
 
 // Ordre de priorité topologique pour respecter les dépendances de clés étrangères
 const ACTION_PRIORITY: Record<string, number> = {
-  // 1. Paramètres, Catégories, Marques, Fournisseurs, Dossiers CRM
+  // 1. Paramètres, Catégories, Marques, Fournisseurs, Dossiers CRM, Remises
   'UPDATE_SETTINGS': 1,
+  'UPDATE_POS_SETTINGS': 1,
   'INSERT_CATEGORY': 1,
   'INSERT_SERVICE': 1,
   'INSERT_CRM_FOLDER': 1,
@@ -108,6 +109,8 @@ const ACTION_PRIORITY: Record<string, number> = {
   'UPDATE_POS_BRAND': 1,
   'INSERT_POS_SUPPLIER': 1,
   'UPDATE_POS_SUPPLIER': 1,
+  'INSERT_POS_DISCOUNT': 1,
+  'UPDATE_POS_DISCOUNT': 1,
   // 2. Profils, Clients, Produits, Prestations
   'INSERT_CLIENT': 2,
   'UPDATE_CLIENT': 2,
@@ -129,7 +132,7 @@ const ACTION_PRIORITY: Record<string, number> = {
   'UPDATE_POS_TRANSACTION': 4,
   'INSERT_DOCUMENT': 4,
   'UPDATE_DOCUMENT': 4,
-  // 5. Paiements, Retours, Mouvements de stock, Inventaires
+  // 5. Paiements, Retours, Mouvements de stock, Entrées stock, Inventaires
   'INSERT_POS_PAYMENT': 5,
   'INSERT_FACTURE_PAIEMENT': 5,
   'INSERT_POS_STOCK_ENTRY': 5,
@@ -139,6 +142,16 @@ const ACTION_PRIORITY: Record<string, number> = {
   'UPDATE_POS_INVENTORY': 5,
   'INSERT_POS_RETURN': 5,
   'UPDATE_POS_RETURN': 5,
+  // 6. Suppressions et purges finales
+  'DELETE_POS_DISCOUNT': 6,
+  'DELETE_POS_CATEGORY': 6,
+  'DELETE_POS_BRAND': 6,
+  'DELETE_POS_SUPPLIER': 6,
+  'DELETE_POS_PRODUCT': 6,
+  'DELETE_POS_STOCK_ENTRY': 6,
+  'DELETE_POS_INVENTORY': 6,
+  'CLEAR_POS_SALES_HISTORY': 6,
+  'DELETE_POS_MOVEMENTS_BY_RANGE': 6,
 };
 
 // Ajouter une action à la file d'attente
@@ -1355,16 +1368,19 @@ export const processSyncQueue = async () => {
         case 'DELETE_POS_PRODUCT': {
           const { error } = await supabase.from('pos_products').delete().eq('id', action.payload.id);
           if (error) {
+            if (isNetworkOrTransientError(error)) {
+              throw new Error(`[NetworkError] ${error.message}`);
+            }
             console.warn('[Sync] DELETE_POS_PRODUCT impossible (contrainte FK), passage en is_active=false :', error.message);
             const { error: updateError } = await supabase.from('pos_products').update({ is_active: false }).eq('id', action.payload.id);
-            success = !updateError;
+            success = checkResult(updateError);
           } else {
             success = true;
           }
           break;
         }
         case 'INSERT_POS_STOCK_MOVEMENT': {
-          const { error } = await supabase.from('pos_stock_movements').insert([{
+          const { error } = await supabase.from('pos_stock_movements').upsert([{
             id: action.payload.id,
             product_id: isUuid(action.payload.productId) ? action.payload.productId : null,
             type: action.payload.type,
@@ -1373,7 +1389,7 @@ export const processSyncQueue = async () => {
             date: action.payload.date || new Date().toISOString(),
             created_by: isUuid(action.payload.createdBy) ? action.payload.createdBy : null,
             notes: action.payload.notes || null
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_POS_STOCK_MOVEMENT échoué :', error);
           success = checkResult(error);
           break;
@@ -1392,10 +1408,11 @@ export const processSyncQueue = async () => {
           }], { onConflict: 'id' });
           if (!error && lines && lines.length > 0) {
             const linesData = lines.map((l: any) => ({
-              id: l.id, entry_id: entryData.id, product_id: l.productId,
+              id: l.id || uuidv4(), entry_id: entryData.id, product_id: isUuid(l.productId) ? l.productId : null,
               quantity: l.quantity, purchase_price: l.purchasePrice, total: l.total
             }));
-            await supabase.from('pos_stock_entry_lines').upsert(linesData, { onConflict: 'id' });
+            const { error: linesErr } = await supabase.from('pos_stock_entry_lines').upsert(linesData, { onConflict: 'id' });
+            if (linesErr && isNetworkOrTransientError(linesErr)) throw new Error(`[NetworkError] ${linesErr.message}`);
           }
           success = checkResult(error);
           break;
@@ -1410,10 +1427,11 @@ export const processSyncQueue = async () => {
             await supabase.from('pos_stock_entry_lines').delete().eq('entry_id', id);
             if (lines && lines.length > 0) {
               const linesData = lines.map((l: any) => ({
-                id: l.id, entry_id: id, product_id: l.productId,
+                id: l.id || uuidv4(), entry_id: id, product_id: isUuid(l.productId) ? l.productId : null,
                 quantity: l.quantity, purchase_price: l.purchasePrice, total: l.total
               }));
-              await supabase.from('pos_stock_entry_lines').insert(linesData);
+              const { error: insLinesErr } = await supabase.from('pos_stock_entry_lines').upsert(linesData, { onConflict: 'id' });
+              if (insLinesErr && isNetworkOrTransientError(insLinesErr)) throw new Error(`[NetworkError] ${insLinesErr.message}`);
             }
           }
           success = checkResult(error);
@@ -1436,7 +1454,8 @@ export const processSyncQueue = async () => {
               id: l.id || uuidv4(), inventory_id: invData.id, product_id: isUuid(l.productId) ? l.productId : null,
               expected_qty: l.expectedQty, counted_qty: l.countedQty, difference: l.difference
             }));
-            await supabase.from('pos_inventory_lines').upsert(linesData, { onConflict: 'id' });
+            const { error: linesErr } = await supabase.from('pos_inventory_lines').upsert(linesData, { onConflict: 'id' });
+            if (linesErr && isNetworkOrTransientError(linesErr)) throw new Error(`[NetworkError] ${linesErr.message}`);
           }
           success = checkResult(error);
           break;
@@ -1554,11 +1573,16 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'CLEAR_POS_SALES_HISTORY': {
-          await supabase.from('pos_return_lines').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-          await supabase.from('pos_returns').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-          await supabase.from('pos_payments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-          await supabase.from('pos_transaction_lines').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-          await supabase.from('pos_transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          const { error: e1 } = await supabase.from('pos_return_lines').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          if (e1 && isNetworkOrTransientError(e1)) throw new Error(`[NetworkError] ${e1.message}`);
+          const { error: e2 } = await supabase.from('pos_returns').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          if (e2 && isNetworkOrTransientError(e2)) throw new Error(`[NetworkError] ${e2.message}`);
+          const { error: e3 } = await supabase.from('pos_payments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          if (e3 && isNetworkOrTransientError(e3)) throw new Error(`[NetworkError] ${e3.message}`);
+          const { error: e4 } = await supabase.from('pos_transaction_lines').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          if (e4 && isNetworkOrTransientError(e4)) throw new Error(`[NetworkError] ${e4.message}`);
+          const { error: e5 } = await supabase.from('pos_transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          if (e5 && isNetworkOrTransientError(e5)) throw new Error(`[NetworkError] ${e5.message}`);
           success = true;
           break;
         }
@@ -1568,11 +1592,13 @@ export const processSyncQueue = async () => {
           const endIso = `${endDate}T23:59:59.999Z`;
 
           // 1. Transactions de la plage
-          const { data: targetTxs } = await supabase
+          const { data: targetTxs, error: txFetchErr } = await supabase
             .from('pos_transactions')
             .select('id')
             .gte('date', startIso)
             .lte('date', endIso);
+
+          if (txFetchErr && isNetworkOrTransientError(txFetchErr)) throw new Error(`[NetworkError] ${txFetchErr.message}`);
 
           const txIds = (targetTxs || []).map((t: any) => t.id);
 
@@ -1583,11 +1609,13 @@ export const processSyncQueue = async () => {
           }
 
           // 2. Retours de la plage
-          const { data: targetReturns } = await supabase
+          const { data: targetReturns, error: retFetchErr } = await supabase
             .from('pos_returns')
             .select('id')
             .gte('date', startIso)
             .lte('date', endIso);
+
+          if (retFetchErr && isNetworkOrTransientError(retFetchErr)) throw new Error(`[NetworkError] ${retFetchErr.message}`);
 
           const returnIds = (targetReturns || []).map((r: any) => r.id);
           if (returnIds.length > 0) {
@@ -1596,11 +1624,13 @@ export const processSyncQueue = async () => {
           }
 
           // 3. Sessions de caisse de la plage
-          await supabase
+          const { error: sessionDelErr } = await supabase
             .from('pos_cash_sessions')
             .delete()
             .gte('opened_at', startIso)
             .lte('opened_at', endIso);
+
+          if (sessionDelErr && isNetworkOrTransientError(sessionDelErr)) throw new Error(`[NetworkError] ${sessionDelErr.message}`);
 
           success = true;
           break;
@@ -1644,12 +1674,17 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'UPDATE_POS_SETTINGS': {
-          const { error } = await supabase.from('pos_settings').update({
-            library_name: action.payload.libraryName, address: action.payload.address,
-            phone: action.payload.phone, email: action.payload.email,
-            currency: action.payload.currency,
-            ticket_message: action.payload.ticketMessage, printer_type: action.payload.printerType
-          }).eq('id', 1);
+          const { error } = await supabase.from('pos_settings').upsert([{
+            id: 1,
+            library_name: action.payload.libraryName || 'Ma Librairie',
+            address: action.payload.address || null,
+            phone: action.payload.phone || null,
+            email: action.payload.email || null,
+            currency: action.payload.currency || 'FCFA',
+            ticket_message: action.payload.ticketMessage || null,
+            printer_type: action.payload.printerType || 'Thermique 80mm',
+            updated_at: new Date().toISOString()
+          }], { onConflict: 'id' });
           success = checkResult(error);
           break;
         }
@@ -1710,14 +1745,14 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_PRODUCT_COMPLETION': {
-          const { error } = await supabase.from('product_completions').insert([{
+          const { error } = await supabase.from('product_completions').upsert([{
             id: action.payload.id,
             product_id: isUuid(action.payload.productId) ? action.payload.productId : null,
             missing_field: action.payload.missingField,
             current_value: action.payload.currentValue,
             suggested_value: action.payload.suggestedValue,
             created_at: action.payload.createdAt
-          }]);
+          }], { onConflict: 'id' });
           success = checkResult(error);
           break;
         }
@@ -1734,7 +1769,7 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_IMPORT_SESSION': {
           const { errors, ...sessionData } = action.payload;
-          const { error } = await supabase.from('import_sessions').insert([{
+          const { error } = await supabase.from('import_sessions').upsert([{
             id: sessionData.id,
             filename: sessionData.filename,
             status: sessionData.status,
@@ -1745,13 +1780,14 @@ export const processSyncQueue = async () => {
             ignored_rows: sessionData.ignoredRows,
             created_at: sessionData.createdAt,
             completed_at: sessionData.completedAt || null
-          }]);
+          }], { onConflict: 'id' });
           if (!error && errors && errors.length > 0) {
             const errorData = errors.map((e: any) => ({
+              id: isUuid(e.id) ? e.id : uuidv4(),
               row_number: e.row, session_id: sessionData.id, field_name: e.field,
               field_value: e.value, error_message: e.error, severity: e.severity
             }));
-            await supabase.from('import_errors').insert(errorData);
+            await supabase.from('import_errors').upsert(errorData, { onConflict: 'id' });
           }
           success = checkResult(error);
           break;
@@ -2058,11 +2094,110 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
           notes: ret.notes || null,
           created_by: isUuid(ret.createdBy) ? ret.createdBy : null
         }], { onConflict: 'id' });
-        if (!retErr) returnsSynced++;
+        
+        if (!retErr) {
+          const allLinesData: any[] = [];
+          if (ret.lines && ret.lines.length > 0) {
+            ret.lines.forEach((l: any) => {
+              allLinesData.push({
+                id: l.id || uuidv4(),
+                return_id: ret.id,
+                product_id: isUuid(l.productId) ? l.productId : null,
+                description: l.description,
+                quantity: l.quantity,
+                unit_price: l.unitPrice,
+                total: l.total,
+                reason: l.reason || 'Retour'
+              });
+            });
+          }
+          if (ret.exchangeLines && ret.exchangeLines.length > 0) {
+            ret.exchangeLines.forEach((l: any) => {
+              allLinesData.push({
+                id: l.id || uuidv4(),
+                return_id: ret.id,
+                product_id: isUuid(l.productId) ? l.productId : null,
+                description: l.description,
+                quantity: l.quantity,
+                unit_price: l.unitPrice,
+                total: l.total,
+                reason: 'Échange'
+              });
+            });
+          }
+          if (allLinesData.length > 0) {
+            await supabase.from('pos_return_lines').upsert(allLinesData, { onConflict: 'id' });
+          }
+          returnsSynced++;
+        }
       }
     }
 
-    // 6. Traiter toute file d'attente restante
+    // 6. Synchroniser les entrées de stock manquantes
+    const localEntries = (await db.posStockEntries.getItem<any[]>('data')) || [];
+    if (localEntries.length > 0) {
+      const { data: remoteEntries } = await supabase.from('pos_stock_entries').select('id');
+      const remoteEntryIds = new Set((remoteEntries || []).map((e: any) => e.id));
+      const missingEntries = localEntries.filter(e => !remoteEntryIds.has(e.id));
+
+      for (const entry of missingEntries) {
+        const { error: entErr } = await supabase.from('pos_stock_entries').upsert([{
+          id: entry.id,
+          reference: entry.reference,
+          supplier_id: isUuid(entry.supplierId) ? entry.supplierId : null,
+          date: entry.date,
+          total_amount: entry.totalAmount ?? 0,
+          status: entry.status,
+          notes: entry.notes || null,
+          created_by: isUuid(entry.createdBy) ? entry.createdBy : null
+        }], { onConflict: 'id' });
+
+        if (!entErr && entry.lines && entry.lines.length > 0) {
+          const linesData = entry.lines.map((l: any) => ({
+            id: l.id || uuidv4(),
+            entry_id: entry.id,
+            product_id: isUuid(l.productId) ? l.productId : null,
+            quantity: l.quantity,
+            purchase_price: l.purchasePrice,
+            total: l.total
+          }));
+          await supabase.from('pos_stock_entry_lines').upsert(linesData, { onConflict: 'id' });
+        }
+      }
+    }
+
+    // 7. Synchroniser les inventaires manquants
+    const localInventories = (await db.posInventories.getItem<any[]>('data')) || [];
+    if (localInventories.length > 0) {
+      const { data: remoteInvs } = await supabase.from('pos_inventories').select('id');
+      const remoteInvIds = new Set((remoteInvs || []).map((i: any) => i.id));
+      const missingInvs = localInventories.filter(i => !remoteInvIds.has(i.id));
+
+      for (const inv of missingInvs) {
+        const { error: invErr } = await supabase.from('pos_inventories').upsert([{
+          id: inv.id,
+          reference: inv.reference,
+          date: inv.date,
+          status: inv.status,
+          notes: inv.notes || null,
+          created_by: isUuid(inv.createdBy) ? inv.createdBy : null
+        }], { onConflict: 'id' });
+
+        if (!invErr && inv.lines && inv.lines.length > 0) {
+          const linesData = inv.lines.map((l: any) => ({
+            id: l.id || uuidv4(),
+            inventory_id: inv.id,
+            product_id: isUuid(l.productId) ? l.productId : null,
+            expected_qty: l.expectedQty,
+            counted_qty: l.countedQty,
+            difference: l.difference
+          }));
+          await supabase.from('pos_inventory_lines').upsert(linesData, { onConflict: 'id' });
+        }
+      }
+    }
+
+    // 8. Traiter toute file d'attente restante
     await processSyncQueue();
 
     return {
