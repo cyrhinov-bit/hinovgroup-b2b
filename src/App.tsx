@@ -175,7 +175,7 @@ function App() {
                     <Route path="pos/settings" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosSettings /></Suspense>} />
                     <Route path="pos/users" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosUsers /></Suspense>} />
                     <Route path="pos/cashier-modules" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant']}><CashierModulesManager /></RequireRole></Suspense>} />
-          <Route path="pos/sync-errors" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant']}><PosSyncErrors /></RequireRole></Suspense>} />
+          <Route path="pos/sync-errors" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant', 'Caissier']}><PosSyncErrors /></RequireRole></Suspense>} />
                     <Route path="pos/discounts" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosDiscounts /></Suspense>} />
                     <Route path="pos/reports" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosReports /></Suspense>} />
                     <Route path="pos/finance" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosFinance /></Suspense>} />

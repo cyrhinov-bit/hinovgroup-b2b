@@ -78,7 +78,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Paramètres', icon: Settings, path: '/pos/settings', color: '#64748B', bg: '#F1F5F9', roles: ['Directeur'] },
     { label: 'Utilisateurs', icon: Shield, path: '/pos/users', color: '#475569', bg: '#F8FAFC', roles: ['Directeur', 'Gerant'] },
     { label: 'Modules Caissier', icon: ToggleRight, path: '/pos/cashier-modules', color: '#3B82F6', bg: '#EFF6FF', roles: ['Directeur', 'Gerant'] },
-    { label: 'Erreurs Sync', icon: Shield, path: '/pos/sync-errors', color: '#DC2626', bg: '#FEF2F2', roles: ['Directeur', 'Gerant'] },
+    { label: 'Erreurs Sync', icon: Shield, path: '/pos/sync-errors', color: '#DC2626', bg: '#FEF2F2', roles: ['Directeur', 'Gerant', 'Caissier'] },
     { label: 'Remises', icon: Tag, path: '/pos/discounts', color: '#D97706', bg: '#FFFBEB', roles: ['Directeur'] },
     { label: 'Rapports', icon: BarChart3, path: '/pos/reports', color: '#06B6D4', bg: '#ECFEFF', roles: ['Directeur'] },
     // Gestion catalogue Gérant
