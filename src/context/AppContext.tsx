@@ -1481,13 +1481,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const handleSyncCriticalError = (e: Event) => {
       const detail = (e as CustomEvent).detail as { message: string };
-      toast.error(detail.message, {
-        duration: 8000,
+      toast((t) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ fontWeight: 600, color: '#991B1B', fontSize: '13px' }}>
+            {detail.message}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={() => {
+                toast.dismiss(t.id);
+                window.location.hash = '#/pos/sync-errors';
+                if (window.location.pathname !== '/pos/sync-errors') {
+                  window.location.href = '/pos/sync-errors';
+                }
+              }}
+              style={{
+                background: '#DC2626',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '4px 10px',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Voir les erreurs
+            </button>
+            <button
+              onClick={() => toast.dismiss(t.id)}
+              style={{
+                background: 'transparent',
+                color: '#6B7280',
+                border: 'none',
+                fontSize: '11px',
+                cursor: 'pointer'
+              }}
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      ), {
+        duration: 9000,
         style: {
           background: '#FEF2F2',
-          color: '#991B1B',
           border: '1px solid #FCA5A5',
-          fontSize: '13px',
+          padding: '12px',
           maxWidth: '420px'
         }
       });

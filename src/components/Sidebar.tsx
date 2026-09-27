@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { db } from '../lib/db';
 import { 
   Home, Users, Briefcase, FileText, Folder, Shield, PieChart, Settings, 
   UserCircle, LogOut, Receipt, Coins, Target, ShoppingCart, Package, Truck, 
@@ -27,6 +28,39 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
   const { currentUser, logout } = useAuth();
   const { posWorkspace, services } = useAppContext();
   const [clickedPath, setClickedPath] = useState<string | null>(null);
+  const [syncErrorsCount, setSyncErrorsCount] = useState<number>(0);
+
+  useEffect(() => {
+    const checkErrors = async () => {
+      try {
+        const stored = (await db.syncErrors.getItem<any[]>('errors')) || [];
+        setSyncErrorsCount(stored.length);
+      } catch {
+        setSyncErrorsCount(0);
+      }
+    };
+
+    checkErrors();
+
+    const handleErrorsUpdated = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail && typeof detail.count === 'number') {
+        setSyncErrorsCount(detail.count);
+      } else {
+        checkErrors();
+      }
+    };
+
+    window.addEventListener('sync-errors-updated', handleErrorsUpdated);
+    window.addEventListener('sync-critical-error', checkErrors);
+    const interval = setInterval(checkErrors, 10000);
+
+    return () => {
+      window.removeEventListener('sync-errors-updated', handleErrorsUpdated);
+      window.removeEventListener('sync-critical-error', checkErrors);
+      clearInterval(interval);
+    };
+  }, []);
 
   const currentService = services.find(s => s.id === currentUser?.serviceId);
   const serviceName = currentService?.name || null;
@@ -152,18 +186,26 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
                   to={item.path} 
                   className={`nav-link ${isClicked ? 'clicked' : ''}`}
                   onClick={() => handleItemClick(item.path)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
                 >
-                  <span 
-                    className="nav-icon-badge" 
-                    style={{ 
-                      backgroundColor: item.bg, 
-                      color: item.color,
-                      boxShadow: isActive ? `0 4px 12px ${item.color}35` : undefined
-                    }}
-                  >
-                    <item.icon size={18} />
-                  </span>
-                  <span>{item.label}</span>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <span 
+                      className="nav-icon-badge" 
+                      style={{ 
+                        backgroundColor: item.bg, 
+                        color: item.color,
+                        boxShadow: isActive ? `0 4px 12px ${item.color}35` : undefined
+                      }}
+                    >
+                      <item.icon size={18} />
+                    </span>
+                    <span>{item.label}</span>
+                  </div>
+                  {item.path === '/pos/sync-errors' && syncErrorsCount > 0 && (
+                    <span className="sidebar-sync-badge" title={`${syncErrorsCount} action(s) en erreur`}>
+                      {syncErrorsCount > 99 ? '99+' : syncErrorsCount}
+                    </span>
+                  )}
                 </Link>
               </li>
             );

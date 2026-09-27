@@ -1846,28 +1846,32 @@ export const processSyncQueue = async () => {
         // En cas de rejet définitif du serveur (ex: violation de schéma PostgreSQL avec données corrompues)
         processedIds.add(action.id);
         console.warn(`[Sync] Action ${action.type} rejetée définitivement par la base de données. Sauvegardée dans syncErrors.`);
+        let currentErrorsCount = 1;
         try {
           const errors = await db.syncErrors.getItem<any[]>('errors') || [];
           errors.push({ action, failedAt: new Date().toISOString() });
           await db.syncErrors.setItem('errors', errors);
+          currentErrorsCount = errors.length;
         } catch(err) {
           console.error('Impossible de sauvegarder dans syncErrors', err);
         }
 
-        // Notifier l'utilisateur pour les actions critiques (transactions, sessions de caisse)
-        const criticalActions: SyncActionType[] = [
-          'INSERT_POS_TRANSACTION', 'INSERT_POS_CASH_SESSION', 'UPDATE_POS_CASH_SESSION'
-        ];
-        if (criticalActions.includes(action.type)) {
-          const labels: Partial<Record<SyncActionType, string>> = {
-            'INSERT_POS_TRANSACTION': '⚠️ Une transaction de caisse n\'a pas pu être synchronisée avec le serveur. Consultez la page Erreurs de Sync.',
-            'INSERT_POS_CASH_SESSION': '⚠️ L\'ouverture de session caisse n\'a pas pu être synchronisée.',
-            'UPDATE_POS_CASH_SESSION': '⚠️ La fermeture de session caisse n\'a pas pu être synchronisée.',
-          };
-          const message = labels[action.type] || `⚠️ Échec de synchronisation : ${action.type}`;
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('sync-critical-error', { detail: { message, action } }));
-          }
+        const labels: Partial<Record<SyncActionType, string>> = {
+          'INSERT_POS_TRANSACTION': '⚠️ Une transaction de caisse n\'a pas pu être synchronisée avec le serveur.',
+          'INSERT_POS_CASH_SESSION': '⚠️ L\'ouverture de session caisse n\'a pas pu être synchronisée.',
+          'UPDATE_POS_CASH_SESSION': '⚠️ La fermeture de session caisse n\'a pas pu être synchronisée.',
+          'INSERT_CRM_FOLDER': '⚠️ Échec de synchronisation d\'un dossier CRM.',
+          'DELETE_CRM_FOLDER': '⚠️ Échec de suppression d\'un dossier CRM.',
+          'INSERT_DOCUMENT': '⚠️ Échec de synchronisation d\'un document.',
+          'UPDATE_DOCUMENT': '⚠️ Échec de mise à jour d\'un document.',
+          'INSERT_QUOTE': '⚠️ Échec de synchronisation d\'un devis.',
+          'INSERT_SALE': '⚠️ Échec de synchronisation d\'une vente.',
+          'INSERT_CLIENT': '⚠️ Échec de synchronisation d\'un client.',
+        };
+        const message = labels[action.type] || `⚠️ Échec de synchronisation : ${action.type}`;
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sync-critical-error', { detail: { message, action } }));
+          window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: currentErrorsCount } }));
         }
       }
     } catch (e) {

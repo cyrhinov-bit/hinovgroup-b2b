@@ -233,3 +233,32 @@
     left: 0;
   }
 }
+
+.sidebar-sync-badge {
+  background-color: #DC2626;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  min-width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
+  animation: pulse-sync-badge 2s infinite ease-in-out;
+  margin-left: auto;
+}
+
+@keyframes pulse-sync-badge {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 3px 10px rgba(220, 38, 38, 0.7);
+  }
+}
+
