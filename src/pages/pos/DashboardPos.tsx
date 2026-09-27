@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useNavigate } from 'react-router-dom';
-import { Package, Warehouse, TrendingUp, AlertTriangle, DollarSign, RotateCcw, ShoppingBag, RefreshCw } from 'lucide-react';
+import { Package, Warehouse, TrendingUp, AlertTriangle, DollarSign, RotateCcw, ShoppingBag, RefreshCw, CloudUpload } from 'lucide-react';
 import { todayLocalKey, toLocalDayKey } from '../../lib/dates';
 import { Button } from '../../components/ui/Button';
 import { toast } from 'react-hot-toast';
 
 export default function DashboardPos() {
-  const { posProducts, posTransactions, posCashSessions, posReturns, refreshData } = useAppContext();
+  const { posProducts, posTransactions, posCashSessions, posReturns, refreshData, reconcilePosData } = useAppContext();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isReconciling, setIsReconciling] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -24,6 +25,24 @@ export default function DashboardPos() {
       toast.error('Erreur lors de la synchronisation');
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  const handleReconcile = async () => {
+    setIsReconciling(true);
+    const toastId = toast.loading('Réconciliation globale avec le serveur Cloud...');
+    try {
+      const res = await reconcilePosData();
+      await refreshData(true);
+      if (res?.success) {
+        toast.success(res.message || 'Synchronisation d\'urgence réussie !', { id: toastId, duration: 6000 });
+      } else {
+        toast.error(res?.message || 'Erreur lors de la synchronisation', { id: toastId, duration: 6000 });
+      }
+    } catch (e: any) {
+      toast.error('Erreur : ' + (e?.message || e), { id: toastId });
+    } finally {
+      setIsReconciling(false);
     }
   };
 
@@ -47,14 +66,24 @@ export default function DashboardPos() {
     <div className="pos-page">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>Dashboard POS</h1>
-        <Button 
-          variant="secondary" 
-          icon={<RefreshCw size={16} className={isRefreshing ? "animate-spin" : ""} />}
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-        >
-          {isRefreshing ? 'Actualisation...' : 'Actualiser'}
-        </Button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Button 
+            variant="primary" 
+            icon={<CloudUpload size={16} className={isReconciling ? "animate-pulse" : ""} />}
+            onClick={handleReconcile}
+            disabled={isReconciling}
+          >
+            {isReconciling ? 'Rapprochement en cours...' : 'Forcer Réconciliation Cloud'}
+          </Button>
+          <Button 
+            variant="secondary" 
+            icon={<RefreshCw size={16} className={isRefreshing ? "animate-spin" : ""} />}
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+          >
+            {isRefreshing ? 'Actualisation...' : 'Actualiser'}
+          </Button>
+        </div>
       </div>
       <div className="pos-kpi-grid">
         <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
