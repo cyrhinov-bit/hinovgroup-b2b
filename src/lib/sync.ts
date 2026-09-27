@@ -52,7 +52,90 @@ export interface SyncAction {
   type: SyncActionType;
   payload: any;
   timestamp: number;
+  retryCount?: number;
 }
+
+export const isNetworkOrTransientError = (err: any): boolean => {
+  if (!err) return false;
+  const msg = (typeof err === 'string' ? err : err.message || err.error_description || JSON.stringify(err)).toLowerCase();
+  const status = err.status || err.code || err.statusCode;
+  
+  if (
+    msg.includes('failed to fetch') ||
+    msg.includes('network') ||
+    msg.includes('connection') ||
+    msg.includes('timeout') ||
+    msg.includes('délai') ||
+    msg.includes('econnrefused') ||
+    msg.includes('err_') ||
+    msg.includes('abort') ||
+    msg.includes('offline') ||
+    msg.includes('gateway') ||
+    msg.includes('load failed') ||
+    msg.includes('fetch error') ||
+    msg.includes('jwt expired') ||
+    msg.includes('auth session missing') ||
+    msg.includes('invalid claim: exp claim is in the past')
+  ) return true;
+
+  if (status === 502 || status === 503 || status === 504 || status === 520 || status === 521 || status === 522 || status === 524 || status === 408 || status === 429) {
+    return true;
+  }
+
+  return false;
+};
+
+// Vérifie si le retour Supabase est une erreur réseau (lance exception) ou logique (renvoie false)
+const checkResult = (error: any): boolean => {
+  if (!error) return true;
+  if (isNetworkOrTransientError(error)) {
+    throw new Error(`[NetworkError] ${error.message || JSON.stringify(error)}`);
+  }
+  return false;
+};
+
+// Ordre de priorité topologique pour respecter les dépendances de clés étrangères
+const ACTION_PRIORITY: Record<string, number> = {
+  // 1. Paramètres, Catégories, Marques, Fournisseurs
+  'UPDATE_SETTINGS': 1,
+  'INSERT_CATEGORY': 1,
+  'INSERT_SERVICE': 1,
+  'INSERT_POS_CATEGORY': 1,
+  'UPDATE_POS_CATEGORY': 1,
+  'INSERT_POS_BRAND': 1,
+  'UPDATE_POS_BRAND': 1,
+  'INSERT_POS_SUPPLIER': 1,
+  'UPDATE_POS_SUPPLIER': 1,
+  // 2. Profils, Clients, Produits, Prestations
+  'INSERT_CLIENT': 2,
+  'UPDATE_CLIENT': 2,
+  'INSERT_POS_PRODUCT': 2,
+  'UPDATE_POS_PRODUCT': 2,
+  'INSERT_PRESTATION': 2,
+  'UPDATE_PRESTATION': 2,
+  // 3. Sessions de caisse (indispensable avant les transactions POS)
+  'INSERT_POS_CASH_SESSION': 3,
+  'UPDATE_POS_CASH_SESSION': 3,
+  // 4. Affaires, Devis, Ventes, Transactions
+  'INSERT_AFFAIRE': 4,
+  'UPDATE_AFFAIRE': 4,
+  'INSERT_QUOTE': 4,
+  'UPDATE_QUOTE': 4,
+  'INSERT_SALE': 4,
+  'UPDATE_SALE': 4,
+  'INSERT_POS_TRANSACTION': 4,
+  'UPDATE_POS_TRANSACTION': 4,
+  // 5. Paiements, Retours, Mouvements de stock, Inventaires
+  'INSERT_POS_PAYMENT': 5,
+  'INSERT_FACTURE_PAIEMENT': 5,
+  'INSERT_POS_STOCK_ENTRY': 5,
+  'UPDATE_POS_STOCK_ENTRY': 5,
+  'INSERT_POS_STOCK_MOVEMENT': 5,
+  'INSERT_POS_INVENTORY': 5,
+  'UPDATE_POS_INVENTORY': 5,
+  'INSERT_POS_RETURN': 5,
+  'UPDATE_POS_RETURN': 5,
+};
 
 // Ajouter une action à la file d'attente
 export const queueSyncAction = async (type: SyncActionType, payload: any) => {
@@ -74,10 +157,10 @@ export const queueSyncAction = async (type: SyncActionType, payload: any) => {
 };
 
 // Helper de timeout pour éviter qu'une action réseau ne bloque la file en cas de coupure
-const withSyncTimeout = async <T,>(promise: Promise<T>, ms: number = 4500): Promise<T> => {
+const withSyncTimeout = async <T,>(promise: Promise<T>, ms: number = 7000): Promise<T> => {
   let timer: any;
   const timeoutPromise = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error('Délai réseau dépassé lors de la synchronisation')), ms);
+    timer = setTimeout(() => reject(new Error('[NetworkError] Délai réseau dépassé lors de la synchronisation')), ms);
   });
   try {
     return await Promise.race([promise, timeoutPromise]);
@@ -94,16 +177,24 @@ export const processSyncQueue = async () => {
   if (syncLock) return;
   syncLock = true;
   try {
-  const currentQueue: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
-  if (currentQueue.length === 0) return;
+    const currentQueue: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
+    if (currentQueue.length === 0) return;
 
-  const processedIds = new Set<string>();
+    // Tri ordonné selon les dépendances (ex: sessions avant transactions)
+    const sortedQueue = [...currentQueue].sort((a, b) => {
+      const pA = ACTION_PRIORITY[a.type] || 10;
+      const pB = ACTION_PRIORITY[b.type] || 10;
+      if (pA !== pB) return pA - pB;
+      return (a.timestamp || 0) - (b.timestamp || 0);
+    });
 
-  for (const action of currentQueue) {
-    try {
-      let success = false;
-      
-      const executeAction = async (): Promise<boolean> => {
+    const processedIds = new Set<string>();
+
+    for (const action of sortedQueue) {
+      try {
+        let success = false;
+        
+        const executeAction = async (): Promise<boolean> => {
         switch (action.type) {
         case 'INSERT_CLIENT': {
           const { error } = await supabase.from('clients').insert([{
@@ -1305,7 +1396,7 @@ export const processSyncQueue = async () => {
             opened_at: action.payload.openedAt, initial_fund: action.payload.initialFund,
             status: action.payload.status
           }], { onConflict: 'id' });
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_POS_CASH_SESSION': {
@@ -1317,7 +1408,7 @@ export const processSyncQueue = async () => {
           if (data.difference !== undefined) mapped.difference = data.difference;
           if (data.status !== undefined) mapped.status = data.status;
           const { error } = await supabase.from('pos_cash_sessions').update(mapped).eq('id', id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_POS_TRANSACTION': {
@@ -1330,7 +1421,7 @@ export const processSyncQueue = async () => {
             session_id: isUuid(txData.sessionId) ? txData.sessionId : null,
             date: txData.date,
             subtotal: txData.subtotal,
-            discount_amount: txData.discountAmount,
+            discount_amount: txData.discountAmount || 0,
             total: txData.total,
             status: txData.status
           };
@@ -1342,8 +1433,8 @@ export const processSyncQueue = async () => {
             description: l.description,
             quantity: l.quantity,
             unit_price: l.unitPrice,
-            discount_percent: l.discountPercent,
-            discount_amount: l.discountAmount,
+            discount_percent: l.discountPercent || 0,
+            discount_amount: l.discountAmount || 0,
             total: l.total
           }));
 
@@ -1352,7 +1443,7 @@ export const processSyncQueue = async () => {
             transaction_id: p_transaction.id,
             method: p.method,
             amount: p.amount,
-            reference: p.reference
+            reference: p.reference || null
           }));
 
           let p_stock_entry = null;
@@ -1363,17 +1454,25 @@ export const processSyncQueue = async () => {
           });
 
           if (error) {
+            if (isNetworkOrTransientError(error)) {
+              throw new Error(`[NetworkError] ${error.message}`);
+            }
             console.warn('[Sync] RPC process_pos_transaction échoué, repli sur insertion directe :', error.message);
             const { error: txErr } = await supabase.from('pos_transactions').upsert([p_transaction], { onConflict: 'id' });
             if (!txErr) {
               if (p_lines.length > 0) {
-                await supabase.from('pos_transaction_lines').upsert(p_lines, { onConflict: 'id' });
+                const { error: linesErr } = await supabase.from('pos_transaction_lines').upsert(p_lines, { onConflict: 'id' });
+                if (linesErr && isNetworkOrTransientError(linesErr)) throw new Error(`[NetworkError] ${linesErr.message}`);
               }
               if (p_payments.length > 0) {
-                await supabase.from('pos_payments').upsert(p_payments, { onConflict: 'id' });
+                const { error: payErr } = await supabase.from('pos_payments').upsert(p_payments, { onConflict: 'id' });
+                if (payErr && isNetworkOrTransientError(payErr)) throw new Error(`[NetworkError] ${payErr.message}`);
               }
               success = true;
             } else {
+              if (isNetworkOrTransientError(txErr)) {
+                throw new Error(`[NetworkError] ${txErr.message}`);
+              }
               console.error('[Sync] Insertion directe pos_transactions échouée :', txErr.message);
               success = false;
             }
@@ -1665,15 +1764,24 @@ export const processSyncQueue = async () => {
         return success;
       };
 
-      success = await withSyncTimeout(executeAction(), 4500);
+      try {
+        success = await withSyncTimeout(executeAction(), 7000);
+      } catch (e: any) {
+        if (isNetworkOrTransientError(e) || e?.message?.includes('[NetworkError]')) {
+          console.warn(`[Sync] Coupure ou instabilité réseau détectée lors de l'action ${action.type}. L'action reste en file d'attente.`);
+          // Arrêter le traitement de la file sans purger l'action
+          break;
+        }
+        console.error('Erreur inattendue pour l\'action', action, e);
+        success = false;
+      }
 
-      // Qu'il y ait succès ou échec logique (rejet de la DB), on retire l'action pour éviter le syndrome de la Poison Pill.
-      // Les vraies pannes réseau (fetch failed) lèveront une exception et tomberont dans le catch.
-      // Marquer l'action comme traitée (pour la retirer de la file)
-      processedIds.add(action.id);
-      
-      if (!success) {
-        console.warn(`[Sync] Action ${action.type} ignorée suite à un rejet du serveur (erreur logique). Sauvegardée dans syncErrors.`);
+      if (success) {
+        processedIds.add(action.id);
+      } else {
+        // En cas de rejet définitif du serveur (ex: violation de schéma PostgreSQL avec données corrompues)
+        processedIds.add(action.id);
+        console.warn(`[Sync] Action ${action.type} rejetée définitivement par la base de données. Sauvegardée dans syncErrors.`);
         try {
           const errors = await db.syncErrors.getItem<any[]>('errors') || [];
           errors.push({ action, failedAt: new Date().toISOString() });
@@ -1693,15 +1801,14 @@ export const processSyncQueue = async () => {
             'UPDATE_POS_CASH_SESSION': '⚠️ La fermeture de session caisse n\'a pas pu être synchronisée.',
           };
           const message = labels[action.type] || `⚠️ Échec de synchronisation : ${action.type}`;
-          // Dispatche un CustomEvent que l'AppContext peut écouter pour afficher un toast
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('sync-critical-error', { detail: { message, action } }));
           }
         }
       }
     } catch (e) {
-      console.error('Erreur de synchronisation pour l\'action', action, e);
-      break; // Stop sur la première erreur réseau
+      console.error('Erreur boucle de synchronisation pour l\'action', action, e);
+      break;
     }
   }
 
@@ -1721,3 +1828,190 @@ if (typeof window !== 'undefined') {
     processSyncQueue();
   });
 }
+
+export interface ReconciliationResult {
+  success: boolean;
+  sessionsSynced: number;
+  transactionsSynced: number;
+  movementsSynced: number;
+  returnsSynced: number;
+  errorsReplayed: number;
+  message: string;
+}
+
+/**
+ * Fonction de réconciliation et de synchronisation d'urgence
+ * Compare toutes les sessions, ventes et mouvements enregistrés localement dans IndexedDB
+ * avec la base Supabase et pousse tout ce qui est manquant.
+ */
+export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationResult> => {
+  let sessionsSynced = 0;
+  let transactionsSynced = 0;
+  let movementsSynced = 0;
+  let returnsSynced = 0;
+  let errorsReplayed = 0;
+
+  try {
+    // 1. Rejouer d'abord les erreurs présentes dans syncErrors
+    const syncErrors = (await db.syncErrors.getItem<any[]>('errors')) || [];
+    if (syncErrors.length > 0) {
+      for (const errItem of syncErrors) {
+        if (errItem?.action) {
+          await queueSyncAction(errItem.action.type, errItem.action.payload);
+          errorsReplayed++;
+        }
+      }
+      // Vider le store d'erreurs une fois remises dans la file
+      await db.syncErrors.setItem('errors', []);
+    }
+
+    // 2. Synchroniser les sessions de caisse locales manquantes
+    const localSessions = (await db.posCashSessions.getItem<any[]>('data')) || [];
+    if (localSessions.length > 0) {
+      const { data: remoteSessions } = await supabase.from('pos_cash_sessions').select('id');
+      const remoteSessionIds = new Set((remoteSessions || []).map((s: any) => s.id));
+      const missingSessions = localSessions.filter(s => !remoteSessionIds.has(s.id));
+
+      for (const s of missingSessions) {
+        const { error } = await supabase.from('pos_cash_sessions').upsert([{
+          id: s.id,
+          cashier_id: isUuid(s.cashierId) ? s.cashierId : null,
+          opened_at: s.openedAt,
+          closed_at: s.closedAt || null,
+          initial_fund: s.initialFund || 0,
+          final_amount: s.finalAmount || null,
+          expected_amount: s.expectedAmount || null,
+          difference: s.difference || null,
+          status: s.status || 'Ouverte'
+        }], { onConflict: 'id' });
+        if (!error) sessionsSynced++;
+      }
+    }
+
+    // 3. Synchroniser les transactions locales manquantes
+    const localTxs = (await db.posTransactions.getItem<any[]>('data')) || [];
+    if (localTxs.length > 0) {
+      const { data: remoteTxs } = await supabase.from('pos_transactions').select('id');
+      const remoteTxIds = new Set((remoteTxs || []).map((t: any) => t.id));
+      const missingTxs = localTxs.filter(t => !remoteTxIds.has(t.id));
+
+      for (const tx of missingTxs) {
+        const p_transaction = {
+          id: tx.id,
+          transaction_number: tx.transactionNumber,
+          cashier_id: isUuid(tx.cashierId) ? tx.cashierId : null,
+          session_id: isUuid(tx.sessionId) ? tx.sessionId : null,
+          date: tx.date,
+          subtotal: tx.subtotal,
+          discount_amount: tx.discountAmount || 0,
+          total: tx.total,
+          status: tx.status || 'Validée'
+        };
+        const p_lines = (tx.lines || []).map((l: any) => ({
+          id: l.id || uuidv4(),
+          transaction_id: tx.id,
+          product_id: isUuid(l.productId) ? l.productId : null,
+          description: l.description,
+          quantity: l.quantity,
+          unit_price: l.unitPrice,
+          discount_percent: l.discountPercent || 0,
+          discount_amount: l.discountAmount || 0,
+          total: l.total
+        }));
+        const p_payments = (tx.payments || []).map((p: any) => ({
+          id: p.id || uuidv4(),
+          transaction_id: tx.id,
+          method: p.method,
+          amount: p.amount,
+          reference: p.reference || null
+        }));
+
+        const { error: rpcErr } = await supabase.rpc('process_pos_transaction', {
+          p_transaction, p_lines, p_payments, p_stock_entry: null, p_stock_entry_lines: null
+        });
+
+        if (rpcErr) {
+          const { error: insErr } = await supabase.from('pos_transactions').upsert([p_transaction], { onConflict: 'id' });
+          if (!insErr) {
+            if (p_lines.length > 0) await supabase.from('pos_transaction_lines').upsert(p_lines, { onConflict: 'id' });
+            if (p_payments.length > 0) await supabase.from('pos_payments').upsert(p_payments, { onConflict: 'id' });
+            transactionsSynced++;
+          }
+        } else {
+          transactionsSynced++;
+        }
+      }
+    }
+
+    // 4. Synchroniser les mouvements de stock manquants
+    const localMovements = (await db.posStockMovements.getItem<any[]>('data')) || [];
+    if (localMovements.length > 0) {
+      const { data: remoteMovements } = await supabase.from('pos_stock_movements').select('id');
+      const remoteMovIds = new Set((remoteMovements || []).map((m: any) => m.id));
+      const missingMovements = localMovements.filter(m => !remoteMovIds.has(m.id));
+
+      if (missingMovements.length > 0) {
+        const payload = missingMovements.map(m => ({
+          id: m.id,
+          product_id: isUuid(m.productId) ? m.productId : null,
+          type: m.type,
+          quantity: m.quantity,
+          reference: m.reference || null,
+          date: m.date || new Date().toISOString(),
+          created_by: isUuid(m.createdBy) ? m.createdBy : null,
+          notes: m.notes || null
+        }));
+        const { error: movErr } = await supabase.from('pos_stock_movements').upsert(payload, { onConflict: 'id' });
+        if (!movErr) movementsSynced = missingMovements.length;
+      }
+    }
+
+    // 5. Synchroniser les retours manquants
+    const localReturns = (await db.posReturns.getItem<any[]>('data')) || [];
+    if (localReturns.length > 0) {
+      const { data: remoteReturns } = await supabase.from('pos_returns').select('id');
+      const remoteRetIds = new Set((remoteReturns || []).map((r: any) => r.id));
+      const missingReturns = localReturns.filter(r => !remoteRetIds.has(r.id));
+
+      for (const ret of missingReturns) {
+        const { error: retErr } = await supabase.from('pos_returns').upsert([{
+          id: ret.id,
+          return_number: ret.returnNumber,
+          transaction_id: isUuid(ret.transactionId) ? ret.transactionId : null,
+          date: ret.date,
+          type: ret.type,
+          total_refund: ret.totalRefund ?? 0,
+          total_exchange: ret.totalExchange ?? 0,
+          status: ret.status,
+          notes: ret.notes || null,
+          created_by: isUuid(ret.createdBy) ? ret.createdBy : null
+        }], { onConflict: 'id' });
+        if (!retErr) returnsSynced++;
+      }
+    }
+
+    // 6. Traiter toute file d'attente restante
+    await processSyncQueue();
+
+    return {
+      success: true,
+      sessionsSynced,
+      transactionsSynced,
+      movementsSynced,
+      returnsSynced,
+      errorsReplayed,
+      message: `Rapprochement réussi : ${sessionsSynced} session(s), ${transactionsSynced} transaction(s), ${movementsSynced} mouvement(s), ${returnsSynced} retour(s) et ${errorsReplayed} action(s) rejouée(s) vers le serveur.`
+    };
+  } catch (err: any) {
+    console.error('Erreur réconciliation :', err);
+    return {
+      success: false,
+      sessionsSynced,
+      transactionsSynced,
+      movementsSynced,
+      returnsSynced,
+      errorsReplayed,
+      message: `Erreur lors de la réconciliation : ${err.message || err}`
+    };
+  }
+};

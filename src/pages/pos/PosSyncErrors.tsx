@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../lib/db';
-import { ShieldAlert, Trash2, RefreshCw } from 'lucide-react';
+import { ShieldAlert, Trash2, RefreshCw, CloudUpload, CheckCircle, AlertTriangle } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
-import { queueSyncAction, type SyncAction } from '../../lib/sync';
+import { queueSyncAction, reconcileLocalPosDataWithCloud, type SyncAction } from '../../lib/sync';
+import { toast } from 'react-hot-toast';
 
 interface SyncError {
   action: SyncAction;
@@ -12,6 +13,8 @@ interface SyncError {
 export default function PosSyncErrors() {
   const [errors, setErrors] = useState<SyncError[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isReconciling, setIsReconciling] = useState(false);
+  const [reconcileResult, setReconcileResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const loadErrors = async () => {
     setLoading(true);
@@ -32,18 +35,50 @@ export default function PosSyncErrors() {
     if (!window.confirm('Voulez-vous vraiment supprimer toutes ces erreurs ? Elles seront définitivement perdues.')) return;
     await db.syncErrors.removeItem('errors');
     setErrors([]);
+    toast.success('Historique des erreurs vidé.');
   };
 
   const retryAction = async (error: SyncError, index: number) => {
-    // Retirer de la liste des erreurs
     const newErrors = [...errors];
     newErrors.splice(index, 1);
     await db.syncErrors.setItem('errors', newErrors);
     setErrors(newErrors);
 
-    // Remettre dans la queue de synchronisation avec un nouveau timestamp
     await queueSyncAction(error.action.type, error.action.payload);
-    alert('Action remise en file d\'attente de synchronisation.');
+    toast.success('Action remise en file d\'attente de synchronisation.');
+  };
+
+  const retryAll = async () => {
+    if (errors.length === 0) return;
+    const count = errors.length;
+    for (const err of errors) {
+      await queueSyncAction(err.action.type, err.action.payload);
+    }
+    await db.syncErrors.setItem('errors', []);
+    setErrors([]);
+    toast.success(`${count} action(s) remise(s) en file de synchronisation.`);
+  };
+
+  const handleGlobalReconciliation = async () => {
+    setIsReconciling(true);
+    setReconcileResult(null);
+    const toastId = toast.loading('Réconciliation globale en cours...');
+    try {
+      const result = await reconcileLocalPosDataWithCloud();
+      setReconcileResult(result);
+      await loadErrors();
+      if (result.success) {
+        toast.success(result.message, { id: toastId, duration: 6000 });
+      } else {
+        toast.error(result.message, { id: toastId, duration: 6000 });
+      }
+    } catch (e: any) {
+      const msg = e?.message || 'Erreur lors du rapprochement.';
+      setReconcileResult({ success: false, message: msg });
+      toast.error(msg, { id: toastId });
+    } finally {
+      setIsReconciling(false);
+    }
   };
 
   if (loading) return <div style={{ padding: 24 }}>Chargement...</div>;
@@ -54,25 +89,66 @@ export default function PosSyncErrors() {
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <ShieldAlert size={24} color="var(--color-error)" />
-            Erreurs de Synchronisation
+            Erreurs & Réconciliation de Synchronisation
           </h1>
           <p style={{ color: 'var(--color-text-muted)', marginTop: '4px', fontSize: '14px' }}>
-            Affiche les données qui n'ont pas pu être envoyées au serveur à cause d'un refus de sécurité ou d'une anomalie métier.
+            Affiche les données non synchronisées et permet le rapprochement automatique de la base locale avec le serveur Cloud.
           </p>
         </div>
         
-        {errors.length > 0 && (
-          <Button variant="danger" icon={<Trash2 size={16} />} onClick={clearAll}>
-            Vider l'historique
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <Button 
+            variant="primary" 
+            icon={<CloudUpload size={16} />} 
+            onClick={handleGlobalReconciliation}
+            disabled={isReconciling}
+          >
+            {isReconciling ? 'Rapprochement en cours...' : 'Forcer Réconciliation Globale POS'}
           </Button>
-        )}
+
+          {errors.length > 0 && (
+            <>
+              <Button variant="secondary" icon={<RefreshCw size={16} />} onClick={retryAll}>
+                Tout ré-essayer ({errors.length})
+              </Button>
+              <Button variant="danger" icon={<Trash2 size={16} />} onClick={clearAll}>
+                Vider l'historique
+              </Button>
+            </>
+          )}
+        </div>
       </div>
+
+      {reconcileResult && (
+        <div style={{
+          padding: '16px',
+          marginBottom: '20px',
+          borderRadius: 'var(--radius-md)',
+          background: reconcileResult.success ? '#f0fdf4' : '#fef2f2',
+          border: `1px solid ${reconcileResult.success ? '#bbf7d0' : '#fecaca'}`,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          {reconcileResult.success ? <CheckCircle size={24} color="#15803d" /> : <AlertTriangle size={24} color="#b91c1c" />}
+          <div>
+            <div style={{ fontWeight: 700, color: reconcileResult.success ? '#15803d' : '#b91c1c' }}>
+              {reconcileResult.success ? 'Rapprochement Réussi' : 'Attention lors du rapprochement'}
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--color-text)' }}>
+              {reconcileResult.message}
+            </div>
+          </div>
+        </div>
+      )}
 
       {errors.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px', background: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
           <ShieldAlert size={48} color="var(--color-success)" style={{ margin: '0 auto 16px' }} />
-          <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>Aucune erreur</h3>
-          <p style={{ color: 'var(--color-text-muted)' }}>Toutes les données ont été synchronisées avec succès avec le serveur.</p>
+          <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>Aucune anomalie détectée</h3>
+          <p style={{ color: 'var(--color-text-muted)', maxWidth: '500px', margin: '0 auto 16px' }}>
+            Toutes les transactions ont été synchronisées. Si des données locales n'apparaissent pas encore sur d'autres postes, utilisez le bouton "Forcer Réconciliation Globale POS" ci-dessus.
+          </p>
         </div>
       ) : (
         <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
