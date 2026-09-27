@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { db } from '../lib/db';
-import { queueSyncAction, processSyncQueue, reconcileLocalPosDataWithCloud } from '../lib/sync';
+import { queueSyncAction, processSyncQueue, reconcileLocalPosDataWithCloud, reconcileAllOfflineDataWithCloud } from '../lib/sync';
 import { v4 as uuidv4 } from 'uuid';
 import toast from 'react-hot-toast';
 import { isProductComplete } from '../features/products/services/ProductService';
@@ -1430,16 +1430,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [currentUser, refreshData]);
 
-  // Auto-retry: relance la sync queue toutes les 60 secondes si des actions sont en attente
+  // Auto-retry & Auto-réconciliation : relance la sync queue et résout les anomalies en arrière-plan
   useEffect(() => {
     const interval = setInterval(async () => {
       if (!navigator.onLine) return;
       const queue = await db.syncQueue.getItem<any[]>('queue');
       if (queue && queue.length > 0) {
         console.log(`[AutoSync] ${queue.length} action(s) en attente. Tentative de synchronisation...`);
-        processSyncQueue();
+        await processSyncQueue();
       }
-    }, 60 * 1000); // toutes les 60s
+      // Rapprochement automatique silencieux si des erreurs ou des données non envoyées subsistent
+      const errors = await db.syncErrors.getItem<any[]>('errors');
+      if (errors && errors.length > 0) {
+        await reconcileAllOfflineDataWithCloud().catch(() => {});
+      }
+    }, 60 * 1000); // vérification toutes les 60s
     return () => clearInterval(interval);
   }, []);
 
@@ -1447,9 +1452,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!currentUser) return;
 
-    const handleWakeup = () => {
+    const handleWakeup = async () => {
       if (navigator.onLine) {
-        processSyncQueue();
+        await processSyncQueue();
+        await reconcileAllOfflineDataWithCloud().catch(() => {});
         refreshData(true);
       }
     };

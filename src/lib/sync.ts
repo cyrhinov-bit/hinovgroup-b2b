@@ -169,6 +169,44 @@ const withSyncTimeout = async <T,>(promise: Promise<T>, ms: number = 7000): Prom
   }
 };
 
+// Vérifie et rétablit l'authentification Supabase si le token JWT a expiré pendant une coupure
+export const ensureSupabaseAuth = async (): Promise<boolean> => {
+  if (typeof window === 'undefined' || !navigator.onLine) return false;
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data?.session && data.session.expires_at && Math.floor(Date.now() / 1000) < (data.session.expires_at - 30)) {
+      return true;
+    }
+    // Si la session est absente ou expirée, tenter de la renouveler via refresh_token
+    if (data?.session?.refresh_token) {
+      const { data: refData, error: refError } = await supabase.auth.refreshSession();
+      if (!refError && refData?.session) {
+        return true;
+      }
+    }
+    // Repli : Réauthentification automatique avec le profil connecté en local (auth_last_user)
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem('auth_last_user');
+      if (stored) {
+        const user = JSON.parse(stored);
+        if (user?.email && user?.pin) {
+          const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email: user.email.toLowerCase().trim(),
+            password: user.pin.trim()
+          });
+          if (!authError && authData?.session) {
+            console.log('[SyncAuth] Reconnexion automatique Supabase Auth réussie pour :', user.email);
+            return true;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[SyncAuth] Échec vérification auth session :', err);
+  }
+  return false;
+};
+
 // Verrou anti-réentrance : empêche deux processSyncQueue simultanés
 let syncLock = false;
 
@@ -177,6 +215,10 @@ export const processSyncQueue = async () => {
   if (syncLock) return;
   syncLock = true;
   try {
+    if (navigator.onLine) {
+      await ensureSupabaseAuth().catch(() => {});
+    }
+
     const currentQueue: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
     if (currentQueue.length === 0) return;
 
@@ -210,7 +252,7 @@ export const processSyncQueue = async () => {
             created_at: action.payload.createdAt || new Date().toISOString()
           }]);
           if (error) console.error('[Sync] INSERT_CLIENT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_CLIENT': {
@@ -226,12 +268,12 @@ export const processSyncQueue = async () => {
           if (data.commercialId !== undefined) mappedData.commercial_id = data.commercialId;
           const { error } = await supabase.from('clients').update(mappedData).eq('id', id);
           if (error) console.error('[Sync] UPDATE_CLIENT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_CLIENT': {
           const { error } = await supabase.from('clients').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_AFFAIRE': {
@@ -256,7 +298,7 @@ export const processSyncQueue = async () => {
             updated_at: affaireData.updatedAt || new Date().toISOString()
           }]);
           if (error) console.error('[Sync] INSERT_AFFAIRE échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_AFFAIRE': {
@@ -278,13 +320,13 @@ export const processSyncQueue = async () => {
           mappedData.updated_at = new Date().toISOString();
           const { error } = await supabase.from('affaires').update(mappedData).eq('id', id);
           if (error) console.error('[Sync] UPDATE_AFFAIRE échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_AFFAIRE': {
           const { error } = await supabase.from('affaires').delete().eq('id', action.payload.id);
           if (error) console.error('[Sync] DELETE_AFFAIRE échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_FACTURE_PAIEMENT': {
@@ -307,7 +349,7 @@ export const processSyncQueue = async () => {
             created_at: payment.createdAt || new Date().toISOString()
           }]);
           if (error) console.error('[Sync] INSERT_FACTURE_PAIEMENT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_COUT': {
@@ -334,7 +376,7 @@ export const processSyncQueue = async () => {
             updated_at: cout.updatedAt || new Date().toISOString()
           }]);
           if (error) console.error('[Sync] INSERT_COUT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_COUT': {
@@ -356,13 +398,13 @@ export const processSyncQueue = async () => {
           mappedCout.updated_at = new Date().toISOString();
           const { error } = await supabase.from('couts').update(mappedCout).eq('id', id);
           if (error) console.error('[Sync] UPDATE_COUT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_COUT': {
           const { error } = await supabase.from('couts').delete().eq('id', action.payload.id);
           if (error) console.error('[Sync] DELETE_COUT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_OBJECTIF': {
@@ -383,7 +425,7 @@ export const processSyncQueue = async () => {
             created_at: obj.createdAt || new Date().toISOString()
           }]);
           if (error) console.error('[Sync] INSERT_OBJECTIF échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_OBJECTIF': {
@@ -398,13 +440,13 @@ export const processSyncQueue = async () => {
           if (data.endDate !== undefined) mapped.end_date = data.endDate;
           const { error } = await supabase.from('objectifs').update(mapped).eq('id', id);
           if (error) console.error('[Sync] UPDATE_OBJECTIF échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_OBJECTIF': {
           const { error } = await supabase.from('objectifs').delete().eq('id', action.payload.id);
           if (error) console.error('[Sync] DELETE_OBJECTIF échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_PRIME': {
@@ -425,7 +467,7 @@ export const processSyncQueue = async () => {
             updated_at: prime.updatedAt || new Date().toISOString()
           }]);
           if (error) console.error('[Sync] INSERT_PRIME échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_PRIME_STATUS': {
@@ -435,7 +477,7 @@ export const processSyncQueue = async () => {
           if (justification !== undefined) mapped.justification = justification;
           const { error } = await supabase.from('primes').update(mapped).eq('id', id);
           if (error) console.error('[Sync] UPDATE_PRIME_STATUS échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_PRIME_AUDIT_LOG': {
@@ -452,7 +494,7 @@ export const processSyncQueue = async () => {
             created_at: log.createdAt || new Date().toISOString()
           }]);
           if (error) console.error('[Sync] INSERT_PRIME_AUDIT_LOG échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_SCORING_RULE': {
@@ -465,7 +507,7 @@ export const processSyncQueue = async () => {
           if (data.isActive !== undefined) mapped.is_active = data.isActive;
           const { error } = await supabase.from('scoring_rules').update(mapped).eq('id', id);
           if (error) console.error('[Sync] UPDATE_SCORING_RULE échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPSERT_CLASSEMENT': {
@@ -485,7 +527,7 @@ export const processSyncQueue = async () => {
             updated_at: new Date().toISOString()
           }]);
           if (error) console.error('[Sync] UPSERT_CLASSEMENT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_QUOTE': {
@@ -586,7 +628,7 @@ export const processSyncQueue = async () => {
         }
         case 'DELETE_QUOTE': {
           const { error } = await supabase.from('quotes').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_SALE': {
@@ -667,7 +709,7 @@ export const processSyncQueue = async () => {
         }
         case 'DELETE_SALE': {
           const { error } = await supabase.from('ventes').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_COMMISSION': {
@@ -688,7 +730,7 @@ export const processSyncQueue = async () => {
             status: action.payload.status
           }]);
           if (error) console.error('[Sync] INSERT_COMMISSION échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_COMMISSION': {
@@ -705,12 +747,12 @@ export const processSyncQueue = async () => {
           if (updateData.affaireId !== undefined) mappedData.affaire_id = updateData.affaireId;
           const { error } = await supabase.from('commissions').update(mappedData).eq('id', id);
           if (error) console.error('[Sync] UPDATE_COMMISSION échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_COMMISSION': {
           const { error } = await supabase.from('commissions').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_INSTALLMENT': {
@@ -724,7 +766,7 @@ export const processSyncQueue = async () => {
             paid_at: action.payload.paidAt || null
           }]);
           if (error) console.error('[Sync] INSERT_INSTALLMENT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_INSTALLMENT': {
@@ -736,12 +778,12 @@ export const processSyncQueue = async () => {
             paid_at: action.payload.paidAt || null
           }).eq('id', action.payload.id);
           if (error) console.error('[Sync] UPDATE_INSTALLMENT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_INSTALLMENT': {
           const { error } = await supabase.from('vente_echeances').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_PROSPECT': {
@@ -767,7 +809,7 @@ export const processSyncQueue = async () => {
             responsible_id: action.payload.responsibleId || null
           }]);
           if (error) console.error('[Sync] INSERT_PROSPECT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_PROSPECT': {
@@ -793,12 +835,12 @@ export const processSyncQueue = async () => {
           if (updateData.updated_at !== undefined) mappedData.updated_at = updateData.updated_at;
           const { error } = await supabase.from('prospects').update(mappedData).eq('id', id);
           if (error) console.error('[Sync] UPDATE_PROSPECT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_PROSPECT': {
           const { error } = await supabase.from('prospects').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_PROSPECT_ACTIVITY': {
@@ -811,12 +853,12 @@ export const processSyncQueue = async () => {
             created_by: action.payload.createdBy || null
           }]);
           if (error) console.error('[Sync] INSERT_PROSPECT_ACTIVITY échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_PROSPECT_ACTIVITY': {
           const { error } = await supabase.from('prospect_activities').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_PROSPECT_FOLLOW_UP': {
@@ -830,19 +872,19 @@ export const processSyncQueue = async () => {
             status: action.payload.status
           }]);
           if (error) console.error('[Sync] INSERT_PROSPECT_FOLLOW_UP échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_PROSPECT_FOLLOW_UP': {
           const { id, ...updateData } = action.payload;
           const { error } = await supabase.from('prospect_follow_ups').update({ status: updateData.status }).eq('id', id);
           if (error) console.error('[Sync] UPDATE_PROSPECT_FOLLOW_UP échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_PROSPECT_FOLLOW_UP': {
           const { error } = await supabase.from('prospect_follow_ups').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_CATEGORY': {
@@ -852,12 +894,12 @@ export const processSyncQueue = async () => {
             name: action.payload.name
           }]);
           if (error) console.error('[Sync] INSERT_CATEGORY échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_CATEGORY': {
           const { error } = await supabase.from('categories').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_SETTINGS': {
@@ -874,19 +916,19 @@ export const processSyncQueue = async () => {
             commission_rate: action.payload.commissionRate ?? null,
           }).eq('id', 1);
           if (error) console.error('[Sync] UPDATE_SETTINGS échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_PROFILE': {
           const { id, ...updateData } = action.payload;
           const { error } = await supabase.from('profiles').update(updateData).eq('id', id);
           if (error) console.error('[Sync] UPDATE_PROFILE échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_PROFILE': {
           const { error } = await supabase.from('profiles').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_ACTIVITY_REPORT': { // @deprecated V1
@@ -901,7 +943,7 @@ export const processSyncQueue = async () => {
             remarques: action.payload.remarques || null
           }]);
           if (error) console.error('[Sync] INSERT_ACTIVITY_REPORT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_ACTIVITY_REPORT': { // @deprecated V1
@@ -915,12 +957,12 @@ export const processSyncQueue = async () => {
             updated_at: action.payload.updatedAt || new Date().toISOString()
           }).eq('id', action.payload.id);
           if (error) console.error('[Sync] UPDATE_ACTIVITY_REPORT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_ACTIVITY_REPORT': { // @deprecated V1
           const { error } = await supabase.from('activity_reports').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_WEEKLY_REPORT': { // @deprecated V1
@@ -934,7 +976,7 @@ export const processSyncQueue = async () => {
             status: action.payload.status || 'Brouillon'
           }]);
           if (error) console.error('[Sync] INSERT_WEEKLY_REPORT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_WEEKLY_REPORT': { // @deprecated V1 - Always needed for markWeeklyReportRead by managers on old reports
@@ -946,7 +988,7 @@ export const processSyncQueue = async () => {
           if (sent_at !== undefined) mapped.sent_at = sent_at;
           const { error } = await supabase.from('weekly_reports').update(mapped).eq('id', action.payload.id);
           if (error) console.error('[Sync] UPDATE_WEEKLY_REPORT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_V2_DAILY_REPORT': {
@@ -956,7 +998,7 @@ export const processSyncQueue = async () => {
             difficulties: action.payload.difficulties, observations: action.payload.observations, status: action.payload.status
           }]);
           if (error) console.error('[Sync] INSERT_V2_DAILY_REPORT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_V2_DAILY_REPORT': {
@@ -967,7 +1009,7 @@ export const processSyncQueue = async () => {
             updated_at: action.payload.updatedAt || new Date().toISOString()
           }).eq('id', action.payload.id);
           if (error) console.error('[Sync] UPDATE_V2_DAILY_REPORT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_V2_WEEKLY_REPORT': {
@@ -995,7 +1037,7 @@ export const processSyncQueue = async () => {
             status: r.status || 'Brouillon'
           }]);
           if (error) console.error('[Sync] INSERT_V2_WEEKLY_REPORT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_V2_WEEKLY_REPORT': {
@@ -1023,12 +1065,12 @@ export const processSyncQueue = async () => {
 
           const { error } = await supabase.from('v2_weekly_reports').update(mapped).eq('id', r.id);
           if (error) console.error('[Sync] UPDATE_V2_WEEKLY_REPORT échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_V2_WEEKLY_REPORT': {
           const { error } = await supabase.from('v2_weekly_reports').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_CRM_FOLDER': {
@@ -1041,7 +1083,7 @@ export const processSyncQueue = async () => {
             is_shared: !!action.payload.isShared
           }]);
           if (error) console.error('[Sync] INSERT_CRM_FOLDER échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_CRM_FOLDER': {
@@ -1052,12 +1094,12 @@ export const processSyncQueue = async () => {
             is_shared: action.payload.isShared
           }).eq('id', action.payload.id);
           if (error) console.error('[Sync] UPDATE_CRM_FOLDER échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_CRM_FOLDER': {
           const { error } = await supabase.from('crm_folders').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_DOCUMENT': {
@@ -1088,7 +1130,7 @@ export const processSyncQueue = async () => {
               is_shared: !!isShared
             }]);
             if (error) console.error('[Sync] INSERT_DOCUMENT DB Error:', error.message);
-            success = !error;
+            success = checkResult(error);
           } else {
             success = false;
           }
@@ -1115,7 +1157,7 @@ export const processSyncQueue = async () => {
 
           const { error } = await supabase.from('crm_documents').update(dbUpdates).eq('id', id);
           if (error) console.error('[Sync] UPDATE_DOCUMENT DB Error:', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_DOCUMENT': {
@@ -1123,19 +1165,19 @@ export const processSyncQueue = async () => {
           if (action.payload.filePath) {
             await supabase.storage.from('crm_documents').remove([action.payload.filePath]);
           }
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'MARK_NOTIFICATION_READ': {
           const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', action.payload.id);
           if (error) console.error('[Sync] MARK_NOTIFICATION_READ échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'MARK_ALL_NOTIFICATIONS_READ': {
           const { error } = await supabase.from('notifications').update({ is_read: true }).eq('user_id', action.payload.user_id).eq('is_read', false);
           if (error) console.error('[Sync] MARK_ALL_NOTIFICATIONS_READ échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_PRESTATION': {
@@ -1143,12 +1185,12 @@ export const processSyncQueue = async () => {
             id: action.payload.id, code: action.payload.code, name: action.payload.name, description: action.payload.description, price: action.payload.price, service_id: action.payload.serviceId, unit: action.payload.unit, cost_price: action.payload.costPrice || 0
           }]);
           if (error) console.error('[Sync] INSERT_PRESTATION échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_PRESTATION': {
           const { error } = await supabase.from('prestations').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_PRESTATION': {
@@ -1157,7 +1199,7 @@ export const processSyncQueue = async () => {
             code: updateData.code, name: updateData.name, description: updateData.description, price: updateData.price, service_id: updateData.serviceId, unit: updateData.unit, cost_price: updateData.costPrice || 0
           }).eq('id', id);
           if (error) console.error('[Sync] UPDATE_PRESTATION échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_SERVICE': {
@@ -1169,7 +1211,7 @@ export const processSyncQueue = async () => {
             commission_rate: action.payload.commissionRate !== undefined ? action.payload.commissionRate : null
           }]);
           if (error) console.error('[Sync] INSERT_SERVICE échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_SERVICE': {
@@ -1181,61 +1223,61 @@ export const processSyncQueue = async () => {
           if (updateData.commissionRate !== undefined) mapped.commission_rate = updateData.commissionRate;
           const { error } = await supabase.from('services').update(mapped).eq('id', id);
           if (error) console.error('[Sync] UPDATE_SERVICE échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_SERVICE': {
           const { error } = await supabase.from('services').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         // === POS SYNC ===
         case 'INSERT_POS_CATEGORY': {
           const { error } = await supabase.from('pos_categories').upsert([{ id: action.payload.id, name: action.payload.name, family: action.payload.family }], { onConflict: 'id' });
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_POS_CATEGORY': {
           const { id, ...data } = action.payload;
           const { error } = await supabase.from('pos_categories').upsert([{ id, ...data }], { onConflict: 'id' });
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_POS_CATEGORY': {
           const { error } = await supabase.from('pos_categories').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_POS_BRAND': {
           const { error } = await supabase.from('pos_brands').upsert([{ id: action.payload.id, name: action.payload.name }], { onConflict: 'id' });
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_POS_BRAND': {
           const { id, ...data } = action.payload;
           const { error } = await supabase.from('pos_brands').upsert([{ id, ...data }], { onConflict: 'id' });
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_POS_BRAND': {
           const { error } = await supabase.from('pos_brands').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_POS_SUPPLIER': {
           const { error } = await supabase.from('pos_suppliers').upsert([{ id: action.payload.id, name: action.payload.name, contact: action.payload.contact, phone: action.payload.phone, email: action.payload.email, address: action.payload.address }], { onConflict: 'id' });
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_POS_SUPPLIER': {
           const { id, ...data } = action.payload;
           const { error } = await supabase.from('pos_suppliers').upsert([{ id, ...data }], { onConflict: 'id' });
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_POS_SUPPLIER': {
           const { error } = await supabase.from('pos_suppliers').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_POS_PRODUCT': {
@@ -1260,7 +1302,7 @@ export const processSyncQueue = async () => {
             updated_at: action.payload.updatedAt || new Date().toISOString()
           }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_POS_PRODUCT échoué :', error);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_POS_PRODUCT': {
@@ -1285,7 +1327,7 @@ export const processSyncQueue = async () => {
           mapped.updated_at = new Date().toISOString();
           const { error } = await supabase.from('pos_products').upsert([mapped], { onConflict: 'id' });
           if (error) console.error('[Sync] UPDATE_POS_PRODUCT échoué :', error);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_POS_PRODUCT': {
@@ -1311,7 +1353,7 @@ export const processSyncQueue = async () => {
             notes: action.payload.notes || null
           }]);
           if (error) console.error('[Sync] INSERT_POS_STOCK_MOVEMENT échoué :', error);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_POS_STOCK_ENTRY': {
@@ -1333,7 +1375,7 @@ export const processSyncQueue = async () => {
             }));
             await supabase.from('pos_stock_entry_lines').upsert(linesData, { onConflict: 'id' });
           }
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_POS_STOCK_ENTRY': {
@@ -1352,12 +1394,12 @@ export const processSyncQueue = async () => {
               await supabase.from('pos_stock_entry_lines').insert(linesData);
             }
           }
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_POS_STOCK_ENTRY': {
           const { error } = await supabase.from('pos_stock_entries').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_POS_INVENTORY': {
@@ -1374,7 +1416,7 @@ export const processSyncQueue = async () => {
             }));
             await supabase.from('pos_inventory_lines').upsert(linesData, { onConflict: 'id' });
           }
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_POS_INVENTORY': {
@@ -1382,12 +1424,12 @@ export const processSyncQueue = async () => {
           const mapped: any = {};
           if (data.status !== undefined) mapped.status = data.status;
           const { error } = await supabase.from('pos_inventories').update(mapped).eq('id', id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_POS_INVENTORY': {
           const { error } = await supabase.from('pos_inventories').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_POS_CASH_SESSION': {
@@ -1486,7 +1528,7 @@ export const processSyncQueue = async () => {
           const mapped: any = {};
           if (data.status !== undefined) mapped.status = data.status;
           const { error } = await supabase.from('pos_transactions').update(mapped).eq('id', id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'CLEAR_POS_SALES_HISTORY': {
@@ -1549,7 +1591,7 @@ export const processSyncQueue = async () => {
             amount: action.payload.amount,
             reference: action.payload.reference || null
           }], { onConflict: 'id' });
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_POS_DISCOUNT': {
@@ -1558,7 +1600,7 @@ export const processSyncQueue = async () => {
             value: action.payload.value, max_percent: action.payload.maxPercent,
             max_amount: action.payload.maxAmount, active: action.payload.active
           }], { onConflict: 'id' });
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_POS_DISCOUNT': {
@@ -1571,12 +1613,12 @@ export const processSyncQueue = async () => {
           if (data.maxAmount !== undefined) mapped.max_amount = data.maxAmount;
           if (data.active !== undefined) mapped.active = data.active;
           const { error } = await supabase.from('pos_discounts').update(mapped).eq('id', id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_POS_DISCOUNT': {
           const { error } = await supabase.from('pos_discounts').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_POS_SETTINGS': {
@@ -1586,7 +1628,7 @@ export const processSyncQueue = async () => {
             currency: action.payload.currency,
             ticket_message: action.payload.ticketMessage, printer_type: action.payload.printerType
           }).eq('id', 1);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_POS_RETURN': {
@@ -1634,7 +1676,7 @@ export const processSyncQueue = async () => {
               await supabase.from('pos_return_lines').upsert(allLinesData, { onConflict: 'id' });
             }
           }
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_POS_RETURN': {
@@ -1642,7 +1684,7 @@ export const processSyncQueue = async () => {
           const mapped: any = {};
           if (data.status !== undefined) mapped.status = data.status;
           const { error } = await supabase.from('pos_returns').update(mapped).eq('id', id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_PRODUCT_COMPLETION': {
@@ -1654,18 +1696,18 @@ export const processSyncQueue = async () => {
             suggested_value: action.payload.suggestedValue,
             created_at: action.payload.createdAt
           }]);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_PRODUCT_COMPLETION': {
           const { id, ...data } = action.payload;
           const { error } = await supabase.from('product_completions').update(data).eq('id', id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_PRODUCT_COMPLETION': {
           const { error } = await supabase.from('product_completions').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_IMPORT_SESSION': {
@@ -1689,7 +1731,7 @@ export const processSyncQueue = async () => {
             }));
             await supabase.from('import_errors').insert(errorData);
           }
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_IMPORT_SESSION': {
@@ -1702,12 +1744,12 @@ export const processSyncQueue = async () => {
           if (data.ignoredRows !== undefined) mapped.ignored_rows = data.ignoredRows;
           if (data.completedAt !== undefined) mapped.completed_at = data.completedAt;
           const { error } = await supabase.from('import_sessions').update(mapped).eq('id', id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_IMPORT_SESSION': {
           const { error } = await supabase.from('import_sessions').delete().eq('id', action.payload.id);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'INSERT_IMPORT_ERROR': {
@@ -1720,7 +1762,7 @@ export const processSyncQueue = async () => {
             error_message: action.payload.error,
             severity: action.payload.severity
           }]);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_PROFILE': {
@@ -1739,13 +1781,13 @@ export const processSyncQueue = async () => {
           if (data.posStockEnabled !== undefined) mapped.pos_stock_enabled = data.posStockEnabled;
           const { error } = await supabase.from('profiles').update(mapped).eq('id', id);
           if (error) console.error('[Sync] UPDATE_PROFILE échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'DELETE_PROFILE': {
           const { error } = await supabase.from('profiles').delete().eq('id', action.payload.id);
           if (error) console.error('[Sync] DELETE_PROFILE échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_SETTINGS': {
@@ -1755,7 +1797,7 @@ export const processSyncQueue = async () => {
             updated_at: new Date().toISOString()
           });
           if (error) console.error('[Sync] UPDATE_SETTINGS échoué :', error.message);
-          success = !error;
+          success = checkResult(error);
           break;
         }
         default:
@@ -1852,6 +1894,10 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
   let errorsReplayed = 0;
 
   try {
+    if (navigator.onLine) {
+      await ensureSupabaseAuth().catch(() => {});
+    }
+
     // 1. Rejouer d'abord les erreurs présentes dans syncErrors
     const syncErrors = (await db.syncErrors.getItem<any[]>('errors')) || [];
     if (syncErrors.length > 0) {
@@ -2015,3 +2061,22 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
     };
   }
 };
+
+/**
+ * Rapprochement complet de TOUT le système (POS + CRM + Factures + Devis + Rapports)
+ */
+export const reconcileAllOfflineDataWithCloud = async () => {
+  const posResult = await reconcileLocalPosDataWithCloud();
+  
+  // CRM Sales / Couts / FacturePaiements auto-reconciliation
+  try {
+    if (navigator.onLine) {
+      await processSyncQueue();
+    }
+  } catch (e) {
+    console.warn('[SyncAll] Erreur vidage file CRM :', e);
+  }
+
+  return posResult;
+};
+
