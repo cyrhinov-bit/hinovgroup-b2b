@@ -1084,17 +1084,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         if (settingsData) {
           const parsedSettings: AppSettings = {
-            companyName: settingsData.company_name,
-            companyLogo: settingsData.company_logo,
-            companyAddress: settingsData.company_address,
-            companySiret: settingsData.company_siret,
-            companyTva: settingsData.company_tva,
-            defaultTerms: settingsData.default_terms,
-            headerLogoBase64: settingsData.header_logo_base64 ?? undefined,
-            companyStampBase64: settingsData.company_stamp_base64 ?? undefined,
-            defaultValidity: settingsData.default_validity ?? undefined,
-            siteUrl: settingsData.site_url ?? undefined,
-            commissionRate: settingsData.commission_rate ?? undefined,
+            companyName: settingsData.company_name || cachedSettings?.companyName || 'Hinov',
+            companyLogo: settingsData.company_logo || cachedSettings?.companyLogo || '',
+            companyAddress: settingsData.company_address ?? cachedSettings?.companyAddress ?? '',
+            companySiret: settingsData.company_siret ?? cachedSettings?.companySiret ?? '',
+            companyTva: settingsData.company_tva ?? cachedSettings?.companyTva ?? '',
+            defaultTerms: settingsData.default_terms ?? cachedSettings?.defaultTerms ?? '',
+            headerLogoBase64: settingsData.header_logo_base64 ?? cachedSettings?.headerLogoBase64 ?? undefined,
+            companyStampBase64: settingsData.company_stamp_base64 ?? cachedSettings?.companyStampBase64 ?? undefined,
+            defaultValidity: settingsData.default_validity ?? cachedSettings?.defaultValidity ?? undefined,
+            siteUrl: settingsData.site_url ?? cachedSettings?.siteUrl ?? undefined,
+            commissionRate: settingsData.commission_rate ?? cachedSettings?.commissionRate ?? undefined,
           };
           setSettings(parsedSettings); await db.settings.setItem('data', parsedSettings);
         }

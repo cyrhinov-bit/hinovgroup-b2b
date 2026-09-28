@@ -13,10 +13,11 @@ export function Parametres() {
   const [localSettings, setLocalSettings] = useState(settings);
   const [selectedThemeColor, setSelectedThemeColor] = useState(() => getUserThemeColor(currentUser?.id));
   const [themeCategory, setThemeCategory] = useState<string>('Tous');
+  const isDirtyRef = React.useRef(false);
 
-  // Keep local state in sync when settings are loaded asynchronously
+  // Keep local state in sync when settings are loaded asynchronously (only if user hasn't edited text fields)
   useEffect(() => {
-    if (settings) {
+    if (!isDirtyRef.current && settings) {
       setLocalSettings(settings);
     }
   }, [settings]);
@@ -42,7 +43,7 @@ export function Parametres() {
       reader.onload = (event) => {
         const rawDataUrl = event.target?.result as string;
         const img = new Image();
-        img.onload = () => {
+        img.onload = async () => {
           const maxWidth = 1400;
           const maxHeight = 500;
           let width = img.naturalWidth || img.width;
@@ -61,24 +62,48 @@ export function Parametres() {
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
+          let optimizedDataUrl = rawDataUrl;
           if (ctx) {
             ctx.drawImage(img, 0, 0, width, height);
             const isPng = file.type === 'image/png';
-            const optimizedDataUrl = isPng 
+            optimizedDataUrl = isPng 
               ? canvas.toDataURL('image/png') 
               : canvas.toDataURL('image/jpeg', 0.92);
-            setLocalSettings(prev => ({ ...prev, headerLogoBase64: optimizedDataUrl }));
-            toast.success('Image prête. N\'oubliez pas de cliquer sur "Enregistrer les paramètres".');
-          } else {
-            setLocalSettings(prev => ({ ...prev, headerLogoBase64: rawDataUrl }));
+          }
+          const next = { ...localSettings, headerLogoBase64: optimizedDataUrl };
+          setLocalSettings(next);
+          try {
+            await updateSettings(next);
+            toast.success('En-tête enregistré avec succès !');
+          } catch (err) {
+            console.error(err);
+            toast.error('Erreur lors de la sauvegarde de l\'en-tête');
           }
         };
-        img.onerror = () => {
-          setLocalSettings(prev => ({ ...prev, headerLogoBase64: rawDataUrl }));
+        img.onerror = async () => {
+          const next = { ...localSettings, headerLogoBase64: rawDataUrl };
+          setLocalSettings(next);
+          try {
+            await updateSettings(next);
+            toast.success('En-tête enregistré avec succès !');
+          } catch (err) {
+            console.error(err);
+          }
         };
         img.src = rawDataUrl;
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveHeaderLogo = async () => {
+    const next = { ...localSettings, headerLogoBase64: undefined };
+    setLocalSettings(next);
+    try {
+      await updateSettings(next);
+      toast.success('En-tête supprimé.');
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -93,7 +118,7 @@ export function Parametres() {
       reader.onload = (event) => {
         const rawDataUrl = event.target?.result as string;
         const img = new Image();
-        img.onload = () => {
+        img.onload = async () => {
           const maxWidth = 800;
           const maxHeight = 800;
           let width = img.naturalWidth || img.width;
@@ -112,21 +137,45 @@ export function Parametres() {
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
+          let optimizedDataUrl = rawDataUrl;
           if (ctx) {
             ctx.drawImage(img, 0, 0, width, height);
-            const optimizedDataUrl = canvas.toDataURL('image/png');
-            setLocalSettings(prev => ({ ...prev, companyStampBase64: optimizedDataUrl }));
-            toast.success('Cachet prêt. N\'oubliez pas de cliquer sur "Enregistrer les paramètres".');
-          } else {
-            setLocalSettings(prev => ({ ...prev, companyStampBase64: rawDataUrl }));
+            optimizedDataUrl = canvas.toDataURL('image/png');
+          }
+          const next = { ...localSettings, companyStampBase64: optimizedDataUrl };
+          setLocalSettings(next);
+          try {
+            await updateSettings(next);
+            toast.success('Cachet d\'entreprise enregistré avec succès !');
+          } catch (err) {
+            console.error(err);
+            toast.error('Erreur lors de la sauvegarde du cachet');
           }
         };
-        img.onerror = () => {
-          setLocalSettings(prev => ({ ...prev, companyStampBase64: rawDataUrl }));
+        img.onerror = async () => {
+          const next = { ...localSettings, companyStampBase64: rawDataUrl };
+          setLocalSettings(next);
+          try {
+            await updateSettings(next);
+            toast.success('Cachet d\'entreprise enregistré avec succès !');
+          } catch (err) {
+            console.error(err);
+          }
         };
         img.src = rawDataUrl;
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveStamp = async () => {
+    const next = { ...localSettings, companyStampBase64: undefined };
+    setLocalSettings(next);
+    try {
+      await updateSettings(next);
+      toast.success('Cachet supprimé.');
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -142,6 +191,7 @@ export function Parametres() {
             setUserThemeColor(currentUser.id, selectedThemeColor);
           }
           await updateSettings(localSettings);
+          isDirtyRef.current = false;
           toast.success('Paramètres enregistrés avec succès !');
         } catch (err) {
           console.error(err);
@@ -173,7 +223,7 @@ export function Parametres() {
                 <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageUpload} />
               </label>
               {localSettings.headerLogoBase64 && (
-                <button className="btn btn-secondary" onClick={() => setLocalSettings({ ...localSettings, headerLogoBase64: undefined })}>Supprimer</button>
+                <button className="btn btn-secondary" onClick={handleRemoveHeaderLogo}>Supprimer</button>
               )}
             </div>
             <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '8px' }}>Cette image apparaît en tête des devis et sur le portail client.</p>
@@ -193,7 +243,7 @@ export function Parametres() {
                 <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleStampUpload} />
               </label>
               {localSettings.companyStampBase64 && (
-                <button className="btn btn-secondary" onClick={() => setLocalSettings({ ...localSettings, companyStampBase64: undefined })}>Supprimer</button>
+                <button className="btn btn-secondary" onClick={handleRemoveStamp}>Supprimer</button>
               )}
             </div>
             <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '8px' }}>Ce cachet apparaîtra automatiquement et de manière permanente dans la section "Signature autorisée & Cachet" sur tous vos devis PDF.</p>
@@ -202,15 +252,15 @@ export function Parametres() {
           <div className="responsive-form-grid">
             <div className="form-group">
               <label>Nom de l'entreprise</label>
-              <input type="text" className="table-input" value={localSettings.companyName} onChange={e => setLocalSettings({...localSettings, companyName: e.target.value})} />
+              <input type="text" className="table-input" value={localSettings.companyName} onChange={e => { isDirtyRef.current = true; setLocalSettings({...localSettings, companyName: e.target.value}); }} />
             </div>
             <div className="form-group">
               <label>RCCM</label>
-              <input type="text" className="table-input" value={localSettings.companySiret} onChange={e => setLocalSettings({...localSettings, companySiret: e.target.value})} />
+              <input type="text" className="table-input" value={localSettings.companySiret} onChange={e => { isDirtyRef.current = true; setLocalSettings({...localSettings, companySiret: e.target.value}); }} />
             </div>
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
               <label>Adresse siège social</label>
-              <input type="text" className="table-input" value={localSettings.companyAddress} onChange={e => setLocalSettings({...localSettings, companyAddress: e.target.value})} />
+              <input type="text" className="table-input" value={localSettings.companyAddress} onChange={e => { isDirtyRef.current = true; setLocalSettings({...localSettings, companyAddress: e.target.value}); }} />
             </div>
           </div>
         </section>
