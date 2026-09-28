@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Search, Trash2, Plus, Minus, Clock, ArrowLeft, Package, RefreshCw, AlertTriangle, Info, ShieldCheck, Printer, Wallet, Smartphone } from 'lucide-react';
@@ -111,28 +111,58 @@ export default function PosTerminal() {
     return matchesProductSearch(p, search);
   });
 
+  const lastClickRef = useRef<{ id: string; time: number }>({ id: '', time: 0 });
+
   const addToCart = (product: typeof posProducts[0], qtyToAdd: number = 1) => {
+    const isService = product.family === 'Service' || product.reference?.startsWith('SRV-');
+    const availableStock = isService ? 999999 : Number(product.quantity ?? 0);
+
+    if (availableStock <= 0) {
+      toast.error(`"${product.name}" est en rupture de stock.`);
+      return;
+    }
+
     const quantityToAdd = Math.max(1, qtyToAdd);
+    let blocked = false;
+
     setCart(prev => {
       const existing = prev.find(c => c.productId === product.id);
+      const currentQty = existing ? existing.quantity : 0;
+      const targetQty = currentQty + quantityToAdd;
+
+      if (!isService && targetQty > availableStock) {
+        blocked = true;
+        return prev;
+      }
+
       if (existing) {
-        const newQty = existing.quantity + quantityToAdd;
         let total: number;
         if (existing.discountType === 'percent') {
-          total = newQty * existing.unitPrice * (1 - existing.discountPercent / 100);
+          total = targetQty * existing.unitPrice * (1 - existing.discountPercent / 100);
         } else if (existing.discountType === 'amount') {
-          total = newQty * existing.unitPrice - existing.discountAmount;
+          total = targetQty * existing.unitPrice - existing.discountAmount;
         } else {
-          total = newQty * existing.unitPrice;
+          total = targetQty * existing.unitPrice;
         }
-        return prev.map(c => c.productId === product.id ? { ...c, quantity: newQty, total } : c);
+        return prev.map(c => c.productId === product.id ? { ...c, quantity: targetQty, total } : c);
       }
       return [...prev, { id: uuidv4(), productId: product.id, name: product.name, reference: product.reference, unitPrice: product.sellingPrice, quantity: quantityToAdd, discountType: 'none' as const, discountPercent: 0, discountAmount: 0, total: product.sellingPrice * quantityToAdd }];
     });
-    setSearch('');
+
+    if (blocked) {
+      toast.error(`Stock maximal atteint pour "${product.name}" (${availableStock} disponible${availableStock > 1 ? 's' : ''}).`);
+    } else {
+      setSearch('');
+    }
   };
 
   const handleProductClick = (product: typeof posProducts[0]) => {
+    // Anti-rebond : ignore les doubles-clics accidentels espacés de moins de 350ms
+    const now = Date.now();
+    if (lastClickRef.current.id === product.id && now - lastClickRef.current.time < 350) {
+      return;
+    }
+    lastClickRef.current = { id: product.id, time: now };
     addToCart(product, 1);
   };
 
@@ -155,22 +185,40 @@ export default function PosTerminal() {
   const updateCartQty = useCallback((id: string, delta: number) => {
     setCart(prev => prev.map(c => {
       if (c.id !== id) return c;
+      const product = posProducts.find(p => p.id === c.productId);
+      const isService = product?.family === 'Service' || product?.reference?.startsWith('SRV-');
+      const maxStock = isService ? 999999 : Number(product?.quantity ?? 999999);
+
+      if (delta > 0 && !isService && c.quantity + delta > maxStock) {
+        toast.error(`Stock maximal atteint (${maxStock} disponible${maxStock > 1 ? 's' : ''})`);
+        return c;
+      }
+
       const newQty = Math.max(1, c.quantity + delta);
       const lineDiscount = c.discountType === 'percent' ? c.discountPercent / 100 : 0;
       const lineAmount = c.discountType === 'amount' ? c.discountAmount : 0;
       return { ...c, quantity: newQty, total: newQty * c.unitPrice * (1 - lineDiscount) - lineAmount };
     }));
-  }, []);
+  }, [posProducts]);
 
   const setExactCartQty = useCallback((id: string, qty: number) => {
     setCart(prev => prev.map(c => {
       if (c.id !== id) return c;
-      const newQty = Math.max(1, qty || 1);
+      const product = posProducts.find(p => p.id === c.productId);
+      const isService = product?.family === 'Service' || product?.reference?.startsWith('SRV-');
+      const maxStock = isService ? 999999 : Number(product?.quantity ?? 999999);
+
+      let targetQty = Math.max(1, qty || 1);
+      if (!isService && targetQty > maxStock) {
+        targetQty = Math.max(1, maxStock);
+        toast.error(`Quantité ajustée au stock disponible (${maxStock})`);
+      }
+
       const lineDiscount = c.discountType === 'percent' ? c.discountPercent / 100 : 0;
       const lineAmount = c.discountType === 'amount' ? c.discountAmount : 0;
-      return { ...c, quantity: newQty, total: newQty * c.unitPrice * (1 - lineDiscount) - lineAmount };
+      return { ...c, quantity: targetQty, total: targetQty * c.unitPrice * (1 - lineDiscount) - lineAmount };
     }));
-  }, []);
+  }, [posProducts]);
 
   const updateCartDiscountType = (id: string, type: 'none' | 'percent' | 'amount') => {
     setCart(prev => prev.map(c => {
@@ -232,10 +280,15 @@ export default function PosTerminal() {
     const outOfStock = cart.filter(c => {
       const product = posProducts.find(p => p.id === c.productId);
       if (!product) return false;
-      return c.quantity > product.quantity;
+      const isService = product.family === 'Service' || product.reference?.startsWith('SRV-');
+      if (isService) return false;
+      return Number(c.quantity) > Number(product.quantity ?? 0);
     });
     if (outOfStock.length > 0) {
-      alert(`Stock insuffisant pour : ${outOfStock.map(c => c.name).join(', ')}`);
+      alert(`Stock insuffisant :\n\n` + outOfStock.map(c => {
+        const prod = posProducts.find(p => p.id === c.productId);
+        return `• ${c.name} : ${c.quantity} demandé(s) dans le panier, mais seulement ${prod?.quantity ?? 0} en stock`;
+      }).join('\n'));
       return;
     }
     const txNumber = `hnv${Date.now()}`;
