@@ -10,9 +10,12 @@
     "dist/**/*",
     "dist-electron/**/*"
   ],
+  "forceCodeSigning": false,
   "win": {
     "target": ["nsis", "portable", "zip"],
-    "icon": "build/icons/icon.ico"
+    "icon": "build/icons/icon.ico",
+    "signAndEditExecutable": false,
+    "verifyUpdateCodeSignature": false
   },
   "nsis": {
     "oneClick": false,
