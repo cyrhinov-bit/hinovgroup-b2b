@@ -34,56 +34,53 @@ export default function PosReports() {
     (desc && (desc.toLowerCase().includes('photocopie') || desc.toLowerCase().includes('impression') || desc.toLowerCase().includes('scan') || desc.toLowerCase().includes('reliure') || desc.toLowerCase().includes('plastification')));
 
   const isLivreProd = (p?: typeof posProducts[0]) => 
-    p && !isServiceProd(p) && ((p.family && p.family.toLowerCase().startsWith('livre')) || !!(p.isbn && p.isbn.trim()));
+    p && ((p.family && p.family.toLowerCase().startsWith('livre')) || !!(p.isbn && p.isbn.trim()));
 
   // Family totals
-  let revenueLivres = 0;
-  let revenueFournitures = 0;
-  let revenueServices = 0;
-  let totalServiceCopies = 0;
+  let rawLivres = 0;
+  let rawFournitures = 0;
 
-  // Top products & Service breakdown
+  // Top products
   const productSales: Record<string, { name: string; quantity: number; revenue: number; family: string }> = {};
-  const serviceSales: Record<string, { name: string; quantity: number; revenue: number }> = {};
 
   validTransactions.forEach(t => {
-    t.lines.forEach(l => {
-      const product = l.productId ? posProducts.find(p => p.id === l.productId) : undefined;
-      const isServ = isServiceProd(product, l.description);
-      const isLiv = isLivreProd(product);
+    const lines = t.lines || [];
+    if (lines.length === 0) {
+      rawFournitures += t.total;
+    } else {
+      const linesGross = lines.reduce((s, l) => s + (l.total || 0), 0);
+      const ratio = linesGross > 0 ? t.total / linesGross : 1;
+      lines.forEach(l => {
+        const product = l.productId ? posProducts.find(p => p.id === l.productId) : undefined;
+        const isLiv = isLivreProd(product);
+        const lineNet = (l.total || 0) * ratio;
 
-      if (isServ) {
-        revenueServices += l.total;
-        totalServiceCopies += l.quantity;
-        const key = l.productId || l.description;
-        if (!serviceSales[key]) {
-          serviceSales[key] = { name: product?.name || l.description, quantity: 0, revenue: 0 };
+        if (isLiv) {
+          rawLivres += lineNet;
+        } else {
+          rawFournitures += lineNet;
         }
-        serviceSales[key].quantity += l.quantity;
-        serviceSales[key].revenue += l.total;
-      } else if (isLiv) {
-        revenueLivres += l.total;
-      } else {
-        revenueFournitures += l.total;
-      }
 
-      if (l.productId) {
-        if (!productSales[l.productId]) {
-          productSales[l.productId] = { 
-            name: product?.name || l.description, 
-            quantity: 0, 
-            revenue: 0,
-            family: isServ ? 'Service' : isLiv ? 'Livre' : 'Fourniture'
-          };
+        if (l.productId) {
+          if (!productSales[l.productId]) {
+            productSales[l.productId] = { 
+              name: product?.name || l.description, 
+              quantity: 0, 
+              revenue: 0,
+              family: isLiv ? 'Livre' : 'Fourniture'
+            };
+          }
+          productSales[l.productId].quantity += l.quantity;
+          productSales[l.productId].revenue += l.total;
         }
-        productSales[l.productId].quantity += l.quantity;
-        productSales[l.productId].revenue += l.total;
-      }
-    });
+      });
+    }
   });
 
+  const revenueLivres = Math.round(rawLivres);
+  const revenueFournitures = totalRevenue - revenueLivres;
+
   const topProducts = Object.values(productSales).sort((a, b) => b.quantity - a.quantity).slice(0, 10);
-  const serviceList = Object.values(serviceSales).sort((a, b) => b.revenue - a.revenue);
 
   const cardStyle: React.CSSProperties = { background: 'white', borderRadius: 'var(--radius-lg)', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' };
 
@@ -153,61 +150,6 @@ export default function PosReports() {
               {totalRevenue > 0 ? ((revenueFournitures / totalRevenue) * 100).toFixed(1) : 0}% du CA total
             </div>
           </div>
-
-          <div style={{ ...cardStyle, borderLeft: '4px solid #7c3aed', background: '#faf5ff' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#6d28d9' }}>🖨️ PHOTOCOPIES & IMPRESSIONS</span>
-              <Printer size={18} color="#7c3aed" />
-            </div>
-            <div style={{ fontSize: '22px', fontWeight: 700, color: '#6d28d9' }}>{revenueServices.toLocaleString()} FCFA</div>
-            <div style={{ fontSize: '12px', color: '#7c3aed', marginTop: '4px', fontWeight: 500 }}>
-              {totalRevenue > 0 ? ((revenueServices / totalRevenue) * 100).toFixed(1) : 0}% du CA &bull; {totalServiceCopies} copies / prestations
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Dedicated Services / Photocopies Table */}
-      <div style={cardStyle}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
-          <div>
-            <h3 style={{ fontSize: '16px', fontWeight: 600, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Printer size={18} color="#7c3aed" /> Détail des Ventes Photocopies, Impressions & Services
-            </h3>
-            <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
-              Volume de tirage et recettes générées par type de prestation.
-            </p>
-          </div>
-          <span style={{ background: '#ede9fe', color: '#6d28d9', padding: '4px 12px', borderRadius: 'var(--radius-full)', fontSize: '13px', fontWeight: 600 }}>
-            Total : {revenueServices.toLocaleString()} FCFA ({totalServiceCopies} unités)
-          </span>
-        </div>
-        <div className="table-responsive">
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
-                <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Prestation</th>
-                <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Volume / Pages</th>
-                <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Recette Totale</th>
-              </tr>
-            </thead>
-            <tbody>
-              {serviceList.map((s, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid var(--color-surface-alt)' }}>
-                  <td style={{ padding: '10px 12px', fontSize: '14px', fontWeight: 500 }}>{s.name}</td>
-                  <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', fontWeight: 600, color: '#7c3aed' }}>{s.quantity.toLocaleString()}</td>
-                  <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', fontWeight: 700 }}>{s.revenue.toLocaleString()} FCFA</td>
-                </tr>
-              ))}
-              {serviceList.length === 0 && (
-                <tr>
-                  <td colSpan={3} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                    Aucune prestation de photocopie ou impression enregistrée sur cette période.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
         </div>
       </div>
 

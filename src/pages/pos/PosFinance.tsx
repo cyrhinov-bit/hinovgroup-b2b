@@ -94,26 +94,33 @@ export default function PosFinance() {
     (desc && (desc.toLowerCase().includes('photocopie') || desc.toLowerCase().includes('impression') || desc.toLowerCase().includes('scan') || desc.toLowerCase().includes('reliure') || desc.toLowerCase().includes('plastification')));
 
   const isLivreProd = (p?: typeof posProducts[0]) => 
-    p && !isServiceProd(p) && ((p.family && p.family.toLowerCase().startsWith('livre')) || !!(p.isbn && p.isbn.trim()));
+    p && ((p.family && p.family.toLowerCase().startsWith('livre')) || !!(p.isbn && p.isbn.trim()));
 
-  let periodLivresRev = 0;
-  let periodFournituresRev = 0;
-  let periodServicesRev = 0;
-  let periodServicesCopies = 0;
+  let rawLivresRev = 0;
+  let rawFournituresRev = 0;
 
   rangeValidTx.forEach(t => {
-    t.lines.forEach(l => {
-      const p = l.productId ? posProducts.find(x => x.id === l.productId) : undefined;
-      if (isServiceProd(p, l.description)) {
-        periodServicesRev += l.total;
-        periodServicesCopies += l.quantity;
-      } else if (isLivreProd(p)) {
-        periodLivresRev += l.total;
-      } else {
-        periodFournituresRev += l.total;
-      }
-    });
+    const lines = t.lines || [];
+    if (lines.length === 0) {
+      // Pour les transactions sans lignes détaillées, attribuer aux ventes diverses / fournitures
+      rawFournituresRev += t.total;
+    } else {
+      const linesGross = lines.reduce((s, l) => s + (l.total || 0), 0);
+      const ratio = linesGross > 0 ? t.total / linesGross : 1;
+      lines.forEach(l => {
+        const p = l.productId ? posProducts.find(x => x.id === l.productId) : undefined;
+        const lineNet = (l.total || 0) * ratio;
+        if (isLivreProd(p)) {
+          rawLivresRev += lineNet;
+        } else {
+          rawFournituresRev += lineNet;
+        }
+      });
+    }
   });
+
+  const periodLivresRev = Math.round(rawLivresRev);
+  const periodFournituresRev = totalRevenue - periodLivresRev;
 
   const rangeSessions = posCashSessions.filter(s => inRange(s.openedAt));
   const closedSessions = rangeSessions.filter(s => s.status === 'Fermée');
@@ -352,17 +359,6 @@ export default function PosFinance() {
             <div style={{ fontSize: '18px', fontWeight: 700, color: '#14532d' }}>{periodFournituresRev.toLocaleString()} FCFA</div>
             <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '2px' }}>
               {totalRevenue > 0 ? ((periodFournituresRev / totalRevenue) * 100).toFixed(1) : 0}% des ventes
-            </div>
-          </div>
-
-          <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', background: '#faf5ff', border: '1px solid #e9d5ff' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: '#6d28d9' }}>🖨️ IMPRESSIONS & SERVICES</span>
-              <Printer size={16} color="#7c3aed" />
-            </div>
-            <div style={{ fontSize: '18px', fontWeight: 700, color: '#581c87' }}>{periodServicesRev.toLocaleString()} FCFA</div>
-            <div style={{ fontSize: '11px', color: '#7c3aed', marginTop: '2px', fontWeight: 500 }}>
-              {totalRevenue > 0 ? ((periodServicesRev / totalRevenue) * 100).toFixed(1) : 0}% des ventes &bull; {periodServicesCopies} copies/actes
             </div>
           </div>
         </div>
