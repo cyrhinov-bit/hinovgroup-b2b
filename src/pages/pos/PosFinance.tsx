@@ -15,7 +15,7 @@ type Period = 'today' | '7days' | '30days' | 'custom';
 export default function PosFinance() {
   const { 
     posTransactions, posCashSessions, posPayments, posProducts, 
-    posReturns, deletePosMovementsByDateRange, refreshData 
+    posReturns, deletePosMovementsByDateRange, refreshData, users 
   } = useAppContext();
   const { currentUser } = useAuth();
 
@@ -456,48 +456,93 @@ export default function PosFinance() {
 </div>
       </div>
 
-      {/* Rapprochement caisse */}
+      {/* Rapprochement caisse exhaustif (Vue Administrateur / Directeur) */}
       {closedSessions.length > 0 && (
         <div style={{ ...cardStyle, marginBottom: '24px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>Rapprochement caisse</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>Rapprochement & Clôtures de caisse</h3>
+            <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+              {closedSessions.length} session(s) de caisse clôturée(s) sur la période
+            </span>
+          </div>
+
           <div className="table-responsive">
-<table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
-                <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Session</th>
-                <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Ouverture</th>
-                <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Fond initial</th>
-                <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Ventes</th>
-                <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Attendu</th>
-                <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Réel</th>
-                <th style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Écart</th>
-              </tr>
-            </thead>
-            <tbody>
-              {closedSessions.map(s => {
-                const sessionTx = validTx.filter(t => t.sessionId === s.id);
-                const sessionReturns = activeReturns.filter(r => r.transactionId && posTransactions.find(t => t.id === r.transactionId)?.sessionId === s.id);
-                const sessionVentes = sessionTx.reduce((sum, t) => sum + t.total, 0);
-                const sessionRetours = sessionReturns.reduce((sum, r) => sum + r.totalRefund, 0);
-                const expected = s.expectedAmount ?? (s.initialFund + sessionVentes - sessionRetours);
-                const diff = s.difference ?? ((s.finalAmount || 0) - expected);
-                return (
-                  <tr key={s.id} style={{ borderBottom: '1px solid var(--color-surface-alt)' }}>
-                    <td style={{ padding: '10px 12px', fontSize: '14px', fontFamily: 'monospace' }}>{s.id.slice(0, 8)}</td>
-                    <td style={{ padding: '10px 12px', fontSize: '13px', color: 'var(--color-text-muted)' }}>{new Date(s.openedAt).toLocaleString('fr-FR')}</td>
-                    <td style={{ padding: '10px 12px', fontSize: '14px' }}>{s.initialFund.toLocaleString()} FCFA</td>
-                    <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', color: 'var(--color-success)' }}>+{sessionVentes.toLocaleString()} FCFA</td>
-                    <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', fontWeight: 600 }}>{expected.toLocaleString()} FCFA</td>
-                    <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', fontWeight: 600 }}>{(s.finalAmount || 0).toLocaleString()} FCFA</td>
-                    <td style={{ padding: '10px 12px', fontSize: '14px', textAlign: 'right', fontWeight: 600, color: diff === 0 ? 'var(--color-success)' : 'var(--color-error)' }}>
-                      {diff === 0 ? 'Équilibré' : `${diff > 0 ? '+' : ''}${diff.toLocaleString()} FCFA`}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-</div>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left', background: '#fafafa' }}>
+                  <th style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Session & Caissier</th>
+                  <th style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Horaires</th>
+                  <th style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Fond initial</th>
+                  <th style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>CA Net (Ventes)</th>
+                  <th style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Attendu Mobile</th>
+                  <th style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Attendu Tiroir</th>
+                  <th style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Réel Compté</th>
+                  <th style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Écart Tiroir</th>
+                </tr>
+              </thead>
+              <tbody>
+                {closedSessions.map(s => {
+                  const sessionTx = validTx.filter(t => t.sessionId === s.id);
+                  const sessionReturns = activeReturns.filter(r => r.sessionId === s.id || (r.transactionId && posTransactions.find(t => t.id === r.transactionId)?.sessionId === s.id));
+                  
+                  const cashSales = sessionTx.reduce((sum, t) => {
+                    const cashPayments = (t.payments || []).filter(p => p.method === 'Espèces' || p.method === 'Mixte').reduce((a, p) => a + p.amount, 0);
+                    return sum + (cashPayments > 0 ? cashPayments : (t.payments?.length === 0 ? t.total : 0));
+                  }, 0);
+                  
+                  const mobileSales = sessionTx.reduce((sum, t) => {
+                    return sum + (t.payments || []).filter(p => p.method === 'Mobile Money').reduce((a, p) => a + p.amount, 0);
+                  }, 0);
+                  
+                  const totalSales = sessionTx.reduce((sum, t) => sum + t.total, 0);
+                  const totalRefunds = sessionReturns.reduce((sum, r) => sum + r.totalRefund, 0);
+                  const expectedCashDrawer = s.expectedAmount ?? (s.initialFund + cashSales - totalRefunds);
+                  const diff = s.difference ?? ((s.finalAmount || 0) - expectedCashDrawer);
+                  const cashier = users?.find(u => u.id === s.cashierId);
+
+                  return (
+                    <tr key={s.id} style={{ borderBottom: '1px solid var(--color-surface-alt)' }}>
+                      <td style={{ padding: '10px 12px' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 600 }}>{cashier?.name || 'Caissier'}</div>
+                        <div style={{ fontSize: '11px', fontFamily: 'monospace', color: 'var(--color-text-muted)' }}>#{s.id.slice(0, 8)}</div>
+                      </td>
+                      <td style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                        <div>Ouv : {new Date(s.openedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} ({new Date(s.openedAt).toLocaleDateString('fr-FR')})</div>
+                        <div>Clôt : {s.closedAt ? `${new Date(s.closedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : '—'}</div>
+                      </td>
+                      <td style={{ padding: '10px 12px', fontSize: '13px', textAlign: 'right' }}>
+                        {s.initialFund.toLocaleString()} FCFA
+                      </td>
+                      <td style={{ padding: '10px 12px', fontSize: '13px', textAlign: 'right' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--color-primary)' }}>+{totalSales.toLocaleString()} FCFA</div>
+                        <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                          💵 {cashSales.toLocaleString()} • 📱 {mobileSales.toLocaleString()}
+                        </div>
+                      </td>
+                      <td style={{ padding: '10px 12px', fontSize: '13px', textAlign: 'right', fontWeight: 600, color: '#b45309' }}>
+                        {mobileSales.toLocaleString()} FCFA
+                      </td>
+                      <td style={{ padding: '10px 12px', fontSize: '13px', textAlign: 'right', fontWeight: 600, color: '#1e40af' }}>
+                        {expectedCashDrawer.toLocaleString()} FCFA
+                      </td>
+                      <td style={{ padding: '10px 12px', fontSize: '13px', textAlign: 'right', fontWeight: 600 }}>
+                        {(s.finalAmount || 0).toLocaleString()} FCFA
+                      </td>
+                      <td style={{ padding: '10px 12px', fontSize: '13px', textAlign: 'right', fontWeight: 600, color: diff === 0 ? 'var(--color-success)' : 'var(--color-error)' }}>
+                        {diff === 0 ? (
+                          <span style={{ padding: '2px 6px', borderRadius: '4px', background: 'var(--color-success-tint)', color: 'var(--color-success)', fontSize: '11px' }}>Équilibré</span>
+                        ) : (
+                          <span style={{ padding: '2px 6px', borderRadius: '4px', background: 'var(--color-error-tint)', color: 'var(--color-error)', fontSize: '11px' }}>
+                            {diff > 0 ? '+' : ''}{diff.toLocaleString()} FCFA
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
