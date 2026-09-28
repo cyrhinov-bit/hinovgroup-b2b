@@ -380,9 +380,9 @@ export const processSyncQueue = async () => {
             id: affaireData.id,
             reference: affaireData.reference,
             title: affaireData.title,
-            client_id: affaireData.clientId,
-            service_id: affaireData.serviceId,
-            commercial_id: affaireData.commercialId,
+            client_id: isUuid(affaireData.clientId) ? affaireData.clientId : null,
+            service_id: isUuid(affaireData.serviceId) ? affaireData.serviceId : null,
+            commercial_id: isUuid(affaireData.commercialId) ? affaireData.commercialId : null,
             description: affaireData.description || null,
             status: affaireData.status || 'QUALIFIEE',
             estimated_amount_ht: affaireData.estimatedAmountHt || 0,
@@ -403,9 +403,9 @@ export const processSyncQueue = async () => {
           const { id, ...data } = action.payload;
           const mappedData: any = {};
           if (data.title !== undefined) mappedData.title = data.title;
-          if (data.clientId !== undefined) mappedData.client_id = data.clientId;
-          if (data.serviceId !== undefined) mappedData.service_id = data.serviceId;
-          if (data.commercialId !== undefined) mappedData.commercial_id = data.commercialId;
+          if (data.clientId !== undefined) mappedData.client_id = isUuid(data.clientId) ? data.clientId : null;
+          if (data.serviceId !== undefined) mappedData.service_id = isUuid(data.serviceId) ? data.serviceId : null;
+          if (data.commercialId !== undefined) mappedData.commercial_id = isUuid(data.commercialId) ? data.commercialId : null;
           if (data.description !== undefined) mappedData.description = data.description;
           if (data.status !== undefined) mappedData.status = data.status;
           if (data.estimatedAmountHt !== undefined) mappedData.estimated_amount_ht = data.estimatedAmountHt;
@@ -462,14 +462,14 @@ export const processSyncQueue = async () => {
             vat_amount: cout.vatAmount || 0,
             amount_ttc: cout.amountTtc,
             date: cout.date,
-            affaire_id: cout.affaireId || null,
-            service_id: cout.serviceId,
+            affaire_id: isUuid(cout.affaireId) ? cout.affaireId : null,
+            service_id: isUuid(cout.serviceId) ? cout.serviceId : null,
             supplier_name: cout.supplierName || null,
             invoice_ref: cout.invoiceRef || null,
             description: cout.description,
             proof_document_id: cout.proofDocumentId || null,
             status: cout.status || 'VALIDE',
-            created_by: cout.createdBy || null,
+            created_by: isUuid(cout.createdBy) ? cout.createdBy : null,
             created_at: cout.createdAt || new Date().toISOString(),
             updated_at: cout.updatedAt || new Date().toISOString()
           }]);
@@ -487,8 +487,8 @@ export const processSyncQueue = async () => {
           if (cData.vatAmount !== undefined) mappedCout.vat_amount = cData.vatAmount;
           if (cData.amountTtc !== undefined) mappedCout.amount_ttc = cData.amountTtc;
           if (cData.date !== undefined) mappedCout.date = cData.date;
-          if (cData.affaireId !== undefined) mappedCout.affaire_id = cData.affaireId;
-          if (cData.serviceId !== undefined) mappedCout.service_id = cData.serviceId;
+          if (cData.affaireId !== undefined) mappedCout.affaire_id = isUuid(cData.affaireId) ? cData.affaireId : null;
+          if (cData.serviceId !== undefined) mappedCout.service_id = isUuid(cData.serviceId) ? cData.serviceId : null;
           if (cData.supplierName !== undefined) mappedCout.supplier_name = cData.supplierName;
           if (cData.invoiceRef !== undefined) mappedCout.invoice_ref = cData.invoiceRef;
           if (cData.description !== undefined) mappedCout.description = cData.description;
@@ -509,8 +509,8 @@ export const processSyncQueue = async () => {
           const obj = action.payload;
           const { error } = await supabase.from('objectifs').insert([{
             id: obj.id,
-            profile_id: obj.profileId,
-            service_id: obj.serviceId,
+            profile_id: isUuid(obj.profileId) ? obj.profileId : null,
+            service_id: isUuid(obj.serviceId) ? obj.serviceId : null,
             period_type: obj.periodType,
             start_date: obj.startDate,
             end_date: obj.endDate,
@@ -519,7 +519,7 @@ export const processSyncQueue = async () => {
             target_deals_count: obj.targetDealsCount || 0,
             target_new_clients: obj.targetNewClients || 0,
             status: obj.status || 'EN_COURS',
-            created_by: obj.createdBy || null,
+            created_by: isUuid(obj.createdBy) ? obj.createdBy : null,
             created_at: obj.createdAt || new Date().toISOString()
           }]);
           if (error) console.error('[Sync] INSERT_OBJECTIF échoué :', error.message);
@@ -552,14 +552,14 @@ export const processSyncQueue = async () => {
           const { error } = await supabase.from('primes').insert([{
             id: prime.id,
             reference: prime.reference,
-            profile_id: prime.profileId,
-            service_id: prime.serviceId,
+            profile_id: isUuid(prime.profileId) ? prime.profileId : null,
+            service_id: isUuid(prime.serviceId) ? prime.serviceId : null,
             period_key: prime.periodKey,
             prime_type: prime.primeType,
             amount: prime.amount,
             status: prime.status || 'PROPOSEE',
-            calculated_by: prime.calculatedBy || null,
-            validated_by: prime.validatedBy || null,
+            calculated_by: isUuid(prime.calculatedBy) ? prime.calculatedBy : null,
+            validated_by: isUuid(prime.validatedBy) ? prime.validatedBy : null,
             justification: prime.justification || null,
             created_at: prime.createdAt || new Date().toISOString(),
             updated_at: prime.updatedAt || new Date().toISOString()
@@ -571,7 +571,7 @@ export const processSyncQueue = async () => {
         case 'UPDATE_PRIME_STATUS': {
           const { id, status, validatedBy, justification } = action.payload;
           const mapped: any = { status, updated_at: new Date().toISOString() };
-          if (validatedBy !== undefined) mapped.validated_by = validatedBy;
+          if (validatedBy !== undefined) mapped.validated_by = isUuid(validatedBy) ? validatedBy : null;
           if (justification !== undefined) mapped.justification = justification;
           const { error } = await supabase.from('primes').update(mapped).eq('id', id);
           if (error) console.error('[Sync] UPDATE_PRIME_STATUS échoué :', error.message);
@@ -582,9 +582,9 @@ export const processSyncQueue = async () => {
           const log = action.payload;
           const { error } = await supabase.from('prime_audit_logs').insert([{
             id: log.id,
-            prime_id: log.primeId,
+            prime_id: isUuid(log.primeId) ? log.primeId : null,
             action: log.action,
-            actor_id: log.actorId,
+            actor_id: isUuid(log.actorId) ? log.actorId : null,
             actor_role: log.actorRole,
             previous_state: log.previousState || null,
             new_state: log.newState || null,
@@ -612,8 +612,8 @@ export const processSyncQueue = async () => {
           const cl = action.payload;
           const { error } = await supabase.from('classements').upsert([{
             id: cl.id,
-            profile_id: cl.profileId,
-            service_id: cl.serviceId,
+            profile_id: isUuid(cl.profileId) ? cl.profileId : null,
+            service_id: isUuid(cl.serviceId) ? cl.serviceId : null,
             period_type: cl.periodType,
             period_key: cl.periodKey,
             score: cl.score,
@@ -633,7 +633,7 @@ export const processSyncQueue = async () => {
           const { error } = await supabase.from('quotes').upsert([{
             id: quoteData.id,
             quote_number: quoteData.quoteNumber,
-            client_id: isUuid(quoteData.clientId) ? quoteData.clientId : quoteData.clientId,
+            client_id: isUuid(quoteData.clientId) ? quoteData.clientId : null,
             commercial_id: isUuid(quoteData.commercialId) ? quoteData.commercialId : null,
             service_id: isUuid(quoteData.serviceId) ? quoteData.serviceId : null,
             affaire_id: isUuid(quoteData.affaireId) ? quoteData.affaireId : null,
@@ -667,20 +667,18 @@ export const processSyncQueue = async () => {
               discount_percent: l.discountPercent || 0,
               total: l.total
             }));
-            await supabase.from('quote_lines').upsert(linesData, { onConflict: 'id' });
-            success = true;
-          } else if (!error) {
-            success = true;
-          } else {
-            console.error('[Sync] INSERT_QUOTE échoué :', error.message);
+            const { error: lineErr } = await supabase.from('quote_lines').upsert(linesData, { onConflict: 'id' });
+            if (lineErr && isNetworkOrTransientError(lineErr)) throw new Error(`[NetworkError] ${lineErr.message}`);
           }
+          if (error) console.error('[Sync] INSERT_QUOTE échoué :', error.message);
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_QUOTE': {
           const { lines, ...quoteData } = action.payload;
           const { error } = await supabase.from('quotes').update({
             quote_number: quoteData.quoteNumber,
-            client_id: isUuid(quoteData.clientId) ? quoteData.clientId : quoteData.clientId,
+            client_id: isUuid(quoteData.clientId) ? quoteData.clientId : null,
             commercial_id: isUuid(quoteData.commercialId) ? quoteData.commercialId : null,
             service_id: isUuid(quoteData.serviceId) ? quoteData.serviceId : null,
             affaire_id: isUuid(quoteData.affaireId) ? quoteData.affaireId : null,
@@ -716,12 +714,12 @@ export const processSyncQueue = async () => {
                 discount_percent: l.discountPercent || 0,
                 total: l.total
               }));
-              await supabase.from('quote_lines').insert(linesData);
+              const { error: insLinesErr } = await supabase.from('quote_lines').insert(linesData);
+              if (insLinesErr && isNetworkOrTransientError(insLinesErr)) throw new Error(`[NetworkError] ${insLinesErr.message}`);
             }
-            success = true;
-          } else {
-            console.error('[Sync] UPDATE_QUOTE échoué :', error.message);
           }
+          if (error) console.error('[Sync] UPDATE_QUOTE échoué :', error.message);
+          success = checkResult(error);
           break;
         }
         case 'DELETE_QUOTE': {
@@ -736,7 +734,7 @@ export const processSyncQueue = async () => {
             sale_number: saleData.saleNumber,
             quote_id: isUuid(saleData.quoteId) ? saleData.quoteId : null,
             affaire_id: isUuid(saleData.affaireId) ? saleData.affaireId : null,
-            client_id: isUuid(saleData.clientId) ? saleData.clientId : saleData.clientId,
+            client_id: isUuid(saleData.clientId) ? saleData.clientId : null,
             service_id: isUuid(saleData.serviceId) ? saleData.serviceId : null,
             commercial_id: isUuid(saleData.commercialId) ? saleData.commercialId : null,
             due_date: saleData.dueDate || null,
@@ -758,13 +756,11 @@ export const processSyncQueue = async () => {
               cost_price: l.costPrice || 0,
               total: l.total
             }));
-            await supabase.from('vente_lines').upsert(linesData, { onConflict: 'id' });
-            success = true;
-          } else if (!error) {
-            success = true;
-          } else {
-            console.error('[Sync] INSERT_SALE échoué :', error.message);
+            const { error: lineErr } = await supabase.from('vente_lines').upsert(linesData, { onConflict: 'id' });
+            if (lineErr && isNetworkOrTransientError(lineErr)) throw new Error(`[NetworkError] ${lineErr.message}`);
           }
+          if (error) console.error('[Sync] INSERT_SALE échoué :', error.message);
+          success = checkResult(error);
           break;
         }
         case 'UPDATE_SALE': {
@@ -773,7 +769,7 @@ export const processSyncQueue = async () => {
             sale_number: saleData.saleNumber,
             quote_id: isUuid(saleData.quoteId) ? saleData.quoteId : null,
             affaire_id: isUuid(saleData.affaireId) ? saleData.affaireId : null,
-            client_id: isUuid(saleData.clientId) ? saleData.clientId : saleData.clientId,
+            client_id: isUuid(saleData.clientId) ? saleData.clientId : null,
             service_id: isUuid(saleData.serviceId) ? saleData.serviceId : null,
             commercial_id: isUuid(saleData.commercialId) ? saleData.commercialId : null,
             due_date: saleData.dueDate !== undefined ? saleData.dueDate : null,
@@ -797,12 +793,12 @@ export const processSyncQueue = async () => {
                 cost_price: l.costPrice || 0,
                 total: l.total
               }));
-              await supabase.from('vente_lines').insert(linesData);
+              const { error: insLinesErr } = await supabase.from('vente_lines').insert(linesData);
+              if (insLinesErr && isNetworkOrTransientError(insLinesErr)) throw new Error(`[NetworkError] ${insLinesErr.message}`);
             }
-            success = true;
-          } else {
-            console.error('[Sync] UPDATE_SALE échoué :', error.message);
           }
+          if (error) console.error('[Sync] UPDATE_SALE échoué :', error.message);
+          success = checkResult(error);
           break;
         }
         case 'DELETE_SALE': {
@@ -813,11 +809,11 @@ export const processSyncQueue = async () => {
         case 'INSERT_COMMISSION': {
           const { error } = await supabase.from('commissions').insert([{
             id: action.payload.id,
-            vente_id: action.payload.saleId || null,
-            affaire_id: action.payload.affaireId || null,
-            client_id: action.payload.clientId || null,
-            commercial_id: action.payload.commercialId || null,
-            service_id: action.payload.serviceId || null,
+            vente_id: isUuid(action.payload.saleId) ? action.payload.saleId : null,
+            affaire_id: isUuid(action.payload.affaireId) ? action.payload.affaireId : null,
+            client_id: isUuid(action.payload.clientId) ? action.payload.clientId : null,
+            commercial_id: isUuid(action.payload.commercialId) ? action.payload.commercialId : null,
+            service_id: isUuid(action.payload.serviceId) ? action.payload.serviceId : null,
             total_ht: action.payload.totalHt,
             cost_total: action.payload.costTotal,
             margin_amount: action.payload.marginAmount,
@@ -842,7 +838,7 @@ export const processSyncQueue = async () => {
           if (updateData.commissionAmount !== undefined) mappedData.commission_amount = updateData.commissionAmount;
           if (updateData.status !== undefined) mappedData.status = updateData.status;
           if (updateData.paidAmount !== undefined) mappedData.paid_amount = updateData.paidAmount;
-          if (updateData.affaireId !== undefined) mappedData.affaire_id = updateData.affaireId;
+          if (updateData.affaireId !== undefined) mappedData.affaire_id = isUuid(updateData.affaireId) ? updateData.affaireId : null;
           const { error } = await supabase.from('commissions').update(mappedData).eq('id', id);
           if (error) console.error('[Sync] UPDATE_COMMISSION échoué :', error.message);
           success = checkResult(error);
@@ -856,7 +852,7 @@ export const processSyncQueue = async () => {
         case 'INSERT_INSTALLMENT': {
           const { error } = await supabase.from('vente_echeances').insert([{
             id: action.payload.id,
-            vente_id: action.payload.saleId,
+            vente_id: isUuid(action.payload.saleId) ? action.payload.saleId : null,
             amount: action.payload.amount,
             due_date: action.payload.dueDate,
             paid_amount: action.payload.paidAmount || 0,
@@ -888,9 +884,9 @@ export const processSyncQueue = async () => {
           const { error } = await supabase.from('prospects').insert([{
             id: action.payload.id,
             prospect_number: action.payload.prospectNumber,
-            commercial_id: action.payload.commercialId,
-            service_id: action.payload.serviceId || null,
-            category_id: action.payload.categoryId || null,
+            commercial_id: isUuid(action.payload.commercialId) ? action.payload.commercialId : null,
+            service_id: isUuid(action.payload.serviceId) ? action.payload.serviceId : null,
+            category_id: isUuid(action.payload.categoryId) ? action.payload.categoryId : null,
             type: action.payload.type,
             name: action.payload.name,
             company: action.payload.company || null,
@@ -904,7 +900,7 @@ export const processSyncQueue = async () => {
             need: action.payload.need || null,
             comments: action.payload.comments || null,
             status: action.payload.status,
-            responsible_id: action.payload.responsibleId || null
+            responsible_id: isUuid(action.payload.responsibleId) ? action.payload.responsibleId : null
           }]);
           if (error) console.error('[Sync] INSERT_PROSPECT échoué :', error.message);
           success = checkResult(error);
@@ -926,10 +922,10 @@ export const processSyncQueue = async () => {
           if (updateData.need !== undefined) mappedData.need = updateData.need;
           if (updateData.comments !== undefined) mappedData.comments = updateData.comments;
           if (updateData.status !== undefined) mappedData.status = updateData.status;
-          if (updateData.categoryId !== undefined) mappedData.category_id = updateData.categoryId;
-          if (updateData.commercialId !== undefined) mappedData.commercial_id = updateData.commercialId;
-          if (updateData.serviceId !== undefined) mappedData.service_id = updateData.serviceId;
-          if (updateData.responsibleId !== undefined) mappedData.responsible_id = updateData.responsibleId;
+          if (updateData.categoryId !== undefined) mappedData.category_id = isUuid(updateData.categoryId) ? updateData.categoryId : null;
+          if (updateData.commercialId !== undefined) mappedData.commercial_id = isUuid(updateData.commercialId) ? updateData.commercialId : null;
+          if (updateData.serviceId !== undefined) mappedData.service_id = isUuid(updateData.serviceId) ? updateData.serviceId : null;
+          if (updateData.responsibleId !== undefined) mappedData.responsible_id = isUuid(updateData.responsibleId) ? updateData.responsibleId : null;
           if (updateData.updated_at !== undefined) mappedData.updated_at = updateData.updated_at;
           const { error } = await supabase.from('prospects').update(mappedData).eq('id', id);
           if (error) console.error('[Sync] UPDATE_PROSPECT échoué :', error.message);
@@ -944,11 +940,11 @@ export const processSyncQueue = async () => {
         case 'INSERT_PROSPECT_ACTIVITY': {
           const { error } = await supabase.from('prospect_activities').insert([{
             id: action.payload.id,
-            prospect_id: action.payload.prospectId,
+            prospect_id: isUuid(action.payload.prospectId) ? action.payload.prospectId : null,
             type: action.payload.type,
             description: action.payload.description || null,
             date: action.payload.date,
-            created_by: action.payload.createdBy || null
+            created_by: isUuid(action.payload.createdBy) ? action.payload.createdBy : null
           }]);
           if (error) console.error('[Sync] INSERT_PROSPECT_ACTIVITY échoué :', error.message);
           success = checkResult(error);
@@ -962,7 +958,7 @@ export const processSyncQueue = async () => {
         case 'INSERT_PROSPECT_FOLLOW_UP': {
           const { error } = await supabase.from('prospect_follow_ups').insert([{
             id: action.payload.id,
-            prospect_id: action.payload.prospectId,
+            prospect_id: isUuid(action.payload.prospectId) ? action.payload.prospectId : null,
             date: action.payload.date,
             time: action.payload.time || null,
             priority: action.payload.priority,
@@ -988,7 +984,7 @@ export const processSyncQueue = async () => {
         case 'INSERT_CATEGORY': {
           const { error } = await supabase.from('categories').insert([{
             id: action.payload.id,
-            service_id: action.payload.serviceId,
+            service_id: isUuid(action.payload.serviceId) ? action.payload.serviceId : null,
             name: action.payload.name
           }]);
           if (error) console.error('[Sync] INSERT_CATEGORY échoué :', error.message);
@@ -1356,7 +1352,7 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_PRESTATION': {
           const { error } = await supabase.from('prestations').insert([{
-            id: action.payload.id, code: action.payload.code, name: action.payload.name, description: action.payload.description, price: action.payload.price, service_id: action.payload.serviceId, unit: action.payload.unit, cost_price: action.payload.costPrice || 0
+            id: action.payload.id, code: action.payload.code, name: action.payload.name, description: action.payload.description, price: action.payload.price, service_id: isUuid(action.payload.serviceId) ? action.payload.serviceId : null, unit: action.payload.unit, cost_price: action.payload.costPrice || 0
           }]);
           if (error) console.error('[Sync] INSERT_PRESTATION échoué :', error.message);
           success = checkResult(error);
@@ -1370,7 +1366,7 @@ export const processSyncQueue = async () => {
         case 'UPDATE_PRESTATION': {
           const { id, ...updateData } = action.payload;
           const { error } = await supabase.from('prestations').update({
-            code: updateData.code, name: updateData.name, description: updateData.description, price: updateData.price, service_id: updateData.serviceId, unit: updateData.unit, cost_price: updateData.costPrice || 0
+            code: updateData.code, name: updateData.name, description: updateData.description, price: updateData.price, service_id: isUuid(updateData.serviceId) ? updateData.serviceId : null, unit: updateData.unit, cost_price: updateData.costPrice || 0
           }).eq('id', id);
           if (error) console.error('[Sync] UPDATE_PRESTATION échoué :', error.message);
           success = checkResult(error);
