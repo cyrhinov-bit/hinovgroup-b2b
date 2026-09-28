@@ -680,22 +680,8 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
         doc.text(companyName.toUpperCase(), margin, 18);
       }
     }
-
-    // Bandeau d'informations sous le logo pour ne jamais perdre le numéro et la date
-    y = bannerH + 4;
-    doc.setFillColor(...neutralLight);
-    doc.roundedRect(margin, y, contentW, 10, 1.5, 1.5, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.setTextColor(...accent);
-    doc.text(`DEVIS N° ${quote.quoteNumber}`, margin + 5, y + 6.5);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(...muted);
-    doc.text(`Émis le : ${dateFr}`, pageW - margin - 55, y + 6.5);
-    doc.text(validityText, pageW - margin - 5, y + 6.5, { align: 'right' });
-    y += 15;
+    // Espace sous le logo sans encadré intermédiaire
+    y = bannerH + 6;
   } else if (isModerne) {
     doc.setFillColor(...accent);
     doc.rect(0, 0, pageW, 40, 'F');
@@ -853,7 +839,7 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
     cOffsetY += 4.5;
   });
 
-  // --- Cartouche Droit : OBJET DU DEVIS ou DÉTAILS ---
+  // --- Cartouche Droit : INFORMATIONS DEVIS & OBJET ---
   if (!isMinimaliste) {
     doc.setFillColor(...(isModerne ? accentLight : neutralLight));
     doc.roundedRect(cardRightX, cardY, cardW, cardH, 2, 2, 'F');
@@ -866,32 +852,26 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
     doc.roundedRect(cardRightX, cardY, cardW, cardH, 1.5, 1.5, 'S');
   }
 
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...(isMinimaliste ? dark : accent));
+  doc.text(`DEVIS N° ${quote.quoteNumber}`, cardRightX + 5, cardY + 5.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...dark);
+  doc.text(`Date d'émission : ${dateFr}`, cardRightX + 5, cardY + 11.5);
+  doc.setTextColor(...muted);
+  doc.text(`Validité : ${validityText}`, cardRightX + 5, cardY + 16.5);
+
   if (quote.subject) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
-    doc.setTextColor(...(isMinimaliste ? dark : accent));
-    doc.text('OBJET DU DEVIS', cardRightX + 5, cardY + 5.5);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
     doc.setTextColor(...dark);
-    const subjectLines = doc.splitTextToSize(quote.subject, cardW - 10) as string[];
-    subjectLines.slice(0, 4).forEach((line, i) => {
-      doc.text(line, cardRightX + 5, cardY + 11.5 + i * 4.5);
-    });
-  } else {
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
-    doc.setTextColor(...(isMinimaliste ? dark : accent));
-    doc.text('INFORMATIONS DEVIS', cardRightX + 5, cardY + 5.5);
-
+    doc.text('Objet : ', cardRightX + 5, cardY + 21.5);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(...dark);
-    doc.text(`Réf. : ${quote.quoteNumber}`, cardRightX + 5, cardY + 11.5);
-    doc.text(`Date d'émission : ${dateFr}`, cardRightX + 5, cardY + 16.5);
-    doc.setTextColor(...muted);
-    doc.text(`Validité : ${validityText}`, cardRightX + 5, cardY + 21.5);
+    const objPrefixW = doc.getTextWidth('Objet : ');
+    const subjectWrapped = doc.splitTextToSize(quote.subject, cardW - 10 - objPrefixW) as string[];
+    doc.text(subjectWrapped[0], cardRightX + 5 + objPrefixW, cardY + 21.5);
   }
 
   y += cardH + 7;
