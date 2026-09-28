@@ -1406,7 +1406,13 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_POS_PRODUCT': {
           const rawId = action.payload.id;
-          const resolvedId = resolveProductUuid(rawId, action.payload.reference);
+          const ref = action.payload.reference;
+          const fam = action.payload.family;
+          if (fam === 'Service' || ref?.startsWith('SRV-') || rawId === '00000000-0000-0000-0000-000000000000') {
+            success = true; // Auto-clear retired service products
+            break;
+          }
+          const resolvedId = resolveProductUuid(rawId, ref);
           if (!isUuid(resolvedId)) {
             console.warn('[Sync] INSERT_POS_PRODUCT ignoré pour ID non-UUID :', rawId);
             success = true;
@@ -1438,7 +1444,13 @@ export const processSyncQueue = async () => {
         }
         case 'UPDATE_POS_PRODUCT': {
           const { id, ...data } = action.payload;
-          const resolvedId = resolveProductUuid(id, data.reference);
+          const ref = data.reference;
+          const fam = data.family;
+          if (fam === 'Service' || ref?.startsWith('SRV-') || id === '00000000-0000-0000-0000-000000000000' || id?.startsWith('srv-')) {
+            success = true; // Auto-clear retired service products
+            break;
+          }
+          const resolvedId = resolveProductUuid(id, ref);
           if (!isUuid(resolvedId)) {
             console.warn('[Sync] UPDATE_POS_PRODUCT ignoré pour ID non-UUID :', id);
             success = true;

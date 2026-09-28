@@ -313,20 +313,13 @@ export default function DashboardPos() {
     let qtyLivres = 0;
     let revFournitures = 0;
     let qtyFournitures = 0;
-    let revServices = 0;
-    let qtyServices = 0;
-
     filteredTxs.forEach(t => {
       t.lines.forEach(l => {
         const p = l.productId ? posProducts.find(prod => prod.id === l.productId) : undefined;
-        const isServ = (p && (p.family === 'Service' || (p.reference && p.reference.startsWith('SRV-')))) ||
-                       (l.description && (l.description.toLowerCase().includes('photocopie') || l.description.toLowerCase().includes('impression') || l.description.toLowerCase().includes('scan') || l.description.toLowerCase().includes('reliure')));
-        const isLiv = p && !isServ && ((p.family && p.family.toLowerCase().startsWith('livre')) || !!(p.isbn && p.isbn.trim()));
+        const isLiv = (p && ((p.family && p.family.toLowerCase().startsWith('livre')) || !!(p.isbn && p.isbn.trim()))) ||
+                      (l.description && l.description.toLowerCase().includes('livre'));
 
-        if (isServ) {
-          revServices += l.total;
-          qtyServices += l.quantity;
-        } else if (isLiv) {
+        if (isLiv) {
           revLivres += l.total;
           qtyLivres += l.quantity;
         } else {
@@ -339,7 +332,6 @@ export default function DashboardPos() {
     const families: FamilyBreakdown[] = [
       { name: 'Fournitures & Papeterie', revenue: revFournitures, quantity: qtyFournitures, color: '#0D9488' },
       { name: 'Livres & Manuels', revenue: revLivres, quantity: qtyLivres, color: '#3B82F6' },
-      { name: 'Services & Reprographie', revenue: revServices, quantity: qtyServices, color: '#8B5CF6' },
     ];
 
     // Modes de paiement

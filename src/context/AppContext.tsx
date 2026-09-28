@@ -300,22 +300,6 @@ export interface PosReturn { id: string; returnNumber: string; transactionId?: s
 export interface PosCartItem { id: string; productId: string; name: string; reference: string; unitPrice: number; quantity: number; discountType: 'none' | 'percent' | 'amount'; discountPercent: number; discountAmount: number; total: number; }
 export interface SuspendedCart { id: string; reference?: string; date: string; cart: PosCartItem[]; }
 
-export const DEFAULT_SERVICE_CATEGORY: PosCategory = {
-  id: '00000000-0000-0000-0000-000000000000',
-  name: 'Impressions & Photocopies',
-  family: 'Service'
-};
-
-export const DEFAULT_SERVICE_PRODUCTS: PosProduct[] = [
-  { id: '11111111-0000-0000-0000-000000000001', reference: 'SRV-COP-NB-R', name: 'Photocopie A4 N&B (Recto)', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 25, quantity: 0, minStock: 0, isActive: true, status: 'Active', description: 'Photocopie monochrome noir & blanc simple face A4' },
-  { id: '11111111-0000-0000-0000-000000000002', reference: 'SRV-COP-NB-RV', name: 'Photocopie A4 N&B (Recto-Verso)', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 50, quantity: 0, minStock: 0, isActive: true, status: 'Active', description: 'Photocopie monochrome noir & blanc recto/verso A4' },
-  { id: '11111111-0000-0000-0000-000000000003', reference: 'SRV-IMP-NB', name: 'Impression A4 N&B', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 50, quantity: 0, minStock: 0, isActive: true, status: 'Active', description: 'Impression document noir & blanc A4' },
-  { id: '11111111-0000-0000-0000-000000000004', reference: 'SRV-IMP-COL', name: 'Impression A4 Couleur', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 150, quantity: 0, minStock: 0, isActive: true, status: 'Active', description: 'Impression document couleur A4' },
-  { id: '11111111-0000-0000-0000-000000000005', reference: 'SRV-SCAN-A4', name: 'Numérisation / Scan Document', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 100, quantity: 0, minStock: 0, isActive: true, status: 'Active', description: 'Numérisation document vers PDF / Clé USB' },
-  { id: '11111111-0000-0000-0000-000000000006', reference: 'SRV-PLAST-A4', name: 'Plastification Document A4', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 200, quantity: 0, minStock: 0, isActive: true, status: 'Active', description: 'Plastification thermique haute protection A4' },
-  { id: '11111111-0000-0000-0000-000000000007', reference: 'SRV-RELIURE', name: 'Reliure Document (Spirale)', family: 'Service', categoryId: '00000000-0000-0000-0000-000000000000', purchasePrice: 0, sellingPrice: 500, quantity: 0, minStock: 0, isActive: true, status: 'Active', description: 'Reliure spirale plastique avec transparents' },
-];
-
 // Product Module Interfaces
 export interface PosStockMovement { id: string; productId: string; type: 'Vente' | 'Retour' | 'Approvisionnement' | 'Inventaire' | 'Ajustement Manuel'; quantity: number; reference?: string; date: string; createdBy?: string; notes?: string; }
 export interface ProductCompletion { id: string; productId: string; missingField: 'family' | 'category' | 'brand' | 'supplier' | 'image' | 'description' | 'minStock'; currentValue: string; suggestedValue: string; createdAt: string; }
@@ -597,10 +581,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [loading, setLoading] = useState(true);
   // POS state
-  const [posCategories, setPosCategories] = useState<PosCategory[]>([DEFAULT_SERVICE_CATEGORY]);
+  const [posCategories, setPosCategories] = useState<PosCategory[]>([]);
   const [posBrands, setPosBrands] = useState<PosBrand[]>([]);
   const [posSuppliers, setPosSuppliers] = useState<PosSupplier[]>([]);
-  const [posProducts, setPosProducts] = useState<PosProduct[]>(DEFAULT_SERVICE_PRODUCTS);
+  const [posProducts, setPosProducts] = useState<PosProduct[]>([]);
   const [posStockEntries, setPosStockEntries] = useState<PosStockEntry[]>([]);
   const [posStockMovements, setPosStockMovements] = useState<PosStockMovement[]>([]);
   const [posInventories, setPosInventories] = useState<PosInventory[]>([]);
@@ -706,16 +690,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (cachedServices) setServices(cachedServices);
       if (cachedPrestations) setPrestations(cachedPrestations);
       if (cachedSettings) setSettings(cachedSettings);
-      let categoriesToSet = cachedPosCategories || [];
+      let categoriesToSet = (cachedPosCategories || []).filter(c => (c as any).family !== 'Service');
       if (categoriesToSet.length === 0) {
         categoriesToSet = [
           { id: uuidv4(), name: 'Livres', family: 'Livre' as const },
           { id: uuidv4(), name: 'Fournitures scolaires', family: 'Fourniture' as const },
-          { id: uuidv4(), name: 'Divers', family: 'Fourniture' as const },
-          DEFAULT_SERVICE_CATEGORY
+          { id: uuidv4(), name: 'Divers', family: 'Fourniture' as const }
         ];
-      } else if (!categoriesToSet.some(c => c.family === 'Service')) {
-        categoriesToSet = [...categoriesToSet, DEFAULT_SERVICE_CATEGORY];
       }
       setPosCategories(categoriesToSet);
       if (!cachedPosCategories || cachedPosCategories.length === 0) {
@@ -736,25 +717,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (cachedProductCompletions) setProductCompletions(cachedProductCompletions);
       if (cachedImportSessions) setImportSessions(cachedImportSessions);
 
-      const rawCachedProducts = cachedPosProducts || [];
+      const rawCachedProducts = (cachedPosProducts || []).filter((p: any) => {
+        return p.family !== 'Service' && !p.reference?.startsWith('SRV-') && p.id !== '00000000-0000-0000-0000-000000000000';
+      });
       const cachedProducts = rawCachedProducts.map((p: any) => ({
         ...p,
         id: resolveProductUuid(p.id, p.reference)
       }));
 
-      const uniqueProductsMap = new Map<string, any>();
-      cachedProducts.forEach((p: any) => uniqueProductsMap.set(p.id, p));
-      DEFAULT_SERVICE_PRODUCTS.forEach(def => {
-        if (!uniqueProductsMap.has(def.id)) {
-          uniqueProductsMap.set(def.id, def);
-        }
-      });
-      const productsWithServices = Array.from(uniqueProductsMap.values());
-      setPosProducts(productsWithServices);
+      setPosProducts(cachedProducts);
       setLoading(false);
 
-      if (rawCachedProducts.some((p: any) => !isUuid(p.id)) || DEFAULT_SERVICE_PRODUCTS.some(def => !cachedProducts.some((p: any) => p.id === def.id))) {
-        db.posProducts.setItem('data', productsWithServices).catch(() => {});
+      if (rawCachedProducts.length !== (cachedPosProducts || []).length) {
+        db.posProducts.setItem('data', cachedProducts).catch(() => {});
       }
 
       // 2. Fetch from Supabase (if online) and update Cache
@@ -1257,33 +1232,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setPosSuppliers(merged); await safeSet(db.posSuppliers, merged);
         }
         if (posProductsData && posProductsData.length > 0) {
-          const parsed = posProductsData.map((p: any) => {
-            let purchasePrice = p.purchase_price;
-            if (p.family === 'Livre' && (!purchasePrice || purchasePrice === 0) && p.selling_price > 0) {
-              purchasePrice = Math.round(p.selling_price * 0.75);
-            }
-            return {
-              id: p.id, reference: p.reference, barcode: p.barcode, isbn: p.isbn, name: p.name,
-              family: p.family, categoryId: p.category_id, brandId: p.brand_id, supplierId: p.supplier_id,
-              purchasePrice: purchasePrice ?? 0, sellingPrice: p.selling_price ?? 0, quantity: p.quantity ?? 0,
-              minStock: (p.min_stock !== null && p.min_stock !== undefined && p.min_stock > 0) ? p.min_stock : 10, imageUrl: p.image_url, description: p.description,
-              status: p.status || 'Active', isActive: p.is_active !== false, unit: p.unit, createdAt: p.created_at, updatedAt: p.updated_at
-            };
-          });
-          const merged = mergeData(cachedPosProducts, parsed);
-          const uniqueMergedMap = new Map<string, any>();
-          merged.forEach((p: any) => {
-            const resolvedId = resolveProductUuid(p.id, p.reference);
-            uniqueMergedMap.set(resolvedId, { ...p, id: resolvedId });
-          });
-          DEFAULT_SERVICE_PRODUCTS.forEach(def => {
-            if (!uniqueMergedMap.has(def.id)) {
-              uniqueMergedMap.set(def.id, def);
-            }
-          });
-          const finalProducts = Array.from(uniqueMergedMap.values());
-          setPosProducts(finalProducts);
-          await safeSet(db.posProducts, finalProducts);
+          const parsed = posProductsData
+            .filter((p: any) => p.family !== 'Service' && !p.reference?.startsWith('SRV-') && p.id !== '00000000-0000-0000-0000-000000000000')
+            .map((p: any) => {
+              let purchasePrice = p.purchase_price;
+              if (p.family === 'Livre' && (!purchasePrice || purchasePrice === 0) && p.selling_price > 0) {
+                purchasePrice = Math.round(p.selling_price * 0.75);
+              }
+              return {
+                id: resolveProductUuid(p.id, p.reference), reference: p.reference, barcode: p.barcode, isbn: p.isbn, name: p.name,
+                family: p.family, categoryId: p.category_id, brandId: p.brand_id, supplierId: p.supplier_id,
+                purchasePrice: purchasePrice ?? 0, sellingPrice: p.selling_price ?? 0, quantity: p.quantity ?? 0,
+                minStock: (p.min_stock !== null && p.min_stock !== undefined && p.min_stock > 0) ? p.min_stock : 10, imageUrl: p.image_url, description: p.description,
+                status: p.status || 'Active', isActive: p.is_active !== false, unit: p.unit, createdAt: p.created_at, updatedAt: p.updated_at
+              };
+            });
+          const cleanCached = (cachedPosProducts || []).filter((p: any) => p.family !== 'Service' && !p.reference?.startsWith('SRV-'));
+          const merged = mergeData(cleanCached, parsed);
+          setPosProducts(merged);
+          await safeSet(db.posProducts, merged);
         }
         if (posStockEntriesData && posStockEntriesData.length > 0) {
           const parsed = posStockEntriesData
