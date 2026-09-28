@@ -543,7 +543,7 @@ export default function PosReturns() {
                     <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
                     <input 
                       type="text" 
-                      placeholder="Ex: VT-2026-000125" 
+                      placeholder="Ex : hnv1790426658400 ou derniers chiffres..." 
                       value={ticketSearch} 
                       onChange={e => setTicketSearch(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && handleSearchTicket()}
@@ -553,6 +553,9 @@ export default function PosReturns() {
                   <button onClick={handleSearchTicket} style={{ padding: '10px 16px', background: 'var(--color-primary)', color: 'white', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer', fontWeight: 500 }}>
                     Rechercher
                   </button>
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '12px' }}>
+                  Indiquez le numéro de ticket (ex : <strong>hnv1790...</strong>) imprimé sur le reçu client ou visible dans l'historique des ventes.
                 </div>
                 
                 {ticketSearched && ticketSearchResults.length === 0 && (
