@@ -2043,8 +2043,14 @@ export const processSyncQueue = async () => {
       if (success) {
         processedIds.add(action.id);
       } else {
-        // En cas de rejet définitif du serveur (ex: violation de schéma PostgreSQL avec données corrompues)
         processedIds.add(action.id);
+
+        // Ne jamais enregistrer en erreur ni notifier les actions des services retirés
+        if (isRetiredServicePayload(action.type, action.payload)) {
+          continue;
+        }
+
+        // En cas de rejet définitif du serveur (ex: violation de schéma PostgreSQL avec données corrompues)
         console.warn(`[Sync] Action ${action.type} rejetée définitivement par la base de données. Sauvegardée dans syncErrors.`);
         let currentErrorsCount = 1;
         try {
