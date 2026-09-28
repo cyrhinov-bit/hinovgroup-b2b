@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { db } from '../lib/db';
-import { queueSyncAction, processSyncQueue, reconcileLocalPosDataWithCloud, reconcileAllOfflineDataWithCloud, resolveProductUuid } from '../lib/sync';
+import { queueSyncAction, processSyncQueue, reconcileLocalPosDataWithCloud, reconcileAllOfflineDataWithCloud, resolveProductUuid, isRetiredServicePayload } from '../lib/sync';
 import { v4 as uuidv4 } from 'uuid';
 import toast from 'react-hot-toast';
 import { isProductComplete } from '../features/products/services/ProductService';
@@ -732,7 +732,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         db.posProducts.setItem('data', cachedProducts).catch(() => {});
       }
 
-      // 2. Fetch from Supabase (if online) and update Cache
+      // 2. Nettoyage proactif immédiat des reliquats de services retirés dans la file et les erreurs
+      try {
+        const currentQueue = (await db.syncQueue.getItem<any[]>('queue')) || [];
+        const cleanQueue = currentQueue.filter(a => !isRetiredServicePayload(a.type, a.payload));
+        if (cleanQueue.length !== currentQueue.length) {
+          await db.syncQueue.setItem('queue', cleanQueue);
+        }
+        const currentErrors = (await db.syncErrors.getItem<any[]>('errors')) || [];
+        const cleanErrors = currentErrors.filter(e => !isRetiredServicePayload(e.action?.type, e.action?.payload));
+        if (cleanErrors.length !== currentErrors.length) {
+          await db.syncErrors.setItem('errors', cleanErrors);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: cleanErrors.length } }));
+          }
+        }
+      } catch {}
+
+      // 3. Fetch from Supabase (if online) and update Cache
       if (navigator.onLine) {
         if (currentUser) {
           // Process any pending offline mutations with a timeout so it doesn't block refreshData

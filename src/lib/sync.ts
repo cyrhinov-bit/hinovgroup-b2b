@@ -185,8 +185,35 @@ const ACTION_PRIORITY: Record<string, number> = {
   'DELETE_POS_MOVEMENTS_BY_RANGE': 6,
 };
 
+// Helper pour détecter les actions liées au module services/photocopies retiré
+export const isRetiredServicePayload = (type: SyncActionType, payload: any): boolean => {
+  if (!payload) return false;
+  if (type === 'INSERT_POS_PRODUCT' || type === 'UPDATE_POS_PRODUCT' || type === 'DELETE_POS_PRODUCT') {
+    const id = payload.id ? String(payload.id).toLowerCase() : '';
+    const ref = payload.reference ? String(payload.reference).toUpperCase() : '';
+    const fam = payload.family ? String(payload.family).toLowerCase() : '';
+    if (fam === 'service' || ref.startsWith('SRV-') || id.startsWith('srv-') || id === '00000000-0000-0000-0000-000000000000') {
+      return true;
+    }
+  }
+  if (type === 'INSERT_POS_CATEGORY' || type === 'UPDATE_POS_CATEGORY' || type === 'DELETE_POS_CATEGORY') {
+    const fam = payload.family ? String(payload.family).toLowerCase() : '';
+    const id = payload.id ? String(payload.id).toLowerCase() : '';
+    if (fam === 'service' || id === 'cat-services') {
+      return true;
+    }
+  }
+  return false;
+};
+
 // Ajouter une action à la file d'attente
 export const queueSyncAction = async (type: SyncActionType, payload: any) => {
+  // Ignorer immédiatement les actions portant sur l'ancien module services/photocopies
+  if (isRetiredServicePayload(type, payload)) {
+    console.log('[Sync] Action ignorée car liée au module de services retiré :', type);
+    return;
+  }
+
   const action: SyncAction = {
     id: uuidv4(),
     type,
@@ -270,6 +297,18 @@ export const processSyncQueue = async () => {
     const currentQueue: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
     if (currentQueue.length === 0) return;
 
+    // Purge automatique des anciennes erreurs liées aux services retirés
+    try {
+      const storedErrors = (await db.syncErrors.getItem<any[]>('errors')) || [];
+      const cleanErrors = storedErrors.filter(e => !isRetiredServicePayload(e.action?.type, e.action?.payload));
+      if (cleanErrors.length !== storedErrors.length) {
+        await db.syncErrors.setItem('errors', cleanErrors);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: cleanErrors.length } }));
+        }
+      }
+    } catch {}
+
     // Tri ordonné selon les dépendances (ex: configurations et sessions avant transactions)
     const sortedQueue = [...currentQueue].sort((a, b) => {
       const pA = ACTION_PRIORITY[a.type] || 10;
@@ -281,6 +320,10 @@ export const processSyncQueue = async () => {
     const processedIds = new Set<string>();
 
     for (const action of sortedQueue) {
+      if (isRetiredServicePayload(action.type, action.payload)) {
+        processedIds.add(action.id);
+        continue;
+      }
       try {
         let success = false;
         

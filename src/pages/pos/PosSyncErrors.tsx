@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { db } from '../../lib/db';
 import { ShieldAlert, Trash2, RefreshCw, CloudUpload, CheckCircle, AlertTriangle } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
-import { queueSyncAction, reconcileLocalPosDataWithCloud, type SyncAction } from '../../lib/sync';
+import { queueSyncAction, reconcileLocalPosDataWithCloud, isRetiredServicePayload, type SyncAction } from '../../lib/sync';
 import { toast } from 'react-hot-toast';
 
 interface SyncError {
@@ -20,7 +20,14 @@ export default function PosSyncErrors() {
     setLoading(true);
     try {
       const stored = (await db.syncErrors.getItem<SyncError[]>('errors')) || [];
-      setErrors(stored);
+      const validErrors = stored.filter(e => !isRetiredServicePayload(e.action?.type, e.action?.payload));
+      if (validErrors.length !== stored.length) {
+        await db.syncErrors.setItem('errors', validErrors);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: validErrors.length } }));
+        }
+      }
+      setErrors(validErrors);
     } catch (e) {
       console.error('Erreur de lecture des syncErrors', e);
     }
@@ -50,22 +57,28 @@ export default function PosSyncErrors() {
       window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: newErrors.length } }));
     }
 
-    await queueSyncAction(error.action.type, error.action.payload);
-    toast.success('Action remise en file d\'attente de synchronisation.');
+    if (!isRetiredServicePayload(error.action.type, error.action.payload)) {
+      await queueSyncAction(error.action.type, error.action.payload);
+      toast.success('Action remise en file d\'attente de synchronisation.');
+    } else {
+      toast.success('Action de service ignorée et retirée.');
+    }
   };
 
   const retryAll = async () => {
     if (errors.length === 0) return;
     const count = errors.length;
     for (const err of errors) {
-      await queueSyncAction(err.action.type, err.action.payload);
+      if (!isRetiredServicePayload(err.action.type, err.action.payload)) {
+        await queueSyncAction(err.action.type, err.action.payload);
+      }
     }
     await db.syncErrors.setItem('errors', []);
     setErrors([]);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: 0 } }));
     }
-    toast.success(`${count} action(s) remise(s) en file de synchronisation.`);
+    toast.success(`${count} action(s) traitée(s).`);
   };
 
   const handleGlobalReconciliation = async () => {
