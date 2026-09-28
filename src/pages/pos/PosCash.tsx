@@ -118,6 +118,13 @@ export default function PosCash() {
   };
   const sessionDiff = (s: typeof posCashSessions[number]) => s.difference ?? (s.finalAmount || 0) - sessionExpected(s);
 
+  const sessionSales = (s: typeof posCashSessions[number]) => {
+    const tx = validTx.filter(t => t.sessionId === s.id);
+    const cash = tx.reduce((sum, t) => sum + cashOfTransaction(t), 0);
+    const mobile = tx.reduce((sum, t) => sum + mobileOfTransaction(t), 0);
+    return { cash, mobile, total: cash + mobile, count: tx.length };
+  };
+
   const cardStyle: React.CSSProperties = {
     background: 'var(--color-surface)',
     borderRadius: 'var(--radius-lg)',
@@ -145,6 +152,7 @@ export default function PosCash() {
     return sortedKeys.map(key => {
       const list = map.get(key)!;
       const totalInitialFund = list.reduce((sum, s) => sum + s.initialFund, 0);
+      const totalRevenue = list.reduce((sum, s) => sum + sessionSales(s).total, 0);
       const totalExpected = list.reduce((sum, s) => sum + sessionExpected(s), 0);
       const totalFinal = list.reduce((sum, s) => sum + (s.finalAmount || 0), 0);
       const totalDiff = totalFinal - totalExpected;
@@ -155,6 +163,7 @@ export default function PosCash() {
         isCurrent: key === currentWeekKey,
         sessions: list,
         totalInitialFund,
+        totalRevenue,
         totalExpected,
         totalFinal,
         totalDiff,
@@ -385,12 +394,15 @@ export default function PosCash() {
                       )}
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
                         <strong>{weekGroup.sessions.length}</strong> session(s)
                       </span>
+                      <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '4px', background: 'var(--color-primary-tint)', color: 'var(--color-primary)', fontWeight: 600 }}>
+                        Ventes : {formatMoney(weekGroup.totalRevenue)}
+                      </span>
                       <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
-                        Réel : <strong>{formatMoney(weekGroup.totalFinal)}</strong>
+                        Réel Tiroir : <strong>{formatMoney(weekGroup.totalFinal)}</strong>
                       </span>
                       <span
                         style={{
@@ -416,8 +428,9 @@ export default function PosCash() {
                             <th style={{ padding: '10px 14px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Ouverture</th>
                             <th style={{ padding: '10px 14px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Clôture</th>
                             <th style={{ padding: '10px 14px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Fond initial</th>
-                            <th style={{ padding: '10px 14px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Attendu</th>
-                            <th style={{ padding: '10px 14px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Réel</th>
+                            <th style={{ padding: '10px 14px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Ventes (CA Total)</th>
+                            <th style={{ padding: '10px 14px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Attendu (Tiroir)</th>
+                            <th style={{ padding: '10px 14px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Réel (Tiroir)</th>
                             <th style={{ padding: '10px 14px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Écart</th>
                             <th style={{ padding: '10px 14px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Statut</th>
                           </tr>
@@ -426,12 +439,19 @@ export default function PosCash() {
                           {weekGroup.sessions.map(s => {
                             const expected = sessionExpected(s);
                             const diff = sessionDiff(s);
+                            const sales = sessionSales(s);
                             return (
                               <tr key={s.id} style={{ borderBottom: '1px solid var(--color-surface-alt)' }}>
                                 <td style={{ padding: '10px 14px', fontSize: '13px', color: 'var(--color-text-muted)' }}>{formatDate(s.openedAt)}</td>
                                 <td style={{ padding: '10px 14px', fontSize: '13px', color: 'var(--color-text-muted)' }}>{s.closedAt ? formatDate(s.closedAt) : '—'}</td>
                                 <td style={{ padding: '10px 14px', fontSize: '13px', textAlign: 'right' }}>{formatMoney(s.initialFund)}</td>
-                                <td style={{ padding: '10px 14px', fontSize: '13px', textAlign: 'right', fontWeight: 600 }}>{formatMoney(expected)}</td>
+                                <td style={{ padding: '10px 14px', fontSize: '13px', textAlign: 'right' }}>
+                                  <div style={{ fontWeight: 600, color: 'var(--color-primary)' }}>+{formatMoney(sales.total)}</div>
+                                  <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                                    💵 {formatMoney(sales.cash)} • 📱 {formatMoney(sales.mobile)}
+                                  </div>
+                                </td>
+                                <td style={{ padding: '10px 14px', fontSize: '13px', textAlign: 'right', fontWeight: 600, color: '#1e40af' }}>{formatMoney(expected)}</td>
                                 <td style={{ padding: '10px 14px', fontSize: '13px', textAlign: 'right', fontWeight: 600 }}>{(s.finalAmount || 0).toLocaleString()} FCFA</td>
                                 <td style={{ padding: '10px 14px', fontSize: '13px', textAlign: 'right', fontWeight: 600, color: diff === 0 ? 'var(--color-success)' : 'var(--color-error)' }}>
                                   {diff === 0 ? 'Équilibré' : `${diff > 0 ? '+' : ''}${formatMoney(diff)}`}

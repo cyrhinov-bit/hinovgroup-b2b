@@ -1,7 +1,7 @@
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
-import { Search, RotateCcw, XCircle, ArrowLeft, Trash2, Calendar, Archive, ChevronDown, ChevronRight, Printer, RefreshCw } from 'lucide-react';
+import { Search, RotateCcw, XCircle, ArrowLeft, Trash2, Calendar, Archive, ChevronDown, ChevronRight, Printer, RefreshCw, Wallet, Smartphone, TrendingUp, Receipt } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
@@ -59,6 +59,19 @@ export default function PosTransactions() {
     }).sort((a, b) => b.date.localeCompare(a.date));
   }, [posTransactions, search]);
 
+  const getTxCash = (t: PosTransaction) => {
+    const cashPayments = (t.payments || [])
+      .filter(p => p.method === 'Espèces' || p.method === 'Mixte')
+      .reduce((a, p) => a + p.amount, 0);
+    return cashPayments > 0 ? cashPayments : (t.payments?.length === 0 ? t.total : 0);
+  };
+
+  const getTxMobile = (t: PosTransaction) => {
+    return (t.payments || [])
+      .filter(p => p.method === 'Mobile Money')
+      .reduce((a, p) => a + p.amount, 0);
+  };
+
   // Regroupement des ventes par semaine (du lundi au dimanche)
   const transactionsByWeek = useMemo(() => {
     const map = new Map<string, PosTransaction[]>();
@@ -78,6 +91,8 @@ export default function PosTransactions() {
       const validTxs = list.filter(t => t.status === 'Validée');
       const voidedTxs = list.filter(t => t.status === 'Annulée');
       const totalRevenue = validTxs.reduce((sum, t) => sum + t.total, 0);
+      const cashRevenue = validTxs.reduce((sum, t) => sum + getTxCash(t), 0);
+      const mobileRevenue = validTxs.reduce((sum, t) => sum + getTxMobile(t), 0);
 
       return {
         weekKey: key,
@@ -88,6 +103,8 @@ export default function PosTransactions() {
         validCount: validTxs.length,
         voidCount: voidedTxs.length,
         totalRevenue,
+        cashRevenue,
+        mobileRevenue,
       };
     });
   }, [filtered, currentWeekKey]);
@@ -97,6 +114,23 @@ export default function PosTransactions() {
     if (selectedWeekFilter === 'all') return transactionsByWeek;
     return transactionsByWeek.filter(w => w.weekKey === selectedWeekFilter);
   }, [transactionsByWeek, selectedWeekFilter]);
+
+  // Statistiques consolidées de la sélection active
+  const summaryStats = useMemo(() => {
+    let validCount = 0;
+    let totalRevenue = 0;
+    let cashRevenue = 0;
+    let mobileRevenue = 0;
+
+    displayedWeekGroups.forEach(w => {
+      validCount += w.validCount;
+      totalRevenue += w.totalRevenue;
+      cashRevenue += w.cashRevenue;
+      mobileRevenue += w.mobileRevenue;
+    });
+
+    return { validCount, totalRevenue, cashRevenue, mobileRevenue };
+  }, [displayedWeekGroups]);
 
   // État des semaines dépliées : par défaut la semaine en cours est ouverte
   const [expandedWeeks, setExpandedWeeks] = useState<Record<string, boolean>>(() => {
@@ -246,6 +280,48 @@ export default function PosTransactions() {
         </div>
       </div>
 
+      {/* Cartes de synthèse financière pour la sélection active */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '20px' }}>
+        <div style={{ background: 'white', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Chiffre d'Affaires Net</span>
+            <TrendingUp size={16} color="var(--color-primary)" />
+          </div>
+          <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--color-primary)' }}>
+            {summaryStats.totalRevenue.toLocaleString()} FCFA
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+            {summaryStats.validCount} vente(s) validée(s)
+          </div>
+        </div>
+
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 'var(--radius-lg)', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#166534' }}>Attendu Espèces (Tiroir)</span>
+            <Wallet size={16} color="#16a34a" />
+          </div>
+          <div style={{ fontSize: '20px', fontWeight: 700, color: '#15803d' }}>
+            {summaryStats.cashRevenue.toLocaleString()} FCFA
+          </div>
+          <div style={{ fontSize: '11px', color: '#166534', marginTop: '2px' }}>
+            {summaryStats.totalRevenue > 0 ? ((summaryStats.cashRevenue / summaryStats.totalRevenue) * 100).toFixed(1) : 0}% du total
+          </div>
+        </div>
+
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 'var(--radius-lg)', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#92400e' }}>Attendu Mobile Money</span>
+            <Smartphone size={16} color="#d97706" />
+          </div>
+          <div style={{ fontSize: '20px', fontWeight: 700, color: '#b45309' }}>
+            {summaryStats.mobileRevenue.toLocaleString()} FCFA
+          </div>
+          <div style={{ fontSize: '11px', color: '#92400e', marginTop: '2px' }}>
+            {summaryStats.totalRevenue > 0 ? ((summaryStats.mobileRevenue / summaryStats.totalRevenue) * 100).toFixed(1) : 0}% du total
+          </div>
+        </div>
+      </div>
+
       {/* Barre de recherche et filtres de semaine */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ flex: '1 1 300px', position: 'relative' }}>
@@ -376,9 +452,15 @@ export default function PosTransactions() {
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
                       <strong>{weekGroup.txCount}</strong> vente(s) {weekGroup.voidCount > 0 && `(${weekGroup.voidCount} annulée)`}
+                    </span>
+                    <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '4px', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>
+                      💵 Espèces: <strong>{weekGroup.cashRevenue.toLocaleString()} FCFA</strong>
+                    </span>
+                    <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '4px', background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a' }}>
+                      📱 Mobile: <strong>{weekGroup.mobileRevenue.toLocaleString()} FCFA</strong>
                     </span>
                     <span
                       style={{
@@ -386,11 +468,11 @@ export default function PosTransactions() {
                         fontWeight: 700,
                         padding: '3px 10px',
                         borderRadius: 'var(--radius-sm)',
-                        background: 'var(--color-success-tint)',
-                        color: 'var(--color-success)',
+                        background: 'var(--color-primary-tint)',
+                        color: 'var(--color-primary)',
                       }}
                     >
-                      CA : {weekGroup.totalRevenue.toLocaleString()} FCFA
+                      CA Total : {weekGroup.totalRevenue.toLocaleString()} FCFA
                     </span>
                   </div>
                 </div>
