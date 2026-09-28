@@ -1183,7 +1183,7 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
   }
 
   const sigW = (contentW - cardGap) / 2; // 85 mm chacun
-  const sigH = 24;
+  const sigH = 26;
   const sigLeftX = margin;
   const sigRightX = margin + sigW + cardGap;
 
@@ -1203,6 +1203,29 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
   doc.setFontSize(7);
   doc.setTextColor(...muted);
   doc.text('Signature autorisée & Cachet', sigLeftX + 4, y + 9);
+
+  // Cachet permanent de l'entreprise
+  if (settings.companyStampBase64) {
+    try {
+      const isPng = settings.companyStampBase64.includes('image/png');
+      const format = isPng ? 'PNG' : 'JPEG';
+      const stampW = 28;
+      const stampH = 15;
+      const stampX = sigLeftX + sigW - stampW - 4;
+      const stampY = y + 9;
+      doc.addImage(settings.companyStampBase64, format, stampX, stampY, stampW, stampH);
+    } catch {
+      try {
+        doc.addImage(settings.companyStampBase64, 'JPEG', sigLeftX + sigW - 32, y + 9, 28, 15);
+      } catch {
+        try {
+          doc.addImage(settings.companyStampBase64, 'PNG', sigLeftX + sigW - 32, y + 9, 28, 15);
+        } catch (e) {
+          console.warn('[PDF] Impossible d\'insérer le cachet :', e);
+        }
+      }
+    }
+  }
 
   // Cadre Signature Client
   doc.roundedRect(sigRightX, y, sigW, sigH, 1.5, 1.5, 'S');

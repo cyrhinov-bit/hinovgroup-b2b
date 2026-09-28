@@ -227,7 +227,7 @@ export interface Commission {
 export interface Prospect { id: string; prospectNumber: string; commercialId: string; serviceId?: string; categoryId?: string; type: 'Entreprise' | 'Particulier'; name: string; company?: string; phone?: string; email?: string; address?: string; city?: string; source?: string; interestLevel: 'Faible' | 'Moyen' | 'Élevé' | 'Très élevé'; budget: number; need?: string; comments?: string; status: 'Nouveau' | 'Premier contact' | 'Besoin identifié' | 'Rendez-vous' | 'Offre en préparation' | 'Négociation' | 'À convertir' | 'Converti' | 'Perdu'; responsibleId?: string; createdAt: string; updatedAt: string; }
 export interface ProspectActivity { id: string; prospectId: string; type: 'Appel' | 'Email' | 'Visite' | 'Réunion' | 'Démonstration' | 'Compte rendu' | 'Autre'; description?: string; date: string; createdBy?: string; }
 export interface ProspectFollowUp { id: string; prospectId: string; date: string; time?: string; priority: 'Basse' | 'Moyenne' | 'Haute' | 'Urgente'; observation?: string; status: 'En attente' | 'Terminée' | 'Annulée'; }
-export interface AppSettings { companyName: string; companyLogo: string; companyAddress: string; companySiret: string; companyTva: string; defaultTerms: string; headerLogoBase64?: string; defaultValidity?: number; siteUrl?: string; commissionRate?: number; }
+export interface AppSettings { companyName: string; companyLogo: string; companyAddress: string; companySiret: string; companyTva: string; defaultTerms: string; headerLogoBase64?: string; companyStampBase64?: string; defaultValidity?: number; siteUrl?: string; commissionRate?: number; }
 
 export interface ActivityReport { id: string; authorId: string; role: User['role']; type: 'Activité' | 'Prospection'; date: string; realisations: string; difficultes: string; remarques: string; createdAt?: string; updatedAt?: string; }
 
@@ -1091,6 +1091,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             companyTva: settingsData.company_tva,
             defaultTerms: settingsData.default_terms,
             headerLogoBase64: settingsData.header_logo_base64 ?? undefined,
+            companyStampBase64: settingsData.company_stamp_base64 ?? undefined,
             defaultValidity: settingsData.default_validity ?? undefined,
             siteUrl: settingsData.site_url ?? undefined,
             commissionRate: settingsData.commission_rate ?? undefined,

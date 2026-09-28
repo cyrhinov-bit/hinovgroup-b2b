@@ -1006,6 +1006,7 @@ export const processSyncQueue = async () => {
             company_tva: action.payload.companyTva,
             default_terms: action.payload.defaultTerms,
             header_logo_base64: action.payload.headerLogoBase64 ?? null,
+            company_stamp_base64: action.payload.companyStampBase64 ?? null,
             default_validity: action.payload.defaultValidity ?? null,
             site_url: action.payload.siteUrl ?? null,
             commission_rate: action.payload.commissionRate ?? null,

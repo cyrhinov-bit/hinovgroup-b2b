@@ -82,6 +82,54 @@ export function Parametres() {
     }
   };
 
+  const handleStampUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        toast.error('Veuillez sélectionner un fichier image valide');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const rawDataUrl = event.target?.result as string;
+        const img = new Image();
+        img.onload = () => {
+          const maxWidth = 800;
+          const maxHeight = 800;
+          let width = img.naturalWidth || img.width;
+          let height = img.naturalHeight || img.height;
+
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const optimizedDataUrl = canvas.toDataURL('image/png');
+            setLocalSettings(prev => ({ ...prev, companyStampBase64: optimizedDataUrl }));
+            toast.success('Cachet prêt. N\'oubliez pas de cliquer sur "Enregistrer les paramètres".');
+          } else {
+            setLocalSettings(prev => ({ ...prev, companyStampBase64: rawDataUrl }));
+          }
+        };
+        img.onerror = () => {
+          setLocalSettings(prev => ({ ...prev, companyStampBase64: rawDataUrl }));
+        };
+        img.src = rawDataUrl;
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSave = () => {
     confirm({
       title: 'Enregistrer les paramètres',
@@ -128,7 +176,27 @@ export function Parametres() {
                 <button className="btn btn-secondary" onClick={() => setLocalSettings({ ...localSettings, headerLogoBase64: undefined })}>Supprimer</button>
               )}
             </div>
-            <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '8px' }}>Cette image remplacera le texte d'en-tête sur le portail client.</p>
+            <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '8px' }}>Cette image apparaît en tête des devis et sur le portail client.</p>
+          </div>
+
+          <div style={{ marginBottom: '24px' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Cachet & Signature de l'entreprise (Permanent sur les PDF)</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              {localSettings.companyStampBase64 ? (
+                <img src={localSettings.companyStampBase64} alt="Cachet Entreprise" style={{ maxHeight: '80px', maxWidth: '160px', objectFit: 'contain', border: '1px solid var(--color-border)', borderRadius: '4px', backgroundColor: '#fafafa', padding: '4px' }} />
+              ) : (
+                <div style={{ width: '150px', height: '60px', backgroundColor: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', borderRadius: '4px' }}>Aucun cachet</div>
+              )}
+              <label className="btn btn-outline" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                <Upload size={16} style={{ marginRight: '8px' }} />
+                Téléverser le cachet
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleStampUpload} />
+              </label>
+              {localSettings.companyStampBase64 && (
+                <button className="btn btn-secondary" onClick={() => setLocalSettings({ ...localSettings, companyStampBase64: undefined })}>Supprimer</button>
+              )}
+            </div>
+            <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '8px' }}>Ce cachet apparaîtra automatiquement et de manière permanente dans la section "Signature autorisée & Cachet" sur tous vos devis PDF.</p>
           </div>
 
           <div className="responsive-form-grid">
