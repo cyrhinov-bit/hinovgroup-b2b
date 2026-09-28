@@ -677,7 +677,7 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
 
   // ============================ 1. EN-TÊTE ============================
   if (settings.headerLogoBase64) {
-    const bannerH = 36;
+    const bannerH = 34;
     let rendered = false;
     try {
       const isPng = settings.headerLogoBase64.includes('image/png');
@@ -706,13 +706,13 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
       doc.setTextColor(255, 255, 255);
       doc.text(companyName.toUpperCase(), margin, 18);
     }
-    // Espace sous le logo sans encadré intermédiaire
-    y = bannerH + 6;
+    // Espace aéré et élégant sous l'en-tête
+    y = bannerH + 14;
   } else if (isModerne) {
     doc.setFillColor(...accent);
-    doc.rect(0, 0, pageW, 40, 'F');
+    doc.rect(0, 0, pageW, 38, 'F');
     doc.setFillColor(...mixWithWhite(accent, 0.2));
-    doc.rect(0, 40, pageW, 1.5, 'F');
+    doc.rect(0, 38, pageW, 1.5, 'F');
 
     // Gauche : Société
     doc.setTextColor(255, 255, 255);
@@ -742,7 +742,7 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
     doc.setTextColor(230, 242, 245);
     doc.text(`Date : ${dateFr}`, pageW - margin, 27, { align: 'right' });
     doc.text(validityText, pageW - margin, 32, { align: 'right' });
-    y = 48;
+    y = 52;
   } else if (isMinimaliste) {
     // Gauche : Société
     doc.setFont('helvetica', 'bold');
@@ -776,13 +776,13 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
     doc.setDrawColor(...neutralBorder);
     doc.setLineWidth(0.4);
     doc.line(margin, 37, pageW - margin, 37);
-    y = 44;
+    y = 48;
   } else {
     // Classique
     doc.setFillColor(...accent);
-    doc.rect(0, 0, pageW, 38, 'F');
+    doc.rect(0, 0, pageW, 36, 'F');
     doc.setFillColor(...mixWithWhite(accent, 0.25));
-    doc.rect(0, 38, pageW, 1.2, 'F');
+    doc.rect(0, 36, pageW, 1.2, 'F');
 
     // Gauche
     doc.setTextColor(255, 255, 255);
@@ -812,13 +812,13 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
     doc.setTextColor(230, 242, 245);
     doc.text(`Date : ${dateFr}`, pageW - margin, 26, { align: 'right' });
     doc.text(validityText, pageW - margin, 31, { align: 'right' });
-    y = 46;
+    y = 50;
   }
 
   // ====================== 2. ENCADRÉS CLIENT & DEVIS ======================
   const cardGap = 8;
   const cardW = (contentW - cardGap) / 2; // 85 mm chacun
-  const cardH = 33; // Hauteur confortable pour 4 lignes parfaitement aérées
+  const cardH = 34; // Hauteur confortable et aérée
   const cardLeftX = margin;
   const cardRightX = margin + cardW + cardGap;
   const cardY = y;
@@ -833,7 +833,7 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
   doc.setTextColor(...accent);
-  doc.text('DESTINATAIRE (CLIENT)', cardLeftX + 5, cardY + 6);
+  doc.text('DESTINATAIRE (CLIENT)', cardLeftX + 5, cardY + 6.5);
 
   const clientName = client?.company || client?.name || 'Client comptant';
   const clientAttn = client?.contact ? `Attn : ${client.contact}` : '';
@@ -844,22 +844,22 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
   doc.setFontSize(9);
   doc.setTextColor(...dark);
   const clientNameWrapped = doc.splitTextToSize(clientName, cardW - 10) as string[];
-  doc.text(clientNameWrapped[0], cardLeftX + 5, cardY + 12.5);
+  doc.text(clientNameWrapped[0], cardLeftX + 5, cardY + 13.5);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(...dark);
   if (clientAttn) {
-    doc.text(clientAttn, cardLeftX + 5, cardY + 18.5);
+    doc.text(clientAttn, cardLeftX + 5, cardY + 19.5);
     if (clientPhone) {
-      doc.text(clientPhone, cardLeftX + 5, cardY + 24.5);
+      doc.text(clientPhone, cardLeftX + 5, cardY + 25.5);
     } else if (clientAddr) {
-      doc.text(clientAddr, cardLeftX + 5, cardY + 24.5);
+      doc.text(clientAddr, cardLeftX + 5, cardY + 25.5);
     }
   } else if (clientPhone) {
-    doc.text(clientPhone, cardLeftX + 5, cardY + 18.5);
+    doc.text(clientPhone, cardLeftX + 5, cardY + 19.5);
     if (clientAddr) {
-      doc.text(clientAddr, cardLeftX + 5, cardY + 24.5);
+      doc.text(clientAddr, cardLeftX + 5, cardY + 25.5);
     }
   }
 
@@ -873,24 +873,24 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(...accent);
-  doc.text(`DEVIS N° ${quote.quoteNumber}`, cardRightX + 5, cardY + 6);
+  doc.text(`DEVIS N° ${quote.quoteNumber}`, cardRightX + 5, cardY + 6.5);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(...dark);
-  doc.text(`Date d'émission : ${dateFr}`, cardRightX + 5, cardY + 12.5);
-  doc.text(`Validité : ${validityText}`, cardRightX + 5, cardY + 18.5);
+  doc.text(`Date d'émission : ${dateFr}`, cardRightX + 5, cardY + 13.5);
+  doc.text(`Validité : ${validityText}`, cardRightX + 5, cardY + 19.5);
 
   if (quote.subject) {
     doc.setFont('helvetica', 'bold');
-    doc.text('Objet : ', cardRightX + 5, cardY + 24.5);
+    doc.text('Objet : ', cardRightX + 5, cardY + 25.5);
     doc.setFont('helvetica', 'normal');
     const objPrefixW = doc.getTextWidth('Objet : ');
     const subjectWrapped = doc.splitTextToSize(quote.subject, cardW - 10 - objPrefixW) as string[];
-    doc.text(subjectWrapped[0], cardRightX + 5 + objPrefixW, cardY + 24.5);
+    doc.text(subjectWrapped[0], cardRightX + 5 + objPrefixW, cardY + 25.5);
   }
 
-  y += cardH + 7;
+  y += cardH + 9;
 
   // ====================== 3. TABLEAU DES ARTICLES ======================
   // Largeurs strictes totalisant 178 mm : [82, 22, 28, 18, 28]
