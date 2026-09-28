@@ -997,7 +997,8 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'UPDATE_SETTINGS': {
-          const { error } = await supabase.from('settings').update({
+          const { error } = await supabase.from('settings').upsert({
+            id: 1,
             company_name: action.payload.companyName,
             company_logo: action.payload.companyLogo,
             company_address: action.payload.companyAddress,
@@ -1008,7 +1009,7 @@ export const processSyncQueue = async () => {
             default_validity: action.payload.defaultValidity ?? null,
             site_url: action.payload.siteUrl ?? null,
             commission_rate: action.payload.commissionRate ?? null,
-          }).eq('id', 1);
+          });
           if (error) console.error('[Sync] UPDATE_SETTINGS échoué :', error.message);
           success = checkResult(error);
           break;
@@ -2029,16 +2030,6 @@ export const processSyncQueue = async () => {
         case 'DELETE_PROFILE': {
           const { error } = await supabase.from('profiles').delete().eq('id', action.payload.id);
           if (error) console.error('[Sync] DELETE_PROFILE échoué :', error.message);
-          success = checkResult(error);
-          break;
-        }
-        case 'UPDATE_SETTINGS': {
-          const { error } = await supabase.from('settings').upsert({
-            id: action.payload.id || 'default',
-            ...action.payload,
-            updated_at: new Date().toISOString()
-          });
-          if (error) console.error('[Sync] UPDATE_SETTINGS échoué :', error.message);
           success = checkResult(error);
           break;
         }

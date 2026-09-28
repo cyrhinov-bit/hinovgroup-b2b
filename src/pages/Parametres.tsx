@@ -1,10 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Save, Upload, Palette, Check } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
-import { THEME_PRESETS, THEME_CATEGORIES, DEFAULT_THEME_COLOR, getUserThemeColor, setUserThemeColor, applyTheme } from '../lib/theme';
+import toast from 'react-hot-toast';
+import { THEME_PRESETS, THEME_CATEGORIES, getUserThemeColor, setUserThemeColor, applyTheme } from '../lib/theme';
 
 export function Parametres() {
   const { settings, updateSettings } = useAppContext();
@@ -13,6 +13,13 @@ export function Parametres() {
   const [localSettings, setLocalSettings] = useState(settings);
   const [selectedThemeColor, setSelectedThemeColor] = useState(() => getUserThemeColor(currentUser?.id));
   const [themeCategory, setThemeCategory] = useState<string>('Tous');
+
+  // Keep local state in sync when settings are loaded asynchronously
+  useEffect(() => {
+    if (settings) {
+      setLocalSettings(settings);
+    }
+  }, [settings]);
 
   const filteredThemePresets = useMemo(() => {
     if (themeCategory === 'Tous') return THEME_PRESETS;
@@ -27,9 +34,49 @@ export function Parametres() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (!file.type.startsWith('image/')) {
+        toast.error('Veuillez sélectionner un fichier image valide');
+        return;
+      }
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setLocalSettings({ ...localSettings, headerLogoBase64: reader.result as string });
+      reader.onload = (event) => {
+        const rawDataUrl = event.target?.result as string;
+        const img = new Image();
+        img.onload = () => {
+          const maxWidth = 1400;
+          const maxHeight = 500;
+          let width = img.naturalWidth || img.width;
+          let height = img.naturalHeight || img.height;
+
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const isPng = file.type === 'image/png';
+            const optimizedDataUrl = isPng 
+              ? canvas.toDataURL('image/png') 
+              : canvas.toDataURL('image/jpeg', 0.92);
+            setLocalSettings(prev => ({ ...prev, headerLogoBase64: optimizedDataUrl }));
+            toast.success('Image prête. N\'oubliez pas de cliquer sur "Enregistrer les paramètres".');
+          } else {
+            setLocalSettings(prev => ({ ...prev, headerLogoBase64: rawDataUrl }));
+          }
+        };
+        img.onerror = () => {
+          setLocalSettings(prev => ({ ...prev, headerLogoBase64: rawDataUrl }));
+        };
+        img.src = rawDataUrl;
       };
       reader.readAsDataURL(file);
     }
@@ -42,10 +89,16 @@ export function Parametres() {
       confirmLabel: 'Enregistrer',
       variant: 'info',
       onConfirm: async () => {
-        if (currentUser?.id) {
-          setUserThemeColor(currentUser.id, selectedThemeColor);
+        try {
+          if (currentUser?.id) {
+            setUserThemeColor(currentUser.id, selectedThemeColor);
+          }
+          await updateSettings(localSettings);
+          toast.success('Paramètres enregistrés avec succès !');
+        } catch (err) {
+          console.error(err);
+          toast.error('Erreur lors de l\'enregistrement des paramètres');
         }
-        await updateSettings(localSettings);
       }
     });
   };

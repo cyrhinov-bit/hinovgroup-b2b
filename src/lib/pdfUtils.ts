@@ -24,10 +24,22 @@ export function downloadDataUrl(dataUrl: string, filename: string) {
 function drawHeader(doc: jsPDF, settings: AppSettings, x: number, y: number): number {
   if (settings.headerLogoBase64) {
     try {
-      doc.addImage(settings.headerLogoBase64, 'PNG', x, y, 60, 20);
+      const isPng = settings.headerLogoBase64.includes('image/png');
+      const format = isPng ? 'PNG' : 'JPEG';
+      doc.addImage(settings.headerLogoBase64, format, x, y, 60, 20);
       return y + 26;
     } catch {
-      // fallback to text
+      try {
+        doc.addImage(settings.headerLogoBase64, 'JPEG', x, y, 60, 20);
+        return y + 26;
+      } catch {
+        try {
+          doc.addImage(settings.headerLogoBase64, 'PNG', x, y, 60, 20);
+          return y + 26;
+        } catch {
+          // fallback to text
+        }
+      }
     }
   }
   doc.setFontSize(16);
@@ -666,19 +678,33 @@ export function generateQuotePdf(quote: Quote, client: Client | undefined, setti
   // ============================ 1. EN-TÊTE ============================
   if (settings.headerLogoBase64) {
     const bannerH = 36;
+    let rendered = false;
     try {
-      doc.addImage(settings.headerLogoBase64, 'PNG', 0, 0, pageW, bannerH);
+      const isPng = settings.headerLogoBase64.includes('image/png');
+      const format = isPng ? 'PNG' : 'JPEG';
+      doc.addImage(settings.headerLogoBase64, format, 0, 0, pageW, bannerH);
+      rendered = true;
     } catch {
       try {
         doc.addImage(settings.headerLogoBase64, 'JPEG', 0, 0, pageW, bannerH);
+        rendered = true;
       } catch {
-        doc.setFillColor(...accent);
-        doc.rect(0, 0, pageW, 36, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(16);
-        doc.setTextColor(255, 255, 255);
-        doc.text(companyName.toUpperCase(), margin, 18);
+        try {
+          doc.addImage(settings.headerLogoBase64, 'PNG', 0, 0, pageW, bannerH);
+          rendered = true;
+        } catch (e) {
+          console.warn('[PDF] Impossible d\'insérer l\'image d\'en-tête :', e);
+        }
       }
+    }
+
+    if (!rendered) {
+      doc.setFillColor(...accent);
+      doc.rect(0, 0, pageW, 36, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.setTextColor(255, 255, 255);
+      doc.text(companyName.toUpperCase(), margin, 18);
     }
     // Espace sous le logo sans encadré intermédiaire
     y = bannerH + 6;
