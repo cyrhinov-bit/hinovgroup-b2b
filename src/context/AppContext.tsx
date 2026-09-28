@@ -2840,8 +2840,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addPosStockMovement = async (movement: Omit<PosStockMovement, 'id' | 'date'>) => {
+    const rawPid = movement.productId;
+    if (!rawPid || rawPid.startsWith('srv-') || rawPid === '00000000-0000-0000-0000-000000000000' || movement.reference?.startsWith('SRV-')) {
+      return; // Ne jamais créer de mouvement de stock pour les services retirés
+    }
+    const resolvedPid = resolveProductUuid(rawPid, movement.reference);
+    if (!isUuid(resolvedPid)) {
+      return;
+    }
     const newMovement: PosStockMovement = {
       ...movement,
+      productId: resolvedPid,
       id: uuidv4(),
       date: new Date().toISOString()
     };
@@ -2864,10 +2873,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   ) => {
     const map = new Map<string, number>();
     for (const d of deltas) {
-      if (!d.productId) continue;
+      if (!d.productId || d.productId.startsWith('srv-') || d.productId === '00000000-0000-0000-0000-000000000000') continue;
       const product = posProducts.find(p => p.id === d.productId);
       if (product && (product.family === 'Service' || (product.reference && product.reference.startsWith('SRV-')))) continue; // Les services (photocopies, scans...) ne sont pas stockés
-      map.set(d.productId, (map.get(d.productId) || 0) + d.quantity);
+      const resolvedPid = resolveProductUuid(d.productId, product?.reference);
+      if (!isUuid(resolvedPid)) continue;
+      map.set(resolvedPid, (map.get(resolvedPid) || 0) + d.quantity);
     }
     if (map.size === 0) return;
     

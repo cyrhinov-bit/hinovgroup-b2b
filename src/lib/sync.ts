@@ -203,6 +203,13 @@ export const isRetiredServicePayload = (type: SyncActionType, payload: any): boo
       return true;
     }
   }
+  if (type === 'INSERT_POS_STOCK_MOVEMENT') {
+    const pid = payload.productId ? String(payload.productId).toLowerCase() : '';
+    const ref = payload.reference ? String(payload.reference).toUpperCase() : '';
+    if (ref.startsWith('SRV-') || pid.startsWith('srv-') || pid === '00000000-0000-0000-0000-000000000000' || !pid || !isUuid(resolveProductUuid(payload.productId, payload.reference))) {
+      return true;
+    }
+  }
   return false;
 };
 
@@ -1542,18 +1549,36 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_POS_STOCK_MOVEMENT': {
-          const resolvedProductId = resolveProductUuid(action.payload.productId);
+          const rawPid = action.payload.productId;
+          const ref = action.payload.reference;
+          if (ref?.startsWith('SRV-') || rawPid?.startsWith('srv-') || rawPid === '00000000-0000-0000-0000-000000000000') {
+            success = true; // Auto-clear retired service movements
+            break;
+          }
+          const resolvedProductId = resolveProductUuid(rawPid, ref);
+          if (!isUuid(resolvedProductId)) {
+            console.warn('[Sync] INSERT_POS_STOCK_MOVEMENT ignoré pour ID produit non-UUID :', rawPid);
+            success = true;
+            break;
+          }
           const { error } = await supabase.from('pos_stock_movements').upsert([{
-            id: action.payload.id,
-            product_id: isUuid(resolvedProductId) ? resolvedProductId : null,
+            id: action.payload.id || uuidv4(),
+            product_id: resolvedProductId,
             type: action.payload.type,
             quantity: action.payload.quantity,
             reference: action.payload.reference || null,
             date: action.payload.date || new Date().toISOString(),
-            created_by: isUuid(action.payload.createdBy) ? action.payload.createdBy : null,
+            created_by: action.payload.createdBy ? String(action.payload.createdBy) : null,
             notes: action.payload.notes || null
           }], { onConflict: 'id' });
-          if (error) console.error('[Sync] INSERT_POS_STOCK_MOVEMENT échoué :', error);
+          if (error) {
+            if (isForeignKeyError(error)) {
+              console.warn('[Sync] INSERT_POS_STOCK_MOVEMENT ignoré (clé étrangère / produit inexistant) :', error.message);
+              success = true;
+              break;
+            }
+            console.error('[Sync] INSERT_POS_STOCK_MOVEMENT échoué :', error);
+          }
           success = checkResult(error);
           break;
         }
@@ -2168,10 +2193,22 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
           if (action.type === 'UPDATE_POS_PRODUCT' || action.type === 'INSERT_POS_PRODUCT' || action.type === 'DELETE_POS_PRODUCT') {
             const resolvedId = resolveProductUuid(action.payload.id, action.payload.reference);
             if (!isUuid(resolvedId)) {
-              console.warn('[SyncReconcile] Action obsolète avec ID non-UUID nettoyée :', action.payload.id);
+              console.warn('[SyncReconcile] Action produit obsolète nettoyée :', action.payload.id);
               continue;
             }
             action.payload.id = resolvedId;
+          }
+          if (action.type === 'INSERT_POS_STOCK_MOVEMENT') {
+            if (isRetiredServicePayload(action.type, action.payload)) {
+              console.warn('[SyncReconcile] Mouvement stock lié à un service retiré nettoyé :', action.payload.productId);
+              continue;
+            }
+            const resolvedPid = resolveProductUuid(action.payload.productId, action.payload.reference);
+            if (!isUuid(resolvedPid)) {
+              console.warn('[SyncReconcile] Mouvement stock avec ID produit non-UUID nettoyé :', action.payload.productId);
+              continue;
+            }
+            action.payload.productId = resolvedPid;
           }
           await queueSyncAction(action.type, action.payload);
           errorsReplayed++;
@@ -2267,17 +2304,22 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
     if (localMovements.length > 0) {
       const { data: remoteMovements } = await supabase.from('pos_stock_movements').select('id');
       const remoteMovIds = new Set((remoteMovements || []).map((m: any) => m.id));
-      const missingMovements = localMovements.filter(m => !remoteMovIds.has(m.id));
+      const missingMovements = localMovements.filter(m => {
+        if (remoteMovIds.has(m.id)) return false;
+        if (isRetiredServicePayload('INSERT_POS_STOCK_MOVEMENT', m)) return false;
+        const resolvedPid = resolveProductUuid(m.productId, m.reference);
+        return isUuid(resolvedPid);
+      });
 
       if (missingMovements.length > 0) {
         const payload = missingMovements.map(m => ({
           id: m.id,
-          product_id: isUuid(m.productId) ? m.productId : null,
+          product_id: resolveProductUuid(m.productId, m.reference),
           type: m.type,
           quantity: m.quantity,
           reference: m.reference || null,
           date: m.date || new Date().toISOString(),
-          created_by: isUuid(m.createdBy) ? m.createdBy : null,
+          created_by: m.createdBy ? String(m.createdBy) : null,
           notes: m.notes || null
         }));
         const { error: movErr } = await supabase.from('pos_stock_movements').upsert(payload, { onConflict: 'id' });
