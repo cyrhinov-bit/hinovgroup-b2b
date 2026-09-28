@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { db } from '../lib/db';
-import { queueSyncAction, processSyncQueue, reconcileLocalPosDataWithCloud, reconcileAllOfflineDataWithCloud } from '../lib/sync';
+import { queueSyncAction, processSyncQueue, reconcileLocalPosDataWithCloud, reconcileAllOfflineDataWithCloud, resolveProductUuid } from '../lib/sync';
 import { v4 as uuidv4 } from 'uuid';
 import toast from 'react-hot-toast';
 import { isProductComplete } from '../features/products/services/ProductService';
@@ -736,19 +736,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (cachedProductCompletions) setProductCompletions(cachedProductCompletions);
       if (cachedImportSessions) setImportSessions(cachedImportSessions);
 
-      const cachedProducts = cachedPosProducts || [];
-      const missingDefaults = DEFAULT_SERVICE_PRODUCTS.filter(def => 
-        !cachedProducts.some(m => m.id === def.id || (m.reference && m.reference === def.reference))
-      );
-      const productsWithServices = [...cachedProducts, ...missingDefaults];
+      const rawCachedProducts = cachedPosProducts || [];
+      const cachedProducts = rawCachedProducts.map((p: any) => ({
+        ...p,
+        id: resolveProductUuid(p.id, p.reference)
+      }));
+
+      const uniqueProductsMap = new Map<string, any>();
+      cachedProducts.forEach((p: any) => uniqueProductsMap.set(p.id, p));
+      DEFAULT_SERVICE_PRODUCTS.forEach(def => {
+        if (!uniqueProductsMap.has(def.id)) {
+          uniqueProductsMap.set(def.id, def);
+        }
+      });
+      const productsWithServices = Array.from(uniqueProductsMap.values());
       setPosProducts(productsWithServices);
       setLoading(false);
 
-      if (missingDefaults.length > 0) {
+      if (rawCachedProducts.some((p: any) => !isUuid(p.id)) || DEFAULT_SERVICE_PRODUCTS.some(def => !cachedProducts.some((p: any) => p.id === def.id))) {
         db.posProducts.setItem('data', productsWithServices).catch(() => {});
-        for (const def of missingDefaults) {
-          queueSyncAction('INSERT_POS_PRODUCT', def).catch(() => {});
-        }
       }
 
       // 2. Fetch from Supabase (if online) and update Cache
@@ -1265,17 +1271,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
             };
           });
           const merged = mergeData(cachedPosProducts, parsed);
-          const missingDefaults = DEFAULT_SERVICE_PRODUCTS.filter(def => 
-            !merged.some((m: any) => m.id === def.id || (m.reference && m.reference === def.reference))
-          );
-          const finalProducts = [...merged, ...missingDefaults];
+          const uniqueMergedMap = new Map<string, any>();
+          merged.forEach((p: any) => {
+            const resolvedId = resolveProductUuid(p.id, p.reference);
+            uniqueMergedMap.set(resolvedId, { ...p, id: resolvedId });
+          });
+          DEFAULT_SERVICE_PRODUCTS.forEach(def => {
+            if (!uniqueMergedMap.has(def.id)) {
+              uniqueMergedMap.set(def.id, def);
+            }
+          });
+          const finalProducts = Array.from(uniqueMergedMap.values());
           setPosProducts(finalProducts);
           await safeSet(db.posProducts, finalProducts);
-          if (missingDefaults.length > 0) {
-            for (const def of missingDefaults) {
-              await queueSyncAction('INSERT_POS_PRODUCT', def);
-            }
-          }
         }
         if (posStockEntriesData && posStockEntriesData.length > 0) {
           const parsed = posStockEntriesData

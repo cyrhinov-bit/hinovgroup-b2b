@@ -4,6 +4,30 @@ import { supabase } from './supabase';
 
 const isUuid = (value?: string) => !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
+export const LEGACY_SERVICE_ID_MAP: Record<string, string> = {
+  'srv-photocopie-nb-recto': '11111111-0000-0000-0000-000000000001',
+  'srv-photocopie-nb-rv': '11111111-0000-0000-0000-000000000002',
+  'srv-impression-nb': '11111111-0000-0000-0000-000000000003',
+  'srv-impression-col': '11111111-0000-0000-0000-000000000004',
+  'srv-scan-a4': '11111111-0000-0000-0000-000000000005',
+  'srv-plast-a4': '11111111-0000-0000-0000-000000000006',
+  'srv-reliure': '11111111-0000-0000-0000-000000000007',
+  'SRV-COP-NB-R': '11111111-0000-0000-0000-000000000001',
+  'SRV-COP-NB-RV': '11111111-0000-0000-0000-000000000002',
+  'SRV-IMP-NB': '11111111-0000-0000-0000-000000000003',
+  'SRV-IMP-COL': '11111111-0000-0000-0000-000000000004',
+  'SRV-SCAN-A4': '11111111-0000-0000-0000-000000000005',
+  'SRV-PLAST-A4': '11111111-0000-0000-0000-000000000006',
+  'SRV-RELIURE': '11111111-0000-0000-0000-000000000007',
+};
+
+export const resolveProductUuid = (id?: string, reference?: string): string => {
+  if (isUuid(id)) return id!;
+  if (id && LEGACY_SERVICE_ID_MAP[id]) return LEGACY_SERVICE_ID_MAP[id];
+  if (reference && LEGACY_SERVICE_ID_MAP[reference]) return LEGACY_SERVICE_ID_MAP[reference];
+  return id || '';
+};
+
 export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT' | 
                              'INSERT_AFFAIRE' | 'UPDATE_AFFAIRE' | 'DELETE_AFFAIRE' |
                              'INSERT_FACTURE_PAIEMENT' |
@@ -1381,8 +1405,15 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_POS_PRODUCT': {
+          const rawId = action.payload.id;
+          const resolvedId = resolveProductUuid(rawId, action.payload.reference);
+          if (!isUuid(resolvedId)) {
+            console.warn('[Sync] INSERT_POS_PRODUCT ignoré pour ID non-UUID :', rawId);
+            success = true;
+            break;
+          }
           const { error } = await supabase.from('pos_products').upsert([{
-            id: action.payload.id,
+            id: resolvedId,
             reference: action.payload.reference, 
             barcode: action.payload.barcode ? action.payload.barcode : null,
             isbn: action.payload.isbn ? action.payload.isbn : null, 
@@ -1407,7 +1438,13 @@ export const processSyncQueue = async () => {
         }
         case 'UPDATE_POS_PRODUCT': {
           const { id, ...data } = action.payload;
-          const mapped: any = { id };
+          const resolvedId = resolveProductUuid(id, data.reference);
+          if (!isUuid(resolvedId)) {
+            console.warn('[Sync] UPDATE_POS_PRODUCT ignoré pour ID non-UUID :', id);
+            success = true;
+            break;
+          }
+          const mapped: any = { id: resolvedId };
           if (data.reference !== undefined) mapped.reference = data.reference;
           if (data.barcode !== undefined) mapped.barcode = data.barcode ? data.barcode : null;
           if (data.isbn !== undefined) mapped.isbn = data.isbn ? data.isbn : null;
@@ -1431,13 +1468,18 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'DELETE_POS_PRODUCT': {
-          const { error } = await supabase.from('pos_products').delete().eq('id', action.payload.id);
+          const resolvedId = resolveProductUuid(action.payload.id);
+          if (!isUuid(resolvedId)) {
+            success = true;
+            break;
+          }
+          const { error } = await supabase.from('pos_products').delete().eq('id', resolvedId);
           if (error) {
             if (isNetworkOrTransientError(error)) {
               throw new Error(`[NetworkError] ${error.message}`);
             }
             console.warn('[Sync] DELETE_POS_PRODUCT impossible (contrainte FK), passage en is_active=false :', error.message);
-            const { error: updateError } = await supabase.from('pos_products').update({ is_active: false }).eq('id', action.payload.id);
+            const { error: updateError } = await supabase.from('pos_products').update({ is_active: false }).eq('id', resolvedId);
             success = checkResult(updateError);
           } else {
             success = true;
@@ -1445,9 +1487,10 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_POS_STOCK_MOVEMENT': {
+          const resolvedProductId = resolveProductUuid(action.payload.productId);
           const { error } = await supabase.from('pos_stock_movements').upsert([{
             id: action.payload.id,
-            product_id: isUuid(action.payload.productId) ? action.payload.productId : null,
+            product_id: isUuid(resolvedProductId) ? resolvedProductId : null,
             type: action.payload.type,
             quantity: action.payload.quantity,
             reference: action.payload.reference || null,
@@ -2055,17 +2098,29 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
       await ensureSupabaseAuth().catch(() => {});
     }
 
-    // 1. Rejouer d'abord les erreurs présentes dans syncErrors
+    // 1. Rejouer d'abord les erreurs présentes dans syncErrors avec auto-réparation UUID
     const syncErrors = (await db.syncErrors.getItem<any[]>('errors')) || [];
     if (syncErrors.length > 0) {
       for (const errItem of syncErrors) {
         if (errItem?.action) {
-          await queueSyncAction(errItem.action.type, errItem.action.payload);
+          const action = errItem.action;
+          if (action.type === 'UPDATE_POS_PRODUCT' || action.type === 'INSERT_POS_PRODUCT' || action.type === 'DELETE_POS_PRODUCT') {
+            const resolvedId = resolveProductUuid(action.payload.id, action.payload.reference);
+            if (!isUuid(resolvedId)) {
+              console.warn('[SyncReconcile] Action obsolète avec ID non-UUID nettoyée :', action.payload.id);
+              continue;
+            }
+            action.payload.id = resolvedId;
+          }
+          await queueSyncAction(action.type, action.payload);
           errorsReplayed++;
         }
       }
       // Vider le store d'erreurs une fois remises dans la file
       await db.syncErrors.setItem('errors', []);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: 0 } }));
+      }
     }
 
     // 2. Synchroniser les sessions de caisse locales manquantes
