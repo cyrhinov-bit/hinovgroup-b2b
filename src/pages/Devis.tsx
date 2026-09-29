@@ -1,5 +1,24 @@
-import { useState, useEffect } from 'react';
-import { Plus, Download, Send, MessageCircle, Edit2, Trash2, Check, X, Clock, Eye, User } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { 
+  Plus, 
+  Download, 
+  Send, 
+  MessageCircle, 
+  Edit2, 
+  Trash2, 
+  Check, 
+  X, 
+  Clock, 
+  Eye, 
+  User, 
+  Filter, 
+  RotateCcw, 
+  Search, 
+  FileText, 
+  CheckCircle,
+  Building2,
+  Calendar
+} from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -9,16 +28,20 @@ import { SendModal } from '../components/SendModal';
 import { ReportPdfPreview, type ReportPdfPreviewData } from '../components/ReportPdfPreview';
 import type { Quote } from '../context/AppContext';
 
+type PeriodFilter = 'ALL' | 'TODAY' | '7_DAYS' | 'THIS_MONTH' | 'THIS_QUARTER' | 'THIS_YEAR';
+
 export function Devis() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { currentUser } = useAuth();
   const { quotes, clients, settings, updateQuoteStatus, deleteQuote, services, users } = useAppContext();
   const { confirm } = useConfirm();
+
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [serviceFilter, setServiceFilter] = useState('');
   const [authorFilter, setAuthorFilter] = useState<string>(searchParams.get('authorId') || '');
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('ALL');
   const [activeSendQuote, setActiveSendQuote] = useState<Quote | null>(null);
   const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
 
@@ -29,26 +52,115 @@ export function Devis() {
     }
   }, [searchParams]);
 
+  const isDirector = currentUser?.role === 'Directeur' || currentUser?.role === 'SuperAdmin' || currentUser?.role === 'Directeur adjoint';
+  const isResponsable = currentUser?.role === 'Responsable';
+
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Inconnu';
   const getServiceName = (id?: string) => services.find(s => s.id === id)?.name || '-';
   const getUserName = (id?: string) => users.find(u => u.id === id)?.name || 'Non assigné';
 
-  const isDirector = currentUser?.role === 'Directeur' || currentUser?.role === 'SuperAdmin' || currentUser?.role === 'Directeur adjoint';
+  // Helper date filtering
+  const isDateInPeriod = (dateStr?: string, period: PeriodFilter = periodFilter): boolean => {
+    if (period === 'ALL') return true;
+    if (!dateStr) return true;
+    
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return true;
+    const now = new Date();
+    
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    switch (period) {
+      case 'TODAY':
+        return d >= startOfToday;
+      case '7_DAYS': {
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        return d >= weekAgo;
+      }
+      case 'THIS_MONTH':
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      case 'THIS_QUARTER': {
+        const currentQuarter = Math.floor(now.getMonth() / 3);
+        const itemQuarter = Math.floor(d.getMonth() / 3);
+        return itemQuarter === currentQuarter && d.getFullYear() === now.getFullYear();
+      }
+      case 'THIS_YEAR':
+        return d.getFullYear() === now.getFullYear();
+      default:
+        return true;
+    }
+  };
 
-  const allowedQuotes = isDirector
-    ? quotes
-    : quotes.filter(q => q.serviceId === currentUser?.serviceId || q.commercialId === currentUser?.id);
+  const allowedQuotes = useMemo(() => {
+    if (isDirector) return quotes;
+    if (isResponsable) {
+      return quotes.filter(q => q.serviceId === currentUser?.serviceId || q.commercialId === currentUser?.id);
+    }
+    return quotes.filter(q => q.commercialId === currentUser?.id);
+  }, [quotes, isDirector, isResponsable, currentUser]);
 
-  const filteredQuotes = allowedQuotes.filter(q => {
-    const matchClient = getClientName(q.clientId).toLowerCase().includes(filter.toLowerCase()) || 
-      q.quoteNumber.toLowerCase().includes(filter.toLowerCase()) || 
-      q.subject.toLowerCase().includes(filter.toLowerCase()) ||
-      getUserName(q.commercialId).toLowerCase().includes(filter.toLowerCase());
-    const matchStatus = statusFilter ? q.status.toLowerCase() === statusFilter.toLowerCase() : true;
-    const matchService = serviceFilter ? q.serviceId === serviceFilter : true;
-    const matchAuthor = authorFilter ? q.commercialId === authorFilter : true;
-    return matchClient && matchStatus && matchService && matchAuthor;
-  }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const filteredQuotes = useMemo(() => {
+    return allowedQuotes.filter(q => {
+      // 1. Période
+      if (!isDateInPeriod(q.date)) return false;
+
+      // 2. Recherche
+      if (filter.trim()) {
+        const qText = filter.toLowerCase();
+        const clientName = getClientName(q.clientId).toLowerCase();
+        const authorName = getUserName(q.commercialId).toLowerCase();
+        const subject = (q.subject || '').toLowerCase();
+        const num = (q.quoteNumber || '').toLowerCase();
+        if (!clientName.includes(qText) && !authorName.includes(qText) && !subject.includes(qText) && !num.includes(qText)) {
+          return false;
+        }
+      }
+
+      // 3. Statut
+      if (statusFilter && q.status.toLowerCase() !== statusFilter.toLowerCase()) {
+        return false;
+      }
+
+      // 4. Service
+      if (serviceFilter && q.serviceId !== serviceFilter) {
+        return false;
+      }
+
+      // 5. Utilisateur / Auteur
+      if (authorFilter) {
+        const matchAuthor = q.commercialId === authorFilter || 
+          (!q.commercialId && users.find(u => u.id === authorFilter)?.serviceId === q.serviceId);
+        if (!matchAuthor) return false;
+      }
+
+      return true;
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [allowedQuotes, filter, statusFilter, serviceFilter, authorFilter, periodFilter, clients, users]);
+
+  // KPIs pour la sélection filtrée
+  const totalFilteredCount = filteredQuotes.length;
+  const totalFilteredAmount = filteredQuotes.filter(q => q.status !== 'Refusé').reduce((sum, q) => sum + q.total, 0);
+  const acceptedFiltered = filteredQuotes.filter(q => q.status === 'Accepté');
+  const acceptedFilteredAmount = acceptedFiltered.reduce((sum, q) => sum + q.total, 0);
+  const conversionRate = totalFilteredCount > 0 ? Math.round((acceptedFiltered.length / totalFilteredCount) * 100) : 0;
+
+  // Liste des utilisateurs éligibles pour le filtre
+  const filterableUsers = useMemo(() => {
+    if (isDirector) return users;
+    if (isResponsable) return users.filter(u => u.serviceId === currentUser?.serviceId);
+    return [];
+  }, [users, isDirector, isResponsable, currentUser]);
+
+  const hasActiveFilters = filter !== '' || statusFilter !== '' || serviceFilter !== '' || authorFilter !== '' || periodFilter !== 'ALL';
+
+  const resetFilters = () => {
+    setFilter('');
+    setStatusFilter('');
+    setServiceFilter('');
+    setAuthorFilter('');
+    setPeriodFilter('ALL');
+    setSearchParams({});
+  };
 
   const getBadgeColor = (status: string) => {
     switch (status) {
@@ -83,11 +195,12 @@ export function Devis() {
 
   return (
     <div className="dashboard">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+      {/* Entête */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h2 style={{ margin: 0 }}>Gestion des Devis</h2>
+          <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>Gestion & Suivi des Devis</h2>
           <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>
-            Créez, personnalisez et suivez l'état de vos propositions commerciales.
+            Consultez, filtrez par collaborateur et suivez l'avancement des devis commerciaux.
           </p>
         </div>
         <button className="btn btn-primary" onClick={() => navigate('/devis/nouveau')} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -95,66 +208,174 @@ export function Devis() {
         </button>
       </div>
 
-      <div className="card">
-        <div className="responsive-flex-actions" style={{ marginBottom: '24px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          <input 
-            type="text" 
-            className="table-input" 
-            placeholder="Rechercher par client, numéro, sujet..." 
-            style={{ maxWidth: '300px', flex: 1 }} 
-            value={filter}
-            onChange={e => setFilter(e.target.value)}
-          />
-          <select 
-            className="table-input" 
-            style={{ maxWidth: '180px' }}
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-          >
-            <option value="">Tous les statuts</option>
-            <option value="Brouillon">Brouillon</option>
-            <option value="Envoyé">Envoyé</option>
-            <option value="Accepté">Accepté</option>
-            <option value="Révision">Révision</option>
-            <option value="Refusé">Refusé</option>
-          </select>
+      {/* ─── BANDEAU DE FILTRES AVANCÉS ───────────────────────── */}
+      <div className="card" style={{ marginBottom: '20px', padding: '16px 20px', border: hasActiveFilters ? '1.5px solid rgba(37, 99, 235, 0.4)' : '1px solid var(--color-border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: 700 }}>
+            <Filter size={16} color="var(--color-primary)" />
+            <span>Filtres de recherche</span>
+            {authorFilter && (
+              <span className="badge-status" style={{ background: 'rgba(37, 99, 235, 0.12)', color: '#2563EB', fontSize: '11px', fontWeight: 600 }}>
+                👤 {getUserName(authorFilter)}
+              </span>
+            )}
+            {hasActiveFilters && (
+              <span className="badge-status" style={{ background: 'var(--color-surface-alt)', color: 'var(--color-text-muted)', fontSize: '11px' }}>
+                {totalFilteredCount} devis trouvé(s)
+              </span>
+            )}
+          </div>
 
-          {isDirector && (
-            <>
+          {hasActiveFilters && (
+            <button 
+              className="btn btn-secondary" 
+              onClick={resetFilters}
+              style={{ fontSize: '0.8rem', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
+            >
+              <RotateCcw size={12} />
+              <span>Réinitialiser les filtres</span>
+            </button>
+          )}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', alignItems: 'center' }}>
+          {/* Recherche */}
+          <div style={{ position: 'relative' }}>
+            <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+            <input 
+              type="text" 
+              className="table-input" 
+              placeholder="Client, N° devis, sujet..." 
+              style={{ paddingLeft: '32px', width: '100%', fontSize: '0.85rem' }} 
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
+            />
+          </div>
+
+          {/* Filtre par Utilisateur / Auteur (Pour Admin et Responsables) */}
+          {(isDirector || isResponsable) && (
+            <div>
               <select 
                 className="table-input" 
-                style={{ maxWidth: '200px' }}
+                style={{ width: '100%', fontSize: '0.85rem', fontWeight: authorFilter ? 700 : 400, borderColor: authorFilter ? '#2563EB' : undefined }}
+                value={authorFilter}
+                onChange={e => {
+                  setAuthorFilter(e.target.value);
+                  if (e.target.value) {
+                    setSearchParams({ authorId: e.target.value });
+                  } else {
+                    setSearchParams({});
+                  }
+                }}
+              >
+                <option value="">👤 Tous les utilisateurs / auteurs</option>
+                {filterableUsers.map(u => {
+                  const userQuoteCount = quotes.filter(q => q.commercialId === u.id).length;
+                  return (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.role}) — {userQuoteCount} devis
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
+
+          {/* Période */}
+          <div>
+            <select
+              className="table-input"
+              style={{ width: '100%', fontSize: '0.85rem' }}
+              value={periodFilter}
+              onChange={e => setPeriodFilter(e.target.value as PeriodFilter)}
+            >
+              <option value="ALL">📅 Toute la période</option>
+              <option value="TODAY">Aujourd'hui</option>
+              <option value="7_DAYS">7 derniers jours</option>
+              <option value="THIS_MONTH">Ce mois-ci</option>
+              <option value="THIS_QUARTER">Ce trimestre</option>
+              <option value="THIS_YEAR">Cette année</option>
+            </select>
+          </div>
+
+          {/* Statut */}
+          <div>
+            <select 
+              className="table-input" 
+              style={{ width: '100%', fontSize: '0.85rem' }}
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+            >
+              <option value="">🏷️ Tous les statuts</option>
+              <option value="Brouillon">Brouillon</option>
+              <option value="Envoyé">Envoyé</option>
+              <option value="Accepté">Accepté</option>
+              <option value="Révision">Révision</option>
+              <option value="Refusé">Refusé</option>
+            </select>
+          </div>
+
+          {/* Service (Direction) */}
+          {isDirector && (
+            <div>
+              <select 
+                className="table-input" 
+                style={{ width: '100%', fontSize: '0.85rem' }}
                 value={serviceFilter}
                 onChange={e => setServiceFilter(e.target.value)}
               >
-                <option value="">Tous les services</option>
+                <option value="">🏢 Tous les services</option>
                 {services.map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
-
-              <select 
-                className="table-input" 
-                style={{ maxWidth: '220px' }}
-                value={authorFilter}
-                onChange={e => setAuthorFilter(e.target.value)}
-              >
-                <option value="">Tous les responsables</option>
-                {users.map(u => (
-                  <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-                ))}
-              </select>
-            </>
+            </div>
           )}
         </div>
+      </div>
 
+      {/* ─── MINI KPIS DE LA SÉLECTION FILTRÉE ─────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+        <div className="card" style={{ padding: '14px 18px', borderLeft: '4px solid #3B82F6' }}>
+          <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Devis Sélectionnés</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text)', marginTop: '2px' }}>
+            {totalFilteredCount}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#2563EB', fontWeight: 600, marginTop: '2px' }}>
+            {totalFilteredAmount.toLocaleString('fr-FR')} FCFA émis
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '14px 18px', borderLeft: '4px solid #10B981' }}>
+          <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 600, textTransform: 'uppercase' }}>Devis Acceptés</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#059669', marginTop: '2px' }}>
+            {acceptedFiltered.length}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: '2px' }}>
+            {acceptedFilteredAmount.toLocaleString('fr-FR')} FCFA ({conversionRate}%)
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '14px 18px', borderLeft: '4px solid #F59E0B' }}>
+          <div style={{ fontSize: '0.72rem', color: '#D97706', fontWeight: 600, textTransform: 'uppercase' }}>En Négociation / Attente</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#D97706', marginTop: '2px' }}>
+            {filteredQuotes.filter(q => q.status === 'Envoyé' || q.status === 'Brouillon' || q.status === 'Révision').length}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+            Pipeline commercial actif
+          </div>
+        </div>
+      </div>
+
+      {/* ─── TABLEAU DES DEVIS ────────────────────────────────── */}
+      <div className="card">
         <div className="table-responsive">
           <table className="data-table responsive-table">
             <thead>
               <tr>
                 <th>N° Devis</th>
                 <th>Client</th>
-                {isDirector && <th>Auteur / Responsable</th>}
+                {(isDirector || isResponsable) && <th>Auteur / Utilisateur</th>}
                 <th>Service</th>
                 <th>Sujet</th>
                 <th style={{ textAlign: 'right' }}>Montant Total</th>
@@ -167,16 +388,29 @@ export function Devis() {
               {filteredQuotes.map(q => (
                 <tr key={q.id}>
                   <td data-label="N° Devis">
-                    <div style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{q.quoteNumber}</div>
+                    <div style={{ fontWeight: 700, color: 'var(--color-primary)' }}>{q.quoteNumber}</div>
                   </td>
                   <td data-label="Client">
                     <strong>{getClientName(q.clientId)}</strong>
                   </td>
-                  {isDirector && (
+                  {(isDirector || isResponsable) && (
                     <td data-label="Auteur">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <User size={14} style={{ color: 'var(--color-text-muted)' }} />
-                        <span style={{ fontWeight: 500 }}>{getUserName(q.commercialId)}</span>
+                      <div 
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                        title="Filtrer uniquement sur ce collaborateur"
+                        onClick={() => {
+                          if (q.commercialId) {
+                            setAuthorFilter(q.commercialId);
+                            setSearchParams({ authorId: q.commercialId });
+                          }
+                        }}
+                      >
+                        <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'var(--color-primary-tint)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700 }}>
+                          {getUserName(q.commercialId).substring(0, 2).toUpperCase()}
+                        </div>
+                        <span style={{ fontWeight: 600, color: authorFilter === q.commercialId ? '#2563EB' : 'var(--color-text)' }}>
+                          {getUserName(q.commercialId)}
+                        </span>
                       </div>
                     </td>
                   )}
@@ -256,8 +490,8 @@ export function Devis() {
               ))}
               {filteredQuotes.length === 0 && (
                 <tr>
-                  <td colSpan={isDirector ? 9 : 8} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
-                    Aucun devis trouvé.
+                  <td colSpan={(isDirector || isResponsable) ? 9 : 8} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
+                    Aucun devis trouvé pour les critères de filtre sélectionnés.
                   </td>
                 </tr>
               )}
