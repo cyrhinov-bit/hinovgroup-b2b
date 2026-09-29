@@ -607,6 +607,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [suspendedCarts, setSuspendedCarts] = useState<SuspendedCart[]>([]);
   const [productCompletions, setProductCompletions] = useState<ProductCompletion[]>([]);
   const [importSessions, setImportSessions] = useState<ImportSession[]>([]);
+  const [posSettings, setPosSettingsState] = useState<PosSettings>({ libraryName: 'Ma Librairie', address: '', phone: '', email: '', currency: 'FCFA', ticketMessage: 'Merci pour votre achat !', printerType: 'Thermique 80mm' });
   const [posWorkspace, setPosWorkspace] = useState<PosWorkspace>({ active: false });
 
   const inFlightRefreshRef = useRef<Promise<void> | null>(null);
