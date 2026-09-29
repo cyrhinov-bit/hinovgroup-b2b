@@ -387,6 +387,19 @@ export function Factures() {
     return invoices.filter(i => i.commercialId === currentUser?.id);
   }, [invoices, isDirector, isResponsable, currentUser]);
 
+  const allowedQuotes = useMemo(() => {
+    if (isDirector) return quotes;
+    if (isResponsable) {
+      return quotes.filter(q => q.serviceId === currentUser?.serviceId || q.commercialId === currentUser?.id);
+    }
+    return quotes.filter(q => q.commercialId === currentUser?.id);
+  }, [quotes, isDirector, isResponsable, currentUser]);
+
+  const allowedClients = useMemo(() => {
+    if (isDirector) return clients;
+    return clients.filter(c => c.commercialId === currentUser?.id);
+  }, [clients, isDirector, currentUser]);
+
   const filteredInvoices = useMemo(() => {
     return allowedInvoices.filter(inv => {
       const client = getClient(inv.clientId);
@@ -1126,7 +1139,7 @@ export function Factures() {
                   onChange={e => handleSelectQuoteInForm(e.target.value)}
                 >
                   <option value="">-- Sélectionner un devis accepté --</option>
-                  {quotes.map(q => (
+                  {allowedQuotes.map(q => (
                     <option key={q.id} value={q.id}>
                       {q.quoteNumber} — {getClientName(q.clientId)} — {q.total.toLocaleString('fr-FR')} FCFA ({q.status})
                     </option>
@@ -1146,7 +1159,7 @@ export function Factures() {
                     onChange={e => setFormClientId(e.target.value)}
                   >
                     <option value="">-- Choisir un client --</option>
-                    {clients.map(c => (
+                    {allowedClients.map(c => (
                       <option key={c.id} value={c.id}>{c.company || c.name}</option>
                     ))}
                   </select>

@@ -42,7 +42,17 @@ export function QuoteCreation() {
   const clientIdParam = searchParams.get('clientId');
   const serviceIdParam = searchParams.get('serviceId');
   const { clients, prestations, addQuote, updateQuote, services, quotes, settings, affaires, users } = useAppContext();
-  const { currentUser } = useAuth();
+  const { currentUser: authUser } = useAuth();
+  const currentUser = users.find(u => u.id === authUser?.id) || authUser;
+
+  const isDirector = currentUser?.role === 'Directeur' || currentUser?.role === 'SuperAdmin' || currentUser?.role === 'Directeur adjoint';
+
+  const sourceQuote = editId ? quotes.find(q => q.id === editId) : null;
+
+  const allowedClients = useMemo(() => {
+    if (isDirector) return clients;
+    return clients.filter(c => c.commercialId === currentUser?.id || c.id === (sourceQuote?.clientId || clientIdParam));
+  }, [clients, isDirector, currentUser, sourceQuote, clientIdParam]);
 
   // Sequential quote number generator
   const nextSequentialNumber = useMemo(() => {
@@ -70,8 +80,6 @@ export function QuoteCreation() {
       return null;
     }
   };
-
-  const sourceQuote = editId ? quotes.find(q => q.id === editId) : null;
 
   // Form states
   const [clientId, setClientId] = useState(sourceQuote?.clientId || clientIdParam || '');
@@ -387,7 +395,7 @@ export function QuoteCreation() {
                 setAffaireId('');
               }}>
                 <option value="">Sélectionner un client...</option>
-                {clients.map(c => <option key={c.id} value={c.id}>{c.name || c.contact}</option>)}
+                {allowedClients.map(c => <option key={c.id} value={c.id}>{c.name || c.contact}</option>)}
               </select>
             </div>
 
