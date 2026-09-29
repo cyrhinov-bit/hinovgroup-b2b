@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
@@ -503,8 +503,8 @@ interface AppState {
 
   const defaultSettings: AppSettings = { companyName: 'Hinov', companyLogo: '', companyAddress: '', companySiret: '', companyTva: '', defaultTerms: '', commissionRate: 10 };
 
-// Helper pour éviter tout blocage réseau infini sur les requêtes asynchrones (3.5s max)
-const withTimeout = async <T,>(promiseOrThenable: any, ms: number = 3500): Promise<T> => {
+// Helper pour éviter tout blocage réseau infini sur les requêtes asynchrones (7.5s max)
+const withTimeout = async <T,>(promiseOrThenable: any, ms: number = 7500): Promise<T> => {
   let timer: any;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error('Délai dépassé')), ms);
@@ -517,6 +517,17 @@ const withTimeout = async <T,>(promiseOrThenable: any, ms: number = 3500): Promi
   } finally {
     clearTimeout(timer);
   }
+};
+
+// Helper pour exécuter des requêtes par lots contrôlés (évite de saturer le pool de 6 connexions HTTP du navigateur)
+const fetchInBatches = async <T,>(tasks: (() => Promise<T>)[], batchSize = 6): Promise<T[]> => {
+  const results: T[] = [];
+  for (let i = 0; i < tasks.length; i += batchSize) {
+    const chunk = tasks.slice(i, i + batchSize);
+    const chunkResults = await Promise.all(chunk.map(fn => fn()));
+    results.push(...chunkResults);
+  }
+  return results;
 };
 
 // Safe reading from LocalForage
@@ -596,16 +607,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [suspendedCarts, setSuspendedCarts] = useState<SuspendedCart[]>([]);
   const [productCompletions, setProductCompletions] = useState<ProductCompletion[]>([]);
   const [importSessions, setImportSessions] = useState<ImportSession[]>([]);
-  const [posSettings, setPosSettingsState] = useState<PosSettings>({ libraryName: 'Ma Librairie', address: '', phone: '', email: '', currency: 'FCFA', ticketMessage: 'Merci pour votre achat !', printerType: 'Thermique 80mm' });
   const [posWorkspace, setPosWorkspace] = useState<PosWorkspace>({ active: false });
+
+  const inFlightRefreshRef = useRef<Promise<void> | null>(null);
+  const lastRefreshTimeRef = useRef<number>(0);
 
   // Load from offline cache first, then fetch from Supabase if online
   const refreshData = useCallback(async (isBackground: boolean = false) => {
-    if (!isBackground) {
-      setLoading(true);
+    // Si une synchronisation d'arrière-plan est demandée mais qu'un rafraîchissement a eu lieu il y a moins de 5 secondes, ignorer
+    if (isBackground && Date.now() - lastRefreshTimeRef.current < 5000) {
+      return;
     }
-    try {
-      const [
+
+    // Si un rafraîchissement est déjà en cours, réutiliser la promesse existante pour éviter de doubler les requêtes
+    if (inFlightRefreshRef.current) {
+      return inFlightRefreshRef.current;
+    }
+
+    const executeRefresh = async () => {
+      if (!isBackground) {
+        setLoading(true);
+      }
+      try {
+        const [
         cachedUsers, cachedClients, cachedAffaires, cachedFacturePaiements, cachedCouts,
         cachedScoringRules, cachedObjectifs, cachedClassements, cachedPrimes, cachedPrimeAuditLogs,
         cachedQuotes, cachedSales, cachedCommissions, cachedInstallments, cachedProspects,
@@ -766,14 +790,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const lastSyncTime = await db.syncMetadata.getItem<string>('lastSyncTime');
         const syncTimestamp = new Date().toISOString();
 
-        // Chaque table est récupérée isolément avec timeout court (3.5s)
+        // Chaque table est récupérée isolément avec timeout sécurisé (7.5s)
         const safeFetch = async (queryFn: () => any, allowDelta: boolean = false): Promise<any> => {
           try {
             let query = queryFn();
             if (allowDelta && lastSyncTime) {
                query = query.gt('updated_at', lastSyncTime);
             }
-            const res = await withTimeout<any>(query, 3500);
+            const res = await withTimeout<any>(query, 7500);
             if (res && res.error) {
               return null;
             }
@@ -782,6 +806,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
             return null;
           }
         };
+
+        const fetchTasks = [
+          () => safeFetch(() => supabase.from('profiles').select('*')),
+          () => currentUser ? safeFetch(() => supabase.from('clients').select('*')) : Promise.resolve(null),
+          () => safeFetch(() => supabase.from('services').select('*')),
+          () => safeFetch(() => supabase.from('prestations').select('*')),
+          () => safeFetch(() => supabase.from('settings').select('*').single()),
+          () => currentUser ? safeFetch(() => supabase.from('quotes').select('*, quote_lines(*)')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('ventes').select('*, vente_lines(*)')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('commissions').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('vente_echeances').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('affaires').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('facture_paiements').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('couts').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('scoring_rules').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('objectifs').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('classements').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('primes').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('prime_audit_logs').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('prospects').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('prospect_activities').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('prospect_follow_ups').select('*')) : Promise.resolve(null),
+          () => safeFetch(() => supabase.from('categories').select('*')),
+          () => currentUser ? safeFetch(() => supabase.from('activity_reports').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('weekly_reports').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('v2_daily_reports').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('v2_weekly_reports').select('*')) : Promise.resolve(null),
+          () => safeFetch(() => supabase.from('pos_categories').select('*')),
+          () => safeFetch(() => supabase.from('pos_brands').select('*')),
+          () => safeFetch(() => supabase.from('pos_suppliers').select('*')),
+          () => safeFetch(() => supabase.from('pos_products').select('*')),
+          () => safeFetch(() => supabase.from('pos_stock_entries').select('*, pos_stock_entry_lines(*)')),
+          () => safeFetch(() => supabase.from('pos_stock_movements').select('*')),
+          () => safeFetch(() => supabase.from('pos_inventories').select('*, pos_inventory_lines(*)')),
+          () => safeFetch(() => supabase.from('pos_cash_sessions').select('*')),
+          () => safeFetch(() => supabase.from('pos_transactions').select('*, pos_transaction_lines(*), pos_payments(*)')),
+          () => safeFetch(() => supabase.from('pos_payments').select('*')),
+          () => safeFetch(() => supabase.from('pos_discounts').select('*')),
+          () => safeFetch(() => supabase.from('pos_settings').select('*').single()),
+          () => currentUser ? safeFetch(() => supabase.from('crm_documents').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('crm_folders').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('notifications').select('*')) : Promise.resolve(null),
+          () => safeFetch(() => supabase.from('pos_returns').select('*, pos_return_lines(*)'))
+        ];
 
         const [
           profilesData, clientsData, servicesData,
@@ -798,49 +866,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           posCashSessionsData, posTransactionsData, posPaymentsData,
           posDiscountsData, posSettingsData, crmDocumentsData, crmFoldersData, notificationsData,
           posReturnsData
-        ] = await Promise.all([
-          safeFetch(() => supabase.from('profiles').select('*')),
-          currentUser ? safeFetch(() => supabase.from('clients').select('*')) : Promise.resolve(null),
-          safeFetch(() => supabase.from('services').select('*')),
-          safeFetch(() => supabase.from('prestations').select('*')),
-          safeFetch(() => supabase.from('settings').select('*').single()),
-          currentUser ? safeFetch(() => supabase.from('quotes').select('*, quote_lines(*)')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('ventes').select('*, vente_lines(*)')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('commissions').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('vente_echeances').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('affaires').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('facture_paiements').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('couts').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('scoring_rules').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('objectifs').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('classements').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('primes').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('prime_audit_logs').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('prospects').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('prospect_activities').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('prospect_follow_ups').select('*')) : Promise.resolve(null),
-          safeFetch(() => supabase.from('categories').select('*')),
-          currentUser ? safeFetch(() => supabase.from('activity_reports').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('weekly_reports').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('v2_daily_reports').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('v2_weekly_reports').select('*')) : Promise.resolve(null),
-          safeFetch(() => supabase.from('pos_categories').select('*')),
-          safeFetch(() => supabase.from('pos_brands').select('*')),
-          safeFetch(() => supabase.from('pos_suppliers').select('*')),
-          safeFetch(() => supabase.from('pos_products').select('*')),
-          safeFetch(() => supabase.from('pos_stock_entries').select('*, pos_stock_entry_lines(*)')),
-          safeFetch(() => supabase.from('pos_stock_movements').select('*')),
-          safeFetch(() => supabase.from('pos_inventories').select('*, pos_inventory_lines(*)')),
-          safeFetch(() => supabase.from('pos_cash_sessions').select('*')),
-          safeFetch(() => supabase.from('pos_transactions').select('*, pos_transaction_lines(*), pos_payments(*)')),
-          safeFetch(() => supabase.from('pos_payments').select('*')),
-          safeFetch(() => supabase.from('pos_discounts').select('*')),
-          safeFetch(() => supabase.from('pos_settings').select('*').single()),
-          currentUser ? safeFetch(() => supabase.from('crm_documents').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('crm_folders').select('*')) : Promise.resolve(null),
-          currentUser ? safeFetch(() => supabase.from('notifications').select('*')) : Promise.resolve(null),
-          safeFetch(() => supabase.from('pos_returns').select('*, pos_return_lines(*)')),
-        ]);
+        ] = await fetchInBatches(fetchTasks, 6);
 
         if (profilesData && profilesData.length > 0) {
           const parsedUsers = profilesData.map((p: any) => ({
@@ -1376,12 +1402,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         // Update last sync time for next delta fetch
         await db.syncMetadata.setItem('lastSyncTime', syncTimestamp);
+        lastRefreshTimeRef.current = Date.now();
       }
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
+      inFlightRefreshRef.current = null;
     }
+  };
+
+    inFlightRefreshRef.current = executeRefresh();
+    return inFlightRefreshRef.current;
   }, [currentUser]);
 
   useEffect(() => { refreshData(); }, [refreshData]);
@@ -1395,7 +1427,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (refreshTimeout) clearTimeout(refreshTimeout);
       refreshTimeout = setTimeout(() => {
         refreshData(true);
-      }, 500);
+      }, 1200);
     };
 
     const channel = supabase.channel('pos-realtime-sync')
@@ -1409,12 +1441,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .on('postgres_changes', { event: '*', schema: 'public' }, debouncedRefresh)
       .subscribe();
 
-    // Heartbeat polling (toutes les 15s) en tâche de fond transparente
+    // Heartbeat polling (toutes les 45s) en tâche de fond transparente
     const heartbeatInterval = setInterval(() => {
       if (navigator.onLine && document.visibilityState === 'visible') {
         refreshData(true);
       }
-    }, 15000);
+    }, 45000);
       
     return () => {
       if (refreshTimeout) clearTimeout(refreshTimeout);
