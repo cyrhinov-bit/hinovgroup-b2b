@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import type { Quote, Sale, Client, AppSettings, ActivityReport, WeeklyReport, User, Prospect, Service, Category } from '../context/AppContext';
+import type { Quote, Sale, Client, AppSettings, ActivityReport, WeeklyReport, User, Prospect, Service, Category, Invoice, InvoicePayment } from '../context/AppContext';
 
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -1368,4 +1368,393 @@ export function generateSalePdf(sale: Sale, client: Client | undefined, settings
 
   const blob = doc.output('blob');
   downloadBlob(blob, `Vente_${sale.saleNumber}.pdf`);
+}
+
+export function generateInvoicePdf(
+  invoice: Invoice,
+  client: Client | undefined,
+  quote: Quote | undefined,
+  settings: AppSettings,
+  payments: InvoicePayment[] = []
+): Blob {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 16;
+  const contentW = pageW - margin * 2; // 178 mm
+  const accent: [number, number, number] = [2, 132, 199]; // Bleu Facture #0284C7
+  const accentLight = mixWithWhite(accent, 0.92);
+  const accentSoft = mixWithWhite(accent, 0.75);
+  const dark: [number, number, number] = [30, 34, 42];
+  const muted: [number, number, number] = [100, 112, 125];
+  const neutralLight: [number, number, number] = [246, 248, 250];
+  const neutralBorder: [number, number, number] = [222, 226, 230];
+  const companyName = settings.companyName || 'HINOV';
+  const dateFr = formatDateFr(invoice.issueDate);
+  const dueDateFr = formatDateFr(invoice.dueDate);
+  const deliveryDateFr = invoice.deliveryDate ? formatDateFr(invoice.deliveryDate) : '-';
+  let y = 0;
+
+  // 1. EN-TÊTE
+  if (settings.headerLogoBase64) {
+    const bannerH = 34;
+    let rendered = false;
+    try {
+      const isPng = settings.headerLogoBase64.includes('image/png');
+      const format = isPng ? 'PNG' : 'JPEG';
+      doc.addImage(settings.headerLogoBase64, format, 0, 0, pageW, bannerH);
+      rendered = true;
+    } catch {
+      try {
+        doc.addImage(settings.headerLogoBase64, 'JPEG', 0, 0, pageW, bannerH);
+        rendered = true;
+      } catch {}
+    }
+    if (!rendered) {
+      doc.setFillColor(...accent);
+      doc.rect(0, 0, pageW, 36, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.setTextColor(255, 255, 255);
+      doc.text(companyName.toUpperCase(), margin, 18);
+    }
+    y = bannerH + 14;
+  } else {
+    doc.setFillColor(...accent);
+    doc.rect(0, 0, pageW, 38, 'F');
+    doc.setFillColor(...mixWithWhite(accent, 0.2));
+    doc.rect(0, 38, pageW, 1.5, 'F');
+
+    // Gauche : Société
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text(companyName, margin, 15);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(230, 242, 245);
+    if (settings.companyAddress) doc.text(settings.companyAddress, margin, 21);
+    const taxInfo = [
+      settings.companySiret ? `RCCM : ${settings.companySiret}` : '',
+      settings.companyTva ? `IFU/TVA : ${settings.companyTva}` : ''
+    ].filter(Boolean).join(' • ');
+    if (taxInfo) doc.text(taxInfo, margin, 26);
+
+    // Droite : Facture
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.text('FACTURE', pageW - margin, 15, { align: 'right' });
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(`N° ${invoice.invoiceNumber}`, pageW - margin, 22, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(230, 242, 245);
+    doc.text(`Date : ${dateFr}`, pageW - margin, 27, { align: 'right' });
+    doc.text(`Échéance : ${dueDateFr}`, pageW - margin, 32, { align: 'right' });
+    y = 52;
+  }
+
+  // 2. ENCADRÉS CLIENT & FACTURE
+  const cardGap = 8;
+  const cardW = (contentW - cardGap) / 2;
+  const cardH = 36;
+  const cardLeftX = margin;
+  const cardRightX = margin + cardW + cardGap;
+  const cardY = y;
+
+  // Gauche : CLIENT
+  doc.setFillColor(...neutralLight);
+  doc.roundedRect(cardLeftX, cardY, cardW, cardH, 2, 2, 'F');
+  doc.setDrawColor(...neutralBorder);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(cardLeftX, cardY, cardW, cardH, 2, 2, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...accent);
+  doc.text('FACTURÉ À (CLIENT)', cardLeftX + 5, cardY + 6.5);
+
+  const clientName = client?.company || client?.name || 'Client';
+  const clientContact = client?.contact ? `Attn : ${client.contact}` : '';
+  const clientPhone = client?.phone ? `Tél : ${client.phone}` : (client?.email ? `Email : ${client.email}` : '');
+  const clientAddr = client?.address || '';
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(...dark);
+  const clientNameWrapped = doc.splitTextToSize(clientName, cardW - 10) as string[];
+  doc.text(clientNameWrapped[0], cardLeftX + 5, cardY + 13.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  let cOffsetY = cardY + 19.5;
+  if (clientContact) {
+    doc.text(clientContact, cardLeftX + 5, cOffsetY);
+    cOffsetY += 5.5;
+  }
+  if (clientPhone) {
+    doc.text(clientPhone, cardLeftX + 5, cOffsetY);
+    cOffsetY += 5.5;
+  } else if (clientAddr) {
+    doc.text(clientAddr, cardLeftX + 5, cOffsetY);
+  }
+
+  // Droite : DÉTAILS FACTURE
+  doc.setFillColor(...neutralLight);
+  doc.roundedRect(cardRightX, cardY, cardW, cardH, 2, 2, 'F');
+  doc.setDrawColor(...neutralBorder);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(cardRightX, cardY, cardW, cardH, 2, 2, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(...accent);
+  doc.text(`FACTURE N° ${invoice.invoiceNumber}`, cardRightX + 5, cardY + 6.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...dark);
+  doc.text(`Date d'émission : ${dateFr}`, cardRightX + 5, cardY + 13.5);
+  doc.text(`Date de livraison : ${deliveryDateFr}`, cardRightX + 5, cardY + 19);
+  doc.text(`Date d'échéance : ${dueDateFr} (${invoice.paymentTerms || '30 jours'})`, cardRightX + 5, cardY + 24.5);
+  if (quote?.quoteNumber || invoice.quoteId) {
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Réf. Devis : ${quote?.quoteNumber || invoice.quoteId}`, cardRightX + 5, cardY + 30);
+  }
+
+  y += cardH + 9;
+
+  // 3. TABLEAU DES LIGNES DE FACTURE
+  const colW = {
+    desc: 82,
+    qty: 22,
+    unitPrice: 28,
+    discount: 18,
+    total: 28
+  };
+  const tableX = margin;
+
+  const drawTableHeader = () => {
+    const thH = 8.5;
+    doc.setFillColor(...accent);
+    doc.rect(tableX, y, contentW, thH, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+
+    doc.text('DÉSIGNATION', tableX + 3, y + 5.5);
+    doc.text('QTÉ', tableX + colW.desc + colW.qty / 2, y + 5.5, { align: 'center' });
+    doc.text('P.U. (FCFA)', tableX + colW.desc + colW.qty + colW.unitPrice - 3, y + 5.5, { align: 'right' });
+    doc.text('REMISE', tableX + colW.desc + colW.qty + colW.unitPrice + colW.discount / 2, y + 5.5, { align: 'center' });
+    doc.text('TOTAL (FCFA)', tableX + contentW - 3, y + 5.5, { align: 'right' });
+
+    y += thH;
+  };
+
+  drawTableHeader();
+
+  const lines = invoice.items || [];
+  if (lines.length === 0) {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8);
+    doc.setTextColor(...muted);
+    doc.text('Prestations facturées selon devis validé.', tableX + 3, y + 6);
+    y += 10;
+    doc.setDrawColor(...neutralBorder);
+    doc.setLineWidth(0.2);
+    doc.line(tableX, y, tableX + contentW, y);
+  } else {
+    lines.forEach((line, idx) => {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+
+      const descClean = cleanPdfText(line.description) || 'Prestation';
+      const qty = Number(line.quantity || 1);
+      const unitPrice = Number(line.unitPrice || 0);
+      const discountPercent = Number(line.discountPercent || 0);
+      const totalVal = Number(line.total || qty * unitPrice);
+
+      const descLines = doc.splitTextToSize(descClean, colW.desc - 6) as string[];
+      const rowH = Math.max(7.5, descLines.length * 4.2 + 3.5);
+
+      if (y + rowH > pageH - 45) {
+        doc.addPage();
+        y = margin + 4;
+        drawTableHeader();
+      }
+
+      if (idx % 2 === 1) {
+        doc.setFillColor(...accentLight);
+        doc.rect(tableX, y, contentW, rowH, 'F');
+      }
+
+      doc.setTextColor(...dark);
+      descLines.forEach((dLine, dIdx) => {
+        doc.text(dLine, tableX + 3, y + 4.8 + dIdx * 4.2);
+      });
+
+      doc.text(String(qty), tableX + colW.desc + colW.qty / 2, y + 4.8, { align: 'center' });
+      doc.text(formatAmount(unitPrice), tableX + colW.desc + colW.qty + colW.unitPrice - 3, y + 4.8, { align: 'right' });
+
+      const discountText = discountPercent > 0 ? `-${discountPercent}%` : '-';
+      doc.setTextColor(...(discountPercent > 0 ? accent : muted));
+      doc.text(discountText, tableX + colW.desc + colW.qty + colW.unitPrice + colW.discount / 2, y + 4.8, { align: 'center' });
+
+      doc.setTextColor(...dark);
+      doc.setFont('helvetica', 'bold');
+      doc.text(formatAmount(totalVal), tableX + contentW - 3, y + 4.8, { align: 'right' });
+      doc.setFont('helvetica', 'normal');
+
+      y += rowH;
+
+      doc.setDrawColor(...neutralBorder);
+      doc.setLineWidth(0.2);
+      doc.line(tableX, y, tableX + contentW, y);
+    });
+  }
+
+  y += 5;
+
+  // 4. TOTAUX & ÉTAT DE PAIEMENT
+  if (y > pageH - 68) {
+    doc.addPage();
+    y = margin + 4;
+  }
+
+  const totalsW = 76;
+  const totalsX = pageW - margin - totalsW;
+  const notesW = contentW - totalsW - 8;
+  const notesX = margin;
+
+  const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const remaining = Math.max(0, (invoice.totalAmount || 0) - totalPaid);
+
+  // Bloc gauche : Historique paiements / Notes
+  doc.setFillColor(...neutralLight);
+  doc.roundedRect(notesX, y, notesW, 36, 1.5, 1.5, 'F');
+  doc.setDrawColor(...neutralBorder);
+  doc.setLineWidth(0.2);
+  doc.roundedRect(notesX, y, notesW, 36, 1.5, 1.5, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...accent);
+  doc.text('RÈGLEMENT & ACOMPTES ENCAISSÉS', notesX + 4, y + 5.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(...dark);
+  let pOffsetY = y + 11;
+
+  if (payments.length > 0) {
+    payments.slice(0, 3).forEach(p => {
+      doc.text(`• ${formatDateFr(p.paymentDate)} : ${formatAmount(p.amount)} (${p.paymentMethod || 'Espèces'})`, notesX + 4, pOffsetY);
+      pOffsetY += 4.5;
+    });
+    if (payments.length > 3) {
+      doc.text(`(+ ${payments.length - 3} autre(s) paiement(s))`, notesX + 4, pOffsetY);
+    }
+  } else {
+    doc.text('Aucun paiement enregistré pour cette facture.', notesX + 4, pOffsetY);
+    pOffsetY += 5;
+    if (invoice.notes) {
+      doc.text(cleanPdfText(invoice.notes), notesX + 4, pOffsetY);
+    }
+  }
+
+  // Bloc droit : Totaux
+  const totBoxH = 36;
+  doc.setFillColor(...accentLight);
+  doc.roundedRect(totalsX, y, totalsW, totBoxH, 2, 2, 'F');
+  doc.setDrawColor(...accentSoft);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(totalsX, y, totalsW, totBoxH, 2, 2, 'S');
+
+  let totY = y + 5.5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...muted);
+  doc.text('Montant Total TTC :', totalsX + 4, totY);
+  doc.setTextColor(...dark);
+  doc.setFont('helvetica', 'bold');
+  doc.text(formatAmount(invoice.totalAmount || 0), pageW - margin - 4, totY, { align: 'right' });
+  totY += 6;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...muted);
+  doc.text('Total Déjà Payé :', totalsX + 4, totY);
+  doc.setTextColor(22, 163, 74); // Vert
+  doc.setFont('helvetica', 'bold');
+  doc.text(formatAmount(totalPaid), pageW - margin - 4, totY, { align: 'right' });
+  totY += 7;
+
+  // Ligne NET RESTANT À PAYER
+  const totalBannerH = 9.5;
+  const bannerColor: [number, number, number] = remaining === 0 ? [22, 163, 74] : accent;
+  doc.setFillColor(...bannerColor);
+  doc.roundedRect(totalsX, y + totBoxH - totalBannerH, totalsW, totalBannerH, 2, 2, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.text(remaining === 0 ? 'FACTURE PAYÉE' : 'RESTE À PAYER', totalsX + 4, y + totBoxH - 3.2);
+  doc.text(formatAmount(remaining), pageW - margin - 4, y + totBoxH - 3.2, { align: 'right' });
+
+  y += totBoxH + 6;
+
+  // 5. MENTIONS & SIGNATURES
+  if (y > pageH - 42) {
+    doc.addPage();
+    y = margin + 4;
+  }
+
+  const condH = 6;
+  doc.setFillColor(...neutralLight);
+  doc.rect(margin, y, contentW, condH, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...accent);
+  doc.text('CONDITIONS DE PAIEMENT & MENTIONS LÉGALES', margin + 4, y + 4.2);
+  y += condH + 3.5;
+
+  const conditionsList = [
+    `- Date limite de règlement : ${dueDateFr} (${invoice.paymentTerms || '30 jours'}).`,
+    `- En cas de retard de paiement, des pénalités d'un taux égal au taux d'intérêt légal seront exigibles de plein droit.`,
+    settings.defaultTerms ? `- ${cleanPdfText(settings.defaultTerms)}` : `- Merci pour votre confiance !`
+  ];
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(...dark);
+  conditionsList.forEach(cond => {
+    const wrapped = doc.splitTextToSize(cond, contentW - 8) as string[];
+    wrapped.forEach(wl => {
+      doc.text(wl, margin + 4, y);
+      y += 3.8;
+    });
+  });
+
+  y += 4;
+
+  // Signature / Cachet
+  const sigW = 85;
+  const sigH = 22;
+  const sigX = pageW - margin - sigW;
+  doc.setDrawColor(...neutralBorder);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(sigX, y, sigW, sigH, 1.5, 1.5, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...accent);
+  doc.text('Pour l\'entreprise - Cachet & Signature', sigX + 4, y + 5);
+
+  if (settings.companyStampBase64) {
+    try {
+      doc.addImage(settings.companyStampBase64, 'PNG', sigX + sigW - 32, y + 2, 28, 18);
+    } catch {}
+  }
+
+  return doc.output('blob');
 }

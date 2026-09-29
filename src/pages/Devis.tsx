@@ -17,7 +17,8 @@ import {
   FileText, 
   CheckCircle,
   Building2,
-  Calendar
+  Calendar,
+  Receipt
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
@@ -34,7 +35,7 @@ export function Devis() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentUser } = useAuth();
-  const { quotes, clients, settings, updateQuoteStatus, deleteQuote, services, users } = useAppContext();
+  const { quotes, clients, settings, updateQuoteStatus, deleteQuote, services, users, invoices } = useAppContext();
   const { confirm } = useConfirm();
 
   const [filter, setFilter] = useState('');
@@ -422,18 +423,48 @@ export function Devis() {
                     {q.total.toLocaleString('fr-FR')} FCFA
                   </td>
                   <td data-label="Statut">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span className={`badge-status ${getBadgeColor(q.status)}`}>{q.status}</span>
-                      {q.clientComment && (
-                        <span title={`Commentaire client : ${q.clientComment}`}>
-                          <MessageCircle size={14} style={{ color: 'var(--color-primary)' }} />
-                        </span>
-                      )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span className={`badge-status ${getBadgeColor(q.status)}`}>{q.status}</span>
+                        {q.clientComment && (
+                          <span title={`Commentaire client : ${q.clientComment}`}>
+                            <MessageCircle size={14} style={{ color: 'var(--color-primary)' }} />
+                          </span>
+                        )}
+                      </div>
+                      {(() => {
+                        const existingInvoice = invoices.find(inv => inv.quoteId === q.id);
+                        if (existingInvoice) {
+                          return (
+                            <span 
+                              style={{ cursor: 'pointer', background: '#E0F2FE', color: '#0284C7', padding: '2px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700, width: 'fit-content' }}
+                              onClick={() => navigate(`/factures?search=${existingInvoice.invoiceNumber}`)}
+                              title="Voir la facture associée"
+                            >
+                              📄 Facturé ({existingInvoice.invoiceNumber})
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   </td>
                   <td data-label="Date d'émission">{q.date}</td>
                   <td data-label="Actions">
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
+                      
+                      {/* Action Créer une facture pour devis Accepté */}
+                      {q.status === 'Accepté' && (
+                        <button 
+                          className="icon-button" 
+                          style={{ color: '#0284C7', background: '#E0F2FE', padding: '6px', borderRadius: '4px' }} 
+                          onClick={() => navigate(`/factures?createFromQuoteId=${q.id}`)} 
+                          title="Créer une facture pour ce devis"
+                        >
+                          <Receipt size={16} />
+                        </button>
+                      )}
+
                       {/* Changement rapide de statut */}
                       {q.status !== 'Accepté' && (
                         <button 

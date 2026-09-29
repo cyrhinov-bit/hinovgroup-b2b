@@ -29,4 +29,5 @@ crm-mobile/
 .expo/
 *.mjs
 *.sql
+!supabase/migrations/*.sql
 dev-dist/

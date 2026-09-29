@@ -221,13 +221,30 @@ export default function CrmModulesManager() {
         </div>
       </div>
 
+      {/* Bannière explicative Supervision Directeur */}
+      <div style={{
+        padding: '14px 18px',
+        borderRadius: '8px',
+        background: 'rgba(59, 130, 246, 0.08)',
+        border: '1px solid rgba(59, 130, 246, 0.25)',
+        marginBottom: '20px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        fontSize: '0.88rem',
+        color: '#1E40AF'
+      }}>
+        <Sparkles size={20} style={{ flexShrink: 0, color: '#2563EB' }} />
+        <span>
+          <strong>Personnalisation & Supervision Direction :</strong> Vous pouvez activer ou désactiver les modules pour les <strong>Directeurs</strong> afin de configurer leurs accès opérationnels directs (menu latéral). <strong>Le Directeur conserve en permanence la supervision totale (Dashboard 360°, KPIs, analytiques et consultation) sur l'ensemble des modules et des collaborateurs.</strong>
+        </span>
+      </div>
+
       {/* Liste des utilisateurs et matrice d'activation */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {eligibleUsers.map(user => {
           const isUserAdmin = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(user.role);
-          const activeCount = isUserAdmin 
-            ? CRM_MODULES.length 
-            : CRM_MODULES.filter(m => !!user[m.key]).length;
+          const activeCount = CRM_MODULES.filter(m => !!user[m.key]).length;
 
           return (
             <div 
@@ -267,6 +284,11 @@ export default function CrmModulesManager() {
                       }}>
                         {user.role}
                       </span>
+                      {isUserAdmin && (
+                        <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.12)', color: '#2563EB', fontWeight: 600 }}>
+                          Supervision 360° permanente
+                        </span>
+                      )}
                     </div>
                     <div style={{ display: 'flex', gap: '12px', marginTop: '4px', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
                       <span>{user.email}</span>
@@ -281,45 +303,35 @@ export default function CrmModulesManager() {
                   <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginRight: '8px' }}>
                     <strong>{activeCount}</strong> / {CRM_MODULES.length} modules actifs
                   </span>
-                  {!isUserAdmin && (
-                    <>
-                      <button 
-                        type="button" 
-                        className="btn btn-secondary" 
-                        style={{ fontSize: '0.8rem', padding: '6px 12px' }}
-                        disabled={savingUserId === user.id}
-                        onClick={() => setAllModules(user, true)}
-                      >
-                        <Check size={14} style={{ marginRight: '4px' }} /> Tout activer
-                      </button>
-                      <button 
-                        type="button" 
-                        className="btn btn-secondary" 
-                        style={{ fontSize: '0.8rem', padding: '6px 12px', color: 'var(--color-error)' }}
-                        disabled={savingUserId === user.id}
-                        onClick={() => setAllModules(user, false)}
-                      >
-                        <X size={14} style={{ marginRight: '4px' }} /> Tout désactiver
-                      </button>
-                    </>
-                  )}
-                  {isUserAdmin && (
-                    <span style={{ fontSize: '0.8rem', padding: '4px 10px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.1)', color: '#059669', fontWeight: 600 }}>
-                      <Sparkles size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} />
-                      Accès administrateur total
-                    </span>
-                  )}
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    style={{ fontSize: '0.8rem', padding: '6px 12px' }}
+                    disabled={savingUserId === user.id}
+                    onClick={() => setAllModules(user, true)}
+                  >
+                    <Check size={14} style={{ marginRight: '4px' }} /> Tout activer
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    style={{ fontSize: '0.8rem', padding: '6px 12px', color: 'var(--color-error)' }}
+                    disabled={savingUserId === user.id}
+                    onClick={() => setAllModules(user, false)}
+                  >
+                    <X size={14} style={{ marginRight: '4px' }} /> Tout désactiver
+                  </button>
                 </div>
               </div>
 
               {/* Grille des 7 modules pour cet utilisateur */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
                 {CRM_MODULES.map(mod => {
-                  const isEnabled = isUserAdmin || !!user[mod.key];
+                  const isEnabled = !!user[mod.key];
                   return (
                     <div 
                       key={mod.key}
-                      onClick={() => !isUserAdmin && toggleModule(user, mod.key)}
+                      onClick={() => toggleModule(user, mod.key)}
                       style={{ 
                         display: 'flex', 
                         alignItems: 'center', 
@@ -328,7 +340,7 @@ export default function CrmModulesManager() {
                         borderRadius: '8px', 
                         background: isEnabled ? 'rgba(59, 130, 246, 0.05)' : 'var(--color-surface-alt)', 
                         border: isEnabled ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid var(--color-border)',
-                        cursor: isUserAdmin ? 'default' : 'pointer',
+                        cursor: 'pointer',
                         transition: 'all 0.15s ease'
                       }}
                     >
@@ -341,7 +353,7 @@ export default function CrmModulesManager() {
                           color: isEnabled ? mod.color : '#94A3B8',
                           display: 'flex', 
                           alignItems: 'center', 
-                          justifyContent: 'center',
+                          justifyContent: 'center', 
                           flexShrink: 0
                         }}>
                           {mod.icon}
@@ -365,9 +377,8 @@ export default function CrmModulesManager() {
                             borderRadius: '12px',
                             background: isEnabled ? '#2563EB' : '#CBD5E1',
                             position: 'relative',
-                            cursor: isUserAdmin ? 'default' : 'pointer',
-                            transition: 'background 0.2s ease',
-                            opacity: isUserAdmin ? 0.7 : 1
+                            cursor: 'pointer',
+                            transition: 'background 0.2s ease'
                           }}
                         >
                           <div 

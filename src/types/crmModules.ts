@@ -219,3 +219,112 @@ export interface InterventionMaintenance {
   created_at?: string;
   updated_at?: string;
 }
+
+export type StatutTechnicien = 'DISPONIBLE' | 'EN_INTERVENTION' | 'CONGE' | 'INACTIF';
+
+export interface TechnicienMaintenance {
+  id: string;
+  nom: string;
+  telephone?: string;
+  email?: string;
+  specialite?: string;
+  statut: StatutTechnicien;
+  cree_par?: string;
+  cree_par_nom?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// ─── Module Facturation Client (HINOV CRM) ───────────────────────────
+export type InvoiceStatus = 'BROUILLON' | 'ÉMISE' | 'PARTIELLEMENT_PAYÉE' | 'PAYÉE' | 'EN_RETARD' | 'ANNULÉE';
+
+export interface InvoiceItem {
+  id: string;
+  invoice_id?: string;
+  invoiceId?: string;
+  prestation_id?: string;
+  prestationId?: string;
+  description: string;
+  quantity: number;
+  unit_price?: number;
+  unitPrice: number;
+  cost_price?: number;
+  costPrice?: number;
+  discount_percent?: number;
+  discountPercent?: number;
+  tax_rate?: number;
+  taxRate?: number;
+  total: number;
+  created_at?: string;
+  createdAt?: string;
+}
+
+export interface InvoicePayment {
+  id: string;
+  invoice_id?: string;
+  invoiceId: string;
+  payment_number?: string;
+  paymentNumber?: string;
+  payment_date?: string;
+  paymentDate: string;
+  amount: number;
+  payment_method?: string;
+  paymentMethod: string;
+  reference?: string;
+  notes?: string;
+  created_by?: string;
+  createdBy?: string;
+  created_at?: string;
+  createdAt?: string;
+}
+
+export interface Invoice {
+  id: string;
+  invoice_number?: string;
+  invoiceNumber: string;
+  quote_id?: string;
+  quoteId?: string;
+  client_id?: string;
+  clientId: string;
+  commercial_id?: string;
+  commercialId?: string;
+  service_id?: string;
+  serviceId?: string;
+  issue_date?: string;
+  issueDate: string;
+  delivery_date?: string;
+  deliveryDate?: string;
+  payment_terms?: string;
+  paymentTerms: string;
+  due_date?: string;
+  dueDate: string;
+  subtotal: number;
+  tax_amount?: number;
+  taxAmount?: number;
+  discount_amount?: number;
+  discountAmount?: number;
+  total_amount?: number;
+  totalAmount: number;
+  cost_amount?: number;
+  costAmount?: number;
+  commission_rate?: number;
+  commissionRate?: number;
+  commission_amount?: number;
+  commissionAmount?: number;
+  gross_margin?: number;
+  grossMargin?: number;
+  hinov_margin?: number;
+  hinovMargin?: number;
+  status: InvoiceStatus;
+  notes?: string;
+  created_by?: string;
+  createdBy?: string;
+  created_at?: string;
+  createdAt?: string;
+  updated_at?: string;
+  updatedAt?: string;
+  items?: InvoiceItem[];
+  payments?: InvoicePayment[];
+}
+
+

@@ -71,5 +71,9 @@ export const db = {
   crmCommissions: createStore('crmCommissions'),
   crmArticles: createStore('crmArticles'),
   crmMaintenance: createStore('crmMaintenance'),
+  crmTechniciens: createStore('crmTechniciens'),
+  // CRM Facturation
+  invoices: createStore('invoices'),
+  invoicePayments: createStore('invoicePayments'),
 };
 

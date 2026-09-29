@@ -12,6 +12,7 @@ import { Clients } from './pages/Clients';
 import { Services } from './pages/Services';
 import { Prestations } from './pages/Prestations';
 import { Devis } from './pages/Devis';
+import { Factures } from './pages/Factures';
 import { CommercialClients } from './pages/CommercialClients';
 import { Documents } from './pages/Documents';
 import { Utilisateurs } from './pages/Utilisateurs';
@@ -169,6 +170,7 @@ function App() {
                     <Route path="prestations" element={<Prestations />} />
                     <Route path="devis" element={<Devis />} />
                     <Route path="devis/nouveau" element={<QuoteCreation />} />
+                    <Route path="factures" element={<Factures />} />
                     <Route path="documents" element={<Documents />} />
                     <Route path="utilisateurs" element={<Utilisateurs />} />
                     <Route path="parametres" element={<Parametres />} />

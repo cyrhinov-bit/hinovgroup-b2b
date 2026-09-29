@@ -31,7 +31,8 @@ const mergeData = <T extends { id: string }>(oldData: T[] | null | undefined, ne
 import type { 
   ClientFournisseur, AgentCommercial, PrestationCommande, 
   MouvementCaisse, CommissionPrestation, CatalogueArticle, 
-  InterventionMaintenance, ModeReglement
+  InterventionMaintenance, TechnicienMaintenance, ModeReglement,
+  Invoice, InvoiceItem, InvoicePayment, InvoiceStatus
 } from '../types/crmModules';
 export * from '../types/crmModules';
 
@@ -522,6 +523,7 @@ interface AppState {
   crmCommissions: CommissionPrestation[];
   crmArticles: CatalogueArticle[];
   crmMaintenance: InterventionMaintenance[];
+  crmTechniciens: TechnicienMaintenance[];
   addCrmTier: (tier: ClientFournisseur) => Promise<void>;
   updateCrmTier: (id: string, tier: Partial<ClientFournisseur>) => Promise<void>;
   deleteCrmTier: (id: string) => Promise<void>;
@@ -542,6 +544,18 @@ interface AppState {
   addCrmIntervention: (interv: InterventionMaintenance) => Promise<void>;
   updateCrmIntervention: (id: string, interv: Partial<InterventionMaintenance>) => Promise<void>;
   deleteCrmIntervention: (id: string) => Promise<void>;
+  addCrmTechnicien: (tech: TechnicienMaintenance) => Promise<void>;
+  updateCrmTechnicien: (id: string, tech: Partial<TechnicienMaintenance>) => Promise<void>;
+  deleteCrmTechnicien: (id: string) => Promise<void>;
+  // Module Facturation Client
+  invoices: Invoice[];
+  invoicePayments: InvoicePayment[];
+  addInvoice: (invoiceData: Omit<Invoice, 'id' | 'createdAt' | 'updatedAt'> | Invoice) => Promise<Invoice>;
+  updateInvoice: (id: string, data: Partial<Invoice>) => Promise<void>;
+  updateInvoiceStatus: (id: string, status: InvoiceStatus) => Promise<void>;
+  deleteInvoice: (id: string) => Promise<void>;
+  addInvoicePayment: (paymentData: Omit<InvoicePayment, 'id' | 'createdAt'> | InvoicePayment) => Promise<InvoicePayment>;
+  deleteInvoicePayment: (paymentId: string) => Promise<void>;
 }
 
   const defaultSettings: AppSettings = { companyName: 'Hinov', companyLogo: '', companyAddress: '', companySiret: '', companyTva: '', defaultTerms: '', commissionRate: 10 };
@@ -661,6 +675,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [crmCommissions, setCrmCommissions] = useState<CommissionPrestation[]>([]);
   const [crmArticles, setCrmArticles] = useState<CatalogueArticle[]>([]);
   const [crmMaintenance, setCrmMaintenance] = useState<InterventionMaintenance[]>([]);
+  const [crmTechniciens, setCrmTechniciens] = useState<TechnicienMaintenance[]>([]);
+  // Facturation
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoicePayments, setInvoicePayments] = useState<InvoicePayment[]>([]);
 
   const inFlightRefreshRef = useRef<Promise<void> | null>(null);
   const lastRefreshTimeRef = useRef<number>(0);
@@ -694,7 +712,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         cachedPosTransactions, cachedPosPayments, cachedPosDiscounts, cachedPosSettings,
         cachedPosReturns, cachedProductCompletions, cachedImportSessions,
         cachedCrmTiers, cachedCrmCommerciaux, cachedCrmPrestations, cachedCrmCaisse,
-        cachedCrmCommissions, cachedCrmArticles, cachedCrmMaintenance
+        cachedCrmCommissions, cachedCrmArticles, cachedCrmMaintenance, cachedCrmTechniciens,
+        cachedInvoices, cachedInvoicePayments
       ] = await Promise.all([
         safeGet<User[]>(db.profiles),
         safeGet<Client[]>(db.clients),
@@ -746,6 +765,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         safeGet<CommissionPrestation[]>(db.crmCommissions),
         safeGet<CatalogueArticle[]>(db.crmArticles),
         safeGet<InterventionMaintenance[]>(db.crmMaintenance),
+        safeGet<TechnicienMaintenance[]>(db.crmTechniciens),
+        safeGet<Invoice[]>(db.invoices),
+        safeGet<InvoicePayment[]>(db.invoicePayments),
       ]);
 
       if (cachedUsers) setUsers(cachedUsers);
@@ -753,6 +775,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (cachedAffaires) setAffaires(cachedAffaires);
       if (cachedFacturePaiements) setFacturePaiements(cachedFacturePaiements);
       if (cachedCouts) setCouts(cachedCouts);
+      if (cachedInvoices) setInvoices(cachedInvoices);
+      if (cachedInvoicePayments) setInvoicePayments(cachedInvoicePayments);
       if (cachedScoringRules) setScoringRules(cachedScoringRules);
       if (cachedObjectifs) setObjectifs(cachedObjectifs);
       if (cachedClassements) setClassements(cachedClassements);
@@ -809,6 +833,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (cachedCrmCommissions) setCrmCommissions(cachedCrmCommissions);
       if (cachedCrmArticles) setCrmArticles(cachedCrmArticles);
       if (cachedCrmMaintenance) setCrmMaintenance(cachedCrmMaintenance);
+      if (cachedCrmTechniciens) setCrmTechniciens(cachedCrmTechniciens);
 
       const rawCachedProducts = (cachedPosProducts || []).filter((p: any) => {
         return p.family !== 'Service' && !p.reference?.startsWith('SRV-') && p.id !== '00000000-0000-0000-0000-000000000000';
@@ -924,7 +949,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           () => currentUser ? safeFetch(() => supabase.from('mouvements_caisse').select('*')) : Promise.resolve(null),
           () => currentUser ? safeFetch(() => supabase.from('commissions_prestations').select('*')) : Promise.resolve(null),
           () => currentUser ? safeFetch(() => supabase.from('catalogue_articles').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('interventions_maintenance').select('*')) : Promise.resolve(null)
+          () => currentUser ? safeFetch(() => supabase.from('interventions_maintenance').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('techniciens_maintenance').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('invoices').select('*, invoice_items(*)')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('invoice_payments').select('*')) : Promise.resolve(null)
         ];
 
         const [
@@ -943,7 +971,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           posDiscountsData, posSettingsData, crmDocumentsData, crmFoldersData, notificationsData,
           posReturnsData,
           crmTiersData, crmCommerciauxData, crmPrestationsData, crmCaisseData,
-          crmCommissionsData, crmArticlesData, crmMaintenanceData
+          crmCommissionsData, crmArticlesData, crmMaintenanceData, crmTechniciensData,
+          invoicesData, invoicePaymentsData
         ] = await fetchInBatches(fetchTasks, 6);
 
         if (profilesData && profilesData.length > 0) {
@@ -1635,6 +1664,86 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }));
           const merged = mergeData(cachedCrmMaintenance, parsed);
           setCrmMaintenance(merged); await db.crmMaintenance.setItem('data', merged);
+        }
+
+        if (crmTechniciensData && crmTechniciensData.length > 0) {
+          const parsed: TechnicienMaintenance[] = crmTechniciensData.map((t: any) => ({
+            id: t.id,
+            nom: t.nom,
+            telephone: t.telephone || undefined,
+            email: t.email || undefined,
+            specialite: t.specialite || undefined,
+            statut: t.statut || 'DISPONIBLE',
+            cree_par: t.cree_par || undefined,
+            cree_par_nom: t.cree_par_nom || undefined,
+            created_at: t.created_at,
+            updated_at: t.updated_at
+          }));
+          const merged = mergeData(cachedCrmTechniciens, parsed);
+          setCrmTechniciens(merged); await db.crmTechniciens.setItem('data', merged);
+        }
+
+        if (invoicesData && invoicesData.length > 0) {
+          const parsed: Invoice[] = invoicesData.map((inv: any) => ({
+            id: inv.id,
+            invoiceNumber: inv.invoice_number,
+            quoteId: inv.quote_id || undefined,
+            clientId: inv.client_id,
+            commercialId: inv.commercial_id || undefined,
+            serviceId: inv.service_id || undefined,
+            issueDate: inv.issue_date,
+            deliveryDate: inv.delivery_date || undefined,
+            paymentTerms: inv.payment_terms || '30 jours',
+            dueDate: inv.due_date,
+            subtotal: Number(inv.subtotal) || 0,
+            taxAmount: Number(inv.tax_amount) || 0,
+            discountAmount: Number(inv.discount_amount) || 0,
+            totalAmount: Number(inv.total_amount) || 0,
+            costAmount: Number(inv.cost_amount) || 0,
+            commissionRate: Number(inv.commission_rate) || 10,
+            commissionAmount: Number(inv.commission_amount) || 0,
+            grossMargin: Number(inv.gross_margin) || 0,
+            hinovMargin: Number(inv.hinov_margin) || 0,
+            status: (inv.status as InvoiceStatus) || 'ÉMISE',
+            notes: inv.notes || undefined,
+            createdBy: inv.created_by || undefined,
+            createdAt: inv.created_at,
+            updatedAt: inv.updated_at,
+            items: (inv.invoice_items || []).map((it: any) => ({
+              id: it.id,
+              invoiceId: it.invoice_id,
+              prestationId: it.prestation_id || undefined,
+              description: it.description,
+              quantity: Number(it.quantity) || 1,
+              unitPrice: Number(it.unit_price) || 0,
+              costPrice: Number(it.cost_price) || 0,
+              discountPercent: Number(it.discount_percent) || 0,
+              taxRate: Number(it.tax_rate) || 0,
+              total: Number(it.total) || 0,
+              createdAt: it.created_at
+            }))
+          }));
+          const merged = mergeData(cachedInvoices, parsed);
+          setInvoices(merged);
+          await db.invoices.setItem('data', merged);
+        }
+
+        if (invoicePaymentsData && invoicePaymentsData.length > 0) {
+          const parsed: InvoicePayment[] = invoicePaymentsData.map((p: any) => ({
+            id: p.id,
+            invoiceId: p.invoice_id,
+            paymentNumber: p.payment_number || undefined,
+            paymentDate: p.payment_date,
+            amount: Number(p.amount) || 0,
+            paymentMethod: p.payment_method || 'Espèces',
+            reference: p.reference || undefined,
+            notes: p.notes || undefined,
+            createdBy: p.created_by || undefined,
+            createdAt: p.created_at
+          }));
+          const merged = mergeData(cachedInvoicePayments, parsed);
+          setInvoicePayments(merged);
+          await db.invoicePayments.setItem('data', merged);
         }
 
         // Update last sync time for next delta fetch
@@ -4392,18 +4501,402 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const addCrmTechnicien = async (tech: TechnicienMaintenance) => {
+    const id = tech.id || uuidv4();
+    const item: TechnicienMaintenance = {
+      ...tech,
+      id,
+      statut: tech.statut || 'DISPONIBLE',
+      cree_par: tech.cree_par || currentUser?.id || '',
+      cree_par_nom: tech.cree_par_nom || currentUser?.name,
+      created_at: tech.created_at || new Date().toISOString(),
+      updated_at: tech.updated_at || new Date().toISOString()
+    };
+    const next = [item, ...crmTechniciens.filter(t => t.id !== id)];
+    setCrmTechniciens(next);
+    await db.crmTechniciens.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('techniciens_maintenance').upsert(item);
+      }
+    } catch (e) {
+      console.warn('Erreur synchro technicien CRM:', e);
+    }
+  };
+
+  const updateCrmTechnicien = async (id: string, tech: Partial<TechnicienMaintenance>) => {
+    const now = new Date().toISOString();
+    const next = crmTechniciens.map(t => t.id === id ? { ...t, ...tech, updated_at: now } : t);
+    setCrmTechniciens(next);
+    await db.crmTechniciens.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('techniciens_maintenance').update({ ...tech, updated_at: now }).eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur synchro technicien CRM:', e);
+    }
+  };
+
+  const deleteCrmTechnicien = async (id: string) => {
+    const next = crmTechniciens.filter(t => t.id !== id);
+    setCrmTechniciens(next);
+    await db.crmTechniciens.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('techniciens_maintenance').delete().eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur suppression technicien CRM:', e);
+    }
+  };
+
+  // Helper statut facture
+  const computeInvoiceStatus = (totalAmount: number, paidAmount: number, dueDate: string, currentStatus?: InvoiceStatus): InvoiceStatus => {
+    if (currentStatus === 'ANNULÉE') return 'ANNULÉE';
+    if (currentStatus === 'BROUILLON') return 'BROUILLON';
+    if (paidAmount >= totalAmount && totalAmount > 0) return 'PAYÉE';
+    if (paidAmount > 0) return 'PARTIELLEMENT_PAYÉE';
+    if (dueDate) {
+      const today = new Date().toISOString().split('T')[0];
+      if (today > dueDate) return 'EN_RETARD';
+    }
+    return 'ÉMISE';
+  };
+
+  const addInvoice = async (invoiceData: Omit<Invoice, 'id' | 'createdAt' | 'updatedAt'> | Invoice): Promise<Invoice> => {
+    const id = ('id' in invoiceData && invoiceData.id) ? invoiceData.id : uuidv4();
+    const now = new Date().toISOString();
+    
+    // Calculs de rentabilité
+    const totalAmount = Number(invoiceData.totalAmount) || 0;
+    const costAmount = Number(invoiceData.costAmount) || 0;
+    const grossMargin = totalAmount - costAmount;
+    const commissionRate = invoiceData.commissionRate !== undefined ? Number(invoiceData.commissionRate) : 10;
+    const commissionAmount = grossMargin > 0 ? Math.round(grossMargin * (commissionRate / 100)) : 0;
+    const hinovMargin = grossMargin - commissionAmount;
+
+    const newInvoice: Invoice = {
+      ...invoiceData,
+      id,
+      totalAmount,
+      costAmount,
+      grossMargin,
+      commissionRate,
+      commissionAmount,
+      hinovMargin,
+      status: invoiceData.status || 'ÉMISE',
+      createdBy: invoiceData.createdBy || currentUser?.id,
+      createdAt: now,
+      updatedAt: now,
+      items: (invoiceData.items || []).map(item => ({
+        ...item,
+        id: item.id || uuidv4(),
+        invoiceId: id
+      }))
+    };
+
+    const next = [newInvoice, ...invoices.filter(i => i.id !== id)];
+    setInvoices(next);
+    await db.invoices.setItem('data', next);
+
+    try {
+      if (navigator.onLine) {
+        const dbInvoice = {
+          id: newInvoice.id,
+          invoice_number: newInvoice.invoiceNumber,
+          quote_id: newInvoice.quoteId || null,
+          client_id: newInvoice.clientId,
+          commercial_id: newInvoice.commercialId || null,
+          service_id: newInvoice.serviceId || null,
+          issue_date: newInvoice.issueDate,
+          delivery_date: newInvoice.deliveryDate || null,
+          payment_terms: newInvoice.paymentTerms || '30 jours',
+          due_date: newInvoice.dueDate,
+          subtotal: newInvoice.subtotal,
+          tax_amount: newInvoice.taxAmount || 0,
+          discount_amount: newInvoice.discountAmount || 0,
+          total_amount: newInvoice.totalAmount,
+          cost_amount: newInvoice.costAmount || 0,
+          commission_rate: newInvoice.commissionRate || 10,
+          commission_amount: newInvoice.commissionAmount || 0,
+          gross_margin: newInvoice.grossMargin || 0,
+          hinov_margin: newInvoice.hinovMargin || 0,
+          status: newInvoice.status,
+          notes: newInvoice.notes || null,
+          created_by: newInvoice.createdBy || null,
+          created_at: newInvoice.createdAt,
+          updated_at: newInvoice.updatedAt
+        };
+        await supabase.from('invoices').upsert(dbInvoice);
+
+        if (newInvoice.items && newInvoice.items.length > 0) {
+          const dbItems = newInvoice.items.map(it => ({
+            id: it.id,
+            invoice_id: id,
+            prestation_id: it.prestationId || null,
+            description: it.description,
+            quantity: it.quantity,
+            unit_price: it.unitPrice,
+            cost_price: it.costPrice || 0,
+            discount_percent: it.discountPercent || 0,
+            tax_rate: it.taxRate || 0,
+            total: it.total,
+            created_at: it.createdAt || now
+          }));
+          await supabase.from('invoice_items').upsert(dbItems);
+        }
+      }
+    } catch (e) {
+      console.warn('Erreur synchro création facture:', e);
+    }
+
+    return newInvoice;
+  };
+
+  const updateInvoice = async (id: string, data: Partial<Invoice>) => {
+    const existing = invoices.find(i => i.id === id);
+    if (!existing) return;
+    const now = new Date().toISOString();
+
+    const totalAmount = data.totalAmount !== undefined ? Number(data.totalAmount) : (existing.totalAmount || 0);
+    const costAmount = data.costAmount !== undefined ? Number(data.costAmount) : (existing.costAmount || 0);
+    const grossMargin = totalAmount - costAmount;
+    const commissionRate = data.commissionRate !== undefined ? Number(data.commissionRate) : (existing.commissionRate || 10);
+    const commissionAmount = grossMargin > 0 ? Math.round(grossMargin * (commissionRate / 100)) : 0;
+    const hinovMargin = grossMargin - commissionAmount;
+
+    const updated: Invoice = {
+      ...existing,
+      ...data,
+      id,
+      totalAmount,
+      costAmount,
+      grossMargin,
+      commissionRate,
+      commissionAmount,
+      hinovMargin,
+      updatedAt: now
+    };
+
+    const next = invoices.map(i => i.id === id ? updated : i);
+    setInvoices(next);
+    await db.invoices.setItem('data', next);
+
+    try {
+      if (navigator.onLine) {
+        const dbUpdate: any = {
+          updated_at: now
+        };
+        if (data.invoiceNumber !== undefined) dbUpdate.invoice_number = data.invoiceNumber;
+        if (data.quoteId !== undefined) dbUpdate.quote_id = data.quoteId || null;
+        if (data.clientId !== undefined) dbUpdate.client_id = data.clientId;
+        if (data.commercialId !== undefined) dbUpdate.commercial_id = data.commercialId || null;
+        if (data.serviceId !== undefined) dbUpdate.service_id = data.serviceId || null;
+        if (data.issueDate !== undefined) dbUpdate.issue_date = data.issueDate;
+        if (data.deliveryDate !== undefined) dbUpdate.delivery_date = data.deliveryDate || null;
+        if (data.paymentTerms !== undefined) dbUpdate.payment_terms = data.paymentTerms;
+        if (data.dueDate !== undefined) dbUpdate.due_date = data.dueDate;
+        if (data.subtotal !== undefined) dbUpdate.subtotal = data.subtotal;
+        if (data.taxAmount !== undefined) dbUpdate.tax_amount = data.taxAmount;
+        if (data.discountAmount !== undefined) dbUpdate.discount_amount = data.discountAmount;
+        dbUpdate.total_amount = totalAmount;
+        dbUpdate.cost_amount = costAmount;
+        dbUpdate.gross_margin = grossMargin;
+        dbUpdate.commission_rate = commissionRate;
+        dbUpdate.commission_amount = commissionAmount;
+        dbUpdate.hinov_margin = hinovMargin;
+        if (data.status !== undefined) dbUpdate.status = data.status;
+        if (data.notes !== undefined) dbUpdate.notes = data.notes;
+
+        await supabase.from('invoices').update(dbUpdate).eq('id', id);
+
+        if (data.items) {
+          await supabase.from('invoice_items').delete().eq('invoice_id', id);
+          if (data.items.length > 0) {
+            const dbItems = data.items.map(it => ({
+              id: it.id || uuidv4(),
+              invoice_id: id,
+              prestation_id: it.prestationId || null,
+              description: it.description,
+              quantity: it.quantity,
+              unit_price: it.unitPrice,
+              cost_price: it.costPrice || 0,
+              discount_percent: it.discountPercent || 0,
+              tax_rate: it.taxRate || 0,
+              total: it.total,
+              created_at: it.createdAt || now
+            }));
+            await supabase.from('invoice_items').upsert(dbItems);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Erreur synchro update facture:', e);
+    }
+  };
+
+  const updateInvoiceStatus = async (id: string, status: InvoiceStatus) => {
+    const now = new Date().toISOString();
+    const next = invoices.map(i => i.id === id ? { ...i, status, updatedAt: now } : i);
+    setInvoices(next);
+    await db.invoices.setItem('data', next);
+
+    try {
+      if (navigator.onLine) {
+        await supabase.from('invoices').update({ status, updated_at: now }).eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur mise à jour statut facture:', e);
+    }
+  };
+
+  const deleteInvoice = async (id: string) => {
+    const nextInvoices = invoices.filter(i => i.id !== id);
+    const nextPayments = invoicePayments.filter(p => p.invoiceId !== id);
+    setInvoices(nextInvoices);
+    setInvoicePayments(nextPayments);
+    await db.invoices.setItem('data', nextInvoices);
+    await db.invoicePayments.setItem('data', nextPayments);
+
+    try {
+      if (navigator.onLine) {
+        await supabase.from('invoice_payments').delete().eq('invoice_id', id);
+        await supabase.from('invoice_items').delete().eq('invoice_id', id);
+        await supabase.from('invoices').delete().eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur suppression facture:', e);
+    }
+  };
+
+  const addInvoicePayment = async (paymentData: Omit<InvoicePayment, 'id' | 'createdAt'> | InvoicePayment): Promise<InvoicePayment> => {
+    const id = ('id' in paymentData && paymentData.id) ? paymentData.id : uuidv4();
+    const now = new Date().toISOString();
+    
+    const targetInvoice = invoices.find(i => i.id === paymentData.invoiceId);
+    const existingPaymentsForInvoice = invoicePayments.filter(p => p.invoiceId === paymentData.invoiceId);
+    const totalPaidBefore = existingPaymentsForInvoice.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const newTotalPaid = totalPaidBefore + (Number(paymentData.amount) || 0);
+
+    const seq = (invoicePayments.length + 1).toString().padStart(4, '0');
+    const paymentNumber = paymentData.paymentNumber || `PAY-${new Date().getFullYear()}-${seq}`;
+
+    const newPayment: InvoicePayment = {
+      ...paymentData,
+      id,
+      paymentNumber,
+      amount: Number(paymentData.amount) || 0,
+      paymentDate: paymentData.paymentDate || now.split('T')[0],
+      paymentMethod: paymentData.paymentMethod || 'Espèces',
+      createdBy: paymentData.createdBy || currentUser?.id,
+      createdAt: now
+    };
+
+    const nextPayments = [newPayment, ...invoicePayments];
+    setInvoicePayments(nextPayments);
+    await db.invoicePayments.setItem('data', nextPayments);
+
+    // Mise à jour automatique du statut de la facture
+    if (targetInvoice) {
+      const newStatus = computeInvoiceStatus(targetInvoice.totalAmount, newTotalPaid, targetInvoice.dueDate, targetInvoice.status);
+      const updatedInvoice: Invoice = {
+        ...targetInvoice,
+        status: newStatus,
+        updatedAt: now
+      };
+      const nextInvoices = invoices.map(i => i.id === targetInvoice.id ? updatedInvoice : i);
+      setInvoices(nextInvoices);
+      await db.invoices.setItem('data', nextInvoices);
+
+      try {
+        if (navigator.onLine) {
+          await supabase.from('invoices').update({ status: newStatus, updated_at: now }).eq('id', targetInvoice.id);
+        }
+      } catch (e) {
+        console.warn('Erreur mise à jour statut facture après paiement:', e);
+      }
+    }
+
+    try {
+      if (navigator.onLine) {
+        const dbPayment = {
+          id: newPayment.id,
+          invoice_id: newPayment.invoiceId,
+          payment_number: newPayment.paymentNumber,
+          payment_date: newPayment.paymentDate,
+          amount: newPayment.amount,
+          payment_method: newPayment.paymentMethod,
+          reference: newPayment.reference || null,
+          notes: newPayment.notes || null,
+          created_by: newPayment.createdBy || null,
+          created_at: newPayment.createdAt
+        };
+        await supabase.from('invoice_payments').upsert(dbPayment);
+      }
+    } catch (e) {
+      console.warn('Erreur synchro paiement facture:', e);
+    }
+
+    return newPayment;
+  };
+
+  const deleteInvoicePayment = async (paymentId: string) => {
+    const payment = invoicePayments.find(p => p.id === paymentId);
+    const nextPayments = invoicePayments.filter(p => p.id !== paymentId);
+    setInvoicePayments(nextPayments);
+    await db.invoicePayments.setItem('data', nextPayments);
+
+    if (payment) {
+      const targetInvoice = invoices.find(i => i.id === payment.invoiceId);
+      if (targetInvoice) {
+        const remainingPayments = nextPayments.filter(p => p.invoiceId === targetInvoice.id);
+        const totalPaid = remainingPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        const newStatus = computeInvoiceStatus(targetInvoice.totalAmount, totalPaid, targetInvoice.dueDate, targetInvoice.status);
+        const now = new Date().toISOString();
+        const updatedInvoice: Invoice = {
+          ...targetInvoice,
+          status: newStatus,
+          updatedAt: now
+        };
+        const nextInvoices = invoices.map(i => i.id === targetInvoice.id ? updatedInvoice : i);
+        setInvoices(nextInvoices);
+        await db.invoices.setItem('data', nextInvoices);
+
+        try {
+          if (navigator.onLine) {
+            await supabase.from('invoices').update({ status: newStatus, updated_at: now }).eq('id', targetInvoice.id);
+          }
+        } catch {}
+      }
+
+      try {
+        if (navigator.onLine) {
+          await supabase.from('invoice_payments').delete().eq('id', paymentId);
+        }
+      } catch (e) {
+        console.warn('Erreur suppression paiement facture:', e);
+      }
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, reviewV2WeeklyReport, deleteV2WeeklyReport, updateMyProfile, addCrmDocument, updateCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData, reconcilePosData: reconcileLocalPosDataWithCloud,
       // CRM Modules Responsables
-      crmTiers, crmCommerciaux, crmPrestations, crmCaisse, crmCommissions, crmArticles, crmMaintenance,
+      crmTiers, crmCommerciaux, crmPrestations, crmCaisse, crmCommissions, crmArticles, crmMaintenance, crmTechniciens,
       addCrmTier, updateCrmTier, deleteCrmTier,
       addCrmCommercial, updateCrmCommercial, deleteCrmCommercial,
       addCrmPrestation, updateCrmPrestation, deleteCrmPrestation, encaisserCrmPrestation,
       addCrmMouvementCaisse, deleteCrmMouvementCaisse,
       updateCrmCommissionStatus, payerCrmCommission,
       addCrmArticle, updateCrmArticle, deleteCrmArticle,
-      addCrmIntervention, updateCrmIntervention, deleteCrmIntervention
+      addCrmIntervention, updateCrmIntervention, deleteCrmIntervention,
+      addCrmTechnicien, updateCrmTechnicien, deleteCrmTechnicien,
+      // Module Facturation Client
+      invoices, invoicePayments,
+      addInvoice, updateInvoice, updateInvoiceStatus, deleteInvoice,
+      addInvoicePayment, deleteInvoicePayment
     }}>
       {children}
     </AppContext.Provider>
