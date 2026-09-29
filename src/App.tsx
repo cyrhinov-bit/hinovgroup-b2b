@@ -29,6 +29,7 @@ import { CrmStocks } from './pages/crm/CrmStocks';
 import { CrmTiers } from './pages/crm/CrmTiers';
 import { CrmCommerciaux } from './pages/crm/CrmCommerciaux';
 import { CrmCommissions } from './pages/crm/CrmCommissions';
+import CrmModulesManager from './pages/crm/CrmModulesManager';
 
 // AI Weekly Reports (Deleted)
 
@@ -180,6 +181,7 @@ function App() {
                     <Route path="crm/tiers" element={<CrmTiers />} />
                     <Route path="crm/commerciaux" element={<CrmCommerciaux />} />
                     <Route path="crm/commissions" element={<CrmCommissions />} />
+                    <Route path="crm/modules" element={<CrmModulesManager />} />
 
                     {/* Commercial routes */}
                     <Route path="commercial" element={<DashboardCommercial />} />
