@@ -146,20 +146,19 @@ export default function PosFinance() {
   });
   rangeValidTx.forEach(t => {
     t.lines.forEach(l => {
-      if (l.productId) {
-        const prod = posProducts.find(p => p.id === l.productId);
-        if (!productMargins[l.productId]) {
-          productMargins[l.productId] = {
-            name: prod?.name || l.description,
-            qtySold: 0, totalRevenue: 0, totalCost: 0,
-            purchasePrice: prod?.purchasePrice || 0,
-            sellingPrice: prod?.sellingPrice || l.unitPrice,
-          };
-        }
-        productMargins[l.productId].qtySold += l.quantity;
-        productMargins[l.productId].totalRevenue += l.total;
-        productMargins[l.productId].totalCost += (prod?.purchasePrice || 0) * l.quantity;
+      const key = l.productId || `custom_${l.description || 'Divers'}`;
+      const prod = l.productId ? posProducts.find(p => p.id === l.productId) : null;
+      if (!productMargins[key]) {
+        productMargins[key] = {
+          name: prod?.name || l.description || 'Article personnalisé / Service',
+          qtySold: 0, totalRevenue: 0, totalCost: 0,
+          purchasePrice: prod?.purchasePrice || 0,
+          sellingPrice: prod?.sellingPrice || l.unitPrice,
+        };
       }
+      productMargins[key].qtySold += l.quantity;
+      productMargins[key].totalRevenue += l.total;
+      productMargins[key].totalCost += (prod?.purchasePrice || 0) * l.quantity;
     });
   });
   const margins = Object.values(productMargins).sort((a, b) => (b.totalRevenue - b.totalCost) - (a.totalRevenue - a.totalCost));

@@ -1698,20 +1698,20 @@ export const processSyncQueue = async () => {
           const p_lines = (lines || []).map((l: any) => ({
             id: l.id || uuidv4(),
             transaction_id: p_transaction.id,
-            product_id: isUuid(l.productId) ? l.productId : null,
-            description: l.description,
-            quantity: l.quantity,
-            unit_price: l.unitPrice,
-            discount_percent: l.discountPercent || 0,
-            discount_amount: l.discountAmount || 0,
-            total: l.total
+            product_id: isUuid(l.productId || l.product_id) ? (l.productId || l.product_id) : null,
+            description: l.description || l.name || l.product_name || 'Article',
+            quantity: Number(l.quantity) || 1,
+            unit_price: Number(l.unitPrice ?? l.unit_price ?? 0),
+            discount_percent: Number(l.discountPercent ?? l.discount_percent ?? 0),
+            discount_amount: Number(l.discountAmount ?? l.discount_amount ?? 0),
+            total: Number(l.total ?? (Number(l.quantity || 1) * Number(l.unitPrice ?? l.unit_price ?? 0)))
           }));
 
           const p_payments = (payments || []).map((p: any) => ({
             id: p.id || uuidv4(),
             transaction_id: p_transaction.id,
-            method: p.method,
-            amount: p.amount,
+            method: p.method || 'Espèces',
+            amount: Number(p.amount ?? p_transaction.total),
             reference: p.reference || null
           }));
 
@@ -1731,11 +1731,17 @@ export const processSyncQueue = async () => {
             if (!txErr) {
               if (p_lines.length > 0) {
                 const { error: linesErr } = await supabase.from('pos_transaction_lines').upsert(p_lines, { onConflict: 'id' });
-                if (linesErr && isNetworkOrTransientError(linesErr)) throw new Error(`[NetworkError] ${linesErr.message}`);
+                if (linesErr) {
+                  if (isNetworkOrTransientError(linesErr)) throw new Error(`[NetworkError] ${linesErr.message}`);
+                  console.error('[Sync] Erreur insertion pos_transaction_lines :', linesErr.message);
+                }
               }
               if (p_payments.length > 0) {
                 const { error: payErr } = await supabase.from('pos_payments').upsert(p_payments, { onConflict: 'id' });
-                if (payErr && isNetworkOrTransientError(payErr)) throw new Error(`[NetworkError] ${payErr.message}`);
+                if (payErr) {
+                  if (isNetworkOrTransientError(payErr)) throw new Error(`[NetworkError] ${payErr.message}`);
+                  console.error('[Sync] Erreur insertion pos_payments :', payErr.message);
+                }
               }
               success = true;
             } else {

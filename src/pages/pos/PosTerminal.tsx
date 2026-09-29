@@ -319,7 +319,16 @@ export default function PosTerminal() {
       receivedAmount: receivedCash > 0 ? receivedCash : (paymentMethod === 'Espèces' ? total : 0),
       changeAmount,
       status: 'Validée' as const,
-      lines: cart.map(c => ({ id: uuidv4(), productId: c.productId, description: c.name, quantity: c.quantity, unitPrice: c.unitPrice, discountPercent: c.discountPercent, discountAmount: c.discountAmount, total: c.total })),
+      lines: cart.map(c => ({
+        id: uuidv4(),
+        productId: c.productId || undefined,
+        description: c.name || (c as any).description || 'Article',
+        quantity: Number(c.quantity) || 1,
+        unitPrice: Number(c.unitPrice) || 0,
+        discountPercent: Number(c.discountPercent) || 0,
+        discountAmount: Number(c.discountAmount) || 0,
+        total: Number(c.total) || ((Number(c.quantity) || 1) * (Number(c.unitPrice) || 0))
+      })),
       payments
     };
 
