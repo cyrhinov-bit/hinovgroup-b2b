@@ -18,7 +18,8 @@ import {
   Package,
   Award,
   Wallet,
-  Layers
+  Layers,
+  Receipt
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -40,6 +41,7 @@ type PeriodFilter = 'ALL' | 'TODAY' | '7_DAYS' | 'THIS_MONTH' | 'THIS_QUARTER' |
 export function DashboardResponsable() {
   const { 
     quotes, 
+    invoices,
     prestations, 
     clients, 
     services, 
@@ -144,6 +146,26 @@ export function DashboardResponsable() {
       return true;
     });
   }, [crmMaintenance, users, currentUser, selectedPeriod, selectedCommercialFilter]);
+
+  // Filtrage Factures du Service
+  const filteredServiceInvoices = useMemo(() => {
+    return invoices.filter(inv => {
+      const invDate = inv.issueDate || inv.issue_date || inv.createdAt || inv.created_at || '';
+      if (!isDateInPeriod(invDate)) return false;
+      const isMyService = inv.serviceId === currentUser?.serviceId || inv.service_id === currentUser?.serviceId || inv.createdBy === currentUser?.id;
+      if (!isMyService) return false;
+      if (selectedCommercialFilter !== 'ALL' && inv.commercialId !== selectedCommercialFilter && inv.commercial_id !== selectedCommercialFilter && inv.createdBy !== selectedCommercialFilter) return false;
+      return true;
+    });
+  }, [invoices, currentUser, selectedPeriod, selectedCommercialFilter]);
+
+  const serviceInvoicesTotal = filteredServiceInvoices.filter(i => (i.status as string) !== 'ANNULEE' && (i.status as string) !== 'Annulée').reduce((sum, i) => sum + (i.totalAmount || 0), 0);
+  const serviceInvoicesPaid = filteredServiceInvoices.reduce((sum, i) => sum + (i.payments || []).reduce((ps, p) => ps + (p.amount || 0), 0), 0);
+  const serviceInvoicesRetardCount = filteredServiceInvoices.filter(i => {
+    const paid = (i.payments || []).reduce((ps, p) => ps + (p.amount || 0), 0);
+    const due = i.dueDate || i.due_date;
+    return (i.status as string) === 'EN_RETARD' || (paid < (i.totalAmount || 0) && due && new Date(due) < new Date());
+  }).length;
 
   // KPIs
   const totalCommandesVente = filteredServicePrestations.reduce((sum, p) => sum + (p.prix_client_final || p.montant_total_vente || 0), 0);
@@ -347,22 +369,26 @@ export function DashboardResponsable() {
         </div>
       </div>
 
-      {/* ─── KPIS DU SERVICE ─────────────────────────────────── */}
+      {/* ─── KPIS DU SERVICE (CONDITIONNÉS PAR LES MODULES ACTIFS) ─────────────────── */}
       <div className="widgets-grid" style={{ marginBottom: '20px' }}>
-        <div className="widget-card" style={{ borderLeft: '4px solid #10B981' }}>
-          <div className="widget-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#059669' }}>
-            <ShoppingBag size={24} />
-          </div>
-          <div className="widget-content">
-            <div className="widget-label">COMMANDES VENTES</div>
-            <div className="widget-value">{totalCommandesVente.toLocaleString('fr-FR')} F</div>
-            <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: '2px' }}>
-              Marge: {totalMargeInterne.toLocaleString('fr-FR')} F ({filteredServicePrestations.length} cmds)
+        {/* Module Commandes / Prestations */}
+        {(selectedCommercialFilter === 'ALL' || users.find(u => u.id === selectedCommercialFilter)?.crmPrestationsEnabled !== false) && (
+          <div className="widget-card" style={{ borderLeft: '4px solid #10B981', cursor: 'pointer' }} onClick={() => setActiveTab('OPERATIONS')}>
+            <div className="widget-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#059669' }}>
+              <ShoppingBag size={24} />
+            </div>
+            <div className="widget-content">
+              <div className="widget-label">COMMANDES VENTES</div>
+              <div className="widget-value">{totalCommandesVente.toLocaleString('fr-FR')} F</div>
+              <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: '2px' }}>
+                Marge: {totalMargeInterne.toLocaleString('fr-FR')} F ({filteredServicePrestations.length} cmds)
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="widget-card" style={{ borderLeft: '4px solid #3B82F6' }}>
+        {/* Module Devis */}
+        <div className="widget-card" style={{ borderLeft: '4px solid #3B82F6', cursor: 'pointer' }} onClick={() => navigate('/devis')}>
           <div className="widget-icon" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#2563EB' }}>
             <FileText size={24} />
           </div>
@@ -375,31 +401,69 @@ export function DashboardResponsable() {
           </div>
         </div>
 
-        <div className="widget-card" style={{ borderLeft: '4px solid #059669' }}>
-          <div className="widget-icon" style={{ background: 'rgba(5, 150, 105, 0.1)', color: '#059669' }}>
-            <Award size={24} />
+        {/* Module Facturation */}
+        <div className="widget-card" style={{ borderLeft: '4px solid #0284C7', cursor: 'pointer' }} onClick={() => navigate('/factures')}>
+          <div className="widget-icon" style={{ background: 'rgba(2, 132, 199, 0.1)', color: '#0284C7' }}>
+            <Receipt size={24} />
           </div>
           <div className="widget-content">
-            <div className="widget-label">BÉNÉFICE NET PÔLE</div>
-            <div className="widget-value">{totalBeneficeNet.toLocaleString('fr-FR')} F</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-              Rendement financier net
+            <div className="widget-label">FACTURES & RECOUVREMENT</div>
+            <div className="widget-value">{serviceInvoicesTotal.toLocaleString('fr-FR')} F</div>
+            <div style={{ fontSize: '0.75rem', color: '#0284C7', fontWeight: 600, marginTop: '2px' }}>
+              Encaissé: {serviceInvoicesPaid.toLocaleString('fr-FR')} F {serviceInvoicesRetardCount > 0 ? `• ${serviceInvoicesRetardCount} retard` : ''}
             </div>
           </div>
         </div>
 
-        <div className="widget-card" style={{ borderLeft: '4px solid #F59E0B' }}>
-          <div className="widget-icon" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#D97706' }}>
-            <Wrench size={24} />
-          </div>
-          <div className="widget-content">
-            <div className="widget-label">MAINTENANCE</div>
-            <div className="widget-value">{filteredServiceMaintenance.length} tickets</div>
-            <div style={{ fontSize: '0.75rem', color: '#D97706', fontWeight: 600, marginTop: '2px' }}>
-              Interventions techniques
+        {/* Module Bénéfice / Rentabilité (Prestations) */}
+        {(selectedCommercialFilter === 'ALL' || users.find(u => u.id === selectedCommercialFilter)?.crmPrestationsEnabled !== false) && (
+          <div className="widget-card" style={{ borderLeft: '4px solid #059669' }}>
+            <div className="widget-icon" style={{ background: 'rgba(5, 150, 105, 0.1)', color: '#059669' }}>
+              <Award size={24} />
+            </div>
+            <div className="widget-content">
+              <div className="widget-label">BÉNÉFICE NET PÔLE</div>
+              <div className="widget-value">{totalBeneficeNet.toLocaleString('fr-FR')} F</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                Rendement financier net
+              </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Module Maintenance */}
+        {(selectedCommercialFilter === 'ALL' || users.find(u => u.id === selectedCommercialFilter)?.crmMaintenanceEnabled !== false) && (
+          <div className="widget-card" style={{ borderLeft: '4px solid #F59E0B', cursor: 'pointer' }} onClick={() => navigate('/crm/maintenance')}>
+            <div className="widget-icon" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#D97706' }}>
+              <Wrench size={24} />
+            </div>
+            <div className="widget-content">
+              <div className="widget-label">MAINTENANCE</div>
+              <div className="widget-value">{filteredServiceMaintenance.length} tickets</div>
+              <div style={{ fontSize: '0.75rem', color: '#D97706', fontWeight: 600, marginTop: '2px' }}>
+                Interventions techniques
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Module Caisse (si activé pour le responsable ou collaborateur) */}
+        {(selectedCommercialFilter === 'ALL' ? currentUser?.crmCaisseEnabled : users.find(u => u.id === selectedCommercialFilter)?.crmCaisseEnabled) && (
+          <div className="widget-card" style={{ borderLeft: '4px solid #EF4444', cursor: 'pointer' }} onClick={() => navigate('/crm/caisse')}>
+            <div className="widget-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#DC2626' }}>
+              <Wallet size={24} />
+            </div>
+            <div className="widget-content">
+              <div className="widget-label">CAISSE & DÉPENSES</div>
+              <div className="widget-value">
+                {crmCaisse.filter(m => m.cree_par === (selectedCommercialFilter !== 'ALL' ? selectedCommercialFilter : currentUser?.id)).reduce((s, m) => s + (m.type === 'SORTIE' ? -m.montant : m.montant), 0).toLocaleString('fr-FR')} F
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                Solde de caisse actif
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ─── ONGLETS DE NAVIGATION ───────────────────────────── */}

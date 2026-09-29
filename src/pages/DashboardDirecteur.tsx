@@ -23,7 +23,8 @@ import {
   Award,
   Wallet,
   Activity,
-  Sparkles
+  Sparkles,
+  Receipt
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
@@ -40,11 +41,12 @@ import {
 import './DashboardDirecteur.css';
 
 type PeriodFilter = 'ALL' | 'TODAY' | '7_DAYS' | 'THIS_MONTH' | 'THIS_QUARTER' | 'THIS_YEAR';
-type ModuleScope = 'ALL' | 'PRESTATIONS' | 'DEVIS' | 'CAISSE' | 'MAINTENANCE' | 'STOCKS' | 'TIERS' | 'COMMISSIONS';
+type ModuleScope = 'ALL' | 'PRESTATIONS' | 'DEVIS' | 'FACTURES' | 'CAISSE' | 'MAINTENANCE' | 'STOCKS' | 'TIERS' | 'COMMISSIONS';
 
 export function DashboardDirecteur() {
   const { 
     quotes, 
+    invoices,
     clients, 
     services, 
     users, 
@@ -220,6 +222,32 @@ export function DashboardDirecteur() {
     });
   }, [crmCommissions, selectedPeriod, selectedUserFilter, searchQuery, users]);
 
+  // 7. Filtrage Factures
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter(inv => {
+      const invDate = inv.issueDate || inv.issue_date || inv.createdAt || inv.created_at || '';
+      if (!isDateInPeriod(invDate)) return false;
+      if (selectedUserFilter !== 'ALL') {
+        const match = inv.commercialId === selectedUserFilter || 
+          inv.commercial_id === selectedUserFilter || 
+          inv.createdBy === selectedUserFilter || 
+          inv.created_by === selectedUserFilter;
+        if (!match) return false;
+      }
+      if (selectedServiceFilter !== 'ALL') {
+        if (inv.serviceId !== selectedServiceFilter && inv.service_id !== selectedServiceFilter) return false;
+      }
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const num = (inv.invoiceNumber || inv.invoice_number || '').toLowerCase();
+        const client = clients.find(c => c.id === (inv.clientId || inv.client_id));
+        const cName = (client?.name || '').toLowerCase();
+        if (!num.includes(query) && !cName.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [invoices, selectedPeriod, selectedUserFilter, selectedServiceFilter, searchQuery, clients]);
+
   // ─── Synthèses Financières & Quantitatives Multi-Modules ───────
   // Prestations KPIs
   const totalCommandesVente = filteredPrestations.reduce((sum, p) => sum + (p.prix_client_final || p.montant_total_vente || 0), 0);
@@ -233,6 +261,16 @@ export function DashboardDirecteur() {
   const acceptedQuotesValue = acceptedQuotes.reduce((sum, q) => sum + q.total, 0);
   const pendingQuotesValue = filteredQuotes.filter(q => q.status === 'Envoyé' || q.status === 'Brouillon' || q.status === 'Révision').reduce((sum, q) => sum + q.total, 0);
   const quotesAcceptanceRate = totalQuotes > 0 ? Math.round((acceptedQuotes.length / totalQuotes) * 100) : 0;
+
+  // Factures KPIs
+  const totalFacturesCount = filteredInvoices.length;
+  const totalFactureMontant = filteredInvoices.filter(i => (i.status as string) !== 'ANNULEE' && (i.status as string) !== 'Annulée').reduce((sum, i) => sum + (i.totalAmount || 0), 0);
+  const totalFacturePaye = filteredInvoices.reduce((sum, i) => sum + (i.payments || []).reduce((ps, p) => ps + (p.amount || 0), 0), 0);
+  const facturesEnRetardCount = filteredInvoices.filter(i => {
+    const paid = (i.payments || []).reduce((ps, p) => ps + (p.amount || 0), 0);
+    const due = i.dueDate || i.due_date;
+    return (i.status as string) === 'EN_RETARD' || (paid < (i.totalAmount || 0) && due && new Date(due) < new Date());
+  }).length;
 
   // Caisse KPIs
   const totalCaisseEntrees = filteredCaisse.filter(m => m.type === 'ENTREE').reduce((sum, m) => sum + (m.montant || 0), 0);
@@ -260,7 +298,6 @@ export function DashboardDirecteur() {
   const userMultiModuleSummaries: UserModuleSummary[] = useMemo(() => {
     return users.map(u => {
       const uService = services.find(s => s.id === u.serviceId);
-      const isAdm = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(u.role);
 
       // Devis
       const uQuotes = filteredQuotes.filter(q => q.commercialId === u.id || (q.serviceId === u.serviceId && !q.commercialId));
@@ -305,13 +342,13 @@ export function DashboardDirecteur() {
       const uCommAttente = uComms.filter(c => c.statut !== 'PAYEE' && c.statut !== 'ANNULEE').reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
 
       const activeMods = [
-        isAdm || u.crmPrestationsEnabled,
-        isAdm || u.crmCaisseEnabled,
-        isAdm || u.crmMaintenanceEnabled,
-        isAdm || u.crmStocksEnabled,
-        isAdm || u.crmTiersEnabled,
-        isAdm || u.crmCommerciauxEnabled,
-        isAdm || u.crmCommissionsEnabled
+        u.crmPrestationsEnabled !== false,
+        !!u.crmCaisseEnabled,
+        u.crmMaintenanceEnabled !== false,
+        u.crmStocksEnabled !== false,
+        u.crmTiersEnabled !== false,
+        u.crmCommerciauxEnabled !== false,
+        u.crmCommissionsEnabled !== false
       ].filter(Boolean).length;
 
       return {
@@ -323,13 +360,13 @@ export function DashboardDirecteur() {
           serviceName: uService?.name || 'Direction / Tous services',
           activeModulesCount: activeMods,
           enabled: {
-            prestations: isAdm || !!u.crmPrestationsEnabled,
-            caisse: isAdm || !!u.crmCaisseEnabled,
-            maintenance: isAdm || !!u.crmMaintenanceEnabled,
-            stocks: isAdm || !!u.crmStocksEnabled,
-            tiers: isAdm || !!u.crmTiersEnabled,
-            commerciaux: isAdm || !!u.crmCommerciauxEnabled,
-            commissions: isAdm || !!u.crmCommissionsEnabled
+            prestations: u.crmPrestationsEnabled !== false,
+            caisse: !!u.crmCaisseEnabled,
+            maintenance: u.crmMaintenanceEnabled !== false,
+            stocks: u.crmStocksEnabled !== false,
+            tiers: u.crmTiersEnabled !== false,
+            commerciaux: u.crmCommerciauxEnabled !== false,
+            commissions: u.crmCommissionsEnabled !== false
           }
         },
         quotes: {
@@ -616,6 +653,7 @@ export function DashboardDirecteur() {
               <option value="ALL">🌟 Synthèse 360° (Tous modules)</option>
               <option value="PRESTATIONS">💼 Commandes (11 colonnes)</option>
               <option value="DEVIS">📄 Devis Clients</option>
+              <option value="FACTURES">🧾 Factures & Recouvrement</option>
               <option value="CAISSE">💰 Caisse & Dépenses</option>
               <option value="MAINTENANCE">🛠️ Maintenance & Tickets</option>
               <option value="STOCKS">📦 Stocks & Consommables</option>
@@ -626,66 +664,107 @@ export function DashboardDirecteur() {
         </div>
       </div>
 
-      {/* ─── 8 KPIS CONSOLIDÉS MULTI-MODULES ──────────────────── */}
-      <div className="widgets-grid" style={{ marginBottom: '20px' }}>
-        {/* KPI 1 : Commandes Prestations */}
-        <div className="widget-card" style={{ borderLeft: '4px solid #10B981', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('PRESTATIONS')}>
-          <div className="widget-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#059669' }}>
-            <ShoppingBag size={24} />
-          </div>
-          <div className="widget-content">
-            <div className="widget-label">COMMANDES VENTES</div>
-            <div className="widget-value">{totalCommandesVente.toLocaleString('fr-FR')} F</div>
-            <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: '2px' }}>
-              Marge: {totalMargeInterne.toLocaleString('fr-FR')} F ({filteredPrestations.length} cmds)
-            </div>
-          </div>
-        </div>
+      {/* ─── KPIS CONSOLIDÉS MULTI-MODULES (FILTRÉS SELON ACCÈS MODULES) ──────────────────── */}
+      {(() => {
+        const targetUserObj = selectedUserFilter !== 'ALL' ? users.find(u => u.id === selectedUserFilter) : null;
+        return (
+          <div className="widgets-grid" style={{ marginBottom: '20px' }}>
+            {/* KPI 1 : Commandes Prestations */}
+            {(selectedUserFilter === 'ALL' || targetUserObj?.crmPrestationsEnabled !== false) && (
+              <div className="widget-card" style={{ borderLeft: '4px solid #10B981', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('PRESTATIONS')}>
+                <div className="widget-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#059669' }}>
+                  <ShoppingBag size={24} />
+                </div>
+                <div className="widget-content">
+                  <div className="widget-label">COMMANDES VENTES</div>
+                  <div className="widget-value">{totalCommandesVente.toLocaleString('fr-FR')} F</div>
+                  <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: '2px' }}>
+                    Marge: {totalMargeInterne.toLocaleString('fr-FR')} F ({filteredPrestations.length} cmds)
+                  </div>
+                </div>
+              </div>
+            )}
 
-        {/* KPI 2 : Devis Clients */}
-        <div className="widget-card" style={{ borderLeft: '4px solid #3B82F6', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('DEVIS')}>
-          <div className="widget-icon" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#2563EB' }}>
-            <FileText size={24} />
-          </div>
-          <div className="widget-content">
-            <div className="widget-label">DEVIS ACCEPTÉS</div>
-            <div className="widget-value">{acceptedQuotesValue.toLocaleString('fr-FR')} F</div>
-            <div style={{ fontSize: '0.75rem', color: '#2563EB', fontWeight: 600, marginTop: '2px' }}>
-              {acceptedQuotes.length}/{totalQuotes} devis ({quotesAcceptanceRate}%)
+            {/* KPI 2 : Devis Clients */}
+            <div className="widget-card" style={{ borderLeft: '4px solid #3B82F6', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('DEVIS')}>
+              <div className="widget-icon" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#2563EB' }}>
+                <FileText size={24} />
+              </div>
+              <div className="widget-content">
+                <div className="widget-label">DEVIS ACCEPTÉS</div>
+                <div className="widget-value">{acceptedQuotesValue.toLocaleString('fr-FR')} F</div>
+                <div style={{ fontSize: '0.75rem', color: '#2563EB', fontWeight: 600, marginTop: '2px' }}>
+                  {acceptedQuotes.length}/{totalQuotes} devis ({quotesAcceptanceRate}%)
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* KPI 3 : Caisse Trésorerie */}
-        <div className="widget-card" style={{ borderLeft: '4px solid #EF4444', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('CAISSE')}>
-          <div className="widget-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#DC2626' }}>
-            <Wallet size={24} />
-          </div>
-          <div className="widget-content">
-            <div className="widget-label">FLUX CAISSE NET</div>
-            <div className="widget-value" style={{ color: soldeNetCaisse >= 0 ? '#059669' : '#DC2626' }}>
-              {soldeNetCaisse.toLocaleString('fr-FR')} F
+            {/* KPI 3 : Facturation & Encaissements */}
+            <div className="widget-card" style={{ borderLeft: '4px solid #0284C7', cursor: 'pointer' }} onClick={() => navigate('/factures')}>
+              <div className="widget-icon" style={{ background: 'rgba(2, 132, 199, 0.1)', color: '#0284C7' }}>
+                <Receipt size={24} />
+              </div>
+              <div className="widget-content">
+                <div className="widget-label">FACTURES & RECOUVREMENT</div>
+                <div className="widget-value">{totalFactureMontant.toLocaleString('fr-FR')} F</div>
+                <div style={{ fontSize: '0.75rem', color: '#0284C7', fontWeight: 600, marginTop: '2px' }}>
+                  Encaissé: {totalFacturePaye.toLocaleString('fr-FR')} F {facturesEnRetardCount > 0 ? `• ${facturesEnRetardCount} retard` : ''}
+                </div>
+              </div>
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-              Entrées: {totalCaisseEntrees.toLocaleString('fr-FR')} | Sorties: {totalCaisseSorties.toLocaleString('fr-FR')}
-            </div>
-          </div>
-        </div>
 
-        {/* KPI 4 : Maintenance */}
-        <div className="widget-card" style={{ borderLeft: '4px solid #F59E0B', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('MAINTENANCE')}>
-          <div className="widget-icon" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#D97706' }}>
-            <Wrench size={24} />
+            {/* KPI 4 : Caisse Trésorerie */}
+            {(selectedUserFilter === 'ALL' || targetUserObj?.crmCaisseEnabled) && (
+              <div className="widget-card" style={{ borderLeft: '4px solid #EF4444', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('CAISSE')}>
+                <div className="widget-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#DC2626' }}>
+                  <Wallet size={24} />
+                </div>
+                <div className="widget-content">
+                  <div className="widget-label">FLUX CAISSE NET</div>
+                  <div className="widget-value" style={{ color: soldeNetCaisse >= 0 ? '#059669' : '#DC2626' }}>
+                    {soldeNetCaisse.toLocaleString('fr-FR')} F
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                    Entrées: {totalCaisseEntrees.toLocaleString('fr-FR')} | Sorties: {totalCaisseSorties.toLocaleString('fr-FR')}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* KPI 5 : Maintenance */}
+            {(selectedUserFilter === 'ALL' || targetUserObj?.crmMaintenanceEnabled !== false) && (
+              <div className="widget-card" style={{ borderLeft: '4px solid #F59E0B', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('MAINTENANCE')}>
+                <div className="widget-icon" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#D97706' }}>
+                  <Wrench size={24} />
+                </div>
+                <div className="widget-content">
+                  <div className="widget-label">MAINTENANCE & PANNES</div>
+                  <div className="widget-value">{totalTickets} tickets</div>
+                  <div style={{ fontSize: '0.75rem', color: '#D97706', fontWeight: 600, marginTop: '2px' }}>
+                    {ticketsUrgents} urgents • Facturé: {totalFacturationMaintenance.toLocaleString('fr-FR')} F
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* KPI 6 : Commissions */}
+            {(selectedUserFilter === 'ALL' || targetUserObj?.crmCommissionsEnabled !== false) && (
+              <div className="widget-card" style={{ borderLeft: '4px solid #8B5CF6', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('COMMISSIONS')}>
+                <div className="widget-icon" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#8B5CF6' }}>
+                  <Award size={24} />
+                </div>
+                <div className="widget-content">
+                  <div className="widget-label">COMMISSIONS & PRIMES</div>
+                  <div className="widget-value">{totalCommissionsMontant.toLocaleString('fr-FR')} F</div>
+                  <div style={{ fontSize: '0.75rem', color: '#8B5CF6', fontWeight: 600, marginTop: '2px' }}>
+                    Payé: {totalCommissionsPayees.toLocaleString('fr-FR')} F • En attente: {totalCommissionsEnAttente.toLocaleString('fr-FR')} F
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-          <div className="widget-content">
-            <div className="widget-label">MAINTENANCE & PANNES</div>
-            <div className="widget-value">{totalTickets} tickets</div>
-            <div style={{ fontSize: '0.75rem', color: '#D97706', fontWeight: 600, marginTop: '2px' }}>
-              {ticketsUrgents} urgents • Facturé: {totalFacturationMaintenance.toLocaleString('fr-FR')} F
-            </div>
-          </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* ─── ONGLETS DE VUE DU DASHBOARD ───────────────────────── */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid var(--color-border)', paddingBottom: '10px', flexWrap: 'wrap' }}>

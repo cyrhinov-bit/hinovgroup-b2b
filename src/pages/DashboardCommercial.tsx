@@ -1,4 +1,4 @@
-import { FileText, Users, CheckCircle, Clock, Plus } from 'lucide-react';
+import { FileText, Users, CheckCircle, Clock, Plus, ShoppingBag, Award, Receipt } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -6,11 +6,14 @@ import './DashboardDirecteur.css';
 
 export function DashboardCommercial() {
   const { currentUser } = useAuth();
-  const { quotes, clients } = useAppContext();
+  const { quotes, clients, crmPrestations, crmCommissions, invoices } = useAppContext();
   const navigate = useNavigate();
 
   const myQuotes = quotes.filter(q => q.commercialId === currentUser?.id || q.serviceId === currentUser?.serviceId);
   const myClients = clients.filter(c => c.commercialId === currentUser?.id);
+  const myPrestations = crmPrestations.filter(p => p.cree_par === currentUser?.id || p.commercial_id === currentUser?.id || p.apporteur_id === currentUser?.id);
+  const myCommissions = crmCommissions.filter(c => c.beneficiaire_id === currentUser?.id || c.cree_par === currentUser?.id || (c.beneficiaire_nom && c.beneficiaire_nom.toLowerCase().includes((currentUser?.name || '').toLowerCase())));
+  const myInvoices = invoices.filter(i => i.commercialId === currentUser?.id);
 
   const totalQuotes = myQuotes.length;
   const acceptedQuotes = myQuotes.filter(q => q.status === 'Accepté');
@@ -23,6 +26,10 @@ export function DashboardCommercial() {
 
   const totalValue = myQuotes.filter(q => q.status !== 'Refusé').reduce((sum, q) => sum + q.total, 0);
   const conversionRate = totalQuotes > 0 ? Math.round((acceptedCount / totalQuotes) * 100) : 0;
+
+  const totalVentePrestations = myPrestations.reduce((sum, p) => sum + (p.prix_client_final || p.montant_total_vente || 0), 0);
+  const totalCommissionsVal = myCommissions.reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
+  const totalFactureVal = myInvoices.reduce((sum, i) => sum + (i.totalAmount || 0), 0);
 
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Inconnu';
 
@@ -43,18 +50,21 @@ export function DashboardCommercial() {
     <div className="dashboard">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h2 style={{ margin: 0 }}>Espace Commercial - Mes Devis</h2>
+          <h2 style={{ margin: 0 }}>Espace Commercial - Mon Tableau de Bord</h2>
           <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>
-            Bienvenue {currentUser?.name}. Gérez vos devis et propositions clients.
+            Bienvenue {currentUser?.name}. Retrouvez l'état de vos devis, commandes et portefeuille.
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => navigate('/devis/nouveau')} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Plus size={16} /> Créer un devis
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn btn-primary" onClick={() => navigate('/devis/nouveau')} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Plus size={16} /> Créer un devis
+          </button>
+        </div>
       </div>
       
       <div className="widgets-grid">
-        <div className="widget-card">
+        {/* Devis Créés */}
+        <div className="widget-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/devis')}>
           <div className="widget-icon bg-info">
             <FileText size={28} color="white" />
           </div>
@@ -62,12 +72,13 @@ export function DashboardCommercial() {
             <div className="widget-label">MES DEVIS CRÉÉS</div>
             <div className="widget-value">{totalQuotes}</div>
             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-              {totalValue.toLocaleString('fr-FR')} FCFA cumulés
+              {totalValue.toLocaleString('fr-FR')} FCFA émis
             </div>
           </div>
         </div>
         
-        <div className="widget-card">
+        {/* Devis Acceptés */}
+        <div className="widget-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/devis')}>
           <div className="widget-icon bg-success">
             <CheckCircle size={28} color="white" />
           </div>
@@ -80,28 +91,62 @@ export function DashboardCommercial() {
           </div>
         </div>
 
-        <div className="widget-card">
-          <div className="widget-icon bg-warning">
-            <Clock size={28} color="white" />
+        {/* Commandes / Prestations (si activé pour le commercial) */}
+        {currentUser?.crmPrestationsEnabled !== false && (
+          <div className="widget-card" style={{ cursor: 'pointer', borderLeft: '4px solid #10B981' }} onClick={() => navigate('/crm/prestations')}>
+            <div className="widget-icon" style={{ background: '#10B981', color: 'white' }}>
+              <ShoppingBag size={28} />
+            </div>
+            <div className="widget-content">
+              <div className="widget-label">MES COMMANDES</div>
+              <div className="widget-value">{myPrestations.length}</div>
+              <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '2px', fontWeight: 600 }}>
+                {totalVentePrestations.toLocaleString('fr-FR')} FCFA générés
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Commissions (si activé pour le commercial) */}
+        {currentUser?.crmCommissionsEnabled !== false && (
+          <div className="widget-card" style={{ cursor: 'pointer', borderLeft: '4px solid #D97706' }} onClick={() => navigate('/crm/commissions')}>
+            <div className="widget-icon" style={{ background: '#D97706', color: 'white' }}>
+              <Award size={28} />
+            </div>
+            <div className="widget-content">
+              <div className="widget-label">MES COMMISSIONS</div>
+              <div className="widget-value">{totalCommissionsVal.toLocaleString('fr-FR')} F</div>
+              <div style={{ fontSize: '0.75rem', color: '#D97706', marginTop: '2px', fontWeight: 600 }}>
+                {myCommissions.length} commission(s)
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Facturation */}
+        <div className="widget-card" style={{ cursor: 'pointer', borderLeft: '4px solid #0284C7' }} onClick={() => navigate('/factures')}>
+          <div className="widget-icon" style={{ background: '#0284C7', color: 'white' }}>
+            <Receipt size={28} />
           </div>
           <div className="widget-content">
-            <div className="widget-label">DEVIS EN NÉGOCIATION</div>
-            <div className="widget-value">{pendingCount}</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-              {pendingValue.toLocaleString('fr-FR')} FCFA en cours
+            <div className="widget-label">FACTURES CLIENTS</div>
+            <div className="widget-value">{myInvoices.length}</div>
+            <div style={{ fontSize: '0.75rem', color: '#0284C7', marginTop: '2px', fontWeight: 600 }}>
+              {totalFactureVal.toLocaleString('fr-FR')} FCFA facturés
             </div>
           </div>
         </div>
 
-        <div className="widget-card">
+        {/* Portefeuille Clients */}
+        <div className="widget-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/clients')}>
           <div className="widget-icon bg-primary">
             <Users size={28} color="white" />
           </div>
           <div className="widget-content">
-            <div className="widget-label">CLIENTS APPORTÉS</div>
+            <div className="widget-label">CLIENTS DU PORTEFEUILLE</div>
             <div className="widget-value">{myClients.length}</div>
             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-              Portefeuille personnel
+              Clients assignés
             </div>
           </div>
         </div>
