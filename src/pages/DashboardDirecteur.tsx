@@ -15,7 +15,15 @@ import {
   BarChart3,
   PieChart as PieIcon,
   Layers,
-  ChevronDown
+  ChevronDown,
+  ShoppingBag,
+  DollarSign,
+  Wrench,
+  Package,
+  Award,
+  Wallet,
+  Activity,
+  Sparkles
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
@@ -23,32 +31,47 @@ import {
   DonutChart, 
   BarComparisonChart, 
   TrendBarsChart, 
-  UserAnalyticsCard,
+  UserMultiModuleSupervisionCard,
   type DonutDataPoint,
   type BarComparisonItem,
-  type TrendPeriodItem
+  type TrendPeriodItem,
+  type UserModuleSummary
 } from '../components/analytics/DashboardCharts';
 import './DashboardDirecteur.css';
 
 type PeriodFilter = 'ALL' | 'TODAY' | '7_DAYS' | 'THIS_MONTH' | 'THIS_QUARTER' | 'THIS_YEAR';
+type ModuleScope = 'ALL' | 'PRESTATIONS' | 'DEVIS' | 'CAISSE' | 'MAINTENANCE' | 'STOCKS' | 'TIERS' | 'COMMISSIONS';
 
 export function DashboardDirecteur() {
-  const { quotes, clients, services, users } = useAppContext();
+  const { 
+    quotes, 
+    clients, 
+    services, 
+    users, 
+    crmPrestations, 
+    crmCaisse, 
+    crmMaintenance, 
+    crmArticles, 
+    crmTiers, 
+    crmCommerciaux, 
+    crmCommissions 
+  } = useAppContext();
+  
   const navigate = useNavigate();
 
   // Filtres
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilter>('ALL');
   const [selectedUserFilter, setSelectedUserFilter] = useState<string>('ALL');
   const [selectedServiceFilter, setSelectedServiceFilter] = useState<string>('ALL');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
+  const [selectedModuleScope, setSelectedModuleScope] = useState<ModuleScope>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'USERS_ANALYTICS' | 'QUOTES_LIST'>('OVERVIEW');
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'USERS_ANALYTICS' | 'DETAILED_TABLES'>('OVERVIEW');
   const [inspectedUserId, setInspectedUserId] = useState<string | null>(null);
 
-  // Helper date parsing
-  const isDateInPeriod = (dateStr: string, period: PeriodFilter): boolean => {
+  // Helper date filtering
+  const isDateInPeriod = (dateStr?: string, period: PeriodFilter = selectedPeriod): boolean => {
     if (period === 'ALL') return true;
-    if (!dateStr) return false;
+    if (!dateStr) return true;
     
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return true;
@@ -77,189 +100,385 @@ export function DashboardDirecteur() {
     }
   };
 
-  // Filtrage principal des devis
+  // 1. Filtrage Devis
   const filteredQuotes = useMemo(() => {
     return quotes.filter(q => {
-      // 1. Période
-      if (!isDateInPeriod(q.date, selectedPeriod)) return false;
-
-      // 2. Responsable / Commercial
+      if (!isDateInPeriod(q.date)) return false;
       if (selectedUserFilter !== 'ALL') {
         const matchUser = q.commercialId === selectedUserFilter || 
           (!q.commercialId && users.find(u => u.id === selectedUserFilter)?.serviceId === q.serviceId);
         if (!matchUser) return false;
       }
-
-      // 3. Service / Pôle
-      if (selectedServiceFilter !== 'ALL' && q.serviceId !== selectedServiceFilter) {
-        return false;
-      }
-
-      // 4. Statut
-      if (selectedStatusFilter !== 'ALL') {
-        if (selectedStatusFilter === 'EN_COURS') {
-          if (q.status !== 'Envoyé' && q.status !== 'Brouillon' && q.status !== 'Révision') return false;
-        } else if (q.status !== selectedStatusFilter) {
-          return false;
-        }
-      }
-
-      // 5. Recherche textuelle
+      if (selectedServiceFilter !== 'ALL' && q.serviceId !== selectedServiceFilter) return false;
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         const clientName = (clients.find(c => c.id === q.clientId)?.name || '').toLowerCase();
         const authorName = (users.find(u => u.id === q.commercialId)?.name || '').toLowerCase();
         const subject = (q.subject || '').toLowerCase();
         const qNum = (q.quoteNumber || '').toLowerCase();
-
-        if (!clientName.includes(query) && !authorName.includes(query) && !subject.includes(query) && !qNum.includes(query)) {
-          return false;
-        }
+        if (!clientName.includes(query) && !authorName.includes(query) && !subject.includes(query) && !qNum.includes(query)) return false;
       }
-
       return true;
     });
-  }, [quotes, selectedPeriod, selectedUserFilter, selectedServiceFilter, selectedStatusFilter, searchQuery, clients, users]);
+  }, [quotes, selectedPeriod, selectedUserFilter, selectedServiceFilter, searchQuery, clients, users]);
 
-  // Global KPIs calculés sur les données filtrées
+  // 2. Filtrage Prestations & Commandes
+  const filteredPrestations = useMemo(() => {
+    return crmPrestations.filter(p => {
+      if (!isDateInPeriod(p.date_commande || p.date_creation || p.created_at)) return false;
+      if (selectedUserFilter !== 'ALL') {
+        const match = p.cree_par === selectedUserFilter || 
+          p.commercial_id === selectedUserFilter || 
+          p.resp_service_id === selectedUserFilter ||
+          p.responsable_service_id === selectedUserFilter ||
+          p.apporteur_id === selectedUserFilter;
+        if (!match) return false;
+      }
+      if (selectedServiceFilter !== 'ALL') {
+        const user = users.find(u => u.id === p.cree_par || u.id === p.resp_service_id || u.id === p.responsable_service_id);
+        if (user && user.serviceId !== selectedServiceFilter) return false;
+      }
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const ref = (p.reference || '').toLowerCase();
+        const client = (p.client_nom || '').toLowerCase();
+        const des = (p.designation || '').toLowerCase();
+        if (!ref.includes(query) && !client.includes(query) && !des.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [crmPrestations, selectedPeriod, selectedUserFilter, selectedServiceFilter, searchQuery, users]);
+
+  // 3. Filtrage Caisse & Mouvements
+  const filteredCaisse = useMemo(() => {
+    return crmCaisse.filter(m => {
+      if (!isDateInPeriod(m.date_mouvement || m.date || m.created_at)) return false;
+      if (selectedUserFilter !== 'ALL' && m.cree_par !== selectedUserFilter) return false;
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const motif = (m.motif || '').toLowerCase();
+        const cat = (m.categorie || '').toLowerCase();
+        if (!motif.includes(query) && !cat.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [crmCaisse, selectedPeriod, selectedUserFilter, searchQuery]);
+
+  // 4. Filtrage Maintenance
+  const filteredMaintenance = useMemo(() => {
+    return crmMaintenance.filter(ticket => {
+      if (!isDateInPeriod(ticket.date_intervention || ticket.created_at)) return false;
+      if (selectedUserFilter !== 'ALL') {
+        const match = ticket.cree_par === selectedUserFilter || 
+          ticket.technicien_assigne?.toLowerCase().includes((users.find(u => u.id === selectedUserFilter)?.name || '').toLowerCase());
+        if (!match) return false;
+      }
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const ref = (ticket.reference || '').toLowerCase();
+        const eq = (ticket.equipement || '').toLowerCase();
+        const site = (ticket.site_agence || '').toLowerCase();
+        if (!ref.includes(query) && !eq.includes(query) && !site.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [crmMaintenance, selectedPeriod, selectedUserFilter, searchQuery, users]);
+
+  // 5. Filtrage Tiers
+  const filteredTiers = useMemo(() => {
+    return crmTiers.filter(t => {
+      if (selectedUserFilter !== 'ALL' && t.cree_par !== selectedUserFilter) return false;
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const nom = (t.nom || '').toLowerCase();
+        const tel = (t.telephone || '').toLowerCase();
+        const email = (t.email || '').toLowerCase();
+        if (!nom.includes(query) && !tel.includes(query) && !email.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [crmTiers, selectedUserFilter, searchQuery]);
+
+  // 6. Filtrage Commissions
+  const filteredCommissions = useMemo(() => {
+    return crmCommissions.filter(c => {
+      if (!isDateInPeriod(c.date_reglement || c.created_at)) return false;
+      if (selectedUserFilter !== 'ALL') {
+        const userName = (users.find(u => u.id === selectedUserFilter)?.name || '').toLowerCase();
+        const match = c.beneficiaire_id === selectedUserFilter || 
+          c.cree_par === selectedUserFilter || 
+          (c.beneficiaire_nom && c.beneficiaire_nom.toLowerCase().includes(userName));
+        if (!match) return false;
+      }
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const ben = (c.beneficiaire_nom || '').toLowerCase();
+        const ref = (c.prestation_ref || '').toLowerCase();
+        if (!ben.includes(query) && !ref.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [crmCommissions, selectedPeriod, selectedUserFilter, searchQuery, users]);
+
+  // ─── Synthèses Financières & Quantitatives Multi-Modules ───────
+  // Prestations KPIs
+  const totalCommandesVente = filteredPrestations.reduce((sum, p) => sum + (p.prix_client_final || p.montant_total_vente || 0), 0);
+  const totalMargeInterne = filteredPrestations.reduce((sum, p) => sum + (p.marge_interne || 0), 0);
+  const totalBeneficeNet = filteredPrestations.reduce((sum, p) => sum + (p.benefice_net || p.benefice_reel || 0), 0);
+  const totalCommandesPayees = filteredPrestations.filter(p => p.statut === 'PAYEE' || p.statut === 'CLOTUREE').length;
+
+  // Devis KPIs
   const totalQuotes = filteredQuotes.length;
-  const acceptedQuotesList = filteredQuotes.filter(q => q.status === 'Accepté');
-  const acceptedCount = acceptedQuotesList.length;
-  const acceptedValue = acceptedQuotesList.reduce((acc, q) => acc + q.total, 0);
+  const acceptedQuotes = filteredQuotes.filter(q => q.status === 'Accepté');
+  const acceptedQuotesValue = acceptedQuotes.reduce((sum, q) => sum + q.total, 0);
+  const pendingQuotesValue = filteredQuotes.filter(q => q.status === 'Envoyé' || q.status === 'Brouillon' || q.status === 'Révision').reduce((sum, q) => sum + q.total, 0);
+  const quotesAcceptanceRate = totalQuotes > 0 ? Math.round((acceptedQuotes.length / totalQuotes) * 100) : 0;
 
-  const pendingQuotesList = filteredQuotes.filter(q => q.status === 'Envoyé' || q.status === 'Brouillon' || q.status === 'Révision');
-  const pendingCount = pendingQuotesList.length;
-  const pendingValue = pendingQuotesList.reduce((acc, q) => acc + q.total, 0);
+  // Caisse KPIs
+  const totalCaisseEntrees = filteredCaisse.filter(m => m.type === 'ENTREE').reduce((sum, m) => sum + (m.montant || 0), 0);
+  const totalCaisseSorties = filteredCaisse.filter(m => m.type === 'SORTIE').reduce((sum, m) => sum + (m.montant || 0), 0);
+  const soldeNetCaisse = totalCaisseEntrees - totalCaisseSorties;
 
-  const refusedQuotesList = filteredQuotes.filter(q => q.status === 'Refusé');
-  const refusedCount = refusedQuotesList.length;
-  const refusedValue = refusedQuotesList.reduce((acc, q) => acc + q.total, 0);
+  // Maintenance KPIs
+  const totalTickets = filteredMaintenance.length;
+  const ticketsUrgents = filteredMaintenance.filter(t => t.priorite === 'URGENTE' || t.priorite === 'HAUTE').length;
+  const totalFacturationMaintenance = filteredMaintenance.reduce((sum, t) => sum + (t.prix_total || t.prix || (t.quantite * t.prix_unitaire) || 0), 0);
+  const ticketsTermines = filteredMaintenance.filter(t => t.statut === 'CLOTURE' || t.statut === 'TERMINE_A_FACTURER' || t.statut === 'TERMINEE').length;
 
-  const totalValue = filteredQuotes.filter(q => q.status !== 'Refusé').reduce((acc, q) => acc + q.total, 0);
-  const acceptanceRate = totalQuotes > 0 ? Math.round((acceptedCount / totalQuotes) * 100) : 0;
-  const averageQuoteValue = totalQuotes > 0 ? Math.round(totalValue / totalQuotes) : 0;
+  // Stocks KPIs
+  const totalArticlesStock = crmArticles.length;
+  const stockAlertesCount = crmArticles.filter(s => (s.quantite_stock ?? 0) <= (s.seuil_alerte ?? 0)).length;
+  const valorisationStockAchat = crmArticles.reduce((sum: number, s) => sum + ((s.quantite_stock || 0) * (s.cout_unitaire_achat || 0)), 0);
+  const valorisationStockVente = crmArticles.reduce((sum: number, s) => sum + ((s.quantite_stock || 0) * (s.prix_unitaire_vente || 0)), 0);
 
-  const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Inconnu';
-  const getServiceName = (id?: string) => services.find(s => s.id === id)?.name || 'Général';
-  const getUserName = (id?: string) => users.find(u => u.id === id)?.name || 'Non assigné';
+  // Commissions KPIs
+  const totalCommissionsMontant = filteredCommissions.reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
+  const totalCommissionsPayees = filteredCommissions.filter(c => c.statut === 'PAYEE').reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
+  const totalCommissionsEnAttente = filteredCommissions.filter(c => c.statut !== 'PAYEE' && c.statut !== 'ANNULEE').reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
 
-  const getBadgeColor = (status: string) => {
-    switch (status) {
-      case 'Accepté': return 'bg-success';
-      case 'Refusé': return 'bg-error';
-      case 'Envoyé': return 'bg-primary';
-      case 'Brouillon': return 'bg-secondary';
-      case 'Révision': return 'bg-warning';
-      default: return '';
-    }
-  };
-
-  // Statistiques calculées par collaborateur (selon les filtres actuels ou globaux)
-  const userStats = useMemo(() => {
+  // ─── Synthèse par Utilisateur (Multi-Module 360°) ───────────────
+  const userMultiModuleSummaries: UserModuleSummary[] = useMemo(() => {
     return users.map(u => {
-      const uQuotes = filteredQuotes.filter(q => q.commercialId === u.id || (q.serviceId === u.serviceId && !q.commercialId));
-      const uAccepted = uQuotes.filter(q => q.status === 'Accepté');
-      const uPending = uQuotes.filter(q => q.status === 'Envoyé' || q.status === 'Brouillon' || q.status === 'Révision');
-      const uRefused = uQuotes.filter(q => q.status === 'Refusé');
-      const uTotalValue = uQuotes.filter(q => q.status !== 'Refusé').reduce((sum, q) => sum + q.total, 0);
-      const uAcceptedValue = uAccepted.reduce((sum, q) => sum + q.total, 0);
-      const uPendingValue = uPending.reduce((sum, q) => sum + q.total, 0);
-      const uRefusedValue = uRefused.reduce((sum, q) => sum + q.total, 0);
-      const uAcceptanceRate = uQuotes.length > 0 ? Math.round((uAccepted.length / uQuotes.length) * 100) : 0;
-      const uAverageValue = uQuotes.length > 0 ? Math.round(uTotalValue / uQuotes.length) : 0;
       const uService = services.find(s => s.id === u.serviceId);
+      const isAdm = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(u.role);
+
+      // Devis
+      const uQuotes = filteredQuotes.filter(q => q.commercialId === u.id || (q.serviceId === u.serviceId && !q.commercialId));
+      const uAcceptedQuotes = uQuotes.filter(q => q.status === 'Accepté');
+      const uTotalQuotesVal = uQuotes.filter(q => q.status !== 'Refusé').reduce((sum, q) => sum + q.total, 0);
+      const uAcceptedQuotesVal = uAcceptedQuotes.reduce((sum, q) => sum + q.total, 0);
+      const uQuotesRate = uQuotes.length > 0 ? Math.round((uAcceptedQuotes.length / uQuotes.length) * 100) : 0;
+
+      // Prestations
+      const uPrestations = filteredPrestations.filter(p => 
+        p.cree_par === u.id || p.commercial_id === u.id || p.resp_service_id === u.id || p.responsable_service_id === u.id
+      );
+      const uVente = uPrestations.reduce((sum, p) => sum + (p.prix_client_final || p.montant_total_vente || 0), 0);
+      const uMarge = uPrestations.reduce((sum, p) => sum + (p.marge_interne || 0), 0);
+      const uBenef = uPrestations.reduce((sum, p) => sum + (p.benefice_net || p.benefice_reel || 0), 0);
+      const uPayees = uPrestations.filter(p => p.statut === 'PAYEE' || p.statut === 'CLOTUREE').length;
+
+      // Caisse
+      const uCaisse = filteredCaisse.filter(m => m.cree_par === u.id);
+      const uEntrees = uCaisse.filter(m => m.type === 'ENTREE').reduce((sum, m) => sum + (m.montant || 0), 0);
+      const uSorties = uCaisse.filter(m => m.type === 'SORTIE').reduce((sum, m) => sum + (m.montant || 0), 0);
+
+      // Maintenance
+      const uMaint = filteredMaintenance.filter(t => 
+        t.cree_par === u.id || t.technicien_assigne?.toLowerCase().includes((u.name || '').toLowerCase())
+      );
+      const uUrgents = uMaint.filter(t => t.priorite === 'URGENTE' || t.priorite === 'HAUTE').length;
+      const uFact = uMaint.reduce((sum, t) => sum + (t.prix_total || t.prix || (t.quantite * t.prix_unitaire) || 0), 0);
+      const uResolus = uMaint.filter(t => t.statut === 'CLOTURE' || t.statut === 'TERMINE_A_FACTURER' || t.statut === 'TERMINEE').length;
+
+      // Tiers
+      const uTiers = filteredTiers.filter(t => t.cree_par === u.id);
+      const uClientsCount = uTiers.filter(t => t.type === 'CLIENT').length;
+      const uPartenairesCount = uTiers.filter(t => t.type === 'PARTENAIRE').length;
+
+      // Commissions
+      const uComms = filteredCommissions.filter(c => 
+        c.beneficiaire_id === u.id || c.cree_par === u.id || (c.beneficiaire_nom && c.beneficiaire_nom.toLowerCase().includes((u.name || '').toLowerCase()))
+      );
+      const uCommTotal = uComms.reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
+      const uCommPayee = uComms.filter(c => c.statut === 'PAYEE').reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
+      const uCommAttente = uComms.filter(c => c.statut !== 'PAYEE' && c.statut !== 'ANNULEE').reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
+
+      const activeMods = [
+        isAdm || u.crmPrestationsEnabled,
+        isAdm || u.crmCaisseEnabled,
+        isAdm || u.crmMaintenanceEnabled,
+        isAdm || u.crmStocksEnabled,
+        isAdm || u.crmTiersEnabled,
+        isAdm || u.crmCommerciauxEnabled,
+        isAdm || u.crmCommissionsEnabled
+      ].filter(Boolean).length;
 
       return {
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        role: u.role,
-        serviceName: uService?.name || 'Direction / Tous services',
-        quoteCount: uQuotes.length,
-        acceptedCount: uAccepted.length,
-        pendingCount: uPending.length,
-        refusedCount: uRefused.length,
-        totalValue: uTotalValue,
-        acceptedValue: uAcceptedValue,
-        pendingValue: uPendingValue,
-        refusedValue: uRefusedValue,
-        acceptanceRate: uAcceptanceRate,
-        averageQuoteValue: uAverageValue
+        user: {
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          serviceName: uService?.name || 'Direction / Tous services',
+          activeModulesCount: activeMods,
+          enabled: {
+            prestations: isAdm || !!u.crmPrestationsEnabled,
+            caisse: isAdm || !!u.crmCaisseEnabled,
+            maintenance: isAdm || !!u.crmMaintenanceEnabled,
+            stocks: isAdm || !!u.crmStocksEnabled,
+            tiers: isAdm || !!u.crmTiersEnabled,
+            commerciaux: isAdm || !!u.crmCommerciauxEnabled,
+            commissions: isAdm || !!u.crmCommissionsEnabled
+          }
+        },
+        quotes: {
+          count: uQuotes.length,
+          totalValue: uTotalQuotesVal,
+          acceptedValue: uAcceptedQuotesVal,
+          rate: uQuotesRate
+        },
+        prestations: {
+          count: uPrestations.length,
+          totalVente: uVente,
+          margeInterne: uMarge,
+          beneficeNet: uBenef,
+          payeeCount: uPayees
+        },
+        caisse: {
+          mouvementsCount: uCaisse.length,
+          totalEntrees: uEntrees,
+          totalSorties: uSorties,
+          solde: uEntrees - uSorties
+        },
+        maintenance: {
+          ticketsCount: uMaint.length,
+          urgentsCount: uUrgents,
+          totalFacturation: uFact,
+          resolusCount: uResolus
+        },
+        tiers: {
+          totalTiers: uTiers.length,
+          clientsCount: uClientsCount,
+          partenairesCount: uPartenairesCount
+        },
+        commissions: {
+          count: uComms.length,
+          totalMontant: uCommTotal,
+          payeeMontant: uCommPayee,
+          attenteMontant: uCommAttente
+        }
       };
-    }).filter(u => u.quoteCount > 0 || u.role === 'Responsable' || u.role === 'Commercial' || u.role === 'Directeur')
-      .sort((a, b) => b.totalValue - a.totalValue);
-  }, [users, filteredQuotes, services]);
+    }).sort((a, b) => (b.prestations.totalVente + b.quotes.totalValue) - (a.prestations.totalVente + a.quotes.totalValue));
+  }, [users, services, filteredQuotes, filteredPrestations, filteredCaisse, filteredMaintenance, filteredTiers, filteredCommissions]);
 
-  // Donut chart data pour la répartition par statut
-  const statusDonutData: DonutDataPoint[] = [
-    { label: 'Acceptés', value: acceptedCount, color: '#10B981' },
-    { label: 'En cours / Négoc.', value: pendingCount, color: '#F59E0B' },
-    { label: 'Refusés', value: refusedCount, color: '#EF4444' },
-    { label: 'Brouillons', value: filteredQuotes.filter(q => q.status === 'Brouillon').length, color: '#94A3B8' }
-  ];
+  // Bar comparison items for the active scope
+  const barComparisonItems: BarComparisonItem[] = useMemo(() => {
+    return userMultiModuleSummaries.map(s => {
+      let totalVal = 0;
+      let accVal = 0;
+      let count = 0;
+      let accCount = 0;
 
-  // Bar Comparison Data par Responsable
-  const barComparisonItems: BarComparisonItem[] = userStats.map(u => ({
-    id: u.id,
-    name: u.name,
-    role: u.role,
-    serviceName: u.serviceName,
-    totalValue: u.totalValue,
-    acceptedValue: u.acceptedValue,
-    pendingValue: u.pendingValue,
-    quoteCount: u.quoteCount,
-    acceptedCount: u.acceptedCount,
-    rate: u.acceptanceRate
-  }));
+      if (selectedModuleScope === 'PRESTATIONS') {
+        totalVal = s.prestations.totalVente;
+        accVal = s.prestations.beneficeNet;
+        count = s.prestations.count;
+        accCount = s.prestations.payeeCount;
+      } else if (selectedModuleScope === 'CAISSE') {
+        totalVal = s.caisse.totalEntrees;
+        accVal = s.caisse.totalSorties;
+        count = s.caisse.mouvementsCount;
+        accCount = s.caisse.mouvementsCount;
+      } else if (selectedModuleScope === 'MAINTENANCE') {
+        totalVal = s.maintenance.totalFacturation;
+        accVal = s.maintenance.totalFacturation;
+        count = s.maintenance.ticketsCount;
+        accCount = s.maintenance.resolusCount;
+      } else {
+        // Consolidated ALL or DEVIS
+        totalVal = s.prestations.totalVente + s.quotes.totalValue;
+        accVal = s.prestations.beneficeNet + s.quotes.acceptedValue;
+        count = s.prestations.count + s.quotes.count;
+        accCount = s.prestations.payeeCount + (s.quotes.count > 0 ? Math.round((s.quotes.rate / 100) * s.quotes.count) : 0);
+      }
 
-  // Trend Data sur 6 derniers mois
-  const trendData: TrendPeriodItem[] = useMemo(() => {
-    const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
-    const now = new Date();
-    const result: TrendPeriodItem[] = [];
+      const rate = totalVal > 0 ? Math.min(100, Math.round((accVal / totalVal) * 100)) : 0;
 
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const mIdx = d.getMonth();
-      const yr = d.getFullYear();
-      const label = `${months[mIdx]}`;
+      return {
+        id: s.user.id,
+        name: s.user.name,
+        role: s.user.role,
+        serviceName: s.user.serviceName,
+        totalValue: totalVal,
+        acceptedValue: accVal,
+        pendingValue: totalVal - accVal,
+        quoteCount: count,
+        acceptedCount: accCount,
+        rate: rate
+      };
+    }).filter(item => item.totalValue > 0 || item.quoteCount > 0);
+  }, [userMultiModuleSummaries, selectedModuleScope]);
 
-      const mQuotes = quotes.filter(q => {
-        if (!q.date) return false;
-        const qd = new Date(q.date);
-        return qd.getMonth() === mIdx && qd.getFullYear() === yr;
-      });
-
-      const mTotal = mQuotes.reduce((sum, q) => sum + q.total, 0);
-      const mAccepted = mQuotes.filter(q => q.status === 'Accepté').reduce((sum, q) => sum + q.total, 0);
-
-      result.push({
-        period: label,
-        total: mTotal,
-        accepted: mAccepted,
-        count: mQuotes.length
-      });
+  // Donut data global
+  const donutScopeData: DonutDataPoint[] = useMemo(() => {
+    if (selectedModuleScope === 'PRESTATIONS') {
+      const payees = filteredPrestations.filter(p => p.statut === 'PAYEE' || p.statut === 'CLOTUREE').length;
+      const validees = filteredPrestations.filter(p => p.statut === 'VALIDE' || p.statut === 'CONFIRMEE' || p.statut === 'EN_COURS').length;
+      const attente = filteredPrestations.filter(p => p.statut === 'EN_ATTENTE_VALIDATION' || p.statut === 'DEVIS').length;
+      const brouillon = filteredPrestations.filter(p => p.statut === 'BROUILLON').length;
+      return [
+        { label: 'Payées / Clôturées', value: payees, color: '#10B981' },
+        { label: 'Validées / En cours', value: validees, color: '#3B82F6' },
+        { label: 'En attente', value: attente, color: '#F59E0B' },
+        { label: 'Brouillons', value: brouillon, color: '#94A3B8' }
+      ];
+    } else if (selectedModuleScope === 'CAISSE') {
+      const entrees = filteredCaisse.filter(m => m.type === 'ENTREE').length;
+      const sorties = filteredCaisse.filter(m => m.type === 'SORTIE').length;
+      return [
+        { label: 'Entrées de fonds', value: entrees, color: '#10B981' },
+        { label: 'Sorties / Dépenses', value: sorties, color: '#EF4444' }
+      ];
+    } else if (selectedModuleScope === 'MAINTENANCE') {
+      const urgentes = filteredMaintenance.filter(t => t.priorite === 'URGENTE').length;
+      const hautes = filteredMaintenance.filter(t => t.priorite === 'HAUTE').length;
+      const moyennes = filteredMaintenance.filter(t => t.priorite === 'MOYENNE' || t.priorite === 'BASSE').length;
+      const cloturees = filteredMaintenance.filter(t => t.statut === 'CLOTURE' || t.statut === 'TERMINEE').length;
+      return [
+        { label: 'Urgentes', value: urgentes, color: '#EF4444' },
+        { label: 'Priorité Haute', value: hautes, color: '#F59E0B' },
+        { label: 'Normales / Basses', value: moyennes, color: '#3B82F6' },
+        { label: 'Clôturées', value: cloturees, color: '#10B981' }
+      ];
+    } else {
+      // 360 Consolidated Activity
+      return [
+        { label: 'Commandes Prestations', value: filteredPrestations.length, color: '#10B981' },
+        { label: 'Devis Clients', value: filteredQuotes.length, color: '#3B82F6' },
+        { label: 'Mouvements Caisse', value: filteredCaisse.length, color: '#EF4444' },
+        { label: 'Interventions Maintenance', value: filteredMaintenance.length, color: '#F59E0B' },
+        { label: 'Tiers Référencés', value: filteredTiers.length, color: '#8B5CF6' }
+      ].filter(d => d.value > 0);
     }
-
-    return result;
-  }, [quotes]);
+  }, [selectedModuleScope, filteredPrestations, filteredCaisse, filteredMaintenance, filteredQuotes, filteredTiers]);
 
   const resetFilters = () => {
     setSelectedPeriod('ALL');
     setSelectedUserFilter('ALL');
     setSelectedServiceFilter('ALL');
-    setSelectedStatusFilter('ALL');
+    setSelectedModuleScope('ALL');
     setSearchQuery('');
     setInspectedUserId(null);
   };
 
-  const hasActiveFilters = selectedPeriod !== 'ALL' || selectedUserFilter !== 'ALL' || selectedServiceFilter !== 'ALL' || selectedStatusFilter !== 'ALL' || searchQuery !== '';
+  const hasActiveFilters = selectedPeriod !== 'ALL' || selectedUserFilter !== 'ALL' || selectedServiceFilter !== 'ALL' || selectedModuleScope !== 'ALL' || searchQuery !== '';
 
-  const inspectedUser = userStats.find(u => u.id === inspectedUserId);
+  const inspectedUserSummary = userMultiModuleSummaries.find(s => s.user.id === inspectedUserId);
 
   return (
     <div className="dashboard">
-      {/* Header avec action de création */}
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -267,9 +486,9 @@ export function DashboardDirecteur() {
               <TrendingUp size={24} />
             </div>
             <div>
-              <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>Supervision Devis & Responsables</h2>
+              <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>Supervision Direction Multi-Modules</h2>
               <p style={{ margin: '4px 0 0', color: 'var(--color-text-muted)', fontSize: '0.88rem' }}>
-                Pilotage analytique complet des devis, montants par pôle et performances individuelles.
+                Pilotage analytique global et supervision individuelle de chaque collaborateur sur tous les modules actifs.
               </p>
             </div>
           </div>
@@ -277,24 +496,33 @@ export function DashboardDirecteur() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button 
-            className="btn btn-primary" 
-            onClick={() => navigate('/devis/nouveau')} 
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontWeight: 600 }}
+            className="btn btn-secondary" 
+            onClick={() => navigate('/crm/modules')} 
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
           >
-            + Nouveau Devis
+            <Layers size={16} />
+            <span>Gestion des Accès Modules</span>
+          </button>
+          <button 
+            className="btn btn-primary" 
+            onClick={() => navigate('/crm/prestations')} 
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
+          >
+            <ShoppingBag size={16} />
+            <span>Nouvelle Commande</span>
           </button>
         </div>
       </div>
 
-      {/* ─── FILTRES AVANCÉS & ÉLÉGANTS ────────────────────────── */}
-      <div className="card" style={{ marginBottom: '24px', padding: '18px 20px', border: hasActiveFilters ? '1.5px solid rgba(37, 99, 235, 0.4)' : '1px solid var(--color-border)' }}>
+      {/* ─── FILTRES MULTI-CRITÈRES ÉLÉGANTS ───────────────────── */}
+      <div className="card" style={{ marginBottom: '20px', padding: '16px 20px', border: hasActiveFilters ? '1.5px solid rgba(37, 99, 235, 0.4)' : '1px solid var(--color-border)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: 700 }}>
             <Filter size={16} color="var(--color-primary)" />
-            <span>Filtres analytiques & Période</span>
+            <span>Filtres de supervision globale</span>
             {hasActiveFilters && (
               <span className="badge-status" style={{ background: 'rgba(37, 99, 235, 0.12)', color: '#2563EB', fontSize: '11px' }}>
-                Filtres actifs ({filteredQuotes.length} devis)
+                Filtres actifs
               </span>
             )}
           </div>
@@ -303,10 +531,10 @@ export function DashboardDirecteur() {
             <button 
               className="btn btn-secondary" 
               onClick={resetFilters}
-              style={{ fontSize: '0.8rem', padding: '5px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              style={{ fontSize: '0.8rem', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '6px' }}
             >
               <RotateCcw size={13} />
-              <span>Réinitialiser les filtres</span>
+              <span>Réinitialiser</span>
             </button>
           )}
         </div>
@@ -319,7 +547,7 @@ export function DashboardDirecteur() {
               type="text"
               className="table-input"
               style={{ paddingLeft: '32px', width: '100%', fontSize: '0.85rem' }}
-              placeholder="N° devis, client, sujet..."
+              placeholder="Rechercher client, référence, collaborateur..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
@@ -355,7 +583,7 @@ export function DashboardDirecteur() {
                 }
               }}
             >
-              <option value="ALL">👤 Tous les responsables ({users.length})</option>
+              <option value="ALL">👤 Tous les collaborateurs ({users.length})</option>
               {users.map(u => (
                 <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
               ))}
@@ -377,93 +605,89 @@ export function DashboardDirecteur() {
             </select>
           </div>
 
-          {/* Statut Devis */}
+          {/* Périmètre Module */}
           <div>
             <select
               className="table-input"
-              style={{ width: '100%', fontSize: '0.85rem' }}
-              value={selectedStatusFilter}
-              onChange={e => setSelectedStatusFilter(e.target.value)}
+              style={{ width: '100%', fontSize: '0.85rem', fontWeight: 600 }}
+              value={selectedModuleScope}
+              onChange={e => setSelectedModuleScope(e.target.value as ModuleScope)}
             >
-              <option value="ALL">🏷️ Tous les statuts</option>
-              <option value="Accepté">Acceptés</option>
-              <option value="EN_COURS">En cours (Envoyé/Brouillon)</option>
-              <option value="Révision">En Révision</option>
-              <option value="Refusé">Refusés</option>
-              <option value="Brouillon">Brouillons uniquement</option>
+              <option value="ALL">🌟 Synthèse 360° (Tous modules)</option>
+              <option value="PRESTATIONS">💼 Commandes (11 colonnes)</option>
+              <option value="DEVIS">📄 Devis Clients</option>
+              <option value="CAISSE">💰 Caisse & Dépenses</option>
+              <option value="MAINTENANCE">🛠️ Maintenance & Tickets</option>
+              <option value="STOCKS">📦 Stocks & Consommables</option>
+              <option value="TIERS">👥 Tiers & Partenaires</option>
+              <option value="COMMISSIONS">🏆 Commissions & Apporteurs</option>
             </select>
           </div>
         </div>
       </div>
 
-      {/* ─── TOP KPI CARDS ÉLÉGANTES ─────────────────────────── */}
-      <div className="widgets-grid" style={{ marginBottom: '24px' }}>
-        <div className="widget-card" style={{ borderLeft: '4px solid #3B82F6' }}>
-          <div className="widget-icon" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#2563EB' }}>
-            <FileText size={26} />
+      {/* ─── 8 KPIS CONSOLIDÉS MULTI-MODULES ──────────────────── */}
+      <div className="widgets-grid" style={{ marginBottom: '20px' }}>
+        {/* KPI 1 : Commandes Prestations */}
+        <div className="widget-card" style={{ borderLeft: '4px solid #10B981', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('PRESTATIONS')}>
+          <div className="widget-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#059669' }}>
+            <ShoppingBag size={24} />
           </div>
           <div className="widget-content">
-            <div className="widget-label">DEVIS ÉMIS</div>
-            <div className="widget-value">{totalQuotes}</div>
-            <div style={{ fontSize: '0.8rem', color: '#2563EB', fontWeight: 700, marginTop: '2px' }}>
-              {totalValue.toLocaleString('fr-FR')} FCFA
-            </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-              Panier moyen : {averageQuoteValue.toLocaleString('fr-FR')} F
+            <div className="widget-label">COMMANDES VENTES</div>
+            <div className="widget-value">{totalCommandesVente.toLocaleString('fr-FR')} F</div>
+            <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: '2px' }}>
+              Marge: {totalMargeInterne.toLocaleString('fr-FR')} F ({filteredPrestations.length} cmds)
             </div>
           </div>
         </div>
-        
-        <div className="widget-card" style={{ borderLeft: '4px solid #10B981' }}>
-          <div className="widget-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#059669' }}>
-            <CheckCircle size={26} />
+
+        {/* KPI 2 : Devis Clients */}
+        <div className="widget-card" style={{ borderLeft: '4px solid #3B82F6', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('DEVIS')}>
+          <div className="widget-icon" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#2563EB' }}>
+            <FileText size={24} />
           </div>
           <div className="widget-content">
             <div className="widget-label">DEVIS ACCEPTÉS</div>
-            <div className="widget-value" style={{ color: '#059669' }}>{acceptedCount}</div>
-            <div style={{ fontSize: '0.8rem', color: '#059669', fontWeight: 700, marginTop: '2px' }}>
-              {acceptedValue.toLocaleString('fr-FR')} FCFA
-            </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-              Taux de conversion : <strong>{acceptanceRate}%</strong>
+            <div className="widget-value">{acceptedQuotesValue.toLocaleString('fr-FR')} F</div>
+            <div style={{ fontSize: '0.75rem', color: '#2563EB', fontWeight: 600, marginTop: '2px' }}>
+              {acceptedQuotes.length}/{totalQuotes} devis ({quotesAcceptanceRate}%)
             </div>
           </div>
         </div>
 
-        <div className="widget-card" style={{ borderLeft: '4px solid #F59E0B' }}>
+        {/* KPI 3 : Caisse Trésorerie */}
+        <div className="widget-card" style={{ borderLeft: '4px solid #EF4444', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('CAISSE')}>
+          <div className="widget-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#DC2626' }}>
+            <Wallet size={24} />
+          </div>
+          <div className="widget-content">
+            <div className="widget-label">FLUX CAISSE NET</div>
+            <div className="widget-value" style={{ color: soldeNetCaisse >= 0 ? '#059669' : '#DC2626' }}>
+              {soldeNetCaisse.toLocaleString('fr-FR')} F
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+              Entrées: {totalCaisseEntrees.toLocaleString('fr-FR')} | Sorties: {totalCaisseSorties.toLocaleString('fr-FR')}
+            </div>
+          </div>
+        </div>
+
+        {/* KPI 4 : Maintenance */}
+        <div className="widget-card" style={{ borderLeft: '4px solid #F59E0B', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('MAINTENANCE')}>
           <div className="widget-icon" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#D97706' }}>
-            <Clock size={26} />
+            <Wrench size={24} />
           </div>
           <div className="widget-content">
-            <div className="widget-label">EN NÉGOCIATION</div>
-            <div className="widget-value" style={{ color: '#D97706' }}>{pendingCount}</div>
-            <div style={{ fontSize: '0.8rem', color: '#D97706', fontWeight: 700, marginTop: '2px' }}>
-              {pendingValue.toLocaleString('fr-FR')} FCFA
-            </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-              Potentiel à convertir
-            </div>
-          </div>
-        </div>
-
-        <div className="widget-card" style={{ borderLeft: '4px solid #8B5CF6' }}>
-          <div className="widget-icon" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#7C3AED' }}>
-            <Users size={26} />
-          </div>
-          <div className="widget-content">
-            <div className="widget-label">COLLABORATEURS</div>
-            <div className="widget-value">{userStats.length}</div>
-            <div style={{ fontSize: '0.8rem', color: '#7C3AED', fontWeight: 700, marginTop: '2px' }}>
-              {services.length} Pôles d'activité
-            </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-              Actifs sur les devis
+            <div className="widget-label">MAINTENANCE & PANNES</div>
+            <div className="widget-value">{totalTickets} tickets</div>
+            <div style={{ fontSize: '0.75rem', color: '#D97706', fontWeight: 600, marginTop: '2px' }}>
+              {ticketsUrgents} urgents • Facturé: {totalFacturationMaintenance.toLocaleString('fr-FR')} F
             </div>
           </div>
         </div>
       </div>
 
-      {/* ─── ONGLET DE NAVIGATION ENTRE VUES ─────────────────────── */}
+      {/* ─── ONGLETS DE VUE DU DASHBOARD ───────────────────────── */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid var(--color-border)', paddingBottom: '10px', flexWrap: 'wrap' }}>
         <button
           className={`btn ${activeTab === 'OVERVIEW' ? 'btn-primary' : 'btn-secondary'}`}
@@ -479,211 +703,157 @@ export function DashboardDirecteur() {
           onClick={() => setActiveTab('USERS_ANALYTICS')}
           style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', padding: '8px 16px' }}
         >
-          <PieIcon size={16} />
-          <span>Graphiques par Utilisateur ({userStats.length})</span>
+          <Users size={16} />
+          <span>Supervision par Collaborateur ({userMultiModuleSummaries.length})</span>
         </button>
 
         <button
-          className={`btn ${activeTab === 'QUOTES_LIST' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => setActiveTab('QUOTES_LIST')}
+          className={`btn ${activeTab === 'DETAILED_TABLES' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveTab('DETAILED_TABLES')}
           style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', padding: '8px 16px' }}
         >
-          <FileText size={16} />
-          <span>Liste détaillée des Devis ({filteredQuotes.length})</span>
+          <Layers size={16} />
+          <span>Opérations Détaillées</span>
         </button>
       </div>
 
-      {/* ─── FOCUS COLLABORATEUR SÉLECTIONNÉ ────────────────────── */}
-      {inspectedUser && (
+      {/* ─── FOCUS COLLABORATEUR INSPECTÉ ───────────────────────── */}
+      {inspectedUserSummary && (
         <div style={{ marginBottom: '24px' }}>
-          <UserAnalyticsCard
-            user={inspectedUser}
-            stats={inspectedUser}
-            onClose={() => setInspectedUserId(null)}
-            onViewQuotes={() => {
-              setSelectedUserFilter(inspectedUser.id);
-              setActiveTab('QUOTES_LIST');
-            }}
+          <UserMultiModuleSupervisionCard
+            summary={inspectedUserSummary}
+            onInspect={() => {}}
           />
         </div>
       )}
 
-      {/* ─── CONTENU SELON L'ONGLET SÉLECTIONNÉ ─────────────────── */}
+      {/* ─── 1. VUE GLOBALE & DIAGRAMMES ────────────────────────── */}
       {activeTab === 'OVERVIEW' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {/* Grille des 2 premiers graphiques : Barres de performance et Donut de statut */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Grille Diagrammes 1 & 2 */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
-            {/* Graphique 1 : Comparaison des montants par Responsable */}
+            {/* Bar Comparison Chart */}
             <div className="card" style={{ padding: '20px' }}>
               <BarComparisonChart
                 items={barComparisonItems}
-                title="Montants par Responsable / Auteur"
-                subTitle="Comparatif volume émis vs volume validé (cliquez pour inspecter)"
+                title={
+                  selectedModuleScope === 'PRESTATIONS' ? 'Commandes & Marges par Responsable' :
+                  selectedModuleScope === 'CAISSE' ? 'Mouvements Caisse par Initiateur' :
+                  selectedModuleScope === 'MAINTENANCE' ? 'Interventions par Technicien / Auteur' :
+                  'Performance Multi-Modules par Collaborateur'
+                }
+                subTitle="Volume généré vs montant finalisé (cliquez pour inspecter)"
+                primaryLabel={selectedModuleScope === 'CAISSE' ? 'Entrées' : 'Volume Total'}
+                secondaryLabel={selectedModuleScope === 'CAISSE' ? 'Sorties' : selectedModuleScope === 'PRESTATIONS' ? 'Bénéfice Net' : 'Validé'}
+                primaryColor={selectedModuleScope === 'CAISSE' ? '#10B981' : '#3B82F6'}
+                secondaryColor={selectedModuleScope === 'CAISSE' ? '#EF4444' : '#10B981'}
                 selectedUserId={inspectedUserId || undefined}
                 onSelectUser={(uid) => setInspectedUserId(uid === inspectedUserId ? null : uid)}
               />
             </div>
 
-            {/* Graphique 2 : Répartition des devis par Statut */}
+            {/* Donut Chart */}
             <div className="card" style={{ padding: '20px' }}>
               <DonutChart
-                data={statusDonutData}
-                title="Distribution des Devis par Statut"
-                subTitle="Répartition globale des états commerciaux"
-                centerLabel="Total devis"
-                centerValue={totalQuotes}
+                data={donutScopeData}
+                title={
+                  selectedModuleScope === 'PRESTATIONS' ? 'Répartition Statuts des Commandes' :
+                  selectedModuleScope === 'CAISSE' ? 'Flux de Trésorerie' :
+                  selectedModuleScope === 'MAINTENANCE' ? 'Niveau d\'Urgence des Tickets' :
+                  'Répartition des Activités CRM Consolidées'
+                }
+                subTitle="Distribution proportionnelle des opérations"
+                centerLabel="Total flux"
+                centerValue={donutScopeData.reduce((acc, d) => acc + d.value, 0)}
                 size={180}
                 strokeWidth={24}
               />
             </div>
           </div>
 
-          {/* Graphique 3 : Tendance temporelle & Tableau synthétique */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
-            <div className="card" style={{ padding: '20px' }}>
-              <TrendBarsChart
-                data={trendData}
-                title="Tendance d'activité (6 derniers mois)"
-                subTitle="Évolution des volumes émis et encaissés"
-              />
-            </div>
-
-            {/* Top Responsables Table */}
+          {/* Synthèse additionnelle : Stocks & Commissions */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+            {/* Carte Stocks & Consommables */}
             <div className="card" style={{ padding: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>Classement & Taux de Succès</h4>
-                  <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Performances des responsables classées par montant</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Package size={20} color="#6366F1" />
+                  <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>Inventaire & Stocks Métier</h4>
                 </div>
+                <button className="btn btn-outline" style={{ fontSize: '0.78rem', padding: '4px 8px' }} onClick={() => navigate('/crm/stocks')}>
+                  Consulter →
+                </button>
               </div>
 
-              <div className="table-responsive">
-                <table className="data-table responsive-table">
-                  <thead>
-                    <tr>
-                      <th>Collaborateur</th>
-                      <th style={{ textAlign: 'center' }}>Devis</th>
-                      <th style={{ textAlign: 'right' }}>Montant Accepté</th>
-                      <th style={{ textAlign: 'center' }}>Taux</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {userStats.slice(0, 5).map(u => (
-                      <tr 
-                        key={u.id} 
-                        style={{ cursor: 'pointer', background: inspectedUserId === u.id ? 'rgba(37, 99, 235, 0.05)' : undefined }}
-                        onClick={() => setInspectedUserId(u.id === inspectedUserId ? null : u.id)}
-                      >
-                        <td>
-                          <strong>{u.name}</strong>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{u.serviceName}</div>
-                        </td>
-                        <td style={{ textAlign: 'center', fontWeight: 600 }}>{u.quoteCount}</td>
-                        <td style={{ textAlign: 'right', color: '#059669', fontWeight: 700 }}>
-                          {u.acceptedValue.toLocaleString('fr-FR')} F
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <span className="badge-status" style={{ background: u.acceptanceRate >= 50 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)', color: u.acceptanceRate >= 50 ? '#059669' : '#D97706', fontSize: '11px', fontWeight: 700 }}>
-                            {u.acceptanceRate}%
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                    {userStats.length === 0 && (
-                      <tr><td colSpan={4} style={{ textAlign: 'center', padding: '16px', color: 'var(--color-text-muted)' }}>Aucune donnée.</td></tr>
-                    )}
-                  </tbody>
-                </table>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                <div style={{ padding: '10px', borderRadius: '8px', background: 'var(--color-surface-alt)' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Articles en Stock</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-text)', marginTop: '2px' }}>{totalArticlesStock}</div>
+                  <div style={{ fontSize: '0.7rem', color: stockAlertesCount > 0 ? '#DC2626' : '#059669', fontWeight: 600 }}>
+                    {stockAlertesCount} article(s) en alerte
+                  </div>
+                </div>
+
+                <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.08)' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#4F46E5', textTransform: 'uppercase' }}>Valorisation Vente</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#4F46E5', marginTop: '2px' }}>
+                    {valorisationStockVente.toLocaleString('fr-FR')} F
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#4F46E5' }}>
+                    Achat: {valorisationStockAchat.toLocaleString('fr-FR')} F
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Carte Commissions & Apporteurs */}
+            <div className="card" style={{ padding: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Award size={20} color="#D97706" />
+                  <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>Commissions & Rétributions</h4>
+                </div>
+                <button className="btn btn-outline" style={{ fontSize: '0.78rem', padding: '4px 8px' }} onClick={() => navigate('/crm/commissions')}>
+                  Consulter →
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(217, 119, 6, 0.08)' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#B45309', textTransform: 'uppercase' }}>Commissions Dues</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#B45309', marginTop: '2px' }}>
+                    {totalCommissionsMontant.toLocaleString('fr-FR')} F
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#B45309' }}>{filteredCommissions.length} rétribution(s)</div>
+                </div>
+
+                <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#059669', textTransform: 'uppercase' }}>Déjà Payées</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#059669', marginTop: '2px' }}>
+                    {totalCommissionsPayees.toLocaleString('fr-FR')} F
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#DC2626' }}>
+                    {totalCommissionsEnAttente.toLocaleString('fr-FR')} F en attente
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ─── VUE ANALYTIQUE DÉTAILLÉE PAR UTILISATEUR ────────────── */}
+      {/* ─── 2. SUPERVISION PAR COLLABORATEUR (MULTI-MODULE 360°) ─── */}
       {activeTab === 'USERS_ANALYTICS' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '20px' }}>
-          {userStats.map(u => {
-            const userDonut: DonutDataPoint[] = [
-              { label: 'Acceptés', value: u.acceptedCount, color: '#10B981' },
-              { label: 'En cours', value: u.pendingCount, color: '#F59E0B' },
-              { label: 'Refusés', value: u.refusedCount, color: '#EF4444' }
-            ];
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '20px' }}>
+          {userMultiModuleSummaries.map(summary => (
+            <UserMultiModuleSupervisionCard
+              key={summary.user.id}
+              summary={summary}
+              onInspect={() => setInspectedUserId(summary.user.id === inspectedUserId ? null : summary.user.id)}
+            />
+          ))}
 
-            return (
-              <div 
-                key={u.id} 
-                className="card" 
-                style={{ 
-                  padding: '20px', 
-                  borderLeft: `4px solid ${u.acceptanceRate >= 50 ? '#10B981' : '#3B82F6'}`,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  gap: '16px'
-                }}
-              >
-                <div>
-                  {/* Entête collaborateur */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'var(--color-primary-tint)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '14px' }}>
-                        {u.name.substring(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700 }}>{u.name}</h4>
-                        <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>{u.serviceName}</span>
-                      </div>
-                    </div>
-                    <span className="badge-status bg-secondary" style={{ fontSize: '11px' }}>{u.role}</span>
-                  </div>
-
-                  {/* KPIs chiffrés */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
-                    <div style={{ padding: '8px 10px', background: 'var(--color-surface-alt)', borderRadius: '6px' }}>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Total Émis</div>
-                      <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>{u.totalValue.toLocaleString('fr-FR')} F</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{u.quoteCount} devis</div>
-                    </div>
-
-                    <div style={{ padding: '8px 10px', background: 'rgba(16, 185, 129, 0.08)', borderRadius: '6px' }}>
-                      <div style={{ fontSize: '0.7rem', color: '#059669', textTransform: 'uppercase' }}>Total Accepté</div>
-                      <div style={{ fontSize: '1rem', fontWeight: 700, color: '#059669' }}>{u.acceptedValue.toLocaleString('fr-FR')} F</div>
-                      <div style={{ fontSize: '0.7rem', color: '#059669' }}>{u.acceptedCount} acceptés</div>
-                    </div>
-                  </div>
-
-                  {/* Diagramme circulaire individuel */}
-                  <div style={{ background: 'var(--color-surface)', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
-                    <DonutChart 
-                      data={userDonut}
-                      centerLabel="Succès"
-                      centerValue={`${u.acceptanceRate}%`}
-                      size={110}
-                      strokeWidth={16}
-                    />
-                  </div>
-                </div>
-
-                {/* Bouton d'action */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '8px', borderTop: '1px solid var(--color-border)' }}>
-                  <button 
-                    className="btn btn-outline" 
-                    style={{ fontSize: '0.8rem', padding: '5px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                    onClick={() => {
-                      setSelectedUserFilter(u.id);
-                      setActiveTab('QUOTES_LIST');
-                    }}
-                  >
-                    <span>Consulter ses devis</span>
-                    <ArrowUpRight size={14} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-
-          {userStats.length === 0 && (
+          {userMultiModuleSummaries.length === 0 && (
             <div className="card" style={{ gridColumn: '1 / -1', padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
               Aucun collaborateur ne correspond aux critères de filtre.
             </div>
@@ -691,55 +861,60 @@ export function DashboardDirecteur() {
         </div>
       )}
 
-      {/* ─── VUE LISTE COMPLÈTE DES DEVIS FILTRÉS ─────────────────── */}
-      {activeTab === 'QUOTES_LIST' && (
+      {/* ─── 3. TABLEAUX D'OPÉRATIONS DÉTAILLÉES ─────────────────── */}
+      {activeTab === 'DETAILED_TABLES' && (
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
             <div>
-              <h3 style={{ margin: 0 }}>Devis filtrés ({filteredQuotes.length})</h3>
+              <h3 style={{ margin: 0 }}>Opérations Commandes & Prestations ({filteredPrestations.length})</h3>
               <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
-                Cliquez sur un devis pour le consulter ou le modifier.
+                Grille financière rigoureuse à 11 colonnes.
               </p>
             </div>
-            
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <button className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '6px 12px' }} onClick={() => navigate('/devis/nouveau')}>
-                + Nouveau devis
-              </button>
-            </div>
+            <button className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '6px 12px' }} onClick={() => navigate('/crm/prestations')}>
+              + Ouvrir le module Commandes
+            </button>
           </div>
 
           <div className="table-responsive">
             <table className="data-table responsive-table">
               <thead>
                 <tr>
-                  <th>N° Devis</th>
+                  <th>Réf.</th>
                   <th>Client</th>
-                  <th>Auteur / Responsable</th>
-                  <th>Service</th>
-                  <th>Sujet</th>
-                  <th style={{ textAlign: 'right' }}>Montant Total</th>
+                  <th>Désignation</th>
+                  <th>Resp. / Commercial</th>
+                  <th style={{ textAlign: 'right' }}>Prix Vente</th>
+                  <th style={{ textAlign: 'right' }}>Marge Interne</th>
+                  <th style={{ textAlign: 'right' }}>Bénéfice Net</th>
                   <th>Statut</th>
-                  <th>Date</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredQuotes.map(q => (
-                  <tr key={q.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/devis/nouveau?editId=${q.id}`)}>
-                    <td data-label="N° Devis"><strong style={{ color: 'var(--color-primary)' }}>{q.quoteNumber}</strong></td>
-                    <td data-label="Client">{getClientName(q.clientId)}</td>
-                    <td data-label="Auteur">
-                      <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{getUserName(q.commercialId)}</span>
+                {filteredPrestations.map(p => (
+                  <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate('/crm/prestations')}>
+                    <td data-label="Réf."><strong style={{ color: 'var(--color-primary)' }}>{p.reference}</strong></td>
+                    <td data-label="Client">{p.client_nom}</td>
+                    <td data-label="Désignation">{p.designation}</td>
+                    <td data-label="Responsable">{p.resp_service_nom || p.responsable_service_nom || p.commercial_nom || p.cree_par_nom || 'Non assigné'}</td>
+                    <td data-label="Prix Vente" style={{ textAlign: 'right', fontWeight: 700 }}>
+                      {(p.prix_client_final || p.montant_total_vente || 0).toLocaleString('fr-FR')} F
                     </td>
-                    <td data-label="Service" style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{getServiceName(q.serviceId)}</td>
-                    <td data-label="Sujet">{q.subject}</td>
-                    <td data-label="Montant Total" style={{ textAlign: 'right', fontWeight: 700 }}>{q.total.toLocaleString('fr-FR')} FCFA</td>
-                    <td data-label="Statut"><span className={`badge-status ${getBadgeColor(q.status)}`}>{q.status}</span></td>
-                    <td data-label="Date">{q.date}</td>
+                    <td data-label="Marge" style={{ textAlign: 'right', color: '#2563EB', fontWeight: 600 }}>
+                      {(p.marge_interne || 0).toLocaleString('fr-FR')} F
+                    </td>
+                    <td data-label="Bénéfice Net" style={{ textAlign: 'right', color: '#059669', fontWeight: 700 }}>
+                      {(p.benefice_net || p.benefice_reel || 0).toLocaleString('fr-FR')} F
+                    </td>
+                    <td data-label="Statut">
+                      <span className="badge-status" style={{ background: p.statut === 'PAYEE' ? '#D1FAE5' : '#DBEAFE', color: p.statut === 'PAYEE' ? '#059669' : '#1D4ED8' }}>
+                        {p.statut}
+                      </span>
+                    </td>
                   </tr>
                 ))}
-                {filteredQuotes.length === 0 && (
-                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>Aucun devis trouvé pour ces critères de filtre.</td></tr>
+                {filteredPrestations.length === 0 && (
+                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>Aucune commande enregistrée pour ces critères.</td></tr>
                 )}
               </tbody>
             </table>

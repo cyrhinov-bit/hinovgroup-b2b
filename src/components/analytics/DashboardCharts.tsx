@@ -11,7 +11,17 @@ import {
   Sparkles,
   BarChart3,
   PieChart as PieIcon,
-  ChevronRight
+  ChevronRight,
+  ShoppingBag,
+  DollarSign,
+  Wrench,
+  Package,
+  Users as UsersIcon,
+  UserCheck,
+  Layers,
+  Shield,
+  Activity,
+  Wallet
 } from 'lucide-react';
 
 /* ─── 1. Donut / Pie Chart SVG ─────────────────────────────────── */
@@ -199,12 +209,20 @@ export function BarComparisonChart({
   items,
   title,
   subTitle,
+  primaryColor = '#3B82F6',
+  secondaryColor = '#10B981',
+  primaryLabel = 'Montant Total',
+  secondaryLabel = 'Montant Réalisé',
   onSelectUser,
   selectedUserId
 }: {
   items: BarComparisonItem[];
   title?: string;
   subTitle?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  primaryLabel?: string;
+  secondaryLabel?: string;
   onSelectUser?: (userId: string) => void;
   selectedUserId?: string;
 }) {
@@ -220,12 +238,12 @@ export function BarComparisonChart({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '0.75rem', fontWeight: 600 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#3B82F6' }} />
-              Montant Total Émis
+              <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: primaryColor }} />
+              {primaryLabel}
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#10B981' }} />
-              Montant Accepté
+              <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: secondaryColor }} />
+              {secondaryLabel}
             </span>
           </div>
         </div>
@@ -266,7 +284,7 @@ export function BarComparisonChart({
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                    <strong>{item.quoteCount}</strong> devis ({item.acceptedCount} acceptés)
+                    <strong>{item.quoteCount}</strong> opérations ({item.acceptedCount} finalisées)
                   </span>
                   <span className="badge-status" style={{ background: item.rate >= 50 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)', color: item.rate >= 50 ? '#059669' : '#D97706', fontSize: '11px', fontWeight: 700 }}>
                     {item.rate}% succès
@@ -276,38 +294,38 @@ export function BarComparisonChart({
 
               {/* Barres horizontales de progression */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {/* Total Émis Bar */}
+                {/* Total Bar */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ flex: 1, height: '8px', background: 'var(--color-surface-alt, #e2e8f0)', borderRadius: '4px', overflow: 'hidden' }}>
                     <div 
                       style={{ 
                         width: `${totalPct}%`, 
                         height: '100%', 
-                        background: 'linear-gradient(90deg, #3B82F6, #2563EB)', 
+                        background: primaryColor, 
                         borderRadius: '4px',
                         transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1)' 
                       }} 
                     />
                   </div>
-                  <span style={{ fontSize: '0.78rem', fontWeight: 600, minWidth: '105px', textAlign: 'right', color: '#2563EB' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600, minWidth: '105px', textAlign: 'right', color: primaryColor }}>
                     {item.totalValue.toLocaleString('fr-FR')} F
                   </span>
                 </div>
 
-                {/* Accepté Bar */}
+                {/* Finalisé Bar */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ flex: 1, height: '8px', background: 'var(--color-surface-alt, #e2e8f0)', borderRadius: '4px', overflow: 'hidden' }}>
                     <div 
                       style={{ 
                         width: `${acceptedPct}%`, 
                         height: '100%', 
-                        background: 'linear-gradient(90deg, #10B981, #059669)', 
+                        background: secondaryColor, 
                         borderRadius: '4px',
                         transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1)' 
                       }} 
                     />
                   </div>
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, minWidth: '105px', textAlign: 'right', color: '#059669' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, minWidth: '105px', textAlign: 'right', color: secondaryColor }}>
                     {item.acceptedValue.toLocaleString('fr-FR')} F
                   </span>
                 </div>
@@ -318,7 +336,7 @@ export function BarComparisonChart({
 
         {items.length === 0 && (
           <div style={{ padding: '30px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-            Aucune donnée de devis disponible pour la sélection actuelle.
+            Aucune donnée disponible pour la sélection actuelle.
           </div>
         )}
       </div>
@@ -366,7 +384,7 @@ export function TrendBarsChart({
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '120px', width: '100%', justifyContent: 'center' }}>
                 {/* Total bar */}
                 <div 
-                  title={`Émis : ${item.total.toLocaleString('fr-FR')} FCFA (${item.count} devis)`}
+                  title={`Émis : ${item.total.toLocaleString('fr-FR')} FCFA (${item.count} opérations)`}
                   style={{
                     width: '12px',
                     height: `${totalHeight}px`,
@@ -377,7 +395,7 @@ export function TrendBarsChart({
                 />
                 {/* Accepted bar */}
                 <div 
-                  title={`Accepté : ${item.accepted.toLocaleString('fr-FR')} FCFA`}
+                  title={`Validé : ${item.accepted.toLocaleString('fr-FR')} FCFA`}
                   style={{
                     width: '12px',
                     height: `${acceptedHeight}px`,
@@ -398,18 +416,265 @@ export function TrendBarsChart({
       <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '10px', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#93C5FD' }} />
-          Total Émis
+          Total Flux
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#10B981' }} />
-          Accepté
+          Validé / Réalisé
         </span>
       </div>
     </div>
   );
 }
 
-/* ─── 4. User Analytics Detail Card ────────────────────────────── */
+/* ─── 4. User Multi-Module 360° Supervision Card ─────────────────── */
+export interface UserModuleSummary {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    serviceName: string;
+    activeModulesCount: number;
+    enabled: {
+      prestations: boolean;
+      caisse: boolean;
+      maintenance: boolean;
+      stocks: boolean;
+      tiers: boolean;
+      commerciaux: boolean;
+      commissions: boolean;
+    };
+  };
+  quotes: {
+    count: number;
+    totalValue: number;
+    acceptedValue: number;
+    rate: number;
+  };
+  prestations: {
+    count: number;
+    totalVente: number;
+    margeInterne: number;
+    beneficeNet: number;
+    payeeCount: number;
+  };
+  caisse: {
+    mouvementsCount: number;
+    totalEntrees: number;
+    totalSorties: number;
+    solde: number;
+  };
+  maintenance: {
+    ticketsCount: number;
+    urgentsCount: number;
+    totalFacturation: number;
+    resolusCount: number;
+  };
+  tiers: {
+    totalTiers: number;
+    clientsCount: number;
+    partenairesCount: number;
+  };
+  commissions: {
+    count: number;
+    totalMontant: number;
+    payeeMontant: number;
+    attenteMontant: number;
+  };
+}
+
+export function UserMultiModuleSupervisionCard({
+  summary,
+  onInspect,
+  onNavigateModule
+}: {
+  summary: UserModuleSummary;
+  onInspect?: () => void;
+  onNavigateModule?: (path: string) => void;
+}) {
+  const { user, quotes, prestations, caisse, maintenance, tiers, commissions } = summary;
+
+  // Donut chart of activity distribution for this user
+  const activityDonutData: DonutDataPoint[] = [
+    { label: 'Commandes', value: prestations.count, color: '#10B981' },
+    { label: 'Devis', value: quotes.count, color: '#3B82F6' },
+    { label: 'Caisse', value: caisse.mouvementsCount, color: '#EF4444' },
+    { label: 'Maintenance', value: maintenance.ticketsCount, color: '#F59E0B' },
+    { label: 'Tiers', value: tiers.totalTiers, color: '#8B5CF6' }
+  ].filter(d => d.value > 0);
+
+  return (
+    <div 
+      className="card" 
+      style={{ 
+        padding: '20px', 
+        borderLeft: '4px solid var(--color-primary)',
+        background: 'var(--color-surface)',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        gap: '16px'
+      }}
+    >
+      <div>
+        {/* Entête collaborateur */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: 'var(--color-primary-tint)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '15px' }}>
+              {user.name.substring(0, 2).toUpperCase()}
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>{user.name}</h4>
+                <span className="badge-status" style={{ background: '#DBEAFE', color: '#1D4ED8', fontSize: '11px' }}>{user.role}</span>
+              </div>
+              <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                {user.serviceName} • {user.email}
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span className="badge-status" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#059669', fontSize: '11px', fontWeight: 600 }}>
+              {user.activeModulesCount} modules actifs
+            </span>
+          </div>
+        </div>
+
+        {/* Grille multi-modules de ce collaborateur */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+          {/* Module 1: Prestations */}
+          {user.enabled.prestations && (
+            <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', color: '#059669', fontWeight: 700 }}>
+                <ShoppingBag size={12} />
+                <span>COMMANDES</span>
+              </div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)', marginTop: '2px' }}>
+                {prestations.totalVente.toLocaleString('fr-FR')} F
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                {prestations.count} commandes • Marge: {prestations.margeInterne.toLocaleString('fr-FR')} F
+              </div>
+            </div>
+          )}
+
+          {/* Module Devis */}
+          <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', color: '#2563EB', fontWeight: 700 }}>
+              <FileText size={12} />
+              <span>DEVIS CLIENTS</span>
+            </div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)', marginTop: '2px' }}>
+              {quotes.totalValue.toLocaleString('fr-FR')} F
+            </div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+              {quotes.count} devis • {quotes.rate}% acceptés
+            </div>
+          </div>
+
+          {/* Module 2: Caisse */}
+          {user.enabled.caisse && (
+            <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', color: '#DC2626', fontWeight: 700 }}>
+                <Wallet size={12} />
+                <span>FLUX CAISSE</span>
+              </div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: caisse.solde >= 0 ? '#059669' : '#DC2626', marginTop: '2px' }}>
+                {caisse.solde.toLocaleString('fr-FR')} F
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                {caisse.mouvementsCount} mouv. ({caisse.totalSorties.toLocaleString('fr-FR')} F sorties)
+              </div>
+            </div>
+          )}
+
+          {/* Module 3: Maintenance */}
+          {user.enabled.maintenance && (
+            <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', color: '#D97706', fontWeight: 700 }}>
+                <Wrench size={12} />
+                <span>MAINTENANCE</span>
+              </div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)', marginTop: '2px' }}>
+                {maintenance.ticketsCount} tickets
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                {maintenance.urgentsCount} urgences • Facturé: {maintenance.totalFacturation.toLocaleString('fr-FR')} F
+              </div>
+            </div>
+          )}
+
+          {/* Module 5: Tiers */}
+          {user.enabled.tiers && (
+            <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.05)', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', color: '#7C3AED', fontWeight: 700 }}>
+                <UsersIcon size={12} />
+                <span>PORT. TIERS</span>
+              </div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)', marginTop: '2px' }}>
+                {tiers.totalTiers} contacts
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                {tiers.clientsCount} clients • {tiers.partenairesCount} partenaires
+              </div>
+            </div>
+          )}
+
+          {/* Module 7: Commissions */}
+          {user.enabled.commissions && (
+            <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(217, 119, 6, 0.05)', border: '1px solid rgba(217, 119, 6, 0.2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', color: '#B45309', fontWeight: 700 }}>
+                <Award size={12} />
+                <span>COMMISSIONS</span>
+              </div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)', marginTop: '2px' }}>
+                {commissions.totalMontant.toLocaleString('fr-FR')} F
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                {commissions.payeeMontant.toLocaleString('fr-FR')} F réglés • {commissions.attenteMontant.toLocaleString('fr-FR')} F en attente
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Diagramme de distribution multi-activités */}
+        {activityDonutData.length > 0 && (
+          <div style={{ background: 'var(--color-surface-alt)', padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+            <DonutChart 
+              data={activityDonutData}
+              title="Distribution des activités CRM du collaborateur"
+              centerLabel="Opérations"
+              centerValue={activityDonutData.reduce((s, a) => s + a.value, 0)}
+              size={120}
+              strokeWidth={18}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid var(--color-border)' }}>
+        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+          {summary.prestations.beneficeNet > 0 ? `Bénéfice net généré : ${summary.prestations.beneficeNet.toLocaleString('fr-FR')} FCFA` : ''}
+        </span>
+        {onInspect && (
+          <button 
+            className="btn btn-outline" 
+            style={{ fontSize: '0.8rem', padding: '5px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+            onClick={onInspect}
+          >
+            <span>Superviser en détail</span>
+            <ArrowUpRight size={14} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── 5. User Analytics Detail Card (Simple) ────────────────────── */
 export function UserAnalyticsCard({
   user,
   stats,

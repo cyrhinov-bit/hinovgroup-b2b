@@ -11,7 +11,14 @@ import {
   Search,
   ArrowUpRight,
   TrendingUp,
-  BarChart3
+  BarChart3,
+  ShoppingBag,
+  Wrench,
+  DollarSign,
+  Package,
+  Award,
+  Wallet,
+  Layers
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -20,30 +27,45 @@ import {
   DonutChart, 
   BarComparisonChart, 
   TrendBarsChart,
+  UserMultiModuleSupervisionCard,
   type DonutDataPoint,
   type BarComparisonItem,
-  type TrendPeriodItem
+  type TrendPeriodItem,
+  type UserModuleSummary
 } from '../components/analytics/DashboardCharts';
 import './DashboardDirecteur.css'; 
 
 type PeriodFilter = 'ALL' | 'TODAY' | '7_DAYS' | 'THIS_MONTH' | 'THIS_QUARTER' | 'THIS_YEAR';
 
 export function DashboardResponsable() {
-  const { quotes, prestations, clients, services, users } = useAppContext();
+  const { 
+    quotes, 
+    prestations, 
+    clients, 
+    services, 
+    users, 
+    crmPrestations, 
+    crmCaisse, 
+    crmMaintenance, 
+    crmArticles, 
+    crmTiers, 
+    crmCommissions 
+  } = useAppContext();
+  
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilter>('ALL');
   const [selectedCommercialFilter, setSelectedCommercialFilter] = useState<string>('ALL');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'TEAM_ANALYTICS' | 'OPERATIONS'>('OVERVIEW');
 
   const currentService = services.find(s => s.id === currentUser?.serviceId);
-  const serviceName = currentService?.name || 'Mon Service';
+  const serviceName = currentService?.name || 'Mon Pôle d\'Activité';
 
-  const isDateInPeriod = (dateStr: string, period: PeriodFilter): boolean => {
+  const isDateInPeriod = (dateStr?: string, period: PeriodFilter = selectedPeriod): boolean => {
     if (period === 'ALL') return true;
-    if (!dateStr) return false;
+    if (!dateStr) return true;
     
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return true;
@@ -72,139 +94,154 @@ export function DashboardResponsable() {
     }
   };
 
-  const rawServiceQuotes = useMemo(() => {
-    return quotes.filter(q => q.serviceId === currentUser?.serviceId);
-  }, [quotes, currentUser?.serviceId]);
-
-  const filteredServiceQuotes = useMemo(() => {
-    return rawServiceQuotes.filter(q => {
-      if (!isDateInPeriod(q.date, selectedPeriod)) return false;
-
-      if (selectedCommercialFilter !== 'ALL' && q.commercialId !== selectedCommercialFilter) {
-        return false;
-      }
-
-      if (selectedStatusFilter !== 'ALL') {
-        if (selectedStatusFilter === 'EN_COURS') {
-          if (q.status !== 'Envoyé' && q.status !== 'Brouillon' && q.status !== 'Révision') return false;
-        } else if (q.status !== selectedStatusFilter) {
-          return false;
-        }
-      }
-
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const clientName = (clients.find(c => c.id === q.clientId)?.name || '').toLowerCase();
-        const authorName = (users.find(u => u.id === q.commercialId)?.name || '').toLowerCase();
-        const subject = (q.subject || '').toLowerCase();
-        const qNum = (q.quoteNumber || '').toLowerCase();
-
-        if (!clientName.includes(query) && !authorName.includes(query) && !subject.includes(query) && !qNum.includes(query)) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [rawServiceQuotes, selectedPeriod, selectedCommercialFilter, selectedStatusFilter, searchQuery, clients, users]);
-
-  const servicePrestations = prestations.filter(p => p.serviceId === currentUser?.serviceId);
   const serviceCommercials = users.filter(u => u.serviceId === currentUser?.serviceId && (u.role === 'Commercial' || u.role === 'Responsable'));
 
-  const totalQuotes = filteredServiceQuotes.length;
-  const acceptedQuotes = filteredServiceQuotes.filter(q => q.status === 'Accepté').length;
-  const acceptedValue = filteredServiceQuotes.filter(q => q.status === 'Accepté').reduce((sum, q) => sum + q.total, 0);
-  const toReviewQuotes = filteredServiceQuotes.filter(q => q.status === 'Brouillon' || q.status === 'Envoyé' || q.status === 'Révision').length;
-  const toReviewValue = filteredServiceQuotes.filter(q => q.status === 'Brouillon' || q.status === 'Envoyé' || q.status === 'Révision').reduce((sum, q) => sum + q.total, 0);
-  const refusedCount = filteredServiceQuotes.filter(q => q.status === 'Refusé').length;
-  const totalValue = filteredServiceQuotes.filter(q => q.status !== 'Refusé').reduce((sum, q) => sum + q.total, 0);
-  const acceptanceRate = totalQuotes > 0 ? Math.round((acceptedQuotes / totalQuotes) * 100) : 0;
-  const totalPrestations = servicePrestations.length;
+  // 1. Devis du Service
+  const filteredServiceQuotes = useMemo(() => {
+    return quotes.filter(q => {
+      if (q.serviceId !== currentUser?.serviceId) return false;
+      if (!isDateInPeriod(q.date)) return false;
+      if (selectedCommercialFilter !== 'ALL' && q.commercialId !== selectedCommercialFilter) return false;
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const cName = (clients.find(c => c.id === q.clientId)?.name || '').toLowerCase();
+        const aName = (users.find(u => u.id === q.commercialId)?.name || '').toLowerCase();
+        const sub = (q.subject || '').toLowerCase();
+        const num = (q.quoteNumber || '').toLowerCase();
+        if (!cName.includes(query) && !aName.includes(query) && !sub.includes(query) && !num.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [quotes, currentUser?.serviceId, selectedPeriod, selectedCommercialFilter, searchQuery, clients, users]);
 
-  const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Inconnu';
-  const getUserName = (id?: string) => users.find(u => u.id === id)?.name || 'Non assigné';
+  // 2. Commandes Prestations du Service
+  const filteredServicePrestations = useMemo(() => {
+    return crmPrestations.filter(p => {
+      const user = users.find(u => u.id === p.cree_par || u.id === p.resp_service_id || u.id === p.responsable_service_id);
+      const isMyService = user?.serviceId === currentUser?.serviceId || p.resp_service_id === currentUser?.id || p.responsable_service_id === currentUser?.id;
+      if (!isMyService) return false;
+      if (!isDateInPeriod(p.date_commande || p.date_creation || p.created_at)) return false;
+      if (selectedCommercialFilter !== 'ALL' && p.cree_par !== selectedCommercialFilter && p.commercial_id !== selectedCommercialFilter) return false;
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const ref = (p.reference || '').toLowerCase();
+        const client = (p.client_nom || '').toLowerCase();
+        const des = (p.designation || '').toLowerCase();
+        if (!ref.includes(query) && !client.includes(query) && !des.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [crmPrestations, users, currentUser, selectedPeriod, selectedCommercialFilter, searchQuery]);
 
-  const getBadgeColor = (status: string) => {
-    switch (status) {
-      case 'Accepté': return 'bg-success';
-      case 'Refusé': return 'bg-error';
-      case 'Envoyé': return 'bg-primary';
-      case 'Brouillon': return 'bg-secondary';
-      case 'Révision': return 'bg-warning';
-      default: return '';
-    }
-  };
+  // 3. Maintenance du Service
+  const filteredServiceMaintenance = useMemo(() => {
+    return crmMaintenance.filter(ticket => {
+      const user = users.find(u => u.id === ticket.cree_par);
+      const isMyService = user?.serviceId === currentUser?.serviceId || ticket.cree_par === currentUser?.id;
+      if (!isMyService) return false;
+      if (!isDateInPeriod(ticket.date_intervention || ticket.created_at)) return false;
+      if (selectedCommercialFilter !== 'ALL' && ticket.cree_par !== selectedCommercialFilter) return false;
+      return true;
+    });
+  }, [crmMaintenance, users, currentUser, selectedPeriod, selectedCommercialFilter]);
 
-  // Donut data
-  const statusDonutData: DonutDataPoint[] = [
-    { label: 'Acceptés', value: acceptedQuotes, color: '#10B981' },
-    { label: 'En cours', value: toReviewQuotes, color: '#F59E0B' },
-    { label: 'Refusés', value: refusedCount, color: '#EF4444' }
-  ];
+  // KPIs
+  const totalCommandesVente = filteredServicePrestations.reduce((sum, p) => sum + (p.prix_client_final || p.montant_total_vente || 0), 0);
+  const totalMargeInterne = filteredServicePrestations.reduce((sum, p) => sum + (p.marge_interne || 0), 0);
+  const totalBeneficeNet = filteredServicePrestations.reduce((sum, p) => sum + (p.benefice_net || p.benefice_reel || 0), 0);
 
-  // Collaborators in this service
-  const serviceMemberStats: BarComparisonItem[] = serviceCommercials.map(u => {
-    const uQuotes = filteredServiceQuotes.filter(q => q.commercialId === u.id);
-    const uAccepted = uQuotes.filter(q => q.status === 'Accepté');
-    const uPending = uQuotes.filter(q => q.status === 'Envoyé' || q.status === 'Brouillon' || q.status === 'Révision');
-    const uTotalValue = uQuotes.filter(q => q.status !== 'Refusé').reduce((sum, q) => sum + q.total, 0);
-    const uAcceptedValue = uAccepted.reduce((sum, q) => sum + q.total, 0);
-    const uPendingValue = uPending.reduce((sum, q) => sum + q.total, 0);
-    const uRate = uQuotes.length > 0 ? Math.round((uAccepted.length / uQuotes.length) * 100) : 0;
+  const totalQuotesVal = filteredServiceQuotes.filter(q => q.status !== 'Refusé').reduce((sum, q) => sum + q.total, 0);
+  const acceptedQuotes = filteredServiceQuotes.filter(q => q.status === 'Accepté');
+  const acceptedQuotesVal = acceptedQuotes.reduce((sum, q) => sum + q.total, 0);
+  const quotesAcceptanceRate = filteredServiceQuotes.length > 0 ? Math.round((acceptedQuotes.length / filteredServiceQuotes.length) * 100) : 0;
 
-    return {
-      id: u.id,
-      name: u.name,
-      role: u.role,
-      serviceName: serviceName,
-      totalValue: uTotalValue,
-      acceptedValue: uAcceptedValue,
-      pendingValue: uPendingValue,
-      quoteCount: uQuotes.length,
-      acceptedCount: uAccepted.length,
-      rate: uRate
-    };
-  }).filter(u => u.quoteCount > 0 || u.role === 'Commercial' || u.role === 'Responsable')
-    .sort((a, b) => b.totalValue - a.totalValue);
+  // Donut Status
+  const donutData: DonutDataPoint[] = [
+    { label: 'Commandes Payées', value: filteredServicePrestations.filter(p => p.statut === 'PAYEE').length, color: '#10B981' },
+    { label: 'Commandes En cours', value: filteredServicePrestations.filter(p => p.statut !== 'PAYEE' && p.statut !== 'BROUILLON').length, color: '#3B82F6' },
+    { label: 'Devis Acceptés', value: acceptedQuotes.length, color: '#059669' },
+    { label: 'Tickets Maintenance', value: filteredServiceMaintenance.length, color: '#F59E0B' }
+  ].filter(d => d.value > 0);
 
-  // 6 months trend for this service
-  const trendData: TrendPeriodItem[] = useMemo(() => {
-    const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
-    const now = new Date();
-    const result: TrendPeriodItem[] = [];
+  // Summaries des membres du service
+  const serviceMemberSummaries: UserModuleSummary[] = useMemo(() => {
+    return serviceCommercials.map(u => {
+      const uQuotes = filteredServiceQuotes.filter(q => q.commercialId === u.id);
+      const uAccQuotes = uQuotes.filter(q => q.status === 'Accepté');
+      const uQVal = uQuotes.filter(q => q.status !== 'Refusé').reduce((sum, q) => sum + q.total, 0);
+      const uQAccVal = uAccQuotes.reduce((sum, q) => sum + q.total, 0);
+      const uRate = uQuotes.length > 0 ? Math.round((uAccQuotes.length / uQuotes.length) * 100) : 0;
 
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const mIdx = d.getMonth();
-      const yr = d.getFullYear();
-      const label = `${months[mIdx]}`;
+      const uPrest = filteredServicePrestations.filter(p => p.cree_par === u.id || p.commercial_id === u.id);
+      const uVente = uPrest.reduce((sum, p) => sum + (p.prix_client_final || p.montant_total_vente || 0), 0);
+      const uMarge = uPrest.reduce((sum, p) => sum + (p.marge_interne || 0), 0);
+      const uBenef = uPrest.reduce((sum, p) => sum + (p.benefice_net || p.benefice_reel || 0), 0);
 
-      const mQuotes = rawServiceQuotes.filter(q => {
-        if (!q.date) return false;
-        const qd = new Date(q.date);
-        return qd.getMonth() === mIdx && qd.getFullYear() === yr;
-      });
+      const uMaint = filteredServiceMaintenance.filter(t => t.cree_par === u.id || t.technicien_assigne?.includes(u.name));
 
-      const mTotal = mQuotes.reduce((sum, q) => sum + q.total, 0);
-      const mAccepted = mQuotes.filter(q => q.status === 'Accepté').reduce((sum, q) => sum + q.total, 0);
+      return {
+        user: {
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          serviceName: serviceName,
+          activeModulesCount: 5,
+          enabled: {
+            prestations: true,
+            caisse: !!u.crmCaisseEnabled,
+            maintenance: true,
+            stocks: true,
+            tiers: true,
+            commerciaux: true,
+            commissions: true
+          }
+        },
+        quotes: {
+          count: uQuotes.length,
+          totalValue: uQVal,
+          acceptedValue: uQAccVal,
+          rate: uRate
+        },
+        prestations: {
+          count: uPrest.length,
+          totalVente: uVente,
+          margeInterne: uMarge,
+          beneficeNet: uBenef,
+          payeeCount: uPrest.filter(p => p.statut === 'PAYEE').length
+        },
+        caisse: {
+          mouvementsCount: 0,
+          totalEntrees: 0,
+          totalSorties: 0,
+          solde: 0
+        },
+        maintenance: {
+          ticketsCount: uMaint.length,
+          urgentsCount: uMaint.filter(t => t.priorite === 'URGENTE').length,
+          totalFacturation: uMaint.reduce((s, t) => s + (t.prix_total || 0), 0),
+          resolusCount: uMaint.filter(t => t.statut === 'CLOTURE').length
+        },
+        tiers: {
+          totalTiers: 0,
+          clientsCount: 0,
+          partenairesCount: 0
+        },
+        commissions: {
+          count: 0,
+          totalMontant: 0,
+          payeeMontant: 0,
+          attenteMontant: 0
+        }
+      };
+    });
+  }, [serviceCommercials, filteredServiceQuotes, filteredServicePrestations, filteredServiceMaintenance, serviceName]);
 
-      result.push({
-        period: label,
-        total: mTotal,
-        accepted: mAccepted,
-        count: mQuotes.length
-      });
-    }
-
-    return result;
-  }, [rawServiceQuotes]);
-
-  const hasActiveFilters = selectedPeriod !== 'ALL' || selectedCommercialFilter !== 'ALL' || selectedStatusFilter !== 'ALL' || searchQuery !== '';
+  const hasActiveFilters = selectedPeriod !== 'ALL' || selectedCommercialFilter !== 'ALL' || searchQuery !== '';
 
   const resetFilters = () => {
     setSelectedPeriod('ALL');
     setSelectedCommercialFilter('ALL');
-    setSelectedStatusFilter('ALL');
     setSearchQuery('');
   };
 
@@ -214,11 +251,11 @@ export function DashboardResponsable() {
       <div className="responsable-hero-banner">
         <div className="hero-badge">
           <Building2 size={15} />
-          <span>PÔLE D'ACTIVITÉ & GESTION DES DEVIS</span>
+          <span>SUPERVISION DU PÔLE DE SERVICE</span>
         </div>
         <h1 className="hero-title">{serviceName}</h1>
         <p className="hero-subtitle">
-          {currentService?.description || 'Vue globale des devis et prestations de votre pôle d\'activité.'}
+          {currentService?.description || 'Pilotage consolidé des commandes, devis, interventions et collaborateurs de votre pôle.'}
         </p>
         <div className="hero-meta-tags">
           <span className="hero-tag">
@@ -226,25 +263,29 @@ export function DashboardResponsable() {
             <strong>{serviceCommercials.length}</strong> Collaborateur(s)
           </span>
           <span className="hero-tag">
-            <Briefcase size={14} color="var(--color-primary)" />
-            <strong>{totalPrestations}</strong> Prestation(s) active(s)
+            <ShoppingBag size={14} color="#10B981" />
+            <strong>{filteredServicePrestations.length}</strong> Commande(s)
           </span>
           <span className="hero-tag">
-            <FileText size={14} color="var(--color-primary)" />
-            <strong>{rawServiceQuotes.length}</strong> Devis enregistrés
+            <FileText size={14} color="#3B82F6" />
+            <strong>{filteredServiceQuotes.length}</strong> Devis émis
+          </span>
+          <span className="hero-tag">
+            <Wrench size={14} color="#F59E0B" />
+            <strong>{filteredServiceMaintenance.length}</strong> Intervention(s)
           </span>
         </div>
       </div>
 
       {/* ─── FILTRES RESPONSABLE ─────────────────────────────── */}
-      <div className="card" style={{ marginBottom: '24px', padding: '16px 20px', border: hasActiveFilters ? '1.5px solid rgba(37, 99, 235, 0.4)' : '1px solid var(--color-border)' }}>
+      <div className="card" style={{ marginBottom: '20px', padding: '16px 20px', border: hasActiveFilters ? '1.5px solid rgba(37, 99, 235, 0.4)' : '1px solid var(--color-border)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: 700 }}>
             <Filter size={16} color="var(--color-primary)" />
             <span>Filtres de supervision du pôle</span>
             {hasActiveFilters && (
               <span className="badge-status" style={{ background: 'rgba(37, 99, 235, 0.12)', color: '#2563EB', fontSize: '11px' }}>
-                {filteredServiceQuotes.length} devis affichés
+                Filtres appliqués
               </span>
             )}
           </div>
@@ -262,20 +303,18 @@ export function DashboardResponsable() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', alignItems: 'center' }}>
-          {/* Recherche */}
           <div style={{ position: 'relative' }}>
             <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
             <input
               type="text"
               className="table-input"
               style={{ paddingLeft: '32px', width: '100%', fontSize: '0.85rem' }}
-              placeholder="Rechercher client, sujet, N°..."
+              placeholder="Rechercher client, référence..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
           </div>
 
-          {/* Période */}
           <div>
             <select
               className="table-input"
@@ -292,7 +331,6 @@ export function DashboardResponsable() {
             </select>
           </div>
 
-          {/* Collaborateur du service */}
           <div>
             <select
               className="table-input"
@@ -306,167 +344,207 @@ export function DashboardResponsable() {
               ))}
             </select>
           </div>
-
-          {/* Statut */}
-          <div>
-            <select
-              className="table-input"
-              style={{ width: '100%', fontSize: '0.85rem' }}
-              value={selectedStatusFilter}
-              onChange={e => setSelectedStatusFilter(e.target.value)}
-            >
-              <option value="ALL">🏷️ Tous les statuts</option>
-              <option value="Accepté">Acceptés</option>
-              <option value="EN_COURS">En cours (Envoyé/Brouillon)</option>
-              <option value="Révision">En Révision</option>
-              <option value="Refusé">Refusés</option>
-            </select>
-          </div>
         </div>
       </div>
-      
-      {/* ─── TOP KPI CARDS ───────────────────────────────────── */}
-      <div className="widgets-grid" style={{ marginBottom: '24px' }}>
-        <div className="widget-card" style={{ borderLeft: '4px solid #3B82F6' }}>
-          <div className="widget-icon" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#2563EB' }}>
-            <FileText size={26} />
+
+      {/* ─── KPIS DU SERVICE ─────────────────────────────────── */}
+      <div className="widgets-grid" style={{ marginBottom: '20px' }}>
+        <div className="widget-card" style={{ borderLeft: '4px solid #10B981' }}>
+          <div className="widget-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#059669' }}>
+            <ShoppingBag size={24} />
           </div>
           <div className="widget-content">
-            <div className="widget-label">DEVIS DU PÔLE</div>
-            <div className="widget-value">{totalQuotes}</div>
-            <div style={{ fontSize: '0.8rem', color: '#2563EB', fontWeight: 700, marginTop: '2px' }}>
-              {totalValue.toLocaleString('fr-FR')} FCFA
+            <div className="widget-label">COMMANDES VENTES</div>
+            <div className="widget-value">{totalCommandesVente.toLocaleString('fr-FR')} F</div>
+            <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: '2px' }}>
+              Marge: {totalMargeInterne.toLocaleString('fr-FR')} F ({filteredServicePrestations.length} cmds)
             </div>
           </div>
         </div>
-        
-        <div className="widget-card" style={{ borderLeft: '4px solid #10B981' }}>
-          <div className="widget-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#059669' }}>
-            <CheckCircle size={26} />
+
+        <div className="widget-card" style={{ borderLeft: '4px solid #3B82F6' }}>
+          <div className="widget-icon" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#2563EB' }}>
+            <FileText size={24} />
           </div>
           <div className="widget-content">
             <div className="widget-label">DEVIS ACCEPTÉS</div>
-            <div className="widget-value" style={{ color: '#059669' }}>{acceptedQuotes}</div>
-            <div style={{ fontSize: '0.8rem', color: '#059669', fontWeight: 700, marginTop: '2px' }}>
-              {acceptedValue.toLocaleString('fr-FR')} FCFA ({acceptanceRate}%)
+            <div className="widget-value">{acceptedQuotesVal.toLocaleString('fr-FR')} F</div>
+            <div style={{ fontSize: '0.75rem', color: '#2563EB', fontWeight: 600, marginTop: '2px' }}>
+              {acceptedQuotes.length}/{filteredServiceQuotes.length} devis ({quotesAcceptanceRate}%)
+            </div>
+          </div>
+        </div>
+
+        <div className="widget-card" style={{ borderLeft: '4px solid #059669' }}>
+          <div className="widget-icon" style={{ background: 'rgba(5, 150, 105, 0.1)', color: '#059669' }}>
+            <Award size={24} />
+          </div>
+          <div className="widget-content">
+            <div className="widget-label">BÉNÉFICE NET PÔLE</div>
+            <div className="widget-value">{totalBeneficeNet.toLocaleString('fr-FR')} F</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+              Rendement financier net
             </div>
           </div>
         </div>
 
         <div className="widget-card" style={{ borderLeft: '4px solid #F59E0B' }}>
           <div className="widget-icon" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#D97706' }}>
-            <Clock size={26} />
+            <Wrench size={24} />
           </div>
           <div className="widget-content">
-            <div className="widget-label">DEVIS EN COURS</div>
-            <div className="widget-value" style={{ color: '#D97706' }}>{toReviewQuotes}</div>
-            <div style={{ fontSize: '0.8rem', color: '#D97706', fontWeight: 700, marginTop: '2px' }}>
-              {toReviewValue.toLocaleString('fr-FR')} FCFA
-            </div>
-          </div>
-        </div>
-
-        <div className="widget-card" style={{ borderLeft: '4px solid #6366F1' }}>
-          <div className="widget-icon" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#4F46E5' }}>
-            <Briefcase size={26} />
-          </div>
-          <div className="widget-content">
-            <div className="widget-label">PRESTATIONS DU PÔLE</div>
-            <div className="widget-value">{totalPrestations}</div>
-            <div style={{ fontSize: '0.8rem', color: '#4F46E5', fontWeight: 700, marginTop: '2px' }}>
-              Tarifées au catalogue
+            <div className="widget-label">MAINTENANCE</div>
+            <div className="widget-value">{filteredServiceMaintenance.length} tickets</div>
+            <div style={{ fontSize: '0.75rem', color: '#D97706', fontWeight: 600, marginTop: '2px' }}>
+              Interventions techniques
             </div>
           </div>
         </div>
       </div>
 
-      {/* ─── GRAPHIQUES ANALYTIQUES DU PÔLE ──────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginBottom: '24px' }}>
-        {/* Graphique 1 : Répartition par Statut */}
-        <div className="card" style={{ padding: '20px' }}>
-          <DonutChart 
-            data={statusDonutData}
-            title="Distribution des Devis du Pôle"
-            subTitle="Répartition par statut de validation"
-            centerLabel="Devis émis"
-            centerValue={totalQuotes}
-            size={160}
-            strokeWidth={22}
-          />
-        </div>
+      {/* ─── ONGLETS DE NAVIGATION ───────────────────────────── */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid var(--color-border)', paddingBottom: '10px' }}>
+        <button
+          className={`btn ${activeTab === 'OVERVIEW' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveTab('OVERVIEW')}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', padding: '8px 16px' }}
+        >
+          <BarChart3 size={16} />
+          <span>Vue Synthèse Pôle</span>
+        </button>
 
-        {/* Graphique 2 : Tendance mensuelle */}
-        <div className="card" style={{ padding: '20px' }}>
-          <TrendBarsChart
-            data={trendData}
-            title="Évolution de l'activité du Pôle"
-            subTitle="Volumes émis et validés sur les 6 derniers mois"
-          />
-        </div>
+        <button
+          className={`btn ${activeTab === 'TEAM_ANALYTICS' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveTab('TEAM_ANALYTICS')}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', padding: '8px 16px' }}
+        >
+          <Users size={16} />
+          <span>Équipe du Pôle ({serviceMemberSummaries.length})</span>
+        </button>
+
+        <button
+          className={`btn ${activeTab === 'OPERATIONS' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveTab('OPERATIONS')}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', padding: '8px 16px' }}
+        >
+          <Layers size={16} />
+          <span>Détail des Commandes ({filteredServicePrestations.length})</span>
+        </button>
       </div>
 
-      {/* Graphique 3 : Performance des membres du service */}
-      {serviceMemberStats.length > 0 && (
-        <div className="card" style={{ padding: '20px', marginBottom: '24px' }}>
-          <BarComparisonChart
-            items={serviceMemberStats}
-            title="Performances des Collaborateurs du Pôle"
-            subTitle="Montants émis vs montants acceptés par membre de l'équipe"
-          />
+      {/* ─── VUE 1 : SYNTHÈSE ─────────────────────────────────── */}
+      {activeTab === 'OVERVIEW' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '20px' }}>
+          <div className="card" style={{ padding: '20px' }}>
+            <DonutChart
+              data={donutData}
+              title="Distribution des Activités du Pôle"
+              subTitle="Commandes, devis et interventions"
+              centerLabel="Opérations"
+              centerValue={donutData.reduce((s, d) => s + d.value, 0)}
+              size={160}
+              strokeWidth={22}
+            />
+          </div>
+
+          <div className="card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div>
+              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>Raccourcis Opérationnels du Service</h4>
+              <p style={{ margin: '2px 0 16px', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Accès direct aux modules CRM du responsable</p>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <button className="btn btn-outline" style={{ justifyContent: 'space-between', padding: '10px 14px' }} onClick={() => navigate('/crm/prestations')}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><ShoppingBag size={16} color="#10B981" /> Commandes (Grille 11 col.)</span>
+                  <ArrowUpRight size={14} />
+                </button>
+                <button className="btn btn-outline" style={{ justifyContent: 'space-between', padding: '10px 14px' }} onClick={() => navigate('/crm/maintenance')}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Wrench size={16} color="#F59E0B" /> Tickets d'intervention</span>
+                  <ArrowUpRight size={14} />
+                </button>
+                <button className="btn btn-outline" style={{ justifyContent: 'space-between', padding: '10px 14px' }} onClick={() => navigate('/crm/caisse')}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Wallet size={16} color="#EF4444" /> Journal de caisse</span>
+                  <ArrowUpRight size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* ─── TABLEAU DES DEVIS DU SERVICE ─────────────────────── */}
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <h3 style={{ margin: 0 }}>Devis du pôle {serviceName} ({filteredServiceQuotes.length})</h3>
-            <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
-              Consultez et suivez l'état d'avancement des devis émis.
-            </p>
+      {/* ─── VUE 2 : ÉQUIPE DU SERVICE ────────────────────────── */}
+      {activeTab === 'TEAM_ANALYTICS' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '20px' }}>
+          {serviceMemberSummaries.map(summary => (
+            <UserMultiModuleSupervisionCard
+              key={summary.user.id}
+              summary={summary}
+            />
+          ))}
+
+          {serviceMemberSummaries.length === 0 && (
+            <div className="card" style={{ gridColumn: '1 / -1', padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+              Aucun collaborateur assigné à ce service pour le moment.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── VUE 3 : OPÉRATIONS COMMANDES ─────────────────────── */}
+      {activeTab === 'OPERATIONS' && (
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+            <h3 style={{ margin: 0 }}>Commandes & Prestations ({filteredServicePrestations.length})</h3>
+            <button className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '6px 14px' }} onClick={() => navigate('/crm/prestations')}>
+              + Nouvelle commande
+            </button>
           </div>
-          <button className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '6px 14px' }} onClick={() => navigate(`/devis/nouveau?serviceId=${currentUser?.serviceId}`)}>
-            + Créer un devis
-          </button>
-        </div>
-        <div className="table-responsive">
-          <table className="data-table responsive-table">
-            <thead>
-              <tr>
-                <th>N° Devis</th>
-                <th>Client</th>
-                <th>Auteur</th>
-                <th>Sujet</th>
-                <th style={{ textAlign: 'right' }}>Montant</th>
-                <th>Statut</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredServiceQuotes.map(q => (
-                <tr key={q.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/devis/nouveau?editId=${q.id}`)}>
-                  <td data-label="N° Devis"><strong style={{ color: 'var(--color-primary)' }}>{q.quoteNumber}</strong></td>
-                  <td data-label="Client">{getClientName(q.clientId)}</td>
-                  <td data-label="Auteur">
-                    <span style={{ fontWeight: 600 }}>{getUserName(q.commercialId)}</span>
-                  </td>
-                  <td data-label="Sujet">{q.subject}</td>
-                  <td data-label="Montant" style={{ textAlign: 'right', fontWeight: 700 }}>{q.total.toLocaleString('fr-FR')} FCFA</td>
-                  <td data-label="Statut"><span className={`badge-status ${getBadgeColor(q.status)}`}>{q.status}</span></td>
-                  <td data-label="Date">{q.date}</td>
-                </tr>
-              ))}
-              {filteredServiceQuotes.length === 0 && (
+          <div className="table-responsive">
+            <table className="data-table responsive-table">
+              <thead>
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-muted)' }}>
-                    Aucun devis trouvé pour ces critères de filtre.
-                  </td>
+                  <th>Réf.</th>
+                  <th>Client</th>
+                  <th>Désignation</th>
+                  <th style={{ textAlign: 'right' }}>Prix Vente</th>
+                  <th style={{ textAlign: 'right' }}>Marge</th>
+                  <th style={{ textAlign: 'right' }}>Bénéfice Net</th>
+                  <th>Statut</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredServicePrestations.map(p => (
+                  <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate('/crm/prestations')}>
+                    <td data-label="Réf."><strong>{p.reference}</strong></td>
+                    <td data-label="Client">{p.client_nom}</td>
+                    <td data-label="Désignation">{p.designation}</td>
+                    <td data-label="Prix Vente" style={{ textAlign: 'right', fontWeight: 700 }}>
+                      {(p.prix_client_final || 0).toLocaleString('fr-FR')} F
+                    </td>
+                    <td data-label="Marge" style={{ textAlign: 'right', color: '#2563EB', fontWeight: 600 }}>
+                      {(p.marge_interne || 0).toLocaleString('fr-FR')} F
+                    </td>
+                    <td data-label="Bénéfice Net" style={{ textAlign: 'right', color: '#059669', fontWeight: 700 }}>
+                      {(p.benefice_net || 0).toLocaleString('fr-FR')} F
+                    </td>
+                    <td data-label="Statut">
+                      <span className="badge-status" style={{ background: p.statut === 'PAYEE' ? '#D1FAE5' : '#DBEAFE', color: p.statut === 'PAYEE' ? '#059669' : '#1D4ED8' }}>
+                        {p.statut}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {filteredServicePrestations.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-muted)' }}>
+                      Aucune commande enregistrée pour ce pôle.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
