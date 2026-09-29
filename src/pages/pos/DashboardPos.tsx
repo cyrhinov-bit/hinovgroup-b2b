@@ -19,7 +19,7 @@ export default function DashboardPos() {
   const { posProducts, posTransactions, posCashSessions, posReturns, posPayments, refreshData, reconcilePosData } = useAppContext();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
-  const [period, setPeriod] = useState<PeriodType>('7d');
+  const [period, setPeriod] = useState<PeriodType>('today');
   const navigate = useNavigate();
 
   useEffect(() => {
