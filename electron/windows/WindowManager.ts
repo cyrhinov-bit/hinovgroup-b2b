@@ -1,10 +1,28 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import { WindowStateService } from './WindowStateService.js';
 
 export class WindowManager {
   private static mainWindow: BrowserWindow | null = null;
   private static splashScreen: BrowserWindow | null = null;
+
+  private static getAppIconPath(): string {
+    const candidates = [
+      path.join(app.getAppPath(), 'build/icons/icon.ico'),
+      path.join(app.getAppPath(), 'electron/assets/icon.png'),
+      path.join(app.getAppPath(), 'public/pwa-512x512.png'),
+      path.join(app.getAppPath(), 'public/logoh.png'),
+      path.join(app.getAppPath(), 'dist/pwa-512x512.png'),
+      path.join(process.cwd(), 'build/icons/icon.ico'),
+      path.join(process.cwd(), 'public/pwa-512x512.png'),
+      path.join(process.cwd(), 'public/logoh.png')
+    ];
+    for (const c of candidates) {
+      if (fs.existsSync(c)) return c;
+    }
+    return '';
+  }
 
   static init(): void {
     this.createSplashScreen();
@@ -16,6 +34,7 @@ export class WindowManager {
   }
 
   private static createSplashScreen(): void {
+    const iconPath = this.getAppIconPath();
     this.splashScreen = new BrowserWindow({
       width: 400,
       height: 300,
@@ -24,6 +43,7 @@ export class WindowManager {
       center: true,
       alwaysOnTop: true,
       show: false,
+      icon: iconPath || undefined,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true
@@ -40,6 +60,7 @@ export class WindowManager {
 
   private static createMainWindow(): void {
     const state = WindowStateService.loadState(1440, 900);
+    const iconPath = this.getAppIconPath();
 
     this.mainWindow = new BrowserWindow({
       title: 'Hinov Business Suite Desktop',
@@ -52,7 +73,7 @@ export class WindowManager {
       show: false,
       autoHideMenuBar: true,
       backgroundColor: '#ffffff',
-      icon: path.join(app.getAppPath(), 'dist/pwa-512x512.png'),
+      icon: iconPath || undefined,
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
