@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Edit2, Trash2, CheckCircle, ArrowRight, DollarSign, Filter, Eye, AlertCircle, TrendingUp, User, Users, FileText, CheckCircle2 } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, CheckCircle, ArrowRight, DollarSign, Filter, Eye, AlertCircle, TrendingUp, User, Users, FileText, CheckCircle2, ShoppingBag } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
@@ -16,7 +16,9 @@ export function CrmPrestations() {
     deleteCrmPrestation,
     encaisserCrmPrestation
   } = useAppContext();
-  const { currentUser } = useAuth();
+  const { currentUser: authUser } = useAuth();
+  const currentUser = users.find(u => u.id === authUser?.id) || authUser;
+  const isDirecteur = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
   const { confirm } = useConfirm();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -267,6 +269,18 @@ export function CrmPrestations() {
   const margeTotal = crmPrestations.filter(p => p.statut !== 'ANNULEE').reduce((sum, p) => sum + (p.marge_interne || 0), 0);
   const beneficeNetTotal = crmPrestations.filter(p => p.statut !== 'ANNULEE').reduce((sum, p) => sum + (p.benefice_net || 0), 0);
   const commissionsTotal = crmPrestations.filter(p => p.statut !== 'ANNULEE').reduce((sum, p) => sum + (p.commission_apporteur || 0) + (p.commission_resp_service || 0) + (p.commission_agent || 0), 0);
+
+  if (!isDirecteur && !currentUser?.crmPrestationsEnabled) {
+    return (
+      <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <ShoppingBag size={48} color="var(--color-error)" style={{ margin: '0 auto 16px' }} />
+        <h2>Module Commandes non activé</h2>
+        <p style={{ color: 'var(--color-text-muted)' }}>
+          Ce module n'est pas activé sur votre profil utilisateur. Veuillez contacter la Direction.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard">

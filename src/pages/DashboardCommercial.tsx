@@ -5,8 +5,9 @@ import { useNavigate } from 'react-router-dom';
 import './DashboardDirecteur.css';
 
 export function DashboardCommercial() {
-  const { currentUser } = useAuth();
-  const { quotes, clients, crmPrestations, crmCommissions, invoices } = useAppContext();
+  const { currentUser: authUser } = useAuth();
+  const { quotes, clients, crmPrestations, crmCommissions, invoices, users } = useAppContext();
+  const currentUser = users.find(u => u.id === authUser?.id) || authUser;
   const navigate = useNavigate();
 
   const myQuotes = quotes.filter(q => q.commercialId === currentUser?.id || q.serviceId === currentUser?.serviceId);
@@ -92,7 +93,7 @@ export function DashboardCommercial() {
         </div>
 
         {/* Commandes / Prestations (si activé pour le commercial) */}
-        {currentUser?.crmPrestationsEnabled !== false && (
+        {currentUser?.crmPrestationsEnabled && (
           <div className="widget-card" style={{ cursor: 'pointer', borderLeft: '4px solid #10B981' }} onClick={() => navigate('/crm/prestations')}>
             <div className="widget-icon" style={{ background: '#10B981', color: 'white' }}>
               <ShoppingBag size={28} />
@@ -108,7 +109,7 @@ export function DashboardCommercial() {
         )}
 
         {/* Commissions (si activé pour le commercial) */}
-        {currentUser?.crmCommissionsEnabled !== false && (
+        {currentUser?.crmCommissionsEnabled && (
           <div className="widget-card" style={{ cursor: 'pointer', borderLeft: '4px solid #D97706' }} onClick={() => navigate('/crm/commissions')}>
             <div className="widget-icon" style={{ background: '#D97706', color: 'white' }}>
               <Award size={28} />

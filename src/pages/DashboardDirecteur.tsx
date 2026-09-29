@@ -670,7 +670,7 @@ export function DashboardDirecteur() {
         return (
           <div className="widgets-grid" style={{ marginBottom: '20px' }}>
             {/* KPI 1 : Commandes Prestations */}
-            {(selectedUserFilter === 'ALL' || targetUserObj?.crmPrestationsEnabled !== false) && (
+            {(selectedUserFilter === 'ALL' || !!targetUserObj?.crmPrestationsEnabled) && (
               <div className="widget-card" style={{ borderLeft: '4px solid #10B981', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('PRESTATIONS')}>
                 <div className="widget-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#059669' }}>
                   <ShoppingBag size={24} />
@@ -714,7 +714,7 @@ export function DashboardDirecteur() {
             </div>
 
             {/* KPI 4 : Caisse Trésorerie */}
-            {(selectedUserFilter === 'ALL' || targetUserObj?.crmCaisseEnabled) && (
+            {(selectedUserFilter === 'ALL' || !!targetUserObj?.crmCaisseEnabled) && (
               <div className="widget-card" style={{ borderLeft: '4px solid #EF4444', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('CAISSE')}>
                 <div className="widget-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#DC2626' }}>
                   <Wallet size={24} />
@@ -732,7 +732,7 @@ export function DashboardDirecteur() {
             )}
 
             {/* KPI 5 : Maintenance */}
-            {(selectedUserFilter === 'ALL' || targetUserObj?.crmMaintenanceEnabled !== false) && (
+            {(selectedUserFilter === 'ALL' || !!targetUserObj?.crmMaintenanceEnabled) && (
               <div className="widget-card" style={{ borderLeft: '4px solid #F59E0B', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('MAINTENANCE')}>
                 <div className="widget-icon" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#D97706' }}>
                   <Wrench size={24} />
@@ -748,7 +748,7 @@ export function DashboardDirecteur() {
             )}
 
             {/* KPI 6 : Commissions */}
-            {(selectedUserFilter === 'ALL' || targetUserObj?.crmCommissionsEnabled !== false) && (
+            {(selectedUserFilter === 'ALL' || !!targetUserObj?.crmCommissionsEnabled) && (
               <div className="widget-card" style={{ borderLeft: '4px solid #8B5CF6', cursor: 'pointer' }} onClick={() => setSelectedModuleScope('COMMISSIONS')}>
                 <div className="widget-icon" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#8B5CF6' }}>
                   <Award size={24} />

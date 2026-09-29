@@ -1003,6 +1003,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }));
           const mergedUsers = mergeData(cachedUsers, parsedUsers);
           setUsers(mergedUsers); await db.profiles.setItem('data', mergedUsers);
+          if (currentUser) {
+            const freshMe = mergedUsers.find((u: User) => u.id === currentUser.id);
+            if (freshMe) {
+              updateCurrentUser(freshMe);
+            }
+          }
         }
         
         if (crmDocumentsData && crmDocumentsData.length > 0) {

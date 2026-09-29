@@ -6,8 +6,10 @@ import { useConfirm } from '../../components/ConfirmModal';
 import type { CatalogueArticle } from '../../types/crmModules';
 
 export function CrmStocks() {
-  const { crmArticles, addCrmArticle, updateCrmArticle, deleteCrmArticle } = useAppContext();
-  const { currentUser } = useAuth();
+  const { crmArticles, users, addCrmArticle, updateCrmArticle, deleteCrmArticle } = useAppContext();
+  const { currentUser: authUser } = useAuth();
+  const currentUser = users.find(u => u.id === authUser?.id) || authUser;
+  const isDirecteur = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
   const { confirm } = useConfirm();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -128,6 +130,18 @@ export function CrmStocks() {
     await updateCrmArticle(adjustingArticle.id, { quantite_stock: Math.max(0, adjustQty) });
     setAdjustingArticle(null);
   };
+
+  if (!isDirecteur && !currentUser?.crmStocksEnabled) {
+    return (
+      <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <Package size={48} color="var(--color-error)" style={{ margin: '0 auto 16px' }} />
+        <h2>Module Stocks non activé</h2>
+        <p style={{ color: 'var(--color-text-muted)' }}>
+          Ce module n'est pas activé sur votre profil utilisateur. Veuillez contacter la Direction.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard">

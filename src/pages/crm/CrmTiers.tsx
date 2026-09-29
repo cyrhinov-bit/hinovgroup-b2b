@@ -6,8 +6,9 @@ import { useConfirm } from '../../components/ConfirmModal';
 import type { ClientFournisseur, TypeTier } from '../../types/crmModules';
 
 export function CrmTiers() {
-  const { crmTiers, addCrmTier, updateCrmTier, deleteCrmTier } = useAppContext();
-  const { currentUser } = useAuth();
+  const { crmTiers, users, addCrmTier, updateCrmTier, deleteCrmTier } = useAppContext();
+  const { currentUser: authUser } = useAuth();
+  const currentUser = users.find(u => u.id === authUser?.id) || authUser;
   const { confirm } = useConfirm();
 
   const [activeTab, setActiveTab] = useState<TypeTier | 'ALL'>('ALL');
@@ -120,6 +121,18 @@ export function CrmTiers() {
         return <span className="badge-status">{type}</span>;
     }
   };
+
+  if (!isAdmin && !currentUser?.crmTiersEnabled) {
+    return (
+      <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <Building2 size={48} color="var(--color-error)" style={{ margin: '0 auto 16px' }} />
+        <h2>Module Tiers non activé</h2>
+        <p style={{ color: 'var(--color-text-muted)' }}>
+          Ce module n'est pas activé sur votre profil utilisateur. Veuillez contacter la Direction.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard">

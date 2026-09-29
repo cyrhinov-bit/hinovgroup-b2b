@@ -54,7 +54,8 @@ export function DashboardResponsable() {
     crmCommissions 
   } = useAppContext();
   
-  const { currentUser } = useAuth();
+  const { currentUser: authUser } = useAuth();
+  const currentUser = users.find(u => u.id === authUser?.id) || authUser;
   const navigate = useNavigate();
 
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilter>('ALL');
@@ -179,10 +180,14 @@ export function DashboardResponsable() {
 
   // Donut Status
   const donutData: DonutDataPoint[] = [
-    { label: 'Commandes Payées', value: filteredServicePrestations.filter(p => p.statut === 'PAYEE').length, color: '#10B981' },
-    { label: 'Commandes En cours', value: filteredServicePrestations.filter(p => p.statut !== 'PAYEE' && p.statut !== 'BROUILLON').length, color: '#3B82F6' },
+    ...(currentUser?.crmPrestationsEnabled ? [
+      { label: 'Commandes Payées', value: filteredServicePrestations.filter(p => p.statut === 'PAYEE').length, color: '#10B981' },
+      { label: 'Commandes En cours', value: filteredServicePrestations.filter(p => p.statut !== 'PAYEE' && p.statut !== 'BROUILLON').length, color: '#3B82F6' }
+    ] : []),
     { label: 'Devis Acceptés', value: acceptedQuotes.length, color: '#059669' },
-    { label: 'Tickets Maintenance', value: filteredServiceMaintenance.length, color: '#F59E0B' }
+    ...(currentUser?.crmMaintenanceEnabled ? [
+      { label: 'Tickets Maintenance', value: filteredServiceMaintenance.length, color: '#F59E0B' }
+    ] : [])
   ].filter(d => d.value > 0);
 
   // Summaries des membres du service
@@ -210,13 +215,13 @@ export function DashboardResponsable() {
           serviceName: serviceName,
           activeModulesCount: 5,
           enabled: {
-            prestations: true,
+            prestations: !!u.crmPrestationsEnabled,
             caisse: !!u.crmCaisseEnabled,
-            maintenance: true,
-            stocks: true,
-            tiers: true,
-            commerciaux: true,
-            commissions: true
+            maintenance: !!u.crmMaintenanceEnabled,
+            stocks: !!u.crmStocksEnabled,
+            tiers: !!u.crmTiersEnabled,
+            commerciaux: !!u.crmCommerciauxEnabled,
+            commissions: !!u.crmCommissionsEnabled
           }
         },
         quotes: {
@@ -284,18 +289,22 @@ export function DashboardResponsable() {
             <Users size={14} color="var(--color-primary)" />
             <strong>{serviceCommercials.length}</strong> Collaborateur(s)
           </span>
-          <span className="hero-tag">
-            <ShoppingBag size={14} color="#10B981" />
-            <strong>{filteredServicePrestations.length}</strong> Commande(s)
-          </span>
+          {currentUser?.crmPrestationsEnabled && (
+            <span className="hero-tag">
+              <ShoppingBag size={14} color="#10B981" />
+              <strong>{filteredServicePrestations.length}</strong> Commande(s)
+            </span>
+          )}
           <span className="hero-tag">
             <FileText size={14} color="#3B82F6" />
             <strong>{filteredServiceQuotes.length}</strong> Devis émis
           </span>
-          <span className="hero-tag">
-            <Wrench size={14} color="#F59E0B" />
-            <strong>{filteredServiceMaintenance.length}</strong> Intervention(s)
-          </span>
+          {currentUser?.crmMaintenanceEnabled && (
+            <span className="hero-tag">
+              <Wrench size={14} color="#F59E0B" />
+              <strong>{filteredServiceMaintenance.length}</strong> Intervention(s)
+            </span>
+          )}
         </div>
       </div>
 
@@ -372,7 +381,7 @@ export function DashboardResponsable() {
       {/* ─── KPIS DU SERVICE (CONDITIONNÉS PAR LES MODULES ACTIFS) ─────────────────── */}
       <div className="widgets-grid" style={{ marginBottom: '20px' }}>
         {/* Module Commandes / Prestations */}
-        {(selectedCommercialFilter === 'ALL' || users.find(u => u.id === selectedCommercialFilter)?.crmPrestationsEnabled !== false) && (
+        {(selectedCommercialFilter === 'ALL' ? !!currentUser?.crmPrestationsEnabled : !!users.find(u => u.id === selectedCommercialFilter)?.crmPrestationsEnabled) && (
           <div className="widget-card" style={{ borderLeft: '4px solid #10B981', cursor: 'pointer' }} onClick={() => setActiveTab('OPERATIONS')}>
             <div className="widget-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#059669' }}>
               <ShoppingBag size={24} />
@@ -416,7 +425,7 @@ export function DashboardResponsable() {
         </div>
 
         {/* Module Bénéfice / Rentabilité (Prestations) */}
-        {(selectedCommercialFilter === 'ALL' || users.find(u => u.id === selectedCommercialFilter)?.crmPrestationsEnabled !== false) && (
+        {(selectedCommercialFilter === 'ALL' ? !!currentUser?.crmPrestationsEnabled : !!users.find(u => u.id === selectedCommercialFilter)?.crmPrestationsEnabled) && (
           <div className="widget-card" style={{ borderLeft: '4px solid #059669' }}>
             <div className="widget-icon" style={{ background: 'rgba(5, 150, 105, 0.1)', color: '#059669' }}>
               <Award size={24} />
@@ -432,7 +441,7 @@ export function DashboardResponsable() {
         )}
 
         {/* Module Maintenance */}
-        {(selectedCommercialFilter === 'ALL' || users.find(u => u.id === selectedCommercialFilter)?.crmMaintenanceEnabled !== false) && (
+        {(selectedCommercialFilter === 'ALL' ? !!currentUser?.crmMaintenanceEnabled : !!users.find(u => u.id === selectedCommercialFilter)?.crmMaintenanceEnabled) && (
           <div className="widget-card" style={{ borderLeft: '4px solid #F59E0B', cursor: 'pointer' }} onClick={() => navigate('/crm/maintenance')}>
             <div className="widget-icon" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#D97706' }}>
               <Wrench size={24} />
@@ -448,7 +457,7 @@ export function DashboardResponsable() {
         )}
 
         {/* Module Caisse (si activé pour le responsable ou collaborateur) */}
-        {(selectedCommercialFilter === 'ALL' ? currentUser?.crmCaisseEnabled : users.find(u => u.id === selectedCommercialFilter)?.crmCaisseEnabled) && (
+        {(selectedCommercialFilter === 'ALL' ? !!currentUser?.crmCaisseEnabled : !!users.find(u => u.id === selectedCommercialFilter)?.crmCaisseEnabled) && (
           <div className="widget-card" style={{ borderLeft: '4px solid #EF4444', cursor: 'pointer' }} onClick={() => navigate('/crm/caisse')}>
             <div className="widget-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#DC2626' }}>
               <Wallet size={24} />
@@ -486,14 +495,16 @@ export function DashboardResponsable() {
           <span>Équipe du Pôle ({serviceMemberSummaries.length})</span>
         </button>
 
-        <button
-          className={`btn ${activeTab === 'OPERATIONS' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => setActiveTab('OPERATIONS')}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', padding: '8px 16px' }}
-        >
-          <Layers size={16} />
-          <span>Détail des Commandes ({filteredServicePrestations.length})</span>
-        </button>
+        {currentUser?.crmPrestationsEnabled && (
+          <button
+            className={`btn ${activeTab === 'OPERATIONS' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTab('OPERATIONS')}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', padding: '8px 16px' }}
+          >
+            <Layers size={16} />
+            <span>Détail des Commandes ({filteredServicePrestations.length})</span>
+          </button>
+        )}
       </div>
 
       {/* ─── VUE 1 : SYNTHÈSE ─────────────────────────────────── */}
@@ -517,16 +528,26 @@ export function DashboardResponsable() {
               <p style={{ margin: '2px 0 16px', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Accès direct aux modules CRM du responsable</p>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <button className="btn btn-outline" style={{ justifyContent: 'space-between', padding: '10px 14px' }} onClick={() => navigate('/crm/prestations')}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><ShoppingBag size={16} color="#10B981" /> Commandes (Grille 11 col.)</span>
-                  <ArrowUpRight size={14} />
-                </button>
-                <button className="btn btn-outline" style={{ justifyContent: 'space-between', padding: '10px 14px' }} onClick={() => navigate('/crm/maintenance')}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Wrench size={16} color="#F59E0B" /> Tickets d'intervention</span>
-                  <ArrowUpRight size={14} />
-                </button>
-                <button className="btn btn-outline" style={{ justifyContent: 'space-between', padding: '10px 14px' }} onClick={() => navigate('/crm/caisse')}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Wallet size={16} color="#EF4444" /> Journal de caisse</span>
+                {currentUser?.crmPrestationsEnabled && (
+                  <button className="btn btn-outline" style={{ justifyContent: 'space-between', padding: '10px 14px' }} onClick={() => navigate('/crm/prestations')}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><ShoppingBag size={16} color="#10B981" /> Commandes (Grille 11 col.)</span>
+                    <ArrowUpRight size={14} />
+                  </button>
+                )}
+                {currentUser?.crmMaintenanceEnabled && (
+                  <button className="btn btn-outline" style={{ justifyContent: 'space-between', padding: '10px 14px' }} onClick={() => navigate('/crm/maintenance')}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Wrench size={16} color="#F59E0B" /> Tickets d'intervention</span>
+                    <ArrowUpRight size={14} />
+                  </button>
+                )}
+                {currentUser?.crmCaisseEnabled && (
+                  <button className="btn btn-outline" style={{ justifyContent: 'space-between', padding: '10px 14px' }} onClick={() => navigate('/crm/caisse')}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Wallet size={16} color="#EF4444" /> Journal de caisse</span>
+                    <ArrowUpRight size={14} />
+                  </button>
+                )}
+                <button className="btn btn-outline" style={{ justifyContent: 'space-between', padding: '10px 14px' }} onClick={() => navigate('/factures')}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Receipt size={16} color="#0284C7" /> Facturation & Impayés</span>
                   <ArrowUpRight size={14} />
                 </button>
               </div>

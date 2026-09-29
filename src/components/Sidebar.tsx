@@ -27,8 +27,9 @@ interface NavItemConfig {
 export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; setMobileOpen?: (val: boolean) => void }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentUser, logout } = useAuth();
-  const { posWorkspace, services } = useAppContext();
+  const { currentUser: authUser, logout } = useAuth();
+  const { posWorkspace, services, users } = useAppContext();
+  const currentUser = users.find(u => u.id === authUser?.id) || authUser;
   const [clickedPath, setClickedPath] = useState<string | null>(null);
   const [syncErrorsCount, setSyncErrorsCount] = useState<number>(0);
 
