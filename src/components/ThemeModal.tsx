@@ -146,7 +146,7 @@ export function ThemeModal({ isOpen, onClose }: ThemeModalProps) {
           <div className="theme-preview-box">
             <div className="theme-preview-header">Aperçu en Direct</div>
             <div className="theme-preview-elements">
-              <button className="btn btn-primary" style={{ pointerEvents: 'none' }}>
+              <button type="button" tabIndex={-1} aria-hidden="true" className="btn btn-primary" style={{ pointerEvents: 'none' }}>
                 <Sparkles size={14} style={{ marginRight: '6px' }} /> Bouton Principal
               </button>
               <span className="badge-status bg-primary">

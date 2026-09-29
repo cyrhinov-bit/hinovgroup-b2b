@@ -98,6 +98,7 @@ export const StudioPreviewCard: React.FC<StudioPreviewCardProps> = ({
       {originalSrc && (
         <button
           type="button"
+          onClick={e => { e.preventDefault(); e.stopPropagation(); }}
           onMouseDown={onHoldOriginalStart}
           onMouseUp={onHoldOriginalEnd}
           onTouchStart={onHoldOriginalStart}

@@ -30,13 +30,18 @@ export function Login() {
     if (email && pin) {
       setError('');
       setIsSubmitting(true);
-      const result = await login(email.trim().toLowerCase(), pin.trim());
-      setIsSubmitting(false);
-      if (result.success) {
-        navigate('/', { replace: true });
-      } else {
-        setError(result.error || 'Identifiants ou code PIN incorrects.');
-        setPin('');
+      try {
+        const result = await login(email.trim().toLowerCase(), pin.trim());
+        if (result.success) {
+          navigate('/', { replace: true });
+        } else {
+          setError(result.error || 'Identifiants ou code PIN incorrects.');
+          setPin('');
+        }
+      } catch (err: any) {
+        setError(err?.message || 'Une erreur est survenue lors de la connexion.');
+      } finally {
+        setIsSubmitting(false);
       }
     }
   };

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { platform, DesktopOnlyFeatureError } from '../platform';
 
 export default function DiagnosticPage() {
@@ -90,7 +91,7 @@ export default function DiagnosticPage() {
       <h1>Diagnostic Système (Phase 6)</h1>
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
         {diagnosticLinks.map(link => (
-          <a key={link.path} href={link.path} style={{ padding: '8px 12px', background: '#1976d2', color: 'white', borderRadius: '4px', textDecoration: 'none', fontWeight: 'bold', fontSize: '13px' }}>{link.label}</a>
+          <Link key={link.path} to={link.path} style={{ padding: '8px 12px', background: '#1976d2', color: 'white', borderRadius: '4px', textDecoration: 'none', fontWeight: 'bold', fontSize: '13px' }}>{link.label}</Link>
         ))}
       </div>
       <div style={{ background: platform.isDesktop ? '#e3f2fd' : '#fff3e0', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
