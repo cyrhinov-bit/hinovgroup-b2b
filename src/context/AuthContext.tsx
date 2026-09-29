@@ -134,7 +134,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           posSupplyEnabled: data.pos_supply_enabled === true,
           posInventoryEnabled: data.pos_inventory_enabled === true,
           posStockEnabled: data.pos_stock_enabled === true,
-          posRole: data.pos_role || null
+          posRole: data.pos_role || null,
+          crmPrestationsEnabled: data.crm_prestations_enabled === true,
+          crmCaisseEnabled: data.crm_caisse_enabled === true,
+          crmMaintenanceEnabled: data.crm_maintenance_enabled === true,
+          crmStocksEnabled: data.crm_stocks_enabled === true,
+          crmTiersEnabled: data.crm_tiers_enabled === true,
+          crmCommerciauxEnabled: data.crm_commerciaux_enabled === true,
+          crmCommissionsEnabled: data.crm_commissions_enabled === true
         };
 
         setCurrentUser(userObj);
@@ -264,7 +271,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           posSupplyEnabled: profile.pos_supply_enabled === true,
           posInventoryEnabled: profile.pos_inventory_enabled === true,
           posStockEnabled: profile.pos_stock_enabled === true,
-          posRole: profile.pos_role || null
+          posRole: profile.pos_role || null,
+          crmPrestationsEnabled: profile.crm_prestations_enabled === true,
+          crmCaisseEnabled: profile.crm_caisse_enabled === true,
+          crmMaintenanceEnabled: profile.crm_maintenance_enabled === true,
+          crmStocksEnabled: profile.crm_stocks_enabled === true,
+          crmTiersEnabled: profile.crm_tiers_enabled === true,
+          crmCommerciauxEnabled: profile.crm_commerciaux_enabled === true,
+          crmCommissionsEnabled: profile.crm_commissions_enabled === true
         };
         setCurrentUser(userObj);
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userObj));

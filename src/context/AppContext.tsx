@@ -604,7 +604,7 @@ const safeSet = async <T,>(store: any, data: T): Promise<void> => {
 const AppContext = createContext<AppState | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const { currentUser } = useAuth();
+  const { currentUser, updateCurrentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [affaires, setAffaires] = useState<Affaire[]>([]);
@@ -3507,7 +3507,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           posRole: user.posRole || null,
           serviceId: user.serviceId || null,
           posReturnsEnabled: user.posReturnsEnabled,
-          posCatalogueEnabled: user.posCatalogueEnabled
+          posCatalogueEnabled: user.posCatalogueEnabled,
+          crmPrestationsEnabled: user.crmPrestationsEnabled ?? true,
+          crmCaisseEnabled: user.crmCaisseEnabled ?? true,
+          crmMaintenanceEnabled: user.crmMaintenanceEnabled ?? true,
+          crmStocksEnabled: user.crmStocksEnabled ?? true,
+          crmTiersEnabled: user.crmTiersEnabled ?? true,
+          crmCommerciauxEnabled: user.crmCommerciauxEnabled ?? true,
+          crmCommissionsEnabled: user.crmCommissionsEnabled ?? true
         }),
       }
     );
@@ -3531,7 +3538,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       active: true,
       posReturnsEnabled: user.posReturnsEnabled,
       posCatalogueEnabled: user.posCatalogueEnabled,
-      posRole: user.posRole || null
+      posRole: user.posRole || null,
+      crmPrestationsEnabled: user.crmPrestationsEnabled ?? true,
+      crmCaisseEnabled: user.crmCaisseEnabled ?? true,
+      crmMaintenanceEnabled: user.crmMaintenanceEnabled ?? true,
+      crmStocksEnabled: user.crmStocksEnabled ?? true,
+      crmTiersEnabled: user.crmTiersEnabled ?? true,
+      crmCommerciauxEnabled: user.crmCommerciauxEnabled ?? true,
+      crmCommissionsEnabled: user.crmCommissionsEnabled ?? true
     };
     const newUsers = [...users, newUser];
     setUsers(newUsers);
@@ -3559,6 +3573,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (data.crmTiersEnabled !== undefined) payload.crm_tiers_enabled = data.crmTiersEnabled;
     if (data.crmCommerciauxEnabled !== undefined) payload.crm_commerciaux_enabled = data.crmCommerciauxEnabled;
     if (data.crmCommissionsEnabled !== undefined) payload.crm_commissions_enabled = data.crmCommissionsEnabled;
+    if (currentUser && currentUser.id === id) {
+      updateCurrentUser(data);
+    }
 
     await queueSyncAction('UPDATE_PROFILE', payload);
     try {
