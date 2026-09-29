@@ -5,13 +5,14 @@ import {
   UserCircle, LogOut, Receipt, Coins, Target, ShoppingCart, Package, Truck, 
   ClipboardList, Warehouse, Tag, BarChart3, DollarSign, RotateCcw, 
   FileSpreadsheet, Wallet, ToggleRight, Trophy, Sparkles, Bot, Building2, ShieldAlert,
-  History
+  History, ShoppingBag, Wrench, UserCheck, Award
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAppContext } from '../context/AppContext';
 import { InstallButton } from './InstallButton';
 import './Sidebar.css';
+import type { User } from '../context/AppContext';
 
 interface NavItemConfig {
   label: string;
@@ -20,6 +21,7 @@ interface NavItemConfig {
   color: string;
   bg: string;
   roles: Array<'Directeur' | 'Responsable' | 'Commercial' | 'Directeur adjoint' | 'SuperAdmin' | 'Gerant' | 'Caissier'>;
+  permissionKey?: keyof User;
 }
 
 export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; setMobileOpen?: (val: boolean) => void }) {
@@ -81,9 +83,18 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     }
   };
 
-  // CRM nav items (Recentré sur les Devis, Clients, Services & Prestations, Documents, Utilisateurs, Paramètres)
+  // CRM nav items
   const crmNavItems: NavItemConfig[] = [
     { label: 'Dashboard', icon: Home, path: '/', color: '#2563EB', bg: '#EFF6FF', roles: ['Directeur', 'Responsable'] },
+    // Modules CRM Responsables de Service
+    { label: 'Commandes', icon: ShoppingBag, path: '/crm/prestations', color: '#10B981', bg: '#ECFDF5', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmPrestationsEnabled' },
+    { label: 'Caisse & Dépenses', icon: Wallet, path: '/crm/caisse', color: '#EF4444', bg: '#FEF2F2', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmCaisseEnabled' },
+    { label: 'Maintenance', icon: Wrench, path: '/crm/maintenance', color: '#F59E0B', bg: '#FFFBEB', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmMaintenanceEnabled' },
+    { label: 'Stocks Métier', icon: Package, path: '/crm/stocks', color: '#6366F1', bg: '#EEF2FF', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmStocksEnabled' },
+    { label: 'Tiers & Apporteurs', icon: Users, path: '/crm/tiers', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmTiersEnabled' },
+    { label: 'Commerciaux', icon: UserCheck, path: '/crm/commerciaux', color: '#0D9488', bg: '#F0FDFA', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmCommerciauxEnabled' },
+    { label: 'Commissions', icon: Award, path: '/crm/commissions', color: '#D97706', bg: '#FFFBEB', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmCommissionsEnabled' },
+    // Modules CRM Standard
     { label: 'Devis', icon: FileText, path: '/devis', color: '#D97706', bg: '#FFFBEB', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Clients', icon: Users, path: '/clients', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Services', icon: Briefcase, path: '/services', color: '#4F46E5', bg: '#EEF2FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
@@ -139,6 +150,12 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
       const isCommercialRoute = item.path.startsWith('/commercial');
       if (isCommercialSpace && !isCommercialRoute) return false;
       if (!isCommercialSpace && isCommercialRoute) return false;
+    }
+
+    // Permissions CRM granulaires pour Responsables et Commerciaux
+    if (!isPos && item.permissionKey) {
+      const isAdmin = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser.role);
+      if (!isAdmin && !currentUser[item.permissionKey]) return false;
     }
 
     if (isPos && effectiveRole === 'Caissier') {

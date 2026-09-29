@@ -63,5 +63,13 @@ export const db = {
   documentFiles: createStore('documentFiles'),
   crmFolders: createStore('crmFolders'),
   notifications: createStore('notifications'),
+  // CRM Modules Responsables
+  crmTiers: createStore('crmTiers'),
+  crmCommerciaux: createStore('crmCommerciaux'),
+  crmPrestations: createStore('crmPrestations'),
+  crmCaisse: createStore('crmCaisse'),
+  crmCommissions: createStore('crmCommissions'),
+  crmArticles: createStore('crmArticles'),
+  crmMaintenance: createStore('crmMaintenance'),
 };
 

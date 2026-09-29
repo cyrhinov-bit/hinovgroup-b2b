@@ -21,6 +21,15 @@ import { Login } from './pages/Login';
 import { PublicCatalog } from './pages/public/PublicCatalog';
 import TestDashboard from './pages/TestDashboard';
 
+// CRM Modules Responsables
+import { CrmPrestations } from './pages/crm/CrmPrestations';
+import { CrmCaisse } from './pages/crm/CrmCaisse';
+import { CrmMaintenance } from './pages/crm/CrmMaintenance';
+import { CrmStocks } from './pages/crm/CrmStocks';
+import { CrmTiers } from './pages/crm/CrmTiers';
+import { CrmCommerciaux } from './pages/crm/CrmCommerciaux';
+import { CrmCommissions } from './pages/crm/CrmCommissions';
+
 // AI Weekly Reports (Deleted)
 
 // POS Pages (lazy loaded)
@@ -162,6 +171,15 @@ function App() {
                     <Route path="documents" element={<Documents />} />
                     <Route path="utilisateurs" element={<Utilisateurs />} />
                     <Route path="parametres" element={<Parametres />} />
+
+                    {/* CRM Modules Responsables de Service */}
+                    <Route path="crm/prestations" element={<CrmPrestations />} />
+                    <Route path="crm/caisse" element={<CrmCaisse />} />
+                    <Route path="crm/maintenance" element={<CrmMaintenance />} />
+                    <Route path="crm/stocks" element={<CrmStocks />} />
+                    <Route path="crm/tiers" element={<CrmTiers />} />
+                    <Route path="crm/commerciaux" element={<CrmCommerciaux />} />
+                    <Route path="crm/commissions" element={<CrmCommissions />} />
 
                     {/* Commercial routes */}
                     <Route path="commercial" element={<DashboardCommercial />} />

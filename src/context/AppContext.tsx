@@ -28,6 +28,13 @@ const mergeData = <T extends { id: string }>(oldData: T[] | null | undefined, ne
   return Array.from(map.values());
 };
 
+import type { 
+  ClientFournisseur, AgentCommercial, PrestationCommande, 
+  MouvementCaisse, CommissionPrestation, CatalogueArticle, 
+  InterventionMaintenance, ModeReglement
+} from '../types/crmModules';
+export * from '../types/crmModules';
+
 export interface User {
   id: string;
   name: string;
@@ -45,6 +52,14 @@ export interface User {
   posInventoryEnabled?: boolean;
   posStockEnabled?: boolean;
   geminiApiKey?: string;
+  // CRM Modules Responsables Permissions
+  crmPrestationsEnabled?: boolean;
+  crmCaisseEnabled?: boolean;
+  crmMaintenanceEnabled?: boolean;
+  crmStocksEnabled?: boolean;
+  crmTiersEnabled?: boolean;
+  crmCommerciauxEnabled?: boolean;
+  crmCommissionsEnabled?: boolean;
 }
 export type AffaireStatus = 'PROSPECTION' | 'QUALIFIEE' | 'PROPOSITION' | 'NEGOCIATION' | 'GAGNEE' | 'EN_COURS' | 'CLOTUREE' | 'PERDUE' | 'ANNULEE';
 export interface Affaire {
@@ -440,7 +455,7 @@ interface AppState {
   deleteCategory: (id: string) => Promise<void>;
   updateSettings: (settings: AppSettings) => Promise<void>;
   addUser: (user: User) => Promise<void>;
-  updateUser: (id: string, data: Pick<User, 'name' | 'role' | 'posRole' | 'serviceId' | 'posReturnsEnabled' | 'posCatalogueEnabled' | 'posSupplyEnabled' | 'posInventoryEnabled' | 'posStockEnabled'>) => Promise<void>;
+  updateUser: (id: string, data: Partial<User>) => Promise<void>;
   toggleUserStatus: (id: string) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   addPrestation: (prestation: Prestation) => Promise<void>;
@@ -499,6 +514,34 @@ interface AppState {
   completeProduct: (productId: string, updates: Partial<PosProduct>) => Promise<void>;
   refreshData: (isBackground?: boolean) => Promise<void>;
   reconcilePosData: () => Promise<any>;
+  // CRM Modules Responsables
+  crmTiers: ClientFournisseur[];
+  crmCommerciaux: AgentCommercial[];
+  crmPrestations: PrestationCommande[];
+  crmCaisse: MouvementCaisse[];
+  crmCommissions: CommissionPrestation[];
+  crmArticles: CatalogueArticle[];
+  crmMaintenance: InterventionMaintenance[];
+  addCrmTier: (tier: ClientFournisseur) => Promise<void>;
+  updateCrmTier: (id: string, tier: Partial<ClientFournisseur>) => Promise<void>;
+  deleteCrmTier: (id: string) => Promise<void>;
+  addCrmCommercial: (comm: AgentCommercial) => Promise<void>;
+  updateCrmCommercial: (id: string, comm: Partial<AgentCommercial>) => Promise<void>;
+  deleteCrmCommercial: (id: string) => Promise<void>;
+  addCrmPrestation: (prest: PrestationCommande) => Promise<void>;
+  updateCrmPrestation: (id: string, prest: Partial<PrestationCommande>) => Promise<void>;
+  deleteCrmPrestation: (id: string) => Promise<void>;
+  encaisserCrmPrestation: (id: string, modeReglement?: string) => Promise<void>;
+  addCrmMouvementCaisse: (mvt: MouvementCaisse) => Promise<void>;
+  deleteCrmMouvementCaisse: (id: string) => Promise<void>;
+  updateCrmCommissionStatus: (id: string, status: CommissionPrestation['statut']) => Promise<void>;
+  payerCrmCommission: (id: string, modeReglement: string) => Promise<void>;
+  addCrmArticle: (art: CatalogueArticle) => Promise<void>;
+  updateCrmArticle: (id: string, art: Partial<CatalogueArticle>) => Promise<void>;
+  deleteCrmArticle: (id: string) => Promise<void>;
+  addCrmIntervention: (interv: InterventionMaintenance) => Promise<void>;
+  updateCrmIntervention: (id: string, interv: Partial<InterventionMaintenance>) => Promise<void>;
+  deleteCrmIntervention: (id: string) => Promise<void>;
 }
 
   const defaultSettings: AppSettings = { companyName: 'Hinov', companyLogo: '', companyAddress: '', companySiret: '', companyTva: '', defaultTerms: '', commissionRate: 10 };
@@ -610,6 +653,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [posSettings, setPosSettingsState] = useState<PosSettings>({ libraryName: 'Ma Librairie', address: '', phone: '', email: '', currency: 'FCFA', ticketMessage: 'Merci pour votre achat !', printerType: 'Thermique 80mm' });
   const [posWorkspace, setPosWorkspace] = useState<PosWorkspace>({ active: false });
 
+  // CRM Modules Responsables
+  const [crmTiers, setCrmTiers] = useState<ClientFournisseur[]>([]);
+  const [crmCommerciaux, setCrmCommerciaux] = useState<AgentCommercial[]>([]);
+  const [crmPrestations, setCrmPrestations] = useState<PrestationCommande[]>([]);
+  const [crmCaisse, setCrmCaisse] = useState<MouvementCaisse[]>([]);
+  const [crmCommissions, setCrmCommissions] = useState<CommissionPrestation[]>([]);
+  const [crmArticles, setCrmArticles] = useState<CatalogueArticle[]>([]);
+  const [crmMaintenance, setCrmMaintenance] = useState<InterventionMaintenance[]>([]);
+
   const inFlightRefreshRef = useRef<Promise<void> | null>(null);
   const lastRefreshTimeRef = useRef<number>(0);
 
@@ -640,7 +692,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         cachedPosCategories, cachedPosBrands, cachedPosSuppliers, cachedPosProducts,
         cachedPosStockEntries, cachedPosStockMovements, cachedPosInventories, cachedPosCashSessions,
         cachedPosTransactions, cachedPosPayments, cachedPosDiscounts, cachedPosSettings,
-        cachedPosReturns, cachedProductCompletions, cachedImportSessions
+        cachedPosReturns, cachedProductCompletions, cachedImportSessions,
+        cachedCrmTiers, cachedCrmCommerciaux, cachedCrmPrestations, cachedCrmCaisse,
+        cachedCrmCommissions, cachedCrmArticles, cachedCrmMaintenance
       ] = await Promise.all([
         safeGet<User[]>(db.profiles),
         safeGet<Client[]>(db.clients),
@@ -685,6 +739,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         safeGet<PosReturn[]>(db.posReturns),
         safeGet<ProductCompletion[]>(db.productCompletions),
         safeGet<ImportSession[]>(db.importSessions),
+        safeGet<ClientFournisseur[]>(db.crmTiers),
+        safeGet<AgentCommercial[]>(db.crmCommerciaux),
+        safeGet<PrestationCommande[]>(db.crmPrestations),
+        safeGet<MouvementCaisse[]>(db.crmCaisse),
+        safeGet<CommissionPrestation[]>(db.crmCommissions),
+        safeGet<CatalogueArticle[]>(db.crmArticles),
+        safeGet<InterventionMaintenance[]>(db.crmMaintenance),
       ]);
 
       if (cachedUsers) setUsers(cachedUsers);
@@ -741,6 +802,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (cachedPosReturns) setPosReturns(cachedPosReturns);
       if (cachedProductCompletions) setProductCompletions(cachedProductCompletions);
       if (cachedImportSessions) setImportSessions(cachedImportSessions);
+      if (cachedCrmTiers) setCrmTiers(cachedCrmTiers);
+      if (cachedCrmCommerciaux) setCrmCommerciaux(cachedCrmCommerciaux);
+      if (cachedCrmPrestations) setCrmPrestations(cachedCrmPrestations);
+      if (cachedCrmCaisse) setCrmCaisse(cachedCrmCaisse);
+      if (cachedCrmCommissions) setCrmCommissions(cachedCrmCommissions);
+      if (cachedCrmArticles) setCrmArticles(cachedCrmArticles);
+      if (cachedCrmMaintenance) setCrmMaintenance(cachedCrmMaintenance);
 
       const rawCachedProducts = (cachedPosProducts || []).filter((p: any) => {
         return p.family !== 'Service' && !p.reference?.startsWith('SRV-') && p.id !== '00000000-0000-0000-0000-000000000000';
@@ -849,7 +917,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           () => currentUser ? safeFetch(() => supabase.from('crm_documents').select('*')) : Promise.resolve(null),
           () => currentUser ? safeFetch(() => supabase.from('crm_folders').select('*')) : Promise.resolve(null),
           () => currentUser ? safeFetch(() => supabase.from('notifications').select('*')) : Promise.resolve(null),
-          () => safeFetch(() => supabase.from('pos_returns').select('*, pos_return_lines(*)'))
+          () => safeFetch(() => supabase.from('pos_returns').select('*, pos_return_lines(*)')),
+          () => currentUser ? safeFetch(() => supabase.from('clients_fournisseurs').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('agents_commerciaux').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('prestations_commandes').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('mouvements_caisse').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('commissions_prestations').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('catalogue_articles').select('*')) : Promise.resolve(null),
+          () => currentUser ? safeFetch(() => supabase.from('interventions_maintenance').select('*')) : Promise.resolve(null)
         ];
 
         const [
@@ -866,7 +941,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           posProductsData, posStockEntriesData, posStockMovementsData, posInventoriesData,
           posCashSessionsData, posTransactionsData, posPaymentsData,
           posDiscountsData, posSettingsData, crmDocumentsData, crmFoldersData, notificationsData,
-          posReturnsData
+          posReturnsData,
+          crmTiersData, crmCommerciauxData, crmPrestationsData, crmCaisseData,
+          crmCommissionsData, crmArticlesData, crmMaintenanceData
         ] = await fetchInBatches(fetchTasks, 6);
 
         if (profilesData && profilesData.length > 0) {
@@ -886,7 +963,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
             posInventoryEnabled: p.pos_inventory_enabled === true,
             posStockEnabled: p.pos_stock_enabled === true,
             posRole: p.pos_role || null,
-            geminiApiKey: p.gemini_api_key || undefined
+            geminiApiKey: p.gemini_api_key || undefined,
+            crmPrestationsEnabled: p.crm_prestations_enabled === true,
+            crmCaisseEnabled: p.crm_caisse_enabled === true,
+            crmMaintenanceEnabled: p.crm_maintenance_enabled === true,
+            crmStocksEnabled: p.crm_stocks_enabled === true,
+            crmTiersEnabled: p.crm_tiers_enabled === true,
+            crmCommerciauxEnabled: p.crm_commerciaux_enabled === true,
+            crmCommissionsEnabled: p.crm_commissions_enabled === true
           }));
           const mergedUsers = mergeData(cachedUsers, parsedUsers);
           setUsers(mergedUsers); await db.profiles.setItem('data', mergedUsers);
@@ -1399,6 +1483,158 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const latestLocalReturns = (await safeGet<PosReturn[]>(db.posReturns)) || cachedPosReturns;
           const merged = mergeData(latestLocalReturns, parsed);
           setPosReturns(merged); await safeSet(db.posReturns, merged);
+        }
+
+        if (crmTiersData && crmTiersData.length > 0) {
+          const parsed: ClientFournisseur[] = crmTiersData.map((t: any) => ({
+            id: t.id,
+            type: t.type,
+            nom: t.nom,
+            telephone: t.telephone || undefined,
+            email: t.email || undefined,
+            adresse: t.adresse || undefined,
+            ville: t.ville || undefined,
+            cree_par: t.cree_par || undefined,
+            cree_par_nom: t.cree_par_nom || undefined,
+            created_at: t.created_at
+          }));
+          const merged = mergeData(cachedCrmTiers, parsed);
+          setCrmTiers(merged); await db.crmTiers.setItem('data', merged);
+        }
+
+        if (crmCommerciauxData && crmCommerciauxData.length > 0) {
+          const parsed: AgentCommercial[] = crmCommerciauxData.map((c: any) => ({
+            id: c.id,
+            nom: c.nom,
+            telephone: c.telephone || undefined,
+            email: c.email || undefined,
+            taux_commission_defaut: Number(c.taux_commission_defaut) || 0,
+            total_ventes: Number(c.total_ventes) || 0,
+            contrats_clos_count: Number(c.contrats_clos_count) || 0,
+            cree_par: c.cree_par || undefined,
+            cree_par_nom: c.cree_par_nom || undefined,
+            created_at: c.created_at
+          }));
+          const merged = mergeData(cachedCrmCommerciaux, parsed);
+          setCrmCommerciaux(merged); await db.crmCommerciaux.setItem('data', merged);
+        }
+
+        if (crmPrestationsData && crmPrestationsData.length > 0) {
+          const parsed: PrestationCommande[] = crmPrestationsData.map((p: any) => ({
+            id: p.id,
+            reference: p.reference,
+            client_id: p.client_id,
+            client_nom: p.client_nom,
+            commercial_id: p.commercial_id || undefined,
+            commercial_nom: p.commercial_nom || undefined,
+            apporteur_id: p.apporteur_id || undefined,
+            apporteur_nom: p.apporteur_nom || undefined,
+            resp_service_id: p.resp_service_id || undefined,
+            resp_service_nom: p.resp_service_nom || undefined,
+            designation: p.designation,
+            quantite: Number(p.quantite) || 1,
+            cout_unitaire_achat: Number(p.cout_unitaire_achat) || 0,
+            cout_final_achat: Number(p.cout_final_achat) || 0,
+            prix_vente_unitaire: Number(p.prix_vente_unitaire) || 0,
+            prix_client_final: Number(p.prix_client_final) || 0,
+            marge_interne: Number(p.marge_interne) || 0,
+            taux_commission_app: Number(p.taux_commission_app) || 0,
+            commission_apporteur: Number(p.commission_apporteur) || 0,
+            commission_resp_service: Number(p.commission_resp_service) || 0,
+            commission_agent: Number(p.commission_agent) || 0,
+            benefice_net: Number(p.benefice_net) || 0,
+            statut: p.statut || 'BROUILLON',
+            cree_par: p.cree_par,
+            cree_par_nom: p.cree_par_nom || undefined,
+            date_creation: p.date_creation || p.created_at,
+            date_validation: p.date_validation || undefined,
+            notes: p.notes || undefined
+          }));
+          const merged = mergeData(cachedCrmPrestations, parsed);
+          setCrmPrestations(merged); await db.crmPrestations.setItem('data', merged);
+        }
+
+        if (crmCaisseData && crmCaisseData.length > 0) {
+          const parsed: MouvementCaisse[] = crmCaisseData.map((m: any) => ({
+            id: m.id,
+            type: m.type,
+            categorie: m.categorie,
+            montant: Number(m.montant) || 0,
+            date_mouvement: m.date_mouvement,
+            mode_reglement: m.mode_reglement,
+            motif: m.motif,
+            module_code: m.module_code || undefined,
+            cree_par: m.cree_par,
+            cree_par_nom: m.cree_par_nom || undefined,
+            reference_piece: m.reference_piece || undefined,
+            created_at: m.created_at
+          }));
+          const merged = mergeData(cachedCrmCaisse, parsed);
+          setCrmCaisse(merged); await db.crmCaisse.setItem('data', merged);
+        }
+
+        if (crmCommissionsData && crmCommissionsData.length > 0) {
+          const parsed: CommissionPrestation[] = crmCommissionsData.map((c: any) => ({
+            id: c.id,
+            prestation_id: c.prestation_id,
+            type_beneficiaire: c.type_beneficiaire,
+            beneficiaire_id: c.beneficiaire_id || undefined,
+            beneficiaire_nom: c.beneficiaire_nom,
+            montant: Number(c.montant) || 0,
+            statut: c.statut || 'EN_ATTENTE',
+            date_reglement: c.date_reglement || undefined,
+            mode_reglement: c.mode_reglement || undefined,
+            cree_par: c.cree_par || undefined,
+            created_at: c.created_at
+          }));
+          const merged = mergeData(cachedCrmCommissions, parsed);
+          setCrmCommissions(merged); await db.crmCommissions.setItem('data', merged);
+        }
+
+        if (crmArticlesData && crmArticlesData.length > 0) {
+          const parsed: CatalogueArticle[] = crmArticlesData.map((a: any) => ({
+            id: a.id,
+            code_article: a.code_article,
+            designation: a.designation,
+            categorie: a.categorie || 'Général',
+            quantite_stock: Number(a.quantite_stock) || 0,
+            seuil_alerte: Number(a.seuil_alerte) || 5,
+            cout_unitaire_achat: Number(a.cout_unitaire_achat) || 0,
+            prix_unitaire_vente: Number(a.prix_unitaire_vente) || 0,
+            cree_par: a.cree_par || undefined,
+            cree_par_nom: a.cree_par_nom || undefined,
+            created_at: a.created_at,
+            updated_at: a.updated_at
+          }));
+          const merged = mergeData(cachedCrmArticles, parsed);
+          setCrmArticles(merged); await db.crmArticles.setItem('data', merged);
+        }
+
+        if (crmMaintenanceData && crmMaintenanceData.length > 0) {
+          const parsed: InterventionMaintenance[] = crmMaintenanceData.map((m: any) => ({
+            id: m.id,
+            reference: m.reference,
+            client_id: m.client_id || undefined,
+            client_nom: m.client_nom || undefined,
+            site_agence: m.site_agence,
+            utilisateur_concerne: m.utilisateur_concerne,
+            equipement: m.equipement,
+            priorite: m.priorite || 'MOYENNE',
+            observation: m.observation,
+            travaux: m.travaux,
+            quantite: Number(m.quantite) || 1,
+            prix_unitaire: Number(m.prix_unitaire) || 0,
+            prix_total: Number(m.prix_total) || 0,
+            technicien_assigne: m.technicien_assigne,
+            statut: m.statut || 'NOUVEAU',
+            date_intervention: m.date_intervention || m.created_at,
+            cree_par: m.cree_par,
+            cree_par_nom: m.cree_par_nom || undefined,
+            created_at: m.created_at,
+            updated_at: m.updated_at
+          }));
+          const merged = mergeData(cachedCrmMaintenance, parsed);
+          setCrmMaintenance(merged); await db.crmMaintenance.setItem('data', merged);
         }
 
         // Update last sync time for next delta fetch
@@ -3302,22 +3538,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.profiles.setItem('data', newUsers);
   };
 
-  const updateUser = async (id: string, data: Pick<User, 'name' | 'role' | 'posRole' | 'serviceId' | 'posReturnsEnabled' | 'posCatalogueEnabled' | 'posSupplyEnabled' | 'posInventoryEnabled' | 'posStockEnabled'>) => {
+  const updateUser = async (id: string, data: Partial<User>) => {
     const newUsers = users.map(u => u.id === id ? { ...u, ...data } : u);
     setUsers(newUsers);
     await db.profiles.setItem('data', newUsers);
-    await queueSyncAction('UPDATE_PROFILE', { 
-      id, 
-      name: data.name, 
-      role: data.role, 
-      pos_role: data.posRole || null,
-      service_id: data.serviceId || null,
-      pos_returns_enabled: data.posReturnsEnabled,
-      pos_catalogue_enabled: data.posCatalogueEnabled,
-      pos_supply_enabled: data.posSupplyEnabled,
-      pos_inventory_enabled: data.posInventoryEnabled,
-      pos_stock_enabled: data.posStockEnabled
-    });
+    const payload: any = { id };
+    if (data.name !== undefined) payload.name = data.name;
+    if (data.role !== undefined) payload.role = data.role;
+    if (data.posRole !== undefined) payload.pos_role = data.posRole || null;
+    if (data.serviceId !== undefined) payload.service_id = data.serviceId || null;
+    if (data.posReturnsEnabled !== undefined) payload.pos_returns_enabled = data.posReturnsEnabled;
+    if (data.posCatalogueEnabled !== undefined) payload.pos_catalogue_enabled = data.posCatalogueEnabled;
+    if (data.posSupplyEnabled !== undefined) payload.pos_supply_enabled = data.posSupplyEnabled;
+    if (data.posInventoryEnabled !== undefined) payload.pos_inventory_enabled = data.posInventoryEnabled;
+    if (data.posStockEnabled !== undefined) payload.pos_stock_enabled = data.posStockEnabled;
+    if (data.crmPrestationsEnabled !== undefined) payload.crm_prestations_enabled = data.crmPrestationsEnabled;
+    if (data.crmCaisseEnabled !== undefined) payload.crm_caisse_enabled = data.crmCaisseEnabled;
+    if (data.crmMaintenanceEnabled !== undefined) payload.crm_maintenance_enabled = data.crmMaintenanceEnabled;
+    if (data.crmStocksEnabled !== undefined) payload.crm_stocks_enabled = data.crmStocksEnabled;
+    if (data.crmTiersEnabled !== undefined) payload.crm_tiers_enabled = data.crmTiersEnabled;
+    if (data.crmCommerciauxEnabled !== undefined) payload.crm_commerciaux_enabled = data.crmCommerciauxEnabled;
+    if (data.crmCommissionsEnabled !== undefined) payload.crm_commissions_enabled = data.crmCommissionsEnabled;
+
+    await queueSyncAction('UPDATE_PROFILE', payload);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('profiles').update(payload).eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur direct profile update:', e);
+    }
   };
 
   const updateMyProfile = async (data: Partial<Pick<User, 'photo' | 'name'>>) => {
@@ -3569,8 +3819,575 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSuspendedCarts(prev => prev.filter(c => c.id !== id));
   }, []);
 
+  // ==========================================
+  // CRM MODULES RESPONSABLES CRUD
+  // ==========================================
+
+  // Module 5: Tiers (Clients, Fournisseurs, Partenaires)
+  const addCrmTier = async (tier: ClientFournisseur) => {
+    const id = tier.id || uuidv4();
+    const item: ClientFournisseur = {
+      ...tier,
+      id,
+      cree_par: tier.cree_par || currentUser?.id,
+      cree_par_nom: tier.cree_par_nom || currentUser?.name,
+      created_at: tier.created_at || new Date().toISOString()
+    };
+    const next = [item, ...crmTiers.filter(t => t.id !== id)];
+    setCrmTiers(next);
+    await db.crmTiers.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('clients_fournisseurs').upsert(item);
+      }
+    } catch (e) {
+      console.warn('Erreur synchro tier CRM:', e);
+    }
+  };
+
+  const updateCrmTier = async (id: string, tier: Partial<ClientFournisseur>) => {
+    const next = crmTiers.map(t => t.id === id ? { ...t, ...tier } : t);
+    setCrmTiers(next);
+    await db.crmTiers.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('clients_fournisseurs').update(tier).eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur synchro tier CRM:', e);
+    }
+  };
+
+  const deleteCrmTier = async (id: string) => {
+    const next = crmTiers.filter(t => t.id !== id);
+    setCrmTiers(next);
+    await db.crmTiers.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('clients_fournisseurs').delete().eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur suppression tier CRM:', e);
+    }
+  };
+
+  // Module 6: Agents Commerciaux
+  const addCrmCommercial = async (comm: AgentCommercial) => {
+    const id = comm.id || uuidv4();
+    const item: AgentCommercial = {
+      ...comm,
+      id,
+      taux_commission_defaut: comm.taux_commission_defaut ?? 0,
+      total_ventes: comm.total_ventes ?? 0,
+      contrats_clos_count: comm.contrats_clos_count ?? 0,
+      cree_par: comm.cree_par || currentUser?.id,
+      cree_par_nom: comm.cree_par_nom || currentUser?.name,
+      created_at: comm.created_at || new Date().toISOString()
+    };
+    const next = [item, ...crmCommerciaux.filter(c => c.id !== id)];
+    setCrmCommerciaux(next);
+    await db.crmCommerciaux.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('agents_commerciaux').upsert(item);
+      }
+    } catch (e) {
+      console.warn('Erreur synchro commercial CRM:', e);
+    }
+  };
+
+  const updateCrmCommercial = async (id: string, comm: Partial<AgentCommercial>) => {
+    const next = crmCommerciaux.map(c => c.id === id ? { ...c, ...comm } : c);
+    setCrmCommerciaux(next);
+    await db.crmCommerciaux.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('agents_commerciaux').update(comm).eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur synchro commercial CRM:', e);
+    }
+  };
+
+  const deleteCrmCommercial = async (id: string) => {
+    const next = crmCommerciaux.filter(c => c.id !== id);
+    setCrmCommerciaux(next);
+    await db.crmCommerciaux.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('agents_commerciaux').delete().eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur suppression commercial CRM:', e);
+    }
+  };
+
+  // Helper pour synchroniser les fiches de commissions pour une prestation
+  const syncCommissionsForPrestation = async (prest: PrestationCommande) => {
+    const newCommissionsToSave: CommissionPrestation[] = [];
+
+    // Commission Apporteur (si montant > 0)
+    if ((prest.commission_apporteur || 0) > 0 && (prest.apporteur_id || prest.apporteur_nom)) {
+      const existing = crmCommissions.find(c => c.prestation_id === prest.id && c.type_beneficiaire === 'APPORTEUR');
+      const comm: CommissionPrestation = {
+        id: existing?.id || uuidv4(),
+        prestation_id: prest.id,
+        type_beneficiaire: 'APPORTEUR',
+        beneficiaire_id: prest.apporteur_id || undefined,
+        beneficiaire_nom: prest.apporteur_nom || 'Apporteur',
+        montant: prest.commission_apporteur || 0,
+        statut: existing?.statut || 'EN_ATTENTE',
+        date_reglement: existing?.date_reglement,
+        mode_reglement: existing?.mode_reglement,
+        cree_par: prest.cree_par,
+        created_at: existing?.created_at || new Date().toISOString()
+      };
+      newCommissionsToSave.push(comm);
+    }
+
+    // Commission Agent Commercial (si montant > 0)
+    if ((prest.commission_agent || 0) > 0 && (prest.commercial_id || prest.commercial_nom)) {
+      const existing = crmCommissions.find(c => c.prestation_id === prest.id && c.type_beneficiaire === 'AGENT_COMMERCIAL');
+      const comm: CommissionPrestation = {
+        id: existing?.id || uuidv4(),
+        prestation_id: prest.id,
+        type_beneficiaire: 'AGENT_COMMERCIAL',
+        beneficiaire_id: prest.commercial_id || undefined,
+        beneficiaire_nom: prest.commercial_nom || 'Commercial',
+        montant: prest.commission_agent || 0,
+        statut: existing?.statut || 'EN_ATTENTE',
+        date_reglement: existing?.date_reglement,
+        mode_reglement: existing?.mode_reglement,
+        cree_par: prest.cree_par,
+        created_at: existing?.created_at || new Date().toISOString()
+      };
+      newCommissionsToSave.push(comm);
+    }
+
+    // Commission Responsable de Service (si montant > 0)
+    if ((prest.commission_resp_service || 0) > 0 && (prest.resp_service_id || prest.resp_service_nom)) {
+      const existing = crmCommissions.find(c => c.prestation_id === prest.id && c.type_beneficiaire === 'RESPONSABLE');
+      const comm: CommissionPrestation = {
+        id: existing?.id || uuidv4(),
+        prestation_id: prest.id,
+        type_beneficiaire: 'RESPONSABLE',
+        beneficiaire_id: prest.resp_service_id || undefined,
+        beneficiaire_nom: prest.resp_service_nom || 'Responsable de Service',
+        montant: prest.commission_resp_service || 0,
+        statut: existing?.statut || 'EN_ATTENTE',
+        date_reglement: existing?.date_reglement,
+        mode_reglement: existing?.mode_reglement,
+        cree_par: prest.cree_par,
+        created_at: existing?.created_at || new Date().toISOString()
+      };
+      newCommissionsToSave.push(comm);
+    }
+
+    if (newCommissionsToSave.length > 0) {
+      const remaining = crmCommissions.filter(c => c.prestation_id !== prest.id);
+      const updatedComms = [...newCommissionsToSave, ...remaining];
+      setCrmCommissions(updatedComms);
+      await db.crmCommissions.setItem('data', updatedComms);
+      try {
+        if (navigator.onLine) {
+          for (const comm of newCommissionsToSave) {
+            await supabase.from('commissions_prestations').upsert(comm);
+          }
+        }
+      } catch (e) {
+        console.warn('Erreur synchro commissions auto:', e);
+      }
+    }
+  };
+
+  // Module 1: Prestations & Commandes
+  const addCrmPrestation = async (prest: PrestationCommande) => {
+    const id = prest.id || uuidv4();
+    const now = new Date();
+    const year = now.getFullYear();
+    const seq = (crmPrestations.length + 1).toString().padStart(4, '0');
+    const reference = prest.reference || `CMD-${year}-${seq}`;
+
+    // 11-column financial formulas
+    const quantite = Number(prest.quantite) || 1;
+    const cout_unitaire_achat = Number(prest.cout_unitaire_achat) || 0;
+    const cout_final_achat = quantite * cout_unitaire_achat;
+    const prix_vente_unitaire = Number(prest.prix_vente_unitaire) || 0;
+    const prix_client_final = quantite * prix_vente_unitaire;
+    const marge_interne = prix_client_final - cout_final_achat;
+    const taux_commission_app = Number(prest.taux_commission_app) || 0;
+    const commission_apporteur = prest.commission_apporteur !== undefined ? Number(prest.commission_apporteur) : (taux_commission_app > 0 ? (prix_client_final * taux_commission_app) / 100 : 0);
+    const commission_resp_service = Number(prest.commission_resp_service) || 0;
+    const commission_agent = Number(prest.commission_agent) || 0;
+    const benefice_net = marge_interne - (commission_apporteur + commission_resp_service + commission_agent);
+
+    const item: PrestationCommande = {
+      ...prest,
+      id,
+      reference,
+      quantite,
+      cout_unitaire_achat,
+      cout_final_achat,
+      prix_vente_unitaire,
+      prix_client_final,
+      marge_interne,
+      taux_commission_app,
+      commission_apporteur,
+      commission_resp_service,
+      commission_agent,
+      benefice_net,
+      statut: prest.statut || 'BROUILLON',
+      cree_par: prest.cree_par || currentUser?.id || '',
+      cree_par_nom: prest.cree_par_nom || currentUser?.name,
+      date_creation: prest.date_creation || now.toISOString().split('T')[0]
+    };
+
+    const next = [item, ...crmPrestations.filter(p => p.id !== id)];
+    setCrmPrestations(next);
+    await db.crmPrestations.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('prestations_commandes').upsert(item);
+      }
+    } catch (e) {
+      console.warn('Erreur synchro prestation CRM:', e);
+    }
+
+    // Auto-generate commissions if > 0
+    await syncCommissionsForPrestation(item);
+
+    // Update commercial metrics if assigned
+    if (item.commercial_id) {
+      const comm = crmCommerciaux.find(c => c.id === item.commercial_id);
+      if (comm) {
+        const total_ventes = (comm.total_ventes || 0) + item.prix_client_final;
+        const contrats_clos_count = (comm.contrats_clos_count || 0) + 1;
+        await updateCrmCommercial(comm.id, { total_ventes, contrats_clos_count });
+      }
+    }
+  };
+
+  const updateCrmPrestation = async (id: string, prest: Partial<PrestationCommande>) => {
+    const current = crmPrestations.find(p => p.id === id);
+    if (!current) return;
+    const quantite = prest.quantite !== undefined ? Number(prest.quantite) : current.quantite;
+    const cout_unitaire_achat = prest.cout_unitaire_achat !== undefined ? Number(prest.cout_unitaire_achat) : current.cout_unitaire_achat;
+    const cout_final_achat = quantite * cout_unitaire_achat;
+    const prix_vente_unitaire = prest.prix_vente_unitaire !== undefined ? Number(prest.prix_vente_unitaire) : current.prix_vente_unitaire;
+    const prix_client_final = quantite * prix_vente_unitaire;
+    const marge_interne = prix_client_final - cout_final_achat;
+    const taux_commission_app = prest.taux_commission_app !== undefined ? Number(prest.taux_commission_app) : (current.taux_commission_app || 0);
+    const commission_apporteur = prest.commission_apporteur !== undefined ? Number(prest.commission_apporteur) : (current.commission_apporteur || 0);
+    const commission_resp_service = prest.commission_resp_service !== undefined ? Number(prest.commission_resp_service) : (current.commission_resp_service || 0);
+    const commission_agent = prest.commission_agent !== undefined ? Number(prest.commission_agent) : (current.commission_agent || 0);
+    const benefice_net = marge_interne - (commission_apporteur + commission_resp_service + commission_agent);
+
+    const updated: PrestationCommande = {
+      ...current,
+      ...prest,
+      quantite,
+      cout_unitaire_achat,
+      cout_final_achat,
+      prix_vente_unitaire,
+      prix_client_final,
+      marge_interne,
+      taux_commission_app,
+      commission_apporteur,
+      commission_resp_service,
+      commission_agent,
+      benefice_net
+    };
+
+    const next = crmPrestations.map(p => p.id === id ? updated : p);
+    setCrmPrestations(next);
+    await db.crmPrestations.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('prestations_commandes').update(updated).eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur synchro prestation CRM:', e);
+    }
+
+    await syncCommissionsForPrestation(updated);
+  };
+
+  const deleteCrmPrestation = async (id: string) => {
+    const next = crmPrestations.filter(p => p.id !== id);
+    setCrmPrestations(next);
+    await db.crmPrestations.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('prestations_commandes').delete().eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur suppression prestation CRM:', e);
+    }
+  };
+
+  const encaisserCrmPrestation = async (id: string, modeReglement: string = 'ESPECES') => {
+    const prest = crmPrestations.find(p => p.id === id);
+    if (!prest) return;
+    const now = new Date().toISOString();
+    const today = now.split('T')[0];
+
+    // 1. Marquer la prestation PAYEE
+    await updateCrmPrestation(id, {
+      statut: 'PAYEE',
+      date_validation: today
+    });
+
+    // 2. Générer l'encaissement dans le journal de caisse (ENTREE)
+    const mvtCaisse: MouvementCaisse = {
+      id: uuidv4(),
+      type: 'ENTREE',
+      categorie: 'PRESTATION',
+      montant: prest.prix_client_final,
+      date_mouvement: today,
+      mode_reglement: (modeReglement as ModeReglement) || 'ESPECES',
+      motif: `Encaissement commande ${prest.reference} - ${prest.designation} (${prest.client_nom})`,
+      module_code: 'PRESTATIONS',
+      cree_par: currentUser?.id || prest.cree_par,
+      cree_par_nom: currentUser?.name || prest.cree_par_nom,
+      reference_piece: prest.reference,
+      created_at: now
+    };
+    await addCrmMouvementCaisse(mvtCaisse);
+  };
+
+  // Module 2: Dépenses & Journal de Caisse
+  const addCrmMouvementCaisse = async (mvt: MouvementCaisse) => {
+    const id = mvt.id || uuidv4();
+    const item: MouvementCaisse = {
+      ...mvt,
+      id,
+      montant: Number(mvt.montant) || 0,
+      cree_par: mvt.cree_par || currentUser?.id || '',
+      cree_par_nom: mvt.cree_par_nom || currentUser?.name,
+      created_at: mvt.created_at || new Date().toISOString()
+    };
+    const next = [item, ...crmCaisse.filter(c => c.id !== id)];
+    setCrmCaisse(next);
+    await db.crmCaisse.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('mouvements_caisse').upsert(item);
+      }
+    } catch (e) {
+      console.warn('Erreur synchro caisse CRM:', e);
+    }
+  };
+
+  const deleteCrmMouvementCaisse = async (id: string) => {
+    const next = crmCaisse.filter(c => c.id !== id);
+    setCrmCaisse(next);
+    await db.crmCaisse.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('mouvements_caisse').delete().eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur suppression caisse CRM:', e);
+    }
+  };
+
+  // Module 7: Commissions
+  const updateCrmCommissionStatus = async (id: string, status: CommissionPrestation['statut']) => {
+    const next = crmCommissions.map(c => c.id === id ? { ...c, statut: status } : c);
+    setCrmCommissions(next);
+    await db.crmCommissions.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('commissions_prestations').update({ statut: status }).eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur synchro statut commission:', e);
+    }
+  };
+
+  const payerCrmCommission = async (id: string, modeReglement: string = 'ESPECES') => {
+    const comm = crmCommissions.find(c => c.id === id);
+    if (!comm) return;
+    const now = new Date().toISOString();
+    const today = now.split('T')[0];
+
+    const updatedComm: CommissionPrestation = {
+      ...comm,
+      statut: 'PAYEE',
+      date_reglement: today,
+      mode_reglement: modeReglement
+    };
+    const nextComms = crmCommissions.map(c => c.id === id ? updatedComm : c);
+    setCrmCommissions(nextComms);
+    await db.crmCommissions.setItem('data', nextComms);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('commissions_prestations').update({
+          statut: 'PAYEE',
+          date_reglement: today,
+          mode_reglement: modeReglement
+        }).eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur synchro paiement commission:', e);
+    }
+
+    // Auto-create cash expense (SORTIE)
+    const prest = crmPrestations.find(p => p.id === comm.prestation_id);
+    const ref = prest ? prest.reference : 'COMM';
+    const mvtCaisse: MouvementCaisse = {
+      id: uuidv4(),
+      type: 'SORTIE',
+      categorie: 'COMMISSION',
+      montant: comm.montant,
+      date_mouvement: today,
+      mode_reglement: (modeReglement as ModeReglement) || 'ESPECES',
+      motif: `Règlement commission ${comm.type_beneficiaire} - ${ref} (${comm.beneficiaire_nom})`,
+      module_code: 'COMMISSIONS',
+      cree_par: currentUser?.id || '',
+      cree_par_nom: currentUser?.name,
+      reference_piece: ref,
+      created_at: now
+    };
+    await addCrmMouvementCaisse(mvtCaisse);
+  };
+
+  // Module 4: Stocks & Consommables
+  const addCrmArticle = async (art: CatalogueArticle) => {
+    const id = art.id || uuidv4();
+    const item: CatalogueArticle = {
+      ...art,
+      id,
+      quantite_stock: Number(art.quantite_stock) || 0,
+      seuil_alerte: Number(art.seuil_alerte) || 5,
+      cout_unitaire_achat: Number(art.cout_unitaire_achat) || 0,
+      prix_unitaire_vente: Number(art.prix_unitaire_vente) || 0,
+      cree_par: art.cree_par || currentUser?.id,
+      cree_par_nom: art.cree_par_nom || currentUser?.name,
+      created_at: art.created_at || new Date().toISOString(),
+      updated_at: art.updated_at || new Date().toISOString()
+    };
+    const next = [item, ...crmArticles.filter(a => a.id !== id)];
+    setCrmArticles(next);
+    await db.crmArticles.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('catalogue_articles').upsert(item);
+      }
+    } catch (e) {
+      console.warn('Erreur synchro article CRM:', e);
+    }
+  };
+
+  const updateCrmArticle = async (id: string, art: Partial<CatalogueArticle>) => {
+    const now = new Date().toISOString();
+    const next = crmArticles.map(a => a.id === id ? { ...a, ...art, updated_at: now } : a);
+    setCrmArticles(next);
+    await db.crmArticles.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('catalogue_articles').update({ ...art, updated_at: now }).eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur synchro article CRM:', e);
+    }
+  };
+
+  const deleteCrmArticle = async (id: string) => {
+    const next = crmArticles.filter(a => a.id !== id);
+    setCrmArticles(next);
+    await db.crmArticles.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('catalogue_articles').delete().eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur suppression article CRM:', e);
+    }
+  };
+
+  // Module 3: Maintenance & Interventions
+  const addCrmIntervention = async (interv: InterventionMaintenance) => {
+    const id = interv.id || uuidv4();
+    const now = new Date();
+    const year = now.getFullYear();
+    const seq = (crmMaintenance.length + 1).toString().padStart(4, '0');
+    const reference = interv.reference || `MNT-${year}-${seq}`;
+    const quantite = Number(interv.quantite) || 1;
+    const prix_unitaire = Number(interv.prix_unitaire) || 0;
+    const prix_total = quantite * prix_unitaire;
+
+    const item: InterventionMaintenance = {
+      ...interv,
+      id,
+      reference,
+      quantite,
+      prix_unitaire,
+      prix_total,
+      priorite: interv.priorite || 'MOYENNE',
+      statut: interv.statut || 'NOUVEAU',
+      cree_par: interv.cree_par || currentUser?.id || '',
+      cree_par_nom: interv.cree_par_nom || currentUser?.name,
+      created_at: interv.created_at || now.toISOString(),
+      updated_at: interv.updated_at || now.toISOString()
+    };
+    const next = [item, ...crmMaintenance.filter(m => m.id !== id)];
+    setCrmMaintenance(next);
+    await db.crmMaintenance.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('interventions_maintenance').upsert(item);
+      }
+    } catch (e) {
+      console.warn('Erreur synchro intervention CRM:', e);
+    }
+  };
+
+  const updateCrmIntervention = async (id: string, interv: Partial<InterventionMaintenance>) => {
+    const now = new Date().toISOString();
+    const current = crmMaintenance.find(m => m.id === id);
+    const quantite = interv.quantite !== undefined ? Number(interv.quantite) : (current?.quantite || 1);
+    const prix_unitaire = interv.prix_unitaire !== undefined ? Number(interv.prix_unitaire) : (current?.prix_unitaire || 0);
+    const prix_total = quantite * prix_unitaire;
+
+    const next = crmMaintenance.map(m => m.id === id ? { ...m, ...interv, quantite, prix_unitaire, prix_total, updated_at: now } : m);
+    setCrmMaintenance(next);
+    await db.crmMaintenance.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('interventions_maintenance').update({ ...interv, quantite, prix_unitaire, prix_total, updated_at: now }).eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur synchro intervention CRM:', e);
+    }
+  };
+
+  const deleteCrmIntervention = async (id: string) => {
+    const next = crmMaintenance.filter(m => m.id !== id);
+    setCrmMaintenance(next);
+    await db.crmMaintenance.setItem('data', next);
+    try {
+      if (navigator.onLine) {
+        await supabase.from('interventions_maintenance').delete().eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Erreur suppression intervention CRM:', e);
+    }
+  };
+
   return (
-    <AppContext.Provider value={{ users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, reviewV2WeeklyReport, deleteV2WeeklyReport, updateMyProfile, addCrmDocument, updateCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData, reconcilePosData: reconcileLocalPosDataWithCloud }}>
+    <AppContext.Provider value={{
+      users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, reviewV2WeeklyReport, deleteV2WeeklyReport, updateMyProfile, addCrmDocument, updateCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData, reconcilePosData: reconcileLocalPosDataWithCloud,
+      // CRM Modules Responsables
+      crmTiers, crmCommerciaux, crmPrestations, crmCaisse, crmCommissions, crmArticles, crmMaintenance,
+      addCrmTier, updateCrmTier, deleteCrmTier,
+      addCrmCommercial, updateCrmCommercial, deleteCrmCommercial,
+      addCrmPrestation, updateCrmPrestation, deleteCrmPrestation, encaisserCrmPrestation,
+      addCrmMouvementCaisse, deleteCrmMouvementCaisse,
+      updateCrmCommissionStatus, payerCrmCommission,
+      addCrmArticle, updateCrmArticle, deleteCrmArticle,
+      addCrmIntervention, updateCrmIntervention, deleteCrmIntervention
+    }}>
       {children}
     </AppContext.Provider>
   );
@@ -3581,3 +4398,4 @@ export const useAppContext = () => {
   if (!context) throw new Error('useAppContext must be used within an AppProvider');
   return context;
 };
+

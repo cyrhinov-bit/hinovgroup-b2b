@@ -1,0 +1,221 @@
+export type TypeTier = 'CLIENT' | 'FOURNISSEUR' | 'PARTENAIRE';
+export type TierType = TypeTier;
+
+export interface ClientFournisseur {
+  id: string;
+  type: TypeTier;
+  nom: string;
+  telephone?: string;
+  email?: string;
+  adresse?: string;
+  ville?: string;
+  cree_par?: string;
+  cree_par_nom?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AgentCommercial {
+  id: string;
+  nom: string;
+  telephone?: string;
+  email?: string;
+  taux_commission_defaut: number; // e.g. 5.0
+  total_ventes?: number;
+  contrats_clos_count?: number;
+  cree_par?: string;
+  cree_par_nom?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type StatutPrestation = 
+  | 'BROUILLON' 
+  | 'EN_ATTENTE_VALIDATION' 
+  | 'VALIDE' 
+  | 'EN_COURS_EXECUTION' 
+  | 'LIVREE' 
+  | 'PAYEE' 
+  | 'CLOTUREE' 
+  | 'ANNULEE'
+  | 'DEVIS'
+  | 'CONFIRMEE'
+  | 'EN_COURS'
+  | 'FACTUREE';
+
+export type PrestationStatut = StatutPrestation;
+
+export interface PrestationCommande {
+  id: string;
+  reference: string;
+  client_id?: string;
+  client_nom: string;
+  commercial_id?: string;
+  commercial_nom?: string;
+  apporteur_id?: string;
+  apporteur_nom?: string;
+  resp_service_id?: string;
+  resp_service_nom?: string;
+  responsable_service_id?: string;
+  responsable_service_nom?: string;
+  designation: string;
+  quantite: number;
+  cout_unitaire_achat: number;
+  cout_final_achat: number;
+  cout_total_revient?: number;
+  prix_vente_unitaire: number;
+  prix_client_final: number;
+  montant_total_vente?: number;
+  marge_interne: number;
+  taux_commission_app?: number;
+  commission_apporteur_taux?: number;
+  commission_apporteur?: number;
+  commission_apporteur_montant?: number;
+  commission_resp_service?: number;
+  commission_responsable_montant?: number;
+  commission_agent?: number;
+  commission_commercial_montant?: number;
+  benefice_net: number;
+  benefice_reel?: number;
+  statut: StatutPrestation;
+  cree_par?: string;
+  cree_par_nom?: string;
+  date_creation?: string;
+  date_commande?: string;
+  date_validation?: string;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type TypeMouvementCaisse = 'ENTREE' | 'SORTIE';
+export type MouvementCaisseType = TypeMouvementCaisse;
+export type ModeReglement = 'ESPECES' | 'CHEQUE' | 'VIREMENT' | 'MOBILE_MONEY';
+export type CaisseModeReglement = ModeReglement;
+
+export type CaisseCategorieSortie = 
+  | 'ACHATS' 
+  | 'FRAIS_GENERAUX' 
+  | 'LOYER' 
+  | 'CARBURANT' 
+  | 'ELECTRICITE_EAU' 
+  | 'SALAIRES' 
+  | 'COMMISSION' 
+  | 'TRANSPORT' 
+  | 'MAINTENANCE' 
+  | 'RESTAURATION' 
+  | 'AUTRE';
+
+export type CaisseCategorieEntree = 
+  | 'PRESTATION' 
+  | 'ACOMPTE_CLIENT' 
+  | 'APPART_CAPITAL' 
+  | 'REMBOURSEMENT' 
+  | 'AUTRE';
+
+export type CaisseCategorie = CaisseCategorieSortie | CaisseCategorieEntree | string;
+
+export interface MouvementCaisse {
+  id: string;
+  type: TypeMouvementCaisse;
+  categorie: string;
+  montant: number;
+  date_mouvement: string;
+  mode_reglement: ModeReglement;
+  motif: string;
+  module_code?: string;
+  tier_id?: string;
+  tier_type?: string;
+  beneficiaire_emetteur?: string;
+  reference_piece?: string;
+  date?: string;
+  cree_par?: string;
+  cree_par_nom?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type TypeBeneficiaire = 'APPORTEUR' | 'AGENT_COMMERCIAL' | 'RESPONSABLE';
+export type CommissionType = TypeBeneficiaire;
+export type StatutCommission = 'EN_ATTENTE' | 'VALIDEE' | 'PAYEE' | 'ANNULEE' | 'A_VALIDER' | 'A_PAYER';
+export type CommissionStatut = StatutCommission;
+
+export interface CommissionPrestation {
+  id: string;
+  prestation_id: string;
+  prestation_ref?: string;
+  type_beneficiaire: TypeBeneficiaire;
+  type?: TypeBeneficiaire;
+  beneficiaire_id?: string;
+  beneficiaire_nom: string;
+  montant: number;
+  montant_prestation?: number;
+  montant_commission?: number;
+  statut: StatutCommission;
+  date_reglement?: string;
+  mode_reglement?: string;
+  mouvement_caisse_id?: string;
+  cree_par?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type ArticleType = 'CONSOMMABLE' | 'EQUIPEMENT' | 'PIECE_DETACHEE' | 'MATERIEL' | string;
+
+export interface CatalogueArticle {
+  id: string;
+  code_article: string;
+  designation: string;
+  categorie?: string;
+  type_article?: ArticleType;
+  quantite_stock: number;
+  seuil_alerte: number;
+  cout_unitaire_achat: number;
+  prix_unitaire_vente: number;
+  unite?: string;
+  fournisseur_id?: string;
+  cree_par?: string;
+  cree_par_nom?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type StatutIntervention = 
+  | 'NOUVEAU' 
+  | 'EN_ATTENTE_PIECE' 
+  | 'EN_COURS' 
+  | 'TERMINE_A_FACTURER' 
+  | 'CLOTURE' 
+  | 'ANNULE'
+  | 'EN_ATTENTE'
+  | 'TERMINEE'
+  | 'ANNULEE';
+
+export type MaintenanceStatut = StatutIntervention;
+
+export type PrioriteIntervention = 'BASSE' | 'MOYENNE' | 'HAUTE' | 'URGENTE';
+export type MaintenancePriorite = PrioriteIntervention;
+
+export interface InterventionMaintenance {
+  id: string;
+  reference: string;
+  client_id?: string;
+  client_nom?: string;
+  site_agence: string;
+  utilisateur_concerne?: string;
+  equipement: string;
+  priorite: PrioriteIntervention;
+  observation?: string;
+  travaux?: string;
+  quantite: number;
+  prix_unitaire: number;
+  prix_total: number;
+  prix?: number;
+  technicien_assigne: string;
+  statut: StatutIntervention;
+  date_intervention?: string;
+  cree_par?: string;
+  cree_par_nom?: string;
+  created_at?: string;
+  updated_at?: string;
+}
