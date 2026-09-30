@@ -92,6 +92,8 @@ export function Factures() {
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
 
   // Form State for Invoice / Tracking row
+  const [formPeriodYear, setFormPeriodYear] = useState<number>(2026);
+  const [formPeriodMonth, setFormPeriodMonth] = useState<number>(9);
   const [formQuoteId, setFormQuoteId] = useState<string>('');
   const [formClientId, setFormClientId] = useState<string>('');
   const [formClientName, setFormClientName] = useState<string>('');
@@ -178,6 +180,8 @@ export function Factures() {
 
   const openCreateModalFromQuote = (quote: Quote) => {
     setEditingInvoiceId(null);
+    setFormPeriodYear(selectedYear);
+    setFormPeriodMonth(selectedMonth);
     setFormQuoteId(quote.id);
     setFormClientId(quote.clientId);
     const client = clients.find(c => c.id === quote.clientId);
@@ -203,6 +207,8 @@ export function Factures() {
 
   const handleOpenNewTrackingRow = () => {
     setEditingInvoiceId(null);
+    setFormPeriodYear(selectedYear);
+    setFormPeriodMonth(selectedMonth);
     setFormQuoteId('');
     setFormClientId('');
     setFormClientName('');
@@ -225,6 +231,10 @@ export function Factures() {
 
   const handleEditTrackingRow = (inv: Invoice) => {
     setEditingInvoiceId(inv.id);
+    const year = inv.periodYear || (inv.deliveryDate ? new Date(inv.deliveryDate).getFullYear() : selectedYear);
+    const month = inv.periodMonth || (inv.deliveryDate ? new Date(inv.deliveryDate).getMonth() + 1 : selectedMonth);
+    setFormPeriodYear(year);
+    setFormPeriodMonth(month);
     setFormQuoteId(inv.quoteId || '');
     setFormClientId(inv.clientId || '');
     setFormClientName(getClientDisplayName(inv));
@@ -257,9 +267,8 @@ export function Factures() {
       return;
     }
 
-    const deliveryDateObj = new Date(formDeliveryDate || `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`);
-    const periodYear = !isNaN(deliveryDateObj.getFullYear()) ? deliveryDateObj.getFullYear() : selectedYear;
-    const periodMonth = !isNaN(deliveryDateObj.getMonth()) ? deliveryDateObj.getMonth() + 1 : selectedMonth;
+    const periodYear = Number(formPeriodYear) || selectedYear;
+    const periodMonth = Number(formPeriodMonth) || selectedMonth;
 
     const grossMargin = Math.max(0, formAmountToPay - formAmountUsed);
     const commissionAmount = (formCommercialName || formCommercialId) && grossMargin > 0
@@ -313,6 +322,10 @@ export function Factures() {
         await addInvoice(invoicePayload as Invoice);
         toast.success(`Facture ajoutée avec succès pour ${MONTH_NAMES[periodMonth - 1]?.name} ${periodYear} !`);
       }
+
+      // Basculer l'affichage vers le mois et l'année choisis
+      setSelectedYear(periodYear);
+      setSelectedMonth(periodMonth);
 
       setIsCreateModalOpen(false);
       setEditingInvoiceId(null);
@@ -1289,6 +1302,47 @@ export function Factures() {
 
             <form onSubmit={handleSaveInvoice} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               
+              {/* Période d'imputation (Mois et Année de suivi) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', background: 'rgba(60, 125, 175, 0.08)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1.5px solid rgba(60, 125, 175, 0.3)' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-primary)', marginBottom: '6px' }}>
+                    📅 Mois de suivi (Registre) *
+                  </label>
+                  <select
+                    required
+                    value={formPeriodMonth}
+                    onChange={e => setFormPeriodMonth(Number(e.target.value))}
+                    className="table-input"
+                    style={{ width: '100%', padding: '8px 12px', fontWeight: 700, fontSize: '0.9rem', borderColor: 'var(--color-primary)' }}
+                  >
+                    {MONTH_NAMES.map(m => (
+                      <option key={m.num} value={m.num}>
+                        {m.name} (Mois {m.num})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-primary)', marginBottom: '6px' }}>
+                    📅 Année d'exercice *
+                  </label>
+                  <select
+                    required
+                    value={formPeriodYear}
+                    onChange={e => setFormPeriodYear(Number(e.target.value))}
+                    className="table-input"
+                    style={{ width: '100%', padding: '8px 12px', fontWeight: 700, fontSize: '0.9rem', borderColor: 'var(--color-primary)' }}
+                  >
+                    {[2024, 2025, 2026, 2027, 2028].map(yr => (
+                      <option key={yr} value={yr}>
+                        {yr}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               {/* Client & Commercial */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
                 <div>
