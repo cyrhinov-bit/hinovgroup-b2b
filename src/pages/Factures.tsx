@@ -2,44 +2,31 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Plus, 
   Search, 
-  Filter, 
   Receipt, 
-  DollarSign, 
   Calendar, 
-  AlertTriangle, 
-  CheckCircle2, 
-  Clock, 
   Download, 
-  Eye, 
   CreditCard, 
-  Send, 
   Trash2, 
   Edit3, 
-  FileText, 
-  TrendingUp, 
-  Percent, 
   X, 
-  Check, 
   Building2, 
-  User, 
-  Upload,
-  FileSpreadsheet,
-  RefreshCw,
-  Share2,
-  ChevronRight,
-  ShieldCheck,
-  Briefcase,
-  Layers,
-  HelpCircle
+  Upload, 
+  FileSpreadsheet, 
+  Share2, 
+  Filter, 
+  RotateCcw,
+  CheckCircle2,
+  TrendingUp,
+  Award,
+  DollarSign
 } from 'lucide-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { useAppContext } from '../context/AppContext';
-import type { Quote, QuoteLine } from '../context/AppContext';
+import type { Quote } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
-import { generateInvoicePdf, downloadBlob } from '../lib/pdfUtils';
-import type { Invoice, InvoiceItem, InvoicePayment, InvoiceStatus } from '../types/crmModules';
+import type { Invoice, InvoiceStatus } from '../types/crmModules';
 import toast from 'react-hot-toast';
 
 const MONTH_NAMES = [
@@ -73,7 +60,6 @@ export function Factures() {
   const { currentUser: authUser } = useAuth();
   const { 
     invoices, 
-    invoicePayments, 
     quotes, 
     clients, 
     services, 
@@ -81,10 +67,8 @@ export function Factures() {
     settings,
     addInvoice, 
     updateInvoice, 
-    updateInvoiceStatus, 
     deleteInvoice, 
-    addInvoicePayment, 
-    deleteInvoicePayment 
+    addInvoicePayment
   } = useAppContext();
 
   const currentUser = users.find(u => u.id === authUser?.id) || authUser;
@@ -92,9 +76,8 @@ export function Factures() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Période de suivi (Année & Mois)
-  const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState<number>(2026);
-  const [selectedMonth, setSelectedMonth] = useState<number>(9); // Défaut Septembre (9) pour correspondre au fichier suivi
+  const [selectedMonth, setSelectedMonth] = useState<number>(9); // Défaut Septembre
 
   // Filtres & Recherche
   const [searchTerm, setSearchTerm] = useState('');
@@ -104,11 +87,7 @@ export function Factures() {
 
   // Modals state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
 
@@ -136,7 +115,7 @@ export function Factures() {
   const [payRef, setPayRef] = useState<string>('');
   const [payNotes, setPayNotes] = useState<string>('');
 
-  const isDirector = currentUser?.role === 'Directeur' || currentUser?.role === 'SuperAdmin' || currentUser?.role === 'Directeur adjoint';
+  const isDirector = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
   const isResponsable = currentUser?.role === 'Responsable';
 
   // Helper functions
@@ -264,7 +243,7 @@ export function Factures() {
     setIsCreateModalOpen(true);
   };
 
-  // Enregistrement / Mise à jour d'une ligne de suivi
+  // Enregistrement / Mise à jour
   const handleSaveInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -332,7 +311,7 @@ export function Factures() {
         toast.success(`Ligne mise à jour avec succès !`);
       } else {
         await addInvoice(invoicePayload as Invoice);
-        toast.success(`Facture / Suivi ajouté avec succès pour ${MONTH_NAMES[periodMonth - 1]?.name} ${periodYear} !`);
+        toast.success(`Facture ajoutée avec succès pour ${MONTH_NAMES[periodMonth - 1]?.name} ${periodYear} !`);
       }
 
       setIsCreateModalOpen(false);
@@ -414,11 +393,6 @@ export function Factures() {
   };
 
   // WhatsApp Relance
-  const handleOpenReminder = (inv: Invoice) => {
-    setSelectedInvoice(inv);
-    setIsReminderModalOpen(true);
-  };
-
   const handleSendWhatsApp = (inv: Invoice) => {
     const client = clients.find(c => c.id === inv.clientId) || clients.find(c => c.name.toLowerCase() === (inv.clientName || '').toLowerCase());
     const phone = client?.phone || '';
@@ -446,7 +420,6 @@ export function Factures() {
         
         let importedCount = 0;
 
-        // Process each sheet (e.g. SEPTEMBRE, OCTOBRE, etc.)
         for (const sheetName of wb.SheetNames) {
           const upperSheet = sheetName.trim().toUpperCase();
           const monthIdx = MONTH_NAMES.findIndex(m => upperSheet.includes(m.name.toUpperCase()));
@@ -456,12 +429,10 @@ export function Factures() {
           const ws = wb.Sheets[sheetName];
           const rawRows: any[] = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false });
 
-          // Find header row or rows with client data
           for (let i = 0; i < rawRows.length; i++) {
             const row = rawRows[i];
             if (!row || row.length === 0) continue;
 
-            // Check if row is header or total
             const col0 = String(row[0] || '').trim();
             const col0Upper = col0.toUpperCase();
             if (col0Upper.includes('CLIENT') || col0Upper.includes('TOTAL') || col0Upper === '' || col0Upper.includes('PAGE')) {
@@ -471,7 +442,6 @@ export function Factures() {
             const clientName = col0;
             const commercialName = String(row[1] || '').trim();
             
-            // Format dates
             let deliveryDate = '';
             if (row[2] instanceof Date) {
               deliveryDate = row[2].toISOString().split('T')[0];
@@ -534,7 +504,6 @@ export function Factures() {
         }
 
         toast.success(`Importation réussie : ${importedCount} factures ajoutées au registre !`);
-        setIsImportModalOpen(false);
       } catch (err) {
         console.error('Erreur import Excel:', err);
         toast.error('Erreur lors de la lecture du fichier Excel.');
@@ -544,7 +513,7 @@ export function Factures() {
     e.target.value = '';
   };
 
-  // Quick Seed Septembre 2026 if empty
+  // Quick Seed Septembre 2026
   const handleSeedSeptembre2026 = async () => {
     const defaultData = [
       {
@@ -661,7 +630,6 @@ export function Factures() {
       inv.remainingAmount !== undefined ? inv.remainingAmount : Math.max(0, inv.totalAmount - (inv.amountPaid || 0))
     ]);
 
-    // Add Total Row
     rows.push([
       'TOTAL DU MOIS',
       '',
@@ -685,7 +653,7 @@ export function Factures() {
     toast.success(`Export Excel généré : ${fileName}`);
   };
 
-  // Filtering for current period
+  // Filtering
   const allowedInvoices = useMemo(() => {
     if (isDirector) return invoices;
     if (isResponsable) {
@@ -710,7 +678,6 @@ export function Factures() {
       const cat = (inv.category || '').toLowerCase();
       const num = (inv.invoiceNumber || '').toLowerCase();
 
-      // Search
       const matchSearch = !searchTerm || 
         clientName.includes(searchTerm.toLowerCase()) ||
         commercial.includes(searchTerm.toLowerCase()) ||
@@ -720,7 +687,6 @@ export function Factures() {
 
       if (!matchSearch) return false;
 
-      // Status
       const rem = inv.remainingAmount !== undefined ? inv.remainingAmount : Math.max(0, inv.totalAmount - (inv.amountPaid || 0));
       const isPaid = rem === 0 && inv.totalAmount > 0;
       const isPartial = rem > 0 && (inv.amountPaid || 0) > 0;
@@ -730,17 +696,14 @@ export function Factures() {
       if (statusFilter === 'PARTIAL' && !isPartial) return false;
       if (statusFilter === 'UNPAID' && !isUnpaid) return false;
 
-      // Service
       if (serviceFilter && inv.serviceName !== serviceFilter && inv.serviceId !== serviceFilter) return false;
-
-      // Commercial
       if (commercialFilter && inv.commercialName !== commercialFilter && inv.commercialId !== commercialFilter) return false;
 
       return true;
     });
-  }, [monthInvoices, searchTerm, statusFilter, serviceFilter, commercialFilter, clients, users, services]);
+  }, [monthInvoices, searchTerm, statusFilter, serviceFilter, commercialFilter]);
 
-  // Monthly KPI and Table Totals calculation
+  // Monthly totals
   const monthlyTotals = useMemo(() => {
     let totalToPay = 0;
     let totalUsed = 0;
@@ -786,83 +749,99 @@ export function Factures() {
 
   const selectedMonthName = MONTH_NAMES.find(m => m.num === selectedMonth)?.name || 'Septembre';
 
+  // Permission Check
+  if (!isDirector && !currentUser?.crmFacturationEnabled) {
+    return (
+      <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <Receipt size={48} color="var(--color-error)" style={{ margin: '0 auto 16px' }} />
+        <h2>Module Suivi des Factures non activé</h2>
+        <p style={{ color: 'var(--color-text-muted)' }}>
+          Ce module n'est pas activé sur votre profil utilisateur. Veuillez contacter la Direction.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-4 sm:p-6 max-w-[1600px] mx-auto space-y-6">
+    <div className="dashboard">
       
-      {/* ─── HEADER & PERIODE SELECTOR ─────────────────────────── */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+      {/* ─── EN-TÊTE PRINCIPALE ─────────────────────────────────── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
-              <Receipt className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                Suivi des Factures Clients
-                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                  Registre Mensuel
-                </span>
-              </h1>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-                Suivi de la rentabilité, coûts engagés, marges HINOV, primes et règlements par mois
-              </p>
-            </div>
-          </div>
+          <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Receipt size={24} color="var(--color-primary)" />
+            <span>Suivi des Factures Clients</span>
+            <span className="badge-status" style={{ background: 'rgba(60, 125, 175, 0.12)', color: 'var(--color-primary)', fontSize: '11px', fontWeight: 700 }}>
+              Registre Mensuel
+            </span>
+          </h2>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>
+            Suivi de la rentabilité, coûts engagés, marges HINOV, primes et règlements par mois
+          </p>
         </div>
 
-        {/* Actions principales */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Boutons d'actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <input 
             type="file" 
             ref={fileInputRef} 
             onChange={handleFileUpload} 
             accept=".xlsx, .xls, .csv" 
-            className="hidden" 
+            style={{ display: 'none' }} 
           />
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800 rounded-xl transition-all shadow-xs"
+            className="btn btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
             title="Importer un fichier Excel de suivi"
           >
-            <Upload className="w-4 h-4 text-emerald-600" />
+            <Upload size={14} color="var(--color-success)" />
             <span>Importer Excel</span>
           </button>
 
           <button
             onClick={handleExportExcel}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl transition-all shadow-xs"
+            className="btn btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
             title="Exporter le registre mensuel en Excel"
           >
-            <Download className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+            <Download size={14} />
             <span>Exporter Excel</span>
           </button>
 
           <button
             onClick={handleOpenNewTrackingRow}
-            className="flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 rounded-xl shadow-md shadow-blue-500/25 transition-all transform active:scale-95"
+            className="btn btn-primary"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
           >
-            <Plus className="w-4 h-4" />
+            <Plus size={16} />
             <span>+ Ajouter une facture</span>
           </button>
         </div>
       </div>
 
       {/* ─── SÉLECTEUR D'ANNÉE ET ONGLETS MENSUELS ───────────────── */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Année d'exercice :</span>
-            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+      <div className="card" style={{ padding: '14px 18px', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px', paddingBottom: '10px', borderBottom: '1px solid var(--color-border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Exercice :</span>
+            <div style={{ display: 'flex', gap: '4px', background: 'var(--color-surface-alt)', padding: '3px', borderRadius: 'var(--radius-md)' }}>
               {[2024, 2025, 2026, 2027].map(yr => (
                 <button
                   key={yr}
                   onClick={() => setSelectedYear(yr)}
-                  className={`px-3 py-1 text-xs sm:text-sm font-bold rounded-lg transition-all ${
-                    selectedYear === yr
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
+                  style={{
+                    padding: '4px 12px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    border: 'none',
+                    borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer',
+                    background: selectedYear === yr ? 'var(--color-primary)' : 'transparent',
+                    color: selectedYear === yr ? '#ffffff' : 'var(--color-text)',
+                    transition: 'all 0.15s ease'
+                  }}
                 >
                   {yr}
                 </button>
@@ -873,16 +852,17 @@ export function Factures() {
           {monthInvoices.length === 0 && selectedYear === 2026 && selectedMonth === 9 && (
             <button
               onClick={handleSeedSeptembre2026}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-100 transition-colors"
+              className="btn btn-secondary"
+              style={{ fontSize: '0.8rem', padding: '5px 12px', display: 'flex', alignItems: 'center', gap: '6px', borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+              <FileSpreadsheet size={14} />
               <span>Charger les données de Septembre 2026</span>
             </button>
           )}
         </div>
 
         {/* 12 Onglets Mensuels */}
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-1.5">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(75px, 1fr))', gap: '6px' }}>
           {MONTH_NAMES.map(m => {
             const isSelected = selectedMonth === m.num;
             const countInMonth = allowedInvoices.filter(i => {
@@ -895,23 +875,33 @@ export function Factures() {
               <button
                 key={m.num}
                 onClick={() => setSelectedMonth(m.num)}
-                className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all border text-center relative ${
-                  isSelected
-                    ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-500 text-blue-700 dark:text-blue-300 font-bold shadow-xs'
-                    : 'bg-slate-50/50 dark:bg-slate-800/30 border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-slate-200'
-                }`}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '8px 4px',
+                  borderRadius: 'var(--radius-md)',
+                  border: isSelected ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                  background: isSelected ? 'rgba(60, 125, 175, 0.1)' : 'var(--color-surface)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
               >
-                <span className="text-xs uppercase tracking-tight font-semibold">{m.short}</span>
-                <span className={`text-[10px] mt-0.5 px-1.5 py-0.2 rounded-full font-medium ${
-                  countInMonth > 0 
-                    ? (isSelected ? 'bg-blue-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300')
-                    : 'text-slate-400'
-                }`}>
+                <span style={{ fontSize: '0.8rem', fontWeight: isSelected ? 700 : 500, color: isSelected ? 'var(--color-primary)' : 'var(--color-text)' }}>
+                  {m.name}
+                </span>
+                <span style={{
+                  fontSize: '10px',
+                  marginTop: '3px',
+                  padding: '1px 6px',
+                  borderRadius: '10px',
+                  fontWeight: 600,
+                  background: countInMonth > 0 ? (isSelected ? 'var(--color-primary)' : 'var(--color-surface-alt)') : 'transparent',
+                  color: countInMonth > 0 ? (isSelected ? '#fff' : 'var(--color-text-muted)') : 'var(--color-text-muted)'
+                }}>
                   {countInMonth > 0 ? `${countInMonth}` : '-'}
                 </span>
-                {isSelected && (
-                  <span className="absolute -bottom-1 w-6 h-0.5 bg-blue-600 rounded-full" />
-                )}
               </button>
             );
           })}
@@ -919,181 +909,184 @@ export function Factures() {
       </div>
 
       {/* ─── 7 CARTES KPI DU MOIS SÉLECTIONNÉ ─────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', marginBottom: '20px' }}>
         {/* 1. Total à Payer */}
-        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Total à Payer</span>
-          <p className="text-base sm:text-lg font-black text-slate-900 dark:text-white truncate">
-            {monthlyTotals.totalToPay.toLocaleString('fr-FR')} <span className="text-[10px] font-normal text-slate-400">FCFA</span>
-          </p>
-          <div className="mt-1 flex items-center text-[10px] text-slate-500 font-medium">
-            <span>{filteredInvoices.length} dossier(s)</span>
+        <div className="card" style={{ padding: '14px', borderLeft: '4px solid #1E293B' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>Total à Payer</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text)' }}>
+            {monthlyTotals.totalToPay.toLocaleString('fr-FR')} <span style={{ fontSize: '0.75rem', fontWeight: 400 }}>F</span>
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+            {filteredInvoices.length} dossier(s)
           </div>
         </div>
 
         {/* 2. Total Utilisé (Coût) */}
-        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Montant Utilisé</span>
-          <p className="text-base sm:text-lg font-black text-amber-600 dark:text-amber-400 truncate">
-            {monthlyTotals.totalUsed.toLocaleString('fr-FR')} <span className="text-[10px] font-normal text-slate-400">FCFA</span>
-          </p>
-          <div className="mt-1 flex items-center text-[10px] text-amber-600/80 font-medium">
-            <span>Coûts engagés</span>
+        <div className="card" style={{ padding: '14px', borderLeft: '4px solid #D97706' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#D97706', textTransform: 'uppercase', marginBottom: '2px' }}>Montant Utilisé</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#D97706' }}>
+            {monthlyTotals.totalUsed.toLocaleString('fr-FR')} <span style={{ fontSize: '0.75rem', fontWeight: 400 }}>F</span>
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#D97706', marginTop: '2px' }}>
+            Coûts engagés
           </div>
         </div>
 
         {/* 3. Marge Brute */}
-        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-emerald-100 dark:border-emerald-950/50 bg-emerald-50/20 dark:bg-emerald-950/10 shadow-xs">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block mb-1">Marge Brute</span>
-          <p className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 truncate">
-            {monthlyTotals.totalGrossMargin.toLocaleString('fr-FR')} <span className="text-[10px] font-normal text-emerald-600/70">FCFA</span>
-          </p>
-          <div className="mt-1 flex items-center text-[10px] font-bold text-emerald-600">
-            <span>Taux marge : {monthlyTotals.marginRate}%</span>
+        <div className="card" style={{ padding: '14px', borderLeft: '4px solid #10B981', background: 'rgba(16, 185, 129, 0.03)' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#059669', textTransform: 'uppercase', marginBottom: '2px' }}>Marge Brute</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#059669' }}>
+            {monthlyTotals.totalGrossMargin.toLocaleString('fr-FR')} <span style={{ fontSize: '0.75rem', fontWeight: 400 }}>F</span>
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: '2px' }}>
+            Taux marge : {monthlyTotals.marginRate}%
           </div>
         </div>
 
         {/* 4. Prime 10% */}
-        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-purple-100 dark:border-purple-950/50 shadow-xs">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 block mb-1">Prime (10%)</span>
-          <p className="text-base sm:text-lg font-black text-purple-600 dark:text-purple-400 truncate">
-            {monthlyTotals.totalCommission.toLocaleString('fr-FR')} <span className="text-[10px] font-normal text-slate-400">FCFA</span>
-          </p>
-          <div className="mt-1 flex items-center text-[10px] text-purple-500 font-medium">
-            <span>Commerciaux</span>
+        <div className="card" style={{ padding: '14px', borderLeft: '4px solid #8B5CF6' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#8B5CF6', textTransform: 'uppercase', marginBottom: '2px' }}>Prime (10%)</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#8B5CF6' }}>
+            {monthlyTotals.totalCommission.toLocaleString('fr-FR')} <span style={{ fontSize: '0.75rem', fontWeight: 400 }}>F</span>
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+            Commerciaux
           </div>
         </div>
 
         {/* 5. Marge Nette HINOV */}
-        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/20 shadow-xs">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300 block mb-1">Marge HINOV</span>
-          <p className="text-base sm:text-lg font-black text-blue-700 dark:text-blue-300 truncate">
-            {monthlyTotals.totalHinovMargin.toLocaleString('fr-FR')} <span className="text-[10px] font-normal text-blue-400">FCFA</span>
-          </p>
-          <div className="mt-1 flex items-center text-[10px] text-blue-600 dark:text-blue-400 font-semibold">
-            <span>Bénéfice Net HINOV</span>
+        <div className="card" style={{ padding: '14px', borderLeft: '4px solid var(--color-primary)', background: 'rgba(60, 125, 175, 0.04)' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', marginBottom: '2px' }}>Marge HINOV</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-primary)' }}>
+            {monthlyTotals.totalHinovMargin.toLocaleString('fr-FR')} <span style={{ fontSize: '0.75rem', fontWeight: 400 }}>F</span>
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 600, marginTop: '2px' }}>
+            Bénéfice Net HINOV
           </div>
         </div>
 
         {/* 6. Total Payé */}
-        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Total Payé</span>
-          <p className="text-base sm:text-lg font-black text-teal-600 dark:text-teal-400 truncate">
-            {monthlyTotals.totalPaid.toLocaleString('fr-FR')} <span className="text-[10px] font-normal text-slate-400">FCFA</span>
-          </p>
-          <div className="mt-1 flex items-center text-[10px] text-teal-600 font-medium">
-            <span>Recouvré : {monthlyTotals.recoveryRate}%</span>
+        <div className="card" style={{ padding: '14px', borderLeft: '4px solid #0D9488' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#0D9488', textTransform: 'uppercase', marginBottom: '2px' }}>Total Payé</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0D9488' }}>
+            {monthlyTotals.totalPaid.toLocaleString('fr-FR')} <span style={{ fontSize: '0.75rem', fontWeight: 400 }}>F</span>
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#0D9488', marginTop: '2px' }}>
+            Recouvré : {monthlyTotals.recoveryRate}%
           </div>
         </div>
 
         {/* 7. Total Reste */}
-        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-rose-100 dark:border-rose-950/50 bg-rose-50/20 dark:bg-rose-950/10 shadow-xs col-span-2 sm:col-span-1">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 block mb-1">Reste à Payer</span>
-          <p className="text-base sm:text-lg font-black text-rose-600 dark:text-rose-400 truncate">
-            {monthlyTotals.totalRemaining.toLocaleString('fr-FR')} <span className="text-[10px] font-normal text-rose-400">FCFA</span>
-          </p>
-          <div className="mt-1 flex items-center text-[10px] font-bold text-rose-500">
-            <span>À recouvrer</span>
+        <div className="card" style={{ padding: '14px', borderLeft: '4px solid #E11D48', background: 'rgba(225, 29, 72, 0.03)' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#E11D48', textTransform: 'uppercase', marginBottom: '2px' }}>Reste à Payer</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#E11D48' }}>
+            {monthlyTotals.totalRemaining.toLocaleString('fr-FR')} <span style={{ fontSize: '0.75rem', fontWeight: 400 }}>F</span>
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#E11D48', fontWeight: 600, marginTop: '2px' }}>
+            À recouvrer
           </div>
         </div>
       </div>
 
       {/* ─── FILTRES & BARRE DE RECHERCHE ───────────────────────── */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Rechercher client, service, catégorie..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-          />
-        </div>
+      <div className="card" style={{ padding: '12px 18px', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: '1 1 240px', minWidth: '220px' }}>
+            <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+            <input
+              type="text"
+              placeholder="Rechercher client, service, catégorie..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="table-input"
+              style={{ width: '100%', paddingLeft: '32px' }}
+            />
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          {/* Filtre Statut de paiement */}
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none"
-          >
-            <option value="ALL">Tous les statuts</option>
-            <option value="PAID">Totalement Payé</option>
-            <option value="PARTIAL">Partiellement Payé</option>
-            <option value="UNPAID">Non Payé (En attente)</option>
-          </select>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="table-input"
+              style={{ padding: '6px 10px', minWidth: '130px' }}
+            >
+              <option value="ALL">Tous les statuts</option>
+              <option value="PAID">Totalement Payé</option>
+              <option value="PARTIAL">Partiellement Payé</option>
+              <option value="UNPAID">Non Payé</option>
+            </select>
 
-          {/* Filtre Service */}
-          <select
-            value={serviceFilter}
-            onChange={e => setServiceFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none"
-          >
-            <option value="">Tous les services</option>
-            {PREDEFINED_SERVICES.map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
+            <select
+              value={serviceFilter}
+              onChange={e => setServiceFilter(e.target.value)}
+              className="table-input"
+              style={{ padding: '6px 10px', minWidth: '130px' }}
+            >
+              <option value="">Tous les services</option>
+              {PREDEFINED_SERVICES.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
 
-          {/* Filtre Commercial */}
-          <select
-            value={commercialFilter}
-            onChange={e => setCommercialFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none"
-          >
-            <option value="">Tous les commerciaux</option>
-            {users.map(u => (
-              <option key={u.id} value={u.name}>{u.name}</option>
-            ))}
-          </select>
+            <select
+              value={commercialFilter}
+              onChange={e => setCommercialFilter(e.target.value)}
+              className="table-input"
+              style={{ padding: '6px 10px', minWidth: '130px' }}
+            >
+              <option value="">Tous les commerciaux</option>
+              {users.map(u => (
+                <option key={u.id} value={u.name}>{u.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
       {/* ─── TABLEAU DU SUIVI MENSUEL (13 COLONNES CONFORMES EXCEL) ─── */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>
               Registre : {selectedMonthName} {selectedYear}
             </span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold">
+            <span className="badge-status" style={{ background: 'var(--color-surface-alt)', color: 'var(--color-text-muted)' }}>
               {filteredInvoices.length} ligne(s)
             </span>
           </div>
 
-          <span className="text-xs text-slate-400">
+          <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
             Période : {selectedMonthName.toUpperCase()} {selectedYear}
           </span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+        <div className="table-container">
+          <table>
             <thead>
-              <tr className="bg-slate-50/80 dark:bg-slate-800/60 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
-                <th className="py-3 px-3 min-w-[140px]">CLIENT / AFFAIRES</th>
-                <th className="py-3 px-2 min-w-[100px]">COMMERCIAL</th>
-                <th className="py-3 px-2 min-w-[95px]">DATE LIVR.</th>
-                <th className="py-3 px-2 min-w-[95px]">DATE PAIEM.</th>
-                <th className="py-3 px-2 min-w-[100px]">SERVICE</th>
-                <th className="py-3 px-2 min-w-[100px]">CATÉGORIE</th>
-                <th className="py-3 px-3 min-w-[110px] text-right">MONTANT À PAYER</th>
-                <th className="py-3 px-3 min-w-[105px] text-right">MONTANT UTILISÉ</th>
-                <th className="py-3 px-3 min-w-[105px] text-right text-emerald-600">MARGE</th>
-                <th className="py-3 px-2 min-w-[85px] text-right text-purple-600">PRIME 10%</th>
-                <th className="py-3 px-3 min-w-[105px] text-right text-blue-600">MARGE HINOV</th>
-                <th className="py-3 px-3 min-w-[95px] text-right text-teal-600">PAYÉ</th>
-                <th className="py-3 px-3 min-w-[105px] text-right text-rose-600">RESTE</th>
-                <th className="py-3 px-2 min-w-[70px] text-center">ACTIONS</th>
+              <tr>
+                <th style={{ minWidth: '130px' }}>CLIENT / AFFAIRES</th>
+                <th style={{ minWidth: '95px' }}>COMMERCIAL</th>
+                <th style={{ minWidth: '90px' }}>DATE LIVR.</th>
+                <th style={{ minWidth: '90px' }}>DATE PAIEM.</th>
+                <th style={{ minWidth: '95px' }}>SERVICE</th>
+                <th style={{ minWidth: '95px' }}>CATÉGORIE</th>
+                <th style={{ minWidth: '110px', textAlign: 'right' }}>MONTANT À PAYER</th>
+                <th style={{ minWidth: '105px', textAlign: 'right', color: '#D97706' }}>MONTANT UTILISÉ</th>
+                <th style={{ minWidth: '105px', textAlign: 'right', color: '#059669' }}>MARGE</th>
+                <th style={{ minWidth: '85px', textAlign: 'right', color: '#8B5CF6' }}>PRIME 10%</th>
+                <th style={{ minWidth: '105px', textAlign: 'right', color: 'var(--color-primary)' }}>MARGE HINOV</th>
+                <th style={{ minWidth: '95px', textAlign: 'right', color: '#0D9488' }}>PAYÉ</th>
+                <th style={{ minWidth: '105px', textAlign: 'right', color: '#E11D48' }}>RESTE</th>
+                <th style={{ minWidth: '85px', textAlign: 'center' }}>ACTIONS</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody>
               {filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="py-12 text-center text-slate-400">
-                    <Receipt className="w-10 h-10 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
-                    <p className="font-semibold text-slate-600 dark:text-slate-300">Aucune facture enregistrée pour {selectedMonthName} {selectedYear}</p>
-                    <p className="text-xs mt-1">Cliquez sur « + Ajouter une facture » ou « Importer Excel » pour commencer.</p>
+                  <td colSpan={14} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--color-text-muted)' }}>
+                    <Receipt size={36} color="var(--color-text-muted)" style={{ margin: '0 auto 8px', opacity: 0.5 }} />
+                    <p style={{ fontWeight: 600, fontSize: '0.95rem', margin: 0 }}>Aucune facture enregistrée pour {selectedMonthName} {selectedYear}</p>
+                    <p style={{ fontSize: '0.8rem', marginTop: '4px' }}>Cliquez sur « + Ajouter une facture » ou « Importer Excel » pour commencer.</p>
                   </td>
                 </tr>
               ) : (
@@ -1113,129 +1106,125 @@ export function Factures() {
                   const isPartiallyPaid = remaining > 0 && paid > 0;
 
                   return (
-                    <tr key={inv.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                    <tr key={inv.id}>
                       {/* 1. Client / Affaires */}
-                      <td className="py-3 px-3 font-bold text-slate-900 dark:text-white">
-                        <div className="flex items-center gap-1.5">
-                          <Building2 className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                          <span className="truncate max-w-[150px]">{clientName}</span>
-                        </div>
+                      <td>
+                        <div style={{ fontWeight: 700, color: 'var(--color-primary)' }}>{clientName}</div>
                         {inv.quoteId && (
-                          <span className="text-[10px] text-blue-500 hover:underline block font-normal">
-                            Devis lié
-                          </span>
+                          <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>Devis lié</div>
                         )}
                       </td>
 
                       {/* 2. Commercial */}
-                      <td className="py-3 px-2 text-slate-700 dark:text-slate-300 font-medium">
+                      <td style={{ fontWeight: 500 }}>
                         {commercialName}
                       </td>
 
                       {/* 3. Date Livraison */}
-                      <td className="py-3 px-2 text-slate-600 dark:text-slate-400 font-mono text-[11px]">
+                      <td style={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>
                         {inv.deliveryDate || '-'}
                       </td>
 
                       {/* 4. Date Paiement */}
-                      <td className="py-3 px-2 text-slate-600 dark:text-slate-400 font-mono text-[11px]">
+                      <td style={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>
                         {inv.paymentDate || '-'}
                       </td>
 
                       {/* 5. Service */}
-                      <td className="py-3 px-2">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-[10px]">
+                      <td>
+                        <span className="badge-status" style={{ background: 'var(--color-surface-alt)', color: 'var(--color-text)', fontSize: '10px' }}>
                           {serviceName}
                         </span>
                       </td>
 
                       {/* 6. Catégorie */}
-                      <td className="py-3 px-2 text-slate-700 dark:text-slate-300">
-                        <span className="truncate max-w-[120px] block" title={inv.category}>
-                          {inv.category || '-'}
-                        </span>
+                      <td>
+                        <span style={{ fontSize: '0.82rem' }}>{inv.category || '-'}</span>
                       </td>
 
                       {/* 7. Montant à payer */}
-                      <td className="py-3 px-3 text-right font-black text-slate-900 dark:text-white">
-                        {toPay.toLocaleString('fr-FR')}
+                      <td style={{ textAlign: 'right', fontWeight: 800 }}>
+                        {toPay.toLocaleString('fr-FR')} F
                       </td>
 
                       {/* 8. Montant utilisé */}
-                      <td className="py-3 px-3 text-right font-semibold text-amber-600 dark:text-amber-400">
-                        {used.toLocaleString('fr-FR')}
+                      <td style={{ textAlign: 'right', fontWeight: 600, color: '#D97706' }}>
+                        {used.toLocaleString('fr-FR')} F
                       </td>
 
                       {/* 9. Marge Brute */}
-                      <td className="py-3 px-3 text-right font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50/10">
-                        {grossMargin.toLocaleString('fr-FR')}
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669', background: 'rgba(16, 185, 129, 0.04)' }}>
+                        {grossMargin.toLocaleString('fr-FR')} F
                       </td>
 
                       {/* 10. Prime 10% */}
-                      <td className="py-3 px-2 text-right font-semibold text-purple-600 dark:text-purple-400">
-                        {commission.toLocaleString('fr-FR')}
+                      <td style={{ textAlign: 'right', fontWeight: 600, color: '#8B5CF6' }}>
+                        {commission.toLocaleString('fr-FR')} F
                       </td>
 
                       {/* 11. Marge HINOV */}
-                      <td className="py-3 px-3 text-right font-black text-blue-700 dark:text-blue-300 bg-blue-50/20">
-                        {hinovMargin.toLocaleString('fr-FR')}
+                      <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--color-primary)', background: 'rgba(60, 125, 175, 0.04)' }}>
+                        {hinovMargin.toLocaleString('fr-FR')} F
                       </td>
 
                       {/* 12. Payé */}
-                      <td className="py-3 px-3 text-right font-semibold text-teal-600 dark:text-teal-400">
-                        {paid.toLocaleString('fr-FR')}
+                      <td style={{ textAlign: 'right', fontWeight: 600, color: '#0D9488' }}>
+                        {paid.toLocaleString('fr-FR')} F
                       </td>
 
                       {/* 13. Reste */}
-                      <td className="py-3 px-3 text-right font-black">
-                        <div className="flex flex-col items-end">
-                          <span className={remaining === 0 ? 'text-emerald-600' : 'text-rose-600'}>
-                            {remaining.toLocaleString('fr-FR')}
-                          </span>
-                          <span className={`text-[9px] px-1 rounded font-bold ${
-                            isFullyPaid 
-                              ? 'bg-emerald-100 text-emerald-700' 
-                              : (isPartiallyPaid ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700')
-                          }`}>
-                            {isFullyPaid ? 'PAYÉ' : (isPartiallyPaid ? 'PARTIEL' : 'NON PAYÉ')}
-                          </span>
+                      <td style={{ textAlign: 'right', fontWeight: 800 }}>
+                        <div style={{ color: remaining === 0 ? '#059669' : '#E11D48' }}>
+                          {remaining.toLocaleString('fr-FR')} F
                         </div>
+                        <span className="badge-status" style={{
+                          fontSize: '9px',
+                          padding: '1px 5px',
+                          background: isFullyPaid ? 'rgba(16, 185, 129, 0.12)' : (isPartiallyPaid ? 'rgba(217, 119, 6, 0.12)' : 'rgba(225, 29, 72, 0.12)'),
+                          color: isFullyPaid ? '#059669' : (isPartiallyPaid ? '#D97706' : '#E11D48')
+                        }}>
+                          {isFullyPaid ? 'PAYÉ' : (isPartiallyPaid ? 'PARTIEL' : 'NON PAYÉ')}
+                        </span>
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3 px-2 text-center">
-                        <div className="flex items-center justify-center gap-1">
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                           {remaining > 0 && (
                             <button
                               onClick={() => handleOpenPaymentModal(inv)}
-                              className="p-1.5 text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/50 rounded-lg transition-colors"
-                              title="Enregistrer un règlement"
+                              className="btn btn-secondary"
+                              style={{ padding: '4px 6px', color: '#0D9488' }}
+                              title="Encaisser un règlement"
                             >
-                              <CreditCard className="w-3.5 h-3.5" />
+                              <CreditCard size={13} />
                             </button>
                           )}
                           {remaining > 0 && (
                             <button
                               onClick={() => handleSendWhatsApp(inv)}
-                              className="p-1.5 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 rounded-lg transition-colors"
+                              className="btn btn-secondary"
+                              style={{ padding: '4px 6px', color: '#059669' }}
                               title="Relance WhatsApp"
                             >
-                              <Share2 className="w-3.5 h-3.5" />
+                              <Share2 size={13} />
                             </button>
                           )}
                           <button
                             onClick={() => handleEditTrackingRow(inv)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded-lg transition-colors"
+                            className="btn btn-secondary"
+                            style={{ padding: '4px 6px', color: 'var(--color-primary)' }}
                             title="Modifier"
                           >
-                            <Edit3 className="w-3.5 h-3.5" />
+                            <Edit3 size={13} />
                           </button>
                           <button
                             onClick={() => handleDelete(inv)}
-                            className="p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
+                            className="btn btn-secondary"
+                            style={{ padding: '4px 6px', color: 'var(--color-error)' }}
                             title="Supprimer"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 size={13} />
                           </button>
                         </div>
                       </td>
@@ -1248,37 +1237,30 @@ export function Factures() {
             {/* ─── LIGNE DE TOTAL DU MOIS (FOOTER STRICT CONFORME EXCEL) ─── */}
             {filteredInvoices.length > 0 && (
               <tfoot>
-                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-black text-xs border-t-2 border-slate-300 dark:border-slate-700">
-                  <td colSpan={6} className="py-3 px-3 text-left uppercase tracking-wider font-extrabold text-blue-800 dark:text-blue-300">
+                <tr style={{ background: 'var(--color-surface-alt)', fontWeight: 800, fontSize: '0.85rem', borderTop: '2px solid var(--color-border)' }}>
+                  <td colSpan={6} style={{ padding: '12px', color: 'var(--color-primary)', textTransform: 'uppercase' }}>
                     TOTAL DU MOIS ({selectedMonthName.toUpperCase()} {selectedYear})
                   </td>
-                  {/* Total à payer */}
-                  <td className="py-3 px-3 text-right text-slate-900 dark:text-white font-black">
-                    {monthlyTotals.totalToPay.toLocaleString('fr-FR')}
+                  <td style={{ textAlign: 'right', padding: '12px' }}>
+                    {monthlyTotals.totalToPay.toLocaleString('fr-FR')} F
                   </td>
-                  {/* Total utilisé */}
-                  <td className="py-3 px-3 text-right text-amber-600 dark:text-amber-400 font-black">
-                    {monthlyTotals.totalUsed.toLocaleString('fr-FR')}
+                  <td style={{ textAlign: 'right', padding: '12px', color: '#D97706' }}>
+                    {monthlyTotals.totalUsed.toLocaleString('fr-FR')} F
                   </td>
-                  {/* Total marge brute */}
-                  <td className="py-3 px-3 text-right text-emerald-600 dark:text-emerald-400 font-black bg-emerald-100/40 dark:bg-emerald-950/40">
-                    {monthlyTotals.totalGrossMargin.toLocaleString('fr-FR')}
+                  <td style={{ textAlign: 'right', padding: '12px', color: '#059669', background: 'rgba(16, 185, 129, 0.08)' }}>
+                    {monthlyTotals.totalGrossMargin.toLocaleString('fr-FR')} F
                   </td>
-                  {/* Total prime */}
-                  <td className="py-3 px-2 text-right text-purple-600 dark:text-purple-400 font-black">
-                    {monthlyTotals.totalCommission.toLocaleString('fr-FR')}
+                  <td style={{ textAlign: 'right', padding: '12px', color: '#8B5CF6' }}>
+                    {monthlyTotals.totalCommission.toLocaleString('fr-FR')} F
                   </td>
-                  {/* Total marge HINOV */}
-                  <td className="py-3 px-3 text-right text-blue-700 dark:text-blue-300 font-black bg-blue-100/40 dark:bg-blue-950/40">
-                    {monthlyTotals.totalHinovMargin.toLocaleString('fr-FR')}
+                  <td style={{ textAlign: 'right', padding: '12px', color: 'var(--color-primary)', background: 'rgba(60, 125, 175, 0.08)' }}>
+                    {monthlyTotals.totalHinovMargin.toLocaleString('fr-FR')} F
                   </td>
-                  {/* Total payé */}
-                  <td className="py-3 px-3 text-right text-teal-600 dark:text-teal-400 font-black">
-                    {monthlyTotals.totalPaid.toLocaleString('fr-FR')}
+                  <td style={{ textAlign: 'right', padding: '12px', color: '#0D9488' }}>
+                    {monthlyTotals.totalPaid.toLocaleString('fr-FR')} F
                   </td>
-                  {/* Total reste */}
-                  <td className="py-3 px-3 text-right text-rose-600 dark:text-rose-400 font-black">
-                    {monthlyTotals.totalRemaining.toLocaleString('fr-FR')}
+                  <td style={{ textAlign: 'right', padding: '12px', color: '#E11D48' }}>
+                    {monthlyTotals.totalRemaining.toLocaleString('fr-FR')} F
                   </td>
                   <td></td>
                 </tr>
@@ -1290,35 +1272,33 @@ export function Factures() {
 
       {/* ─── MODAL D'AJOUT / MODIFICATION DE LIGNE DE SUIVI ───────────── */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden my-8">
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
-              <div className="flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-blue-600" />
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="modal-content" style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: '24px', maxWidth: '650px', width: '100%', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-1)' }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid var(--color-border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Receipt size={20} color="var(--color-primary)" />
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>
                   {editingInvoiceId ? 'Modifier la ligne de suivi' : 'Ajouter une facture au suivi'}
-                </h2>
+                </h3>
               </div>
-              <button
-                onClick={() => setIsCreateModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <X className="w-5 h-5" />
+              <button onClick={() => setIsCreateModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}>
+                <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveInvoice} className="p-6 space-y-5">
+            <form onSubmit={handleSaveInvoice} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               
               {/* Client & Commercial */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
                     Client / Affaires *
                   </label>
                   <input
                     type="text"
                     required
-                    list="clients-list"
+                    list="clients-list-modal"
                     value={formClientName}
                     onChange={e => {
                       setFormClientName(e.target.value);
@@ -1329,9 +1309,10 @@ export function Factures() {
                       }
                     }}
                     placeholder="Ex: CORIS, MEDLOG, MEHI..."
-                    className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500"
+                    className="table-input"
+                    style={{ width: '100%', padding: '8px 12px' }}
                   />
-                  <datalist id="clients-list">
+                  <datalist id="clients-list-modal">
                     {clients.map(c => (
                       <option key={c.id} value={c.company || c.name} />
                     ))}
@@ -1339,12 +1320,12 @@ export function Factures() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
                     Commercial
                   </label>
                   <input
                     type="text"
-                    list="commerciaux-list"
+                    list="commerciaux-list-modal"
                     value={formCommercialName}
                     onChange={e => {
                       setFormCommercialName(e.target.value);
@@ -1352,9 +1333,10 @@ export function Factures() {
                       if (matching) setFormCommercialId(matching.id);
                     }}
                     placeholder="Ex: BOSSO, AKOSSI, DIALLO..."
-                    className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500"
+                    className="table-input"
+                    style={{ width: '100%', padding: '8px 12px' }}
                   />
-                  <datalist id="commerciaux-list">
+                  <datalist id="commerciaux-list-modal">
                     {users.map(u => (
                       <option key={u.id} value={u.name} />
                     ))}
@@ -1363,20 +1345,21 @@ export function Factures() {
               </div>
 
               {/* Service & Catégorie */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
                     Service
                   </label>
                   <input
                     type="text"
-                    list="services-list"
+                    list="services-list-modal"
                     value={formServiceName}
                     onChange={e => setFormServiceName(e.target.value.toUpperCase())}
                     placeholder="INFORMATIQUE, IMPRIMERIE..."
-                    className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 uppercase font-semibold"
+                    className="table-input"
+                    style={{ width: '100%', padding: '8px 12px', fontWeight: 600 }}
                   />
-                  <datalist id="services-list">
+                  <datalist id="services-list-modal">
                     {PREDEFINED_SERVICES.map(s => (
                       <option key={s} value={s} />
                     ))}
@@ -1384,7 +1367,7 @@ export function Factures() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
                     Catégorie / Désignation
                   </label>
                   <input
@@ -1392,15 +1375,16 @@ export function Factures() {
                     value={formCategory}
                     onChange={e => setFormCategory(e.target.value)}
                     placeholder="Ex: CARTOUCHE, CASQUE, MACARON..."
-                    className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500"
+                    className="table-input"
+                    style={{ width: '100%', padding: '8px 12px' }}
                   />
                 </div>
               </div>
 
               {/* Dates */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
                     Date de Livraison *
                   </label>
                   <input
@@ -1408,29 +1392,31 @@ export function Factures() {
                     required
                     value={formDeliveryDate}
                     onChange={e => setFormDeliveryDate(e.target.value)}
-                    className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500"
+                    className="table-input"
+                    style={{ width: '100%', padding: '8px 12px' }}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
                     Date de Paiement (Optionnel)
                   </label>
                   <input
                     type="date"
                     value={formPaymentDate}
                     onChange={e => setFormPaymentDate(e.target.value)}
-                    className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500"
+                    className="table-input"
+                    style={{ width: '100%', padding: '8px 12px' }}
                   />
                 </div>
               </div>
 
-              {/* Montants & Coûts */}
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Bloc Montants & Coûts */}
+              <div className="card" style={{ padding: '16px', background: 'var(--color-surface-alt)', border: '1px solid var(--color-border)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '14px' }}>
                   <div>
-                    <label className="block text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-1">
-                      Montant à Payer (FCFA) *
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Montant à Payer *
                     </label>
                     <input
                       type="number"
@@ -1440,13 +1426,14 @@ export function Factures() {
                       value={formAmountToPay || ''}
                       onChange={e => setFormAmountToPay(Number(e.target.value) || 0)}
                       placeholder="0"
-                      className="w-full px-3.5 py-2 text-sm font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500"
+                      className="table-input"
+                      style={{ width: '100%', padding: '8px 10px', fontWeight: 700, fontSize: '1rem' }}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">
-                      Montant Utilisé / Coût (FCFA)
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px', color: '#D97706' }}>
+                      Montant Utilisé (Coût)
                     </label>
                     <input
                       type="number"
@@ -1455,12 +1442,13 @@ export function Factures() {
                       value={formAmountUsed || ''}
                       onChange={e => setFormAmountUsed(Number(e.target.value) || 0)}
                       placeholder="0"
-                      className="w-full px-3.5 py-2 text-sm font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500"
+                      className="table-input"
+                      style={{ width: '100%', padding: '8px 10px', fontWeight: 700, color: '#D97706', fontSize: '1rem' }}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider mb-1">
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px', color: '#0D9488' }}>
                       Déjà Payé (FCFA)
                     </label>
                     <input
@@ -1470,52 +1458,46 @@ export function Factures() {
                       value={formAmountPaid || ''}
                       onChange={e => setFormAmountPaid(Number(e.target.value) || 0)}
                       placeholder="0"
-                      className="w-full px-3.5 py-2 text-sm font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500"
+                      className="table-input"
+                      style={{ width: '100%', padding: '8px 10px', fontWeight: 700, color: '#0D9488', fontSize: '1rem' }}
                     />
                   </div>
                 </div>
 
-                {/* Calculs automatiques en temps réel */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t border-slate-200 dark:border-slate-700 text-center">
-                  <div className="bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Marge Brute</span>
-                    <span className="text-xs font-black text-emerald-600">
-                      {formGrossMargin.toLocaleString('fr-FR')} F
-                    </span>
+                {/* Calculs automatiques temps réel */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', paddingTop: '10px', borderTop: '1px solid var(--color-border)', textAlign: 'center' }}>
+                  <div style={{ background: 'var(--color-surface)', padding: '6px', borderRadius: 'var(--radius-sm)' }}>
+                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Marge Brute</span>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#059669' }}>{formGrossMargin.toLocaleString('fr-FR')} F</span>
                   </div>
 
-                  <div className="bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Prime (10%)</span>
-                    <span className="text-xs font-black text-purple-600">
-                      {formCommissionAmount.toLocaleString('fr-FR')} F
-                    </span>
+                  <div style={{ background: 'var(--color-surface)', padding: '6px', borderRadius: 'var(--radius-sm)' }}>
+                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Prime (10%)</span>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#8B5CF6' }}>{formCommissionAmount.toLocaleString('fr-FR')} F</span>
                   </div>
 
-                  <div className="bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Marge HINOV</span>
-                    <span className="text-xs font-black text-blue-600">
-                      {formHinovMargin.toLocaleString('fr-FR')} F
-                    </span>
+                  <div style={{ background: 'var(--color-surface)', padding: '6px', borderRadius: 'var(--radius-sm)' }}>
+                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Marge HINOV</span>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-primary)' }}>{formHinovMargin.toLocaleString('fr-FR')} F</span>
                   </div>
 
-                  <div className="bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Reste à payer</span>
-                    <span className={`text-xs font-black ${formRemainingAmount === 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {formRemainingAmount.toLocaleString('fr-FR')} F
-                    </span>
+                  <div style={{ background: 'var(--color-surface)', padding: '6px', borderRadius: 'var(--radius-sm)' }}>
+                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Reste</span>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: formRemainingAmount === 0 ? '#059669' : '#E11D48' }}>{formRemainingAmount.toLocaleString('fr-FR')} F</span>
                   </div>
                 </div>
               </div>
 
-              {/* Traçabilité Devis Optionnelle */}
+              {/* Liaison Devis (Optionnelle) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
                   Liaison Devis (Optionnelle)
                 </label>
                 <select
                   value={formQuoteId}
                   onChange={e => setFormQuoteId(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                  className="table-input"
+                  style={{ width: '100%', padding: '6px 10px', fontSize: '0.8rem' }}
                 >
                   <option value="">Aucun devis lié (Création directe)</option>
                   {quotes.map(q => {
@@ -1531,18 +1513,19 @@ export function Factures() {
               </div>
 
               {/* Boutons d'action */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px', paddingTop: '14px', borderTop: '1px solid var(--color-border)' }}>
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+                  className="btn btn-secondary"
                 >
                   Annuler
                 </button>
 
                 <button
                   type="submit"
-                  className="px-6 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/20"
+                  className="btn btn-primary"
+                  style={{ fontWeight: 700 }}
                 >
                   {editingInvoiceId ? 'Enregistrer les modifications' : 'Ajouter au suivi'}
                 </button>
@@ -1554,34 +1537,37 @@ export function Factures() {
 
       {/* ─── MODAL D'ENREGISTREMENT D'UN PAIEMENT ─────────────────── */}
       {isPaymentModalOpen && selectedInvoice && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-teal-50 dark:bg-teal-950/30">
-              <div className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-teal-600" />
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="modal-content" style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: '24px', maxWidth: '450px', width: '100%', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-1)' }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', paddingBottom: '10px', borderBottom: '1px solid var(--color-border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CreditCard size={18} color="#0D9488" />
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>
                   Encaisser un règlement
                 </h3>
               </div>
-              <button onClick={() => setIsPaymentModalOpen(false)} className="text-slate-400 p-1">
-                <X className="w-5 h-5" />
+              <button onClick={() => setIsPaymentModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}>
+                <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSavePayment} className="p-6 space-y-4">
-              <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl">
-                <span className="text-xs text-slate-500 block">Client / Facture :</span>
-                <span className="font-bold text-sm text-slate-900 dark:text-white">
-                  {getClientDisplayName(selectedInvoice)} ({selectedInvoice.invoiceNumber})
+            <form onSubmit={handleSavePayment} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ background: 'var(--color-surface-alt)', padding: '12px', borderRadius: 'var(--radius-md)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block' }}>Client :</span>
+                <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--color-primary)' }}>
+                  {getClientDisplayName(selectedInvoice)}
                 </span>
-                <div className="flex justify-between mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 text-xs">
-                  <span>Montant total : <b>{selectedInvoice.totalAmount.toLocaleString('fr-FR')} F</b></span>
-                  <span className="text-rose-600">Reste : <b>{(selectedInvoice.remainingAmount ?? (selectedInvoice.totalAmount - (selectedInvoice.amountPaid || 0))).toLocaleString('fr-FR')} F</b></span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid var(--color-border)', fontSize: '0.8rem' }}>
+                  <span>Total : <b>{selectedInvoice.totalAmount.toLocaleString('fr-FR')} F</b></span>
+                  <span style={{ color: '#E11D48' }}>Reste : <b>{(selectedInvoice.remainingAmount ?? (selectedInvoice.totalAmount - (selectedInvoice.amountPaid || 0))).toLocaleString('fr-FR')} F</b></span>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase mb-1">Montant encaissé (FCFA) *</label>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Montant encaissé (FCFA) *
+                </label>
                 <input
                   type="number"
                   required
@@ -1589,27 +1575,34 @@ export function Factures() {
                   max={selectedInvoice.remainingAmount ?? selectedInvoice.totalAmount}
                   value={payAmount || ''}
                   onChange={e => setPayAmount(Number(e.target.value) || 0)}
-                  className="w-full px-3.5 py-2 font-bold text-sm bg-white dark:bg-slate-900 border rounded-xl"
+                  className="table-input"
+                  style={{ width: '100%', padding: '8px 10px', fontWeight: 700, fontSize: '1rem' }}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase mb-1">Date d'encaissement</label>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Date d'encaissement
+                </label>
                 <input
                   type="date"
                   required
                   value={payDate}
                   onChange={e => setPayDate(e.target.value)}
-                  className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border rounded-xl"
+                  className="table-input"
+                  style={{ width: '100%', padding: '8px 10px' }}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase mb-1">Mode de règlement</label>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Mode de règlement
+                </label>
                 <select
                   value={payMethod}
                   onChange={e => setPayMethod(e.target.value)}
-                  className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border rounded-xl"
+                  className="table-input"
+                  style={{ width: '100%', padding: '8px 10px' }}
                 >
                   <option value="Espèces">Espèces</option>
                   <option value="Virement">Virement bancaire</option>
@@ -1619,27 +1612,31 @@ export function Factures() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Référence / Pièce (Optionnel)</label>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Référence / N° Pièce (Optionnel)
+                </label>
                 <input
                   type="text"
                   value={payRef}
                   onChange={e => setPayRef(e.target.value)}
                   placeholder="N° chèque, réf virement..."
-                  className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-900 border rounded-xl"
+                  className="table-input"
+                  style={{ width: '100%', padding: '8px 10px' }}
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t">
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px', paddingTop: '12px', borderTop: '1px solid var(--color-border)' }}>
                 <button
                   type="button"
                   onClick={() => setIsPaymentModalOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-slate-600 rounded-xl"
+                  className="btn btn-secondary"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-md"
+                  className="btn btn-primary"
+                  style={{ background: '#0D9488', borderColor: '#0D9488', fontWeight: 700 }}
                 >
                   Valider le règlement
                 </button>
