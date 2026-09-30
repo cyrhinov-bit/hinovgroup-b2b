@@ -1480,7 +1480,7 @@ export function Factures() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '14px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      Montant à Payer *
+                      Total à Payer (FCFA) *
                     </label>
                     <input
                       type="number"
@@ -1497,7 +1497,7 @@ export function Factures() {
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px', color: '#D97706' }}>
-                      Montant Utilisé (Coût)
+                      Montant Utilisé / Coût (FCFA)
                     </label>
                     <input
                       type="number"
@@ -1513,7 +1513,7 @@ export function Factures() {
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px', color: '#0D9488' }}>
-                      Déjà Payé (FCFA)
+                      Total Payé (FCFA)
                     </label>
                     <input
                       type="number"
@@ -1546,7 +1546,7 @@ export function Factures() {
                   </div>
 
                   <div style={{ background: 'var(--color-surface)', padding: '6px', borderRadius: 'var(--radius-sm)' }}>
-                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Reste</span>
+                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Reste à Payer</span>
                     <span style={{ fontSize: '0.85rem', fontWeight: 800, color: formRemainingAmount === 0 ? '#059669' : '#E11D48' }}>{formRemainingAmount.toLocaleString('fr-FR')} F</span>
                   </div>
                 </div>
