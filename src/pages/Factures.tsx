@@ -1076,20 +1076,20 @@ export function Factures() {
         <div className="table-container" style={{ margin: 0, border: 'none' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
-              <tr style={{ background: 'linear-gradient(180deg, #1E293B 0%, #0F172A 100%)', color: '#FFFFFF', borderBottom: '2px solid #0F172A' }}>
-                <th style={{ minWidth: '140px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>CLIENT / AFFAIRES</th>
-                <th style={{ minWidth: '100px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>COMMERCIAL</th>
-                <th style={{ minWidth: '92px', padding: '12px 8px', color: '#CBD5E1', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>DATE LIVR.</th>
-                <th style={{ minWidth: '92px', padding: '12px 8px', color: '#CBD5E1', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>DATE PAIEM.</th>
-                <th style={{ minWidth: '100px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>SERVICE</th>
-                <th style={{ minWidth: '100px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>CATÉGORIE</th>
-                <th style={{ minWidth: '115px', padding: '12px 10px', textAlign: 'right', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>MONTANT À PAYER</th>
-                <th style={{ minWidth: '110px', padding: '12px 10px', textAlign: 'right', color: '#FBBF24', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>MONTANT UTILISÉ</th>
-                <th style={{ minWidth: '110px', padding: '12px 10px', textAlign: 'right', color: '#34D399', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>MARGE BRUTE</th>
-                <th style={{ minWidth: '95px', padding: '12px 10px', textAlign: 'right', color: '#C084FC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>PRIME 10%</th>
-                <th style={{ minWidth: '115px', padding: '12px 10px', textAlign: 'right', color: '#60A5FA', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>MARGE HINOV</th>
-                <th style={{ minWidth: '100px', padding: '12px 10px', textAlign: 'right', color: '#2DD4BF', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>PAYÉ</th>
-                <th style={{ minWidth: '110px', padding: '12px 10px', textAlign: 'right', color: '#FB7185', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>RESTE</th>
+              <tr style={{ background: 'linear-gradient(180deg, #1F4363 0%, #152E46 100%)', color: '#FFFFFF', borderBottom: '2px solid #152E46' }}>
+                <th style={{ minWidth: '140px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>CLIENT / AFFAIRES</th>
+                <th style={{ minWidth: '100px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>COMMERCIAL</th>
+                <th style={{ minWidth: '92px', padding: '12px 8px', color: '#E0F2FE', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>DATE LIVR.</th>
+                <th style={{ minWidth: '92px', padding: '12px 8px', color: '#E0F2FE', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>DATE PAIEM.</th>
+                <th style={{ minWidth: '100px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>SERVICE</th>
+                <th style={{ minWidth: '100px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>CATÉGORIE</th>
+                <th style={{ minWidth: '115px', padding: '12px 10px', textAlign: 'right', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>MONTANT À PAYER</th>
+                <th style={{ minWidth: '110px', padding: '12px 10px', textAlign: 'right', color: '#FDE047', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>MONTANT UTILISÉ</th>
+                <th style={{ minWidth: '110px', padding: '12px 10px', textAlign: 'right', color: '#6EE7B7', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>MARGE BRUTE</th>
+                <th style={{ minWidth: '95px', padding: '12px 10px', textAlign: 'right', color: '#DDD6FE', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>PRIME 10%</th>
+                <th style={{ minWidth: '115px', padding: '12px 10px', textAlign: 'right', color: '#93C5FD', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>MARGE HINOV</th>
+                <th style={{ minWidth: '100px', padding: '12px 10px', textAlign: 'right', color: '#5EEAD4', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>PAYÉ</th>
+                <th style={{ minWidth: '110px', padding: '12px 10px', textAlign: 'right', color: '#FDA4AF', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>RESTE</th>
                 <th style={{ minWidth: '90px', padding: '12px 8px', textAlign: 'center', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase' }}>ACTIONS</th>
               </tr>
             </thead>
@@ -1262,29 +1262,29 @@ export function Factures() {
             {/* ─── LIGNE DE TOTAL DU MOIS (FOOTER CONFORME EXCEL) ─── */}
             {filteredInvoices.length > 0 && (
               <tfoot>
-                <tr style={{ background: '#0F172A', color: '#FFFFFF', fontWeight: 800, fontSize: '0.85rem', borderTop: '2px solid #0F172A' }}>
-                  <td colSpan={6} style={{ padding: '14px 12px', color: '#38BDF8', textTransform: 'uppercase', letterSpacing: '0.5px', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                <tr style={{ background: 'linear-gradient(180deg, #1F4363 0%, #152E46 100%)', color: '#FFFFFF', fontWeight: 800, fontSize: '0.85rem', borderTop: '2px solid #152E46' }}>
+                  <td colSpan={6} style={{ padding: '14px 12px', color: '#93C5FD', textTransform: 'uppercase', letterSpacing: '0.5px', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                     TOTAL DU MOIS ({selectedMonthName.toUpperCase()} {selectedYear})
                   </td>
                   <td style={{ textAlign: 'right', padding: '14px 10px', color: '#FFFFFF', fontFamily: 'monospace', fontSize: '0.9rem', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                     {monthlyTotals.totalToPay.toLocaleString('fr-FR')} F
                   </td>
-                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#FBBF24', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#FDE047', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                     {monthlyTotals.totalUsed.toLocaleString('fr-FR')} F
                   </td>
-                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#34D399', background: 'rgba(16, 185, 129, 0.15)', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#6EE7B7', background: 'rgba(16, 185, 129, 0.18)', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                     {monthlyTotals.totalGrossMargin.toLocaleString('fr-FR')} F
                   </td>
-                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#C084FC', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#DDD6FE', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                     {monthlyTotals.totalCommission.toLocaleString('fr-FR')} F
                   </td>
-                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#60A5FA', background: 'rgba(37, 99, 235, 0.15)', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#93C5FD', background: 'rgba(59, 130, 246, 0.18)', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                     {monthlyTotals.totalHinovMargin.toLocaleString('fr-FR')} F
                   </td>
-                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#2DD4BF', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#5EEAD4', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                     {monthlyTotals.totalPaid.toLocaleString('fr-FR')} F
                   </td>
-                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#FB7185', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#FDA4AF', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                     {monthlyTotals.totalRemaining.toLocaleString('fr-FR')} F
                   </td>
                   <td style={{ padding: '14px 8px' }}></td>
