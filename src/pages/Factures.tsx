@@ -1083,13 +1083,13 @@ export function Factures() {
                 <th style={{ minWidth: '92px', padding: '12px 8px', color: '#E0F2FE', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>DATE PAIEM.</th>
                 <th style={{ minWidth: '100px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>SERVICE</th>
                 <th style={{ minWidth: '100px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>CATÉGORIE</th>
-                <th style={{ minWidth: '115px', padding: '12px 10px', textAlign: 'right', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>MONTANT À PAYER</th>
+                <th style={{ minWidth: '120px', padding: '12px 10px', textAlign: 'right', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>TOTAL À PAYER</th>
                 <th style={{ minWidth: '110px', padding: '12px 10px', textAlign: 'right', color: '#FDE047', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>MONTANT UTILISÉ</th>
                 <th style={{ minWidth: '110px', padding: '12px 10px', textAlign: 'right', color: '#6EE7B7', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>MARGE BRUTE</th>
                 <th style={{ minWidth: '95px', padding: '12px 10px', textAlign: 'right', color: '#DDD6FE', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>PRIME 10%</th>
                 <th style={{ minWidth: '115px', padding: '12px 10px', textAlign: 'right', color: '#93C5FD', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>MARGE HINOV</th>
-                <th style={{ minWidth: '100px', padding: '12px 10px', textAlign: 'right', color: '#5EEAD4', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>PAYÉ</th>
-                <th style={{ minWidth: '110px', padding: '12px 10px', textAlign: 'right', color: '#FDA4AF', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>RESTE</th>
+                <th style={{ minWidth: '105px', padding: '12px 10px', textAlign: 'right', color: '#5EEAD4', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>TOTAL PAYÉ</th>
+                <th style={{ minWidth: '115px', padding: '12px 10px', textAlign: 'right', color: '#FDA4AF', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>RESTE À PAYER</th>
                 <th style={{ minWidth: '90px', padding: '12px 8px', textAlign: 'center', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase' }}>ACTIONS</th>
               </tr>
             </thead>
@@ -1163,7 +1163,7 @@ export function Factures() {
                         <span style={{ fontSize: '0.82rem', color: '#475569' }}>{inv.category || '-'}</span>
                       </td>
 
-                      {/* 7. Montant à payer */}
+                      {/* 7. Total à payer */}
                       <td style={{ padding: '10px', textAlign: 'right', fontWeight: 800, color: '#0F172A', fontFamily: 'monospace', fontSize: '0.88rem', borderRight: '1px solid #F1F5F9' }}>
                         {toPay.toLocaleString('fr-FR')} F
                       </td>
@@ -1188,12 +1188,12 @@ export function Factures() {
                         {hinovMargin.toLocaleString('fr-FR')} F
                       </td>
 
-                      {/* 12. Payé */}
+                      {/* 12. Total Payé */}
                       <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700, color: '#0D9488', fontFamily: 'monospace', borderRight: '1px solid #F1F5F9' }}>
                         {paid.toLocaleString('fr-FR')} F
                       </td>
 
-                      {/* 13. Reste */}
+                      {/* 13. Reste à Payer */}
                       <td style={{ padding: '10px', textAlign: 'right', borderRight: '1px solid #F1F5F9' }}>
                         <div style={{ fontWeight: 800, fontFamily: 'monospace', color: remaining === 0 ? '#059669' : '#E11D48', fontSize: '0.88rem' }}>
                           {remaining.toLocaleString('fr-FR')} F
@@ -1259,38 +1259,36 @@ export function Factures() {
               )}
             </tbody>
 
-            {/* ─── LIGNE DE TOTAL DU MOIS (FOOTER CONFORME EXCEL) ─── */}
-            {filteredInvoices.length > 0 && (
-              <tfoot>
-                <tr style={{ background: 'linear-gradient(180deg, #1F4363 0%, #152E46 100%)', color: '#FFFFFF', fontWeight: 800, fontSize: '0.85rem', borderTop: '2px solid #152E46' }}>
-                  <td colSpan={6} style={{ padding: '14px 12px', color: '#93C5FD', textTransform: 'uppercase', letterSpacing: '0.5px', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
-                    TOTAL DU MOIS ({selectedMonthName.toUpperCase()} {selectedYear})
-                  </td>
-                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#FFFFFF', fontFamily: 'monospace', fontSize: '0.9rem', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
-                    {monthlyTotals.totalToPay.toLocaleString('fr-FR')} F
-                  </td>
-                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#FDE047', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
-                    {monthlyTotals.totalUsed.toLocaleString('fr-FR')} F
-                  </td>
-                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#6EE7B7', background: 'rgba(16, 185, 129, 0.18)', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
-                    {monthlyTotals.totalGrossMargin.toLocaleString('fr-FR')} F
-                  </td>
-                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#DDD6FE', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
-                    {monthlyTotals.totalCommission.toLocaleString('fr-FR')} F
-                  </td>
-                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#93C5FD', background: 'rgba(59, 130, 246, 0.18)', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
-                    {monthlyTotals.totalHinovMargin.toLocaleString('fr-FR')} F
-                  </td>
-                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#5EEAD4', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
-                    {monthlyTotals.totalPaid.toLocaleString('fr-FR')} F
-                  </td>
-                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#FDA4AF', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
-                    {monthlyTotals.totalRemaining.toLocaleString('fr-FR')} F
-                  </td>
-                  <td style={{ padding: '14px 8px' }}></td>
-                </tr>
-              </tfoot>
-            )}
+            {/* ─── LIGNE DE TOTAL DU MOIS (FOOTER PERMANENT CONFORME EXCEL) ─── */}
+            <tfoot>
+              <tr style={{ background: 'linear-gradient(180deg, #1F4363 0%, #152E46 100%)', color: '#FFFFFF', fontWeight: 800, fontSize: '0.85rem', borderTop: '2px solid #152E46' }}>
+                <td colSpan={6} style={{ padding: '14px 12px', color: '#93C5FD', textTransform: 'uppercase', letterSpacing: '0.5px', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                  TOTAL DU MOIS ({selectedMonthName.toUpperCase()} {selectedYear})
+                </td>
+                <td style={{ textAlign: 'right', padding: '14px 10px', color: '#FFFFFF', fontFamily: 'monospace', fontSize: '0.9rem', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                  {monthlyTotals.totalToPay.toLocaleString('fr-FR')} F
+                </td>
+                <td style={{ textAlign: 'right', padding: '14px 10px', color: '#FDE047', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                  {monthlyTotals.totalUsed.toLocaleString('fr-FR')} F
+                </td>
+                <td style={{ textAlign: 'right', padding: '14px 10px', color: '#6EE7B7', background: 'rgba(16, 185, 129, 0.18)', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                  {monthlyTotals.totalGrossMargin.toLocaleString('fr-FR')} F
+                </td>
+                <td style={{ textAlign: 'right', padding: '14px 10px', color: '#DDD6FE', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                  {monthlyTotals.totalCommission.toLocaleString('fr-FR')} F
+                </td>
+                <td style={{ textAlign: 'right', padding: '14px 10px', color: '#93C5FD', background: 'rgba(59, 130, 246, 0.18)', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                  {monthlyTotals.totalHinovMargin.toLocaleString('fr-FR')} F
+                </td>
+                <td style={{ textAlign: 'right', padding: '14px 10px', color: '#5EEAD4', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                  {monthlyTotals.totalPaid.toLocaleString('fr-FR')} F
+                </td>
+                <td style={{ textAlign: 'right', padding: '14px 10px', color: '#FDA4AF', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                  {monthlyTotals.totalRemaining.toLocaleString('fr-FR')} F
+                </td>
+                <td style={{ padding: '14px 8px' }}></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
