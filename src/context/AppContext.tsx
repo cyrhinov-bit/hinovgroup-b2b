@@ -3716,7 +3716,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('UPDATE_PROFILE', payload);
     try {
       if (navigator.onLine) {
-        await supabase.from('profiles').update(payload).eq('id', id);
+        const { id: _, ...fieldsToUpdate } = payload;
+        await supabase.from('profiles').update(fieldsToUpdate).eq('id', id);
       }
     } catch (e) {
       console.warn('Erreur direct profile update:', e);

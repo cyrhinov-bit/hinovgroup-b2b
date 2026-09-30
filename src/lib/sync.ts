@@ -2023,12 +2023,38 @@ export const processSyncQueue = async () => {
           if (data.role !== undefined) mapped.role = data.role;
           if (data.active !== undefined) mapped.active = data.active;
           if (data.serviceId !== undefined) mapped.service_id = data.serviceId || null;
+          if (data.service_id !== undefined) mapped.service_id = data.service_id || null;
           if (data.posRole !== undefined) mapped.pos_role = data.posRole || null;
+          if (data.pos_role !== undefined) mapped.pos_role = data.pos_role || null;
           if (data.posReturnsEnabled !== undefined) mapped.pos_returns_enabled = data.posReturnsEnabled;
+          if (data.pos_returns_enabled !== undefined) mapped.pos_returns_enabled = data.pos_returns_enabled;
           if (data.posCatalogueEnabled !== undefined) mapped.pos_catalogue_enabled = data.posCatalogueEnabled;
+          if (data.pos_catalogue_enabled !== undefined) mapped.pos_catalogue_enabled = data.pos_catalogue_enabled;
           if (data.posSupplyEnabled !== undefined) mapped.pos_supply_enabled = data.posSupplyEnabled;
+          if (data.pos_supply_enabled !== undefined) mapped.pos_supply_enabled = data.pos_supply_enabled;
           if (data.posInventoryEnabled !== undefined) mapped.pos_inventory_enabled = data.posInventoryEnabled;
+          if (data.pos_inventory_enabled !== undefined) mapped.pos_inventory_enabled = data.pos_inventory_enabled;
           if (data.posStockEnabled !== undefined) mapped.pos_stock_enabled = data.posStockEnabled;
+          if (data.pos_stock_enabled !== undefined) mapped.pos_stock_enabled = data.pos_stock_enabled;
+
+          // Permissions CRM
+          if (data.crmPrestationsEnabled !== undefined) mapped.crm_prestations_enabled = data.crmPrestationsEnabled;
+          if (data.crm_prestations_enabled !== undefined) mapped.crm_prestations_enabled = data.crm_prestations_enabled;
+          if (data.crmCaisseEnabled !== undefined) mapped.crm_caisse_enabled = data.crmCaisseEnabled;
+          if (data.crm_caisse_enabled !== undefined) mapped.crm_caisse_enabled = data.crm_caisse_enabled;
+          if (data.crmMaintenanceEnabled !== undefined) mapped.crm_maintenance_enabled = data.crmMaintenanceEnabled;
+          if (data.crm_maintenance_enabled !== undefined) mapped.crm_maintenance_enabled = data.crm_maintenance_enabled;
+          if (data.crmStocksEnabled !== undefined) mapped.crm_stocks_enabled = data.crmStocksEnabled;
+          if (data.crm_stocks_enabled !== undefined) mapped.crm_stocks_enabled = data.crm_stocks_enabled;
+          if (data.crmTiersEnabled !== undefined) mapped.crm_tiers_enabled = data.crmTiersEnabled;
+          if (data.crm_tiers_enabled !== undefined) mapped.crm_tiers_enabled = data.crm_tiers_enabled;
+          if (data.crmCommerciauxEnabled !== undefined) mapped.crm_commerciaux_enabled = data.crmCommerciauxEnabled;
+          if (data.crm_commerciaux_enabled !== undefined) mapped.crm_commerciaux_enabled = data.crm_commerciaux_enabled;
+          if (data.crmCommissionsEnabled !== undefined) mapped.crm_commissions_enabled = data.crmCommissionsEnabled;
+          if (data.crm_commissions_enabled !== undefined) mapped.crm_commissions_enabled = data.crm_commissions_enabled;
+          if (data.crmFacturationEnabled !== undefined) mapped.crm_facturation_enabled = data.crmFacturationEnabled;
+          if (data.crm_facturation_enabled !== undefined) mapped.crm_facturation_enabled = data.crm_facturation_enabled;
+
           const { error } = await supabase.from('profiles').update(mapped).eq('id', id);
           if (error) console.error('[Sync] UPDATE_PROFILE échoué :', error.message);
           success = checkResult(error);
