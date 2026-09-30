@@ -348,7 +348,8 @@ export function DashboardDirecteur() {
         u.crmStocksEnabled !== false,
         u.crmTiersEnabled !== false,
         u.crmCommerciauxEnabled !== false,
-        u.crmCommissionsEnabled !== false
+        u.crmCommissionsEnabled !== false,
+        u.crmFacturationEnabled !== false
       ].filter(Boolean).length;
 
       return {
@@ -366,7 +367,8 @@ export function DashboardDirecteur() {
             stocks: u.crmStocksEnabled !== false,
             tiers: u.crmTiersEnabled !== false,
             commerciaux: u.crmCommerciauxEnabled !== false,
-            commissions: u.crmCommissionsEnabled !== false
+            commissions: u.crmCommissionsEnabled !== false,
+            facturation: u.crmFacturationEnabled !== false
           }
         },
         quotes: {

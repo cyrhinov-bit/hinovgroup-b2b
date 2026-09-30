@@ -61,6 +61,7 @@ export interface User {
   crmTiersEnabled?: boolean;
   crmCommerciauxEnabled?: boolean;
   crmCommissionsEnabled?: boolean;
+  crmFacturationEnabled?: boolean;
 }
 export type AffaireStatus = 'PROSPECTION' | 'QUALIFIEE' | 'PROPOSITION' | 'NEGOCIATION' | 'GAGNEE' | 'EN_COURS' | 'CLOTUREE' | 'PERDUE' | 'ANNULEE';
 export interface Affaire {
@@ -999,7 +1000,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             crmStocksEnabled: p.crm_stocks_enabled === true,
             crmTiersEnabled: p.crm_tiers_enabled === true,
             crmCommerciauxEnabled: p.crm_commerciaux_enabled === true,
-            crmCommissionsEnabled: p.crm_commissions_enabled === true
+            crmCommissionsEnabled: p.crm_commissions_enabled === true,
+            crmFacturationEnabled: p.crm_facturation_enabled === true
           }));
           const mergedUsers = mergeData(cachedUsers, parsedUsers);
           setUsers(mergedUsers); await db.profiles.setItem('data', mergedUsers);
@@ -3629,7 +3631,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           crmStocksEnabled: user.crmStocksEnabled ?? true,
           crmTiersEnabled: user.crmTiersEnabled ?? true,
           crmCommerciauxEnabled: user.crmCommerciauxEnabled ?? true,
-          crmCommissionsEnabled: user.crmCommissionsEnabled ?? true
+          crmCommissionsEnabled: user.crmCommissionsEnabled ?? true,
+          crmFacturationEnabled: user.crmFacturationEnabled ?? true
         }),
       }
     );
@@ -3660,7 +3663,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       crmStocksEnabled: user.crmStocksEnabled ?? true,
       crmTiersEnabled: user.crmTiersEnabled ?? true,
       crmCommerciauxEnabled: user.crmCommerciauxEnabled ?? true,
-      crmCommissionsEnabled: user.crmCommissionsEnabled ?? true
+      crmCommissionsEnabled: user.crmCommissionsEnabled ?? true,
+      crmFacturationEnabled: user.crmFacturationEnabled ?? true
     };
     const newUsers = [...users, newUser];
     setUsers(newUsers);
@@ -3688,6 +3692,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (data.crmTiersEnabled !== undefined) payload.crm_tiers_enabled = data.crmTiersEnabled;
     if (data.crmCommerciauxEnabled !== undefined) payload.crm_commerciaux_enabled = data.crmCommerciauxEnabled;
     if (data.crmCommissionsEnabled !== undefined) payload.crm_commissions_enabled = data.crmCommissionsEnabled;
+    if (data.crmFacturationEnabled !== undefined) payload.crm_facturation_enabled = data.crmFacturationEnabled;
     if (currentUser && currentUser.id === id) {
       updateCurrentUser(data);
     }

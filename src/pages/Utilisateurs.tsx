@@ -50,7 +50,8 @@ export function Utilisateurs() {
       crmStocksEnabled: true,
       crmTiersEnabled: true,
       crmCommerciauxEnabled: true,
-      crmCommissionsEnabled: true
+      crmCommissionsEnabled: true,
+      crmFacturationEnabled: true
     });
     setShowForm(false);
     setNewUser({

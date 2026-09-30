@@ -16,7 +16,8 @@ import {
   X,
   Sparkles,
   Layers,
-  Filter
+  Filter,
+  Receipt
 } from 'lucide-react';
 
 interface ModuleDef {
@@ -27,7 +28,8 @@ interface ModuleDef {
     'crmStocksEnabled' | 
     'crmTiersEnabled' | 
     'crmCommerciauxEnabled' | 
-    'crmCommissionsEnabled'
+    'crmCommissionsEnabled' |
+    'crmFacturationEnabled'
   >;
   label: string;
   shortDesc: string;
@@ -92,6 +94,14 @@ const CRM_MODULES: ModuleDef[] = [
     icon: <Award size={18} />,
     color: '#D97706',
     badge: 'Module 7'
+  },
+  {
+    key: 'crmFacturationEnabled',
+    label: 'Facturation & Impayés',
+    shortDesc: 'Factures clients, encaissements multiples, échéances, relances et marges',
+    icon: <Receipt size={18} />,
+    color: '#0284C7',
+    badge: 'Module 8'
   }
 ];
 
@@ -154,7 +164,8 @@ export default function CrmModulesManager() {
         crmStocksEnabled: state,
         crmTiersEnabled: state,
         crmCommerciauxEnabled: state,
-        crmCommissionsEnabled: state
+        crmCommissionsEnabled: state,
+        crmFacturationEnabled: state
       });
     } finally {
       setSavingUserId(null);

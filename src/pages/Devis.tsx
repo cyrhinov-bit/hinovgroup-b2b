@@ -34,8 +34,9 @@ type PeriodFilter = 'ALL' | 'TODAY' | '7_DAYS' | 'THIS_MONTH' | 'THIS_QUARTER' |
 export function Devis() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { currentUser } = useAuth();
+  const { currentUser: authUser } = useAuth();
   const { quotes, clients, settings, updateQuoteStatus, deleteQuote, services, users, invoices } = useAppContext();
+  const currentUser = users.find(u => u.id === authUser?.id) || authUser;
   const { confirm } = useConfirm();
 
   const [filter, setFilter] = useState('');
@@ -434,7 +435,7 @@ export function Devis() {
                       </div>
                       {(() => {
                         const existingInvoice = invoices.find(inv => inv.quoteId === q.id);
-                        if (existingInvoice) {
+                        if (existingInvoice && (isDirector || !!currentUser?.crmFacturationEnabled)) {
                           return (
                             <span 
                               style={{ cursor: 'pointer', background: '#E0F2FE', color: '#0284C7', padding: '2px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700, width: 'fit-content' }}
@@ -454,7 +455,7 @@ export function Devis() {
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
                       
                       {/* Action Créer une facture pour devis Accepté */}
-                      {q.status === 'Accepté' && (
+                      {q.status === 'Accepté' && (isDirector || !!currentUser?.crmFacturationEnabled) && (
                         <button 
                           className="icon-button" 
                           style={{ color: '#0284C7', background: '#E0F2FE', padding: '6px', borderRadius: '4px' }} 

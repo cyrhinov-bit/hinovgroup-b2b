@@ -124,19 +124,21 @@ export function DashboardCommercial() {
           </div>
         )}
 
-        {/* Facturation */}
-        <div className="widget-card" style={{ cursor: 'pointer', borderLeft: '4px solid #0284C7' }} onClick={() => navigate('/factures')}>
-          <div className="widget-icon" style={{ background: '#0284C7', color: 'white' }}>
-            <Receipt size={28} />
-          </div>
-          <div className="widget-content">
-            <div className="widget-label">FACTURES CLIENTS</div>
-            <div className="widget-value">{myInvoices.length}</div>
-            <div style={{ fontSize: '0.75rem', color: '#0284C7', marginTop: '2px', fontWeight: 600 }}>
-              {totalFactureVal.toLocaleString('fr-FR')} FCFA facturés
+        {/* Facturation (si activé pour le commercial) */}
+        {currentUser?.crmFacturationEnabled && (
+          <div className="widget-card" style={{ cursor: 'pointer', borderLeft: '4px solid #0284C7' }} onClick={() => navigate('/factures')}>
+            <div className="widget-icon" style={{ background: '#0284C7', color: 'white' }}>
+              <Receipt size={28} />
+            </div>
+            <div className="widget-content">
+              <div className="widget-label">FACTURES CLIENTS</div>
+              <div className="widget-value">{myInvoices.length}</div>
+              <div style={{ fontSize: '0.75rem', color: '#0284C7', marginTop: '2px', fontWeight: 600 }}>
+                {totalFactureVal.toLocaleString('fr-FR')} FCFA facturés
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Portefeuille Clients */}
         <div className="widget-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/clients')}>

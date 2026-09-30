@@ -97,7 +97,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Commissions', icon: Award, path: '/crm/commissions', color: '#D97706', bg: '#FFFBEB', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmCommissionsEnabled' },
     // Modules CRM Standard
     { label: 'Devis', icon: FileText, path: '/devis', color: '#D97706', bg: '#FFFBEB', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
-    { label: 'Facturation', icon: Receipt, path: '/factures', color: '#0284C7', bg: '#F0F9FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
+    { label: 'Facturation', icon: Receipt, path: '/factures', color: '#0284C7', bg: '#F0F9FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmFacturationEnabled' },
     { label: 'Clients', icon: Users, path: '/clients', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Services', icon: Briefcase, path: '/services', color: '#4F46E5', bg: '#EEF2FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Prestations', icon: FileText, path: '/prestations', color: '#6366F1', bg: '#EEF2FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },

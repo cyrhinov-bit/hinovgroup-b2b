@@ -141,7 +141,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           crmStocksEnabled: data.crm_stocks_enabled === true,
           crmTiersEnabled: data.crm_tiers_enabled === true,
           crmCommerciauxEnabled: data.crm_commerciaux_enabled === true,
-          crmCommissionsEnabled: data.crm_commissions_enabled === true
+          crmCommissionsEnabled: data.crm_commissions_enabled === true,
+          crmFacturationEnabled: data.crm_facturation_enabled === true
         };
 
         setCurrentUser(userObj);
@@ -278,7 +279,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           crmStocksEnabled: profile.crm_stocks_enabled === true,
           crmTiersEnabled: profile.crm_tiers_enabled === true,
           crmCommerciauxEnabled: profile.crm_commerciaux_enabled === true,
-          crmCommissionsEnabled: profile.crm_commissions_enabled === true
+          crmCommissionsEnabled: profile.crm_commissions_enabled === true,
+          crmFacturationEnabled: profile.crm_facturation_enabled === true
         };
         setCurrentUser(userObj);
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userObj));

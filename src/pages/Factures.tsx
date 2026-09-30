@@ -43,7 +43,7 @@ type PeriodFilter = 'ALL' | 'TODAY' | '7_DAYS' | 'THIS_MONTH' | 'THIS_QUARTER' |
 export function Factures() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { currentUser } = useAuth();
+  const { currentUser: authUser } = useAuth();
   const { 
     invoices, 
     invoicePayments, 
@@ -59,6 +59,7 @@ export function Factures() {
     addInvoicePayment, 
     deleteInvoicePayment 
   } = useAppContext();
+  const currentUser = users.find(u => u.id === authUser?.id) || authUser;
   const { confirm } = useConfirm();
 
   // URL Params & Tabs
@@ -511,6 +512,18 @@ export function Factures() {
     }
     return <span className="badge-status bg-blue-100 text-blue-800">ÉMISE</span>;
   };
+
+  if (!isDirector && !currentUser?.crmFacturationEnabled) {
+    return (
+      <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <Receipt size={48} color="var(--color-error)" style={{ margin: '0 auto 16px' }} />
+        <h2>Module Facturation non activé</h2>
+        <p style={{ color: 'var(--color-text-muted)' }}>
+          Ce module n'est pas activé sur votre profil utilisateur. Veuillez contacter la Direction.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container" style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto' }}>
