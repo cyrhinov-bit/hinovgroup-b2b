@@ -97,8 +97,8 @@ const CRM_MODULES: ModuleDef[] = [
   },
   {
     key: 'crmFacturationEnabled',
-    label: 'Facturation & Impayés',
-    shortDesc: 'Factures clients, encaissements multiples, échéances, relances et marges',
+    label: 'Suivi des factures clients',
+    shortDesc: 'Registre mensuel de suivi des factures, coûts, primes et rentabilité',
     icon: <Receipt size={18} />,
     color: '#0284C7',
     badge: 'Module 8'

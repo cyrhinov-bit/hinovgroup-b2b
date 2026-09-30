@@ -702,18 +702,20 @@ export function DashboardDirecteur() {
             </div>
 
             {/* KPI 3 : Facturation & Encaissements */}
-            <div className="widget-card" style={{ borderLeft: '4px solid #0284C7', cursor: 'pointer' }} onClick={() => navigate('/factures')}>
-              <div className="widget-icon" style={{ background: 'rgba(2, 132, 199, 0.1)', color: '#0284C7' }}>
-                <Receipt size={24} />
-              </div>
-              <div className="widget-content">
-                <div className="widget-label">FACTURES & RECOUVREMENT</div>
-                <div className="widget-value">{totalFactureMontant.toLocaleString('fr-FR')} F</div>
-                <div style={{ fontSize: '0.75rem', color: '#0284C7', fontWeight: 600, marginTop: '2px' }}>
-                  Encaissé: {totalFacturePaye.toLocaleString('fr-FR')} F {facturesEnRetardCount > 0 ? `• ${facturesEnRetardCount} retard` : ''}
+            {(selectedUserFilter === 'ALL' || !!targetUserObj?.crmFacturationEnabled) && (
+              <div className="widget-card" style={{ borderLeft: '4px solid #0284C7', cursor: 'pointer' }} onClick={() => navigate('/factures')}>
+                <div className="widget-icon" style={{ background: 'rgba(2, 132, 199, 0.1)', color: '#0284C7' }}>
+                  <Receipt size={24} />
+                </div>
+                <div className="widget-content">
+                  <div className="widget-label">SUIVI DES FACTURES</div>
+                  <div className="widget-value">{totalFactureMontant.toLocaleString('fr-FR')} F</div>
+                  <div style={{ fontSize: '0.75rem', color: '#0284C7', fontWeight: 600, marginTop: '2px' }}>
+                    Encaissé: {totalFacturePaye.toLocaleString('fr-FR')} F {facturesEnRetardCount > 0 ? `• ${facturesEnRetardCount} retard` : ''}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* KPI 4 : Caisse Trésorerie */}
             {(selectedUserFilter === 'ALL' || !!targetUserObj?.crmCaisseEnabled) && (

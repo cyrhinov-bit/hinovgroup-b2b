@@ -550,7 +550,7 @@ export function DashboardResponsable() {
                 )}
                 {currentUser?.crmFacturationEnabled && (
                   <button className="btn btn-outline" style={{ justifyContent: 'space-between', padding: '10px 14px' }} onClick={() => navigate('/factures')}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Receipt size={16} color="#0284C7" /> Facturation & Impayés</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Receipt size={16} color="#0284C7" /> Suivi des factures</span>
                     <ArrowUpRight size={14} />
                   </button>
                 )}
