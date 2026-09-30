@@ -1692,45 +1692,61 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
 
         if (invoicesData && invoicesData.length > 0) {
-          const parsed: Invoice[] = invoicesData.map((inv: any) => ({
-            id: inv.id,
-            invoiceNumber: inv.invoice_number,
-            quoteId: inv.quote_id || undefined,
-            clientId: inv.client_id,
-            commercialId: inv.commercial_id || undefined,
-            serviceId: inv.service_id || undefined,
-            issueDate: inv.issue_date,
-            deliveryDate: inv.delivery_date || undefined,
-            paymentTerms: inv.payment_terms || '30 jours',
-            dueDate: inv.due_date,
-            subtotal: Number(inv.subtotal) || 0,
-            taxAmount: Number(inv.tax_amount) || 0,
-            discountAmount: Number(inv.discount_amount) || 0,
-            totalAmount: Number(inv.total_amount) || 0,
-            costAmount: Number(inv.cost_amount) || 0,
-            commissionRate: Number(inv.commission_rate) || 10,
-            commissionAmount: Number(inv.commission_amount) || 0,
-            grossMargin: Number(inv.gross_margin) || 0,
-            hinovMargin: Number(inv.hinov_margin) || 0,
-            status: (inv.status as InvoiceStatus) || 'ÉMISE',
-            notes: inv.notes || undefined,
-            createdBy: inv.created_by || undefined,
-            createdAt: inv.created_at,
-            updatedAt: inv.updated_at,
-            items: (inv.invoice_items || []).map((it: any) => ({
-              id: it.id,
-              invoiceId: it.invoice_id,
-              prestationId: it.prestation_id || undefined,
-              description: it.description,
-              quantity: Number(it.quantity) || 1,
-              unitPrice: Number(it.unit_price) || 0,
-              costPrice: Number(it.cost_price) || 0,
-              discountPercent: Number(it.discount_percent) || 0,
-              taxRate: Number(it.tax_rate) || 0,
-              total: Number(it.total) || 0,
-              createdAt: it.created_at
-            }))
-          }));
+          const parsed: Invoice[] = invoicesData.map((inv: any) => {
+            const d = inv.delivery_date || inv.issue_date || inv.created_at;
+            const fallbackDate = d ? new Date(d) : new Date();
+            const year = inv.period_year ? Number(inv.period_year) : (isNaN(fallbackDate.getFullYear()) ? new Date().getFullYear() : fallbackDate.getFullYear());
+            const month = inv.period_month ? Number(inv.period_month) : (isNaN(fallbackDate.getMonth()) ? new Date().getMonth() + 1 : fallbackDate.getMonth() + 1);
+
+            return {
+              id: inv.id,
+              invoiceNumber: inv.invoice_number,
+              quoteId: inv.quote_id || undefined,
+              clientId: inv.client_id,
+              clientName: inv.client_nom || undefined,
+              commercialId: inv.commercial_id || undefined,
+              commercialName: inv.commercial_nom || undefined,
+              serviceId: inv.service_id || undefined,
+              serviceName: inv.service_nom || undefined,
+              category: inv.category || undefined,
+              periodYear: year,
+              periodMonth: month,
+              issueDate: inv.issue_date,
+              deliveryDate: inv.delivery_date || undefined,
+              paymentDate: inv.payment_date || undefined,
+              paymentTerms: inv.payment_terms || '30 jours',
+              dueDate: inv.due_date,
+              subtotal: Number(inv.subtotal) || 0,
+              taxAmount: Number(inv.tax_amount) || 0,
+              discountAmount: Number(inv.discount_amount) || 0,
+              totalAmount: Number(inv.total_amount) || 0,
+              costAmount: Number(inv.cost_amount) || 0,
+              commissionRate: Number(inv.commission_rate) || 10,
+              commissionAmount: Number(inv.commission_amount) || 0,
+              grossMargin: Number(inv.gross_margin) || 0,
+              hinovMargin: Number(inv.hinov_margin) || 0,
+              amountPaid: Number(inv.amount_paid) || 0,
+              remainingAmount: Number(inv.remaining_amount) || 0,
+              status: (inv.status as InvoiceStatus) || 'ÉMISE',
+              notes: inv.notes || undefined,
+              createdBy: inv.created_by || undefined,
+              createdAt: inv.created_at,
+              updatedAt: inv.updated_at,
+              items: (inv.invoice_items || []).map((it: any) => ({
+                id: it.id,
+                invoiceId: it.invoice_id,
+                prestationId: it.prestation_id || undefined,
+                description: it.description,
+                quantity: Number(it.quantity) || 1,
+                unitPrice: Number(it.unit_price) || 0,
+                costPrice: Number(it.cost_price) || 0,
+                discountPercent: Number(it.discount_percent) || 0,
+                taxRate: Number(it.tax_rate) || 0,
+                total: Number(it.total) || 0,
+                createdAt: it.created_at
+              }))
+            };
+          });
           const merged = mergeData(cachedInvoices, parsed);
           setInvoices(merged);
           await db.invoices.setItem('data', merged);
@@ -4579,7 +4595,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const id = ('id' in invoiceData && invoiceData.id) ? invoiceData.id : uuidv4();
     const now = new Date().toISOString();
     
-    // Calculs de rentabilité
+    // Calculs de rentabilité et suivi
     const totalAmount = Number(invoiceData.totalAmount) || 0;
     const costAmount = Number(invoiceData.costAmount) || 0;
     const grossMargin = totalAmount - costAmount;
@@ -4587,16 +4603,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const commissionAmount = grossMargin > 0 ? Math.round(grossMargin * (commissionRate / 100)) : 0;
     const hinovMargin = grossMargin - commissionAmount;
 
+    // Détermination de la période
+    const d = invoiceData.deliveryDate || invoiceData.issueDate || now;
+    const dateObj = new Date(d);
+    const periodYear = invoiceData.periodYear || (isNaN(dateObj.getFullYear()) ? new Date().getFullYear() : dateObj.getFullYear());
+    const periodMonth = invoiceData.periodMonth || (isNaN(dateObj.getMonth()) ? new Date().getMonth() + 1 : dateObj.getMonth() + 1);
+
+    const amountPaid = invoiceData.amountPaid !== undefined ? Number(invoiceData.amountPaid) : 0;
+    const remainingAmount = invoiceData.remainingAmount !== undefined ? Number(invoiceData.remainingAmount) : Math.max(0, totalAmount - amountPaid);
+
     const newInvoice: Invoice = {
       ...invoiceData,
       id,
+      periodYear,
+      periodMonth,
       totalAmount,
       costAmount,
       grossMargin,
       commissionRate,
       commissionAmount,
       hinovMargin,
-      status: invoiceData.status || 'ÉMISE',
+      amountPaid,
+      remainingAmount,
+      status: invoiceData.status || (remainingAmount === 0 && totalAmount > 0 ? 'PAYÉE' : (amountPaid > 0 ? 'PARTIELLEMENT_PAYÉE' : 'ÉMISE')),
       createdBy: invoiceData.createdBy || currentUser?.id,
       createdAt: now,
       updatedAt: now,
@@ -4613,15 +4642,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     try {
       if (navigator.onLine) {
-        const dbInvoice = {
+        const dbInvoice: any = {
           id: newInvoice.id,
           invoice_number: newInvoice.invoiceNumber,
           quote_id: newInvoice.quoteId || null,
-          client_id: newInvoice.clientId,
+          client_id: newInvoice.clientId || null,
+          client_nom: newInvoice.clientName || null,
           commercial_id: newInvoice.commercialId || null,
+          commercial_nom: newInvoice.commercialName || null,
           service_id: newInvoice.serviceId || null,
+          service_nom: newInvoice.serviceName || null,
+          category: newInvoice.category || null,
+          period_year: newInvoice.periodYear,
+          period_month: newInvoice.periodMonth,
           issue_date: newInvoice.issueDate,
           delivery_date: newInvoice.deliveryDate || null,
+          payment_date: newInvoice.paymentDate || null,
           payment_terms: newInvoice.paymentTerms || '30 jours',
           due_date: newInvoice.dueDate,
           subtotal: newInvoice.subtotal,
@@ -4633,6 +4669,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           commission_amount: newInvoice.commissionAmount || 0,
           gross_margin: newInvoice.grossMargin || 0,
           hinov_margin: newInvoice.hinovMargin || 0,
+          amount_paid: newInvoice.amountPaid || 0,
+          remaining_amount: newInvoice.remainingAmount,
           status: newInvoice.status,
           notes: newInvoice.notes || null,
           created_by: newInvoice.createdBy || null,
@@ -4676,6 +4714,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const commissionRate = data.commissionRate !== undefined ? Number(data.commissionRate) : (existing.commissionRate || 10);
     const commissionAmount = grossMargin > 0 ? Math.round(grossMargin * (commissionRate / 100)) : 0;
     const hinovMargin = grossMargin - commissionAmount;
+    const amountPaid = data.amountPaid !== undefined ? Number(data.amountPaid) : (existing.amountPaid || 0);
+    const remainingAmount = data.remainingAmount !== undefined ? Number(data.remainingAmount) : Math.max(0, totalAmount - amountPaid);
 
     const updated: Invoice = {
       ...existing,
@@ -4687,6 +4727,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       commissionRate,
       commissionAmount,
       hinovMargin,
+      amountPaid,
+      remainingAmount,
       updatedAt: now
     };
 
@@ -4701,11 +4743,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         };
         if (data.invoiceNumber !== undefined) dbUpdate.invoice_number = data.invoiceNumber;
         if (data.quoteId !== undefined) dbUpdate.quote_id = data.quoteId || null;
-        if (data.clientId !== undefined) dbUpdate.client_id = data.clientId;
+        if (data.clientId !== undefined) dbUpdate.client_id = data.clientId || null;
+        if (data.clientName !== undefined) dbUpdate.client_nom = data.clientName || null;
         if (data.commercialId !== undefined) dbUpdate.commercial_id = data.commercialId || null;
+        if (data.commercialName !== undefined) dbUpdate.commercial_nom = data.commercialName || null;
         if (data.serviceId !== undefined) dbUpdate.service_id = data.serviceId || null;
+        if (data.serviceName !== undefined) dbUpdate.service_nom = data.serviceName || null;
+        if (data.category !== undefined) dbUpdate.category = data.category || null;
+        if (data.periodYear !== undefined) dbUpdate.period_year = data.periodYear;
+        if (data.periodMonth !== undefined) dbUpdate.period_month = data.periodMonth;
         if (data.issueDate !== undefined) dbUpdate.issue_date = data.issueDate;
         if (data.deliveryDate !== undefined) dbUpdate.delivery_date = data.deliveryDate || null;
+        if (data.paymentDate !== undefined) dbUpdate.payment_date = data.paymentDate || null;
         if (data.paymentTerms !== undefined) dbUpdate.payment_terms = data.paymentTerms;
         if (data.dueDate !== undefined) dbUpdate.due_date = data.dueDate;
         if (data.subtotal !== undefined) dbUpdate.subtotal = data.subtotal;
@@ -4717,6 +4766,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dbUpdate.commission_rate = commissionRate;
         dbUpdate.commission_amount = commissionAmount;
         dbUpdate.hinov_margin = hinovMargin;
+        dbUpdate.amount_paid = amountPaid;
+        dbUpdate.remaining_amount = remainingAmount;
         if (data.status !== undefined) dbUpdate.status = data.status;
         if (data.notes !== undefined) dbUpdate.notes = data.notes;
 
