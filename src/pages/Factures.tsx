@@ -1057,53 +1057,53 @@ export function Factures() {
       </div>
 
       {/* ─── TABLEAU DU SUIVI MENSUEL (13 COLONNES CONFORMES EXCEL) ─── */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>
+      <div className="card" style={{ padding: 0, overflow: 'hidden', border: '1px solid #CBD5E1', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05)', borderRadius: '10px' }}>
+        <div style={{ padding: '14px 20px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontWeight: 800, fontSize: '1rem', color: '#0F172A', letterSpacing: '-0.01em' }}>
               Registre : {selectedMonthName} {selectedYear}
             </span>
-            <span className="badge-status" style={{ background: 'var(--color-surface-alt)', color: 'var(--color-text-muted)' }}>
-              {filteredInvoices.length} ligne(s)
+            <span style={{ background: '#E2E8F0', color: '#334155', fontWeight: 700, fontSize: '0.75rem', padding: '3px 8px', borderRadius: '12px' }}>
+              {filteredInvoices.length} dossier(s)
             </span>
           </div>
 
-          <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-            Période : {selectedMonthName.toUpperCase()} {selectedYear}
+          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#64748B', letterSpacing: '0.02em' }}>
+            PÉRIODE D'EXERCICE : <strong style={{ color: 'var(--color-primary)' }}>{selectedMonthName.toUpperCase()} {selectedYear}</strong>
           </span>
         </div>
 
-        <div className="table-container">
-          <table>
+        <div className="table-container" style={{ margin: 0, border: 'none' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
-              <tr>
-                <th style={{ minWidth: '130px' }}>CLIENT / AFFAIRES</th>
-                <th style={{ minWidth: '95px' }}>COMMERCIAL</th>
-                <th style={{ minWidth: '90px' }}>DATE LIVR.</th>
-                <th style={{ minWidth: '90px' }}>DATE PAIEM.</th>
-                <th style={{ minWidth: '95px' }}>SERVICE</th>
-                <th style={{ minWidth: '95px' }}>CATÉGORIE</th>
-                <th style={{ minWidth: '110px', textAlign: 'right' }}>MONTANT À PAYER</th>
-                <th style={{ minWidth: '105px', textAlign: 'right', color: '#D97706' }}>MONTANT UTILISÉ</th>
-                <th style={{ minWidth: '105px', textAlign: 'right', color: '#059669' }}>MARGE</th>
-                <th style={{ minWidth: '85px', textAlign: 'right', color: '#8B5CF6' }}>PRIME 10%</th>
-                <th style={{ minWidth: '105px', textAlign: 'right', color: 'var(--color-primary)' }}>MARGE HINOV</th>
-                <th style={{ minWidth: '95px', textAlign: 'right', color: '#0D9488' }}>PAYÉ</th>
-                <th style={{ minWidth: '105px', textAlign: 'right', color: '#E11D48' }}>RESTE</th>
-                <th style={{ minWidth: '85px', textAlign: 'center' }}>ACTIONS</th>
+              <tr style={{ background: 'linear-gradient(180deg, #1E293B 0%, #0F172A 100%)', color: '#FFFFFF', borderBottom: '2px solid #0F172A' }}>
+                <th style={{ minWidth: '140px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>CLIENT / AFFAIRES</th>
+                <th style={{ minWidth: '100px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>COMMERCIAL</th>
+                <th style={{ minWidth: '92px', padding: '12px 8px', color: '#CBD5E1', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>DATE LIVR.</th>
+                <th style={{ minWidth: '92px', padding: '12px 8px', color: '#CBD5E1', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>DATE PAIEM.</th>
+                <th style={{ minWidth: '100px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>SERVICE</th>
+                <th style={{ minWidth: '100px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>CATÉGORIE</th>
+                <th style={{ minWidth: '115px', padding: '12px 10px', textAlign: 'right', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>MONTANT À PAYER</th>
+                <th style={{ minWidth: '110px', padding: '12px 10px', textAlign: 'right', color: '#FBBF24', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>MONTANT UTILISÉ</th>
+                <th style={{ minWidth: '110px', padding: '12px 10px', textAlign: 'right', color: '#34D399', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>MARGE BRUTE</th>
+                <th style={{ minWidth: '95px', padding: '12px 10px', textAlign: 'right', color: '#C084FC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>PRIME 10%</th>
+                <th style={{ minWidth: '115px', padding: '12px 10px', textAlign: 'right', color: '#60A5FA', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>MARGE HINOV</th>
+                <th style={{ minWidth: '100px', padding: '12px 10px', textAlign: 'right', color: '#2DD4BF', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>PAYÉ</th>
+                <th style={{ minWidth: '110px', padding: '12px 10px', textAlign: 'right', color: '#FB7185', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.08)' }}>RESTE</th>
+                <th style={{ minWidth: '90px', padding: '12px 8px', textAlign: 'center', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase' }}>ACTIONS</th>
               </tr>
             </thead>
             <tbody>
               {filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={14} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--color-text-muted)' }}>
-                    <Receipt size={36} color="var(--color-text-muted)" style={{ margin: '0 auto 8px', opacity: 0.5 }} />
-                    <p style={{ fontWeight: 600, fontSize: '0.95rem', margin: 0 }}>Aucune facture enregistrée pour {selectedMonthName} {selectedYear}</p>
-                    <p style={{ fontSize: '0.8rem', marginTop: '4px' }}>Cliquez sur « + Ajouter une facture » ou « Importer Excel » pour commencer.</p>
+                  <td colSpan={14} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B', background: '#FFFFFF' }}>
+                    <Receipt size={40} color="#94A3B8" style={{ margin: '0 auto 10px', opacity: 0.7 }} />
+                    <p style={{ fontWeight: 700, fontSize: '1rem', color: '#334155', margin: 0 }}>Aucune facture enregistrée pour {selectedMonthName} {selectedYear}</p>
+                    <p style={{ fontSize: '0.85rem', color: '#64748B', marginTop: '6px' }}>Cliquez sur « + Ajouter une facture » ou « Importer Excel » pour commencer.</p>
                   </td>
                 </tr>
               ) : (
-                filteredInvoices.map(inv => {
+                filteredInvoices.map((inv, index) => {
                   const clientName = getClientDisplayName(inv);
                   const commercialName = getCommercialDisplayName(inv);
                   const serviceName = getServiceDisplayName(inv);
@@ -1117,97 +1117,109 @@ export function Factures() {
 
                   const isFullyPaid = remaining === 0 && toPay > 0;
                   const isPartiallyPaid = remaining > 0 && paid > 0;
+                  const rowBg = index % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
 
                   return (
-                    <tr key={inv.id}>
+                    <tr
+                      key={inv.id}
+                      style={{
+                        background: rowBg,
+                        borderBottom: '1px solid #E2E8F0',
+                        transition: 'background-color 0.15s ease'
+                      }}
+                    >
                       {/* 1. Client / Affaires */}
-                      <td>
-                        <div style={{ fontWeight: 700, color: 'var(--color-primary)' }}>{clientName}</div>
+                      <td style={{ padding: '10px', borderRight: '1px solid #F1F5F9' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--color-primary)', fontSize: '0.88rem' }}>{clientName}</div>
                         {inv.quoteId && (
-                          <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>Devis lié</div>
+                          <span style={{ fontSize: '10px', color: '#64748B', background: '#EEF2F6', padding: '1px 5px', borderRadius: '4px', display: 'inline-block', marginTop: '2px' }}>Devis lié</span>
                         )}
                       </td>
 
                       {/* 2. Commercial */}
-                      <td style={{ fontWeight: 500 }}>
+                      <td style={{ padding: '10px', fontWeight: 600, color: '#334155', borderRight: '1px solid #F1F5F9' }}>
                         {commercialName}
                       </td>
 
                       {/* 3. Date Livraison */}
-                      <td style={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>
+                      <td style={{ padding: '10px 8px', fontSize: '0.8rem', fontFamily: 'monospace', color: '#475569', borderRight: '1px solid #F1F5F9' }}>
                         {inv.deliveryDate || '-'}
                       </td>
 
                       {/* 4. Date Paiement */}
-                      <td style={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>
+                      <td style={{ padding: '10px 8px', fontSize: '0.8rem', fontFamily: 'monospace', color: '#475569', borderRight: '1px solid #F1F5F9' }}>
                         {inv.paymentDate || '-'}
                       </td>
 
                       {/* 5. Service */}
-                      <td>
-                        <span className="badge-status" style={{ background: 'var(--color-surface-alt)', color: 'var(--color-text)', fontSize: '10px' }}>
+                      <td style={{ padding: '10px', borderRight: '1px solid #F1F5F9' }}>
+                        <span style={{ background: '#E0F2FE', color: '#0369A1', fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '6px', display: 'inline-block' }}>
                           {serviceName}
                         </span>
                       </td>
 
                       {/* 6. Catégorie */}
-                      <td>
-                        <span style={{ fontSize: '0.82rem' }}>{inv.category || '-'}</span>
+                      <td style={{ padding: '10px', borderRight: '1px solid #F1F5F9' }}>
+                        <span style={{ fontSize: '0.82rem', color: '#475569' }}>{inv.category || '-'}</span>
                       </td>
 
                       {/* 7. Montant à payer */}
-                      <td style={{ textAlign: 'right', fontWeight: 800 }}>
+                      <td style={{ padding: '10px', textAlign: 'right', fontWeight: 800, color: '#0F172A', fontFamily: 'monospace', fontSize: '0.88rem', borderRight: '1px solid #F1F5F9' }}>
                         {toPay.toLocaleString('fr-FR')} F
                       </td>
 
                       {/* 8. Montant utilisé */}
-                      <td style={{ textAlign: 'right', fontWeight: 600, color: '#D97706' }}>
+                      <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700, color: '#D97706', fontFamily: 'monospace', borderRight: '1px solid #F1F5F9' }}>
                         {used.toLocaleString('fr-FR')} F
                       </td>
 
                       {/* 9. Marge Brute */}
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669', background: 'rgba(16, 185, 129, 0.04)' }}>
+                      <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700, color: '#059669', background: 'rgba(16, 185, 129, 0.05)', fontFamily: 'monospace', borderRight: '1px solid #F1F5F9' }}>
                         {grossMargin.toLocaleString('fr-FR')} F
                       </td>
 
                       {/* 10. Prime 10% */}
-                      <td style={{ textAlign: 'right', fontWeight: 600, color: '#8B5CF6' }}>
+                      <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700, color: '#7C3AED', fontFamily: 'monospace', borderRight: '1px solid #F1F5F9' }}>
                         {commission.toLocaleString('fr-FR')} F
                       </td>
 
                       {/* 11. Marge HINOV */}
-                      <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--color-primary)', background: 'rgba(60, 125, 175, 0.04)' }}>
+                      <td style={{ padding: '10px', textAlign: 'right', fontWeight: 800, color: 'var(--color-primary)', background: 'rgba(37, 99, 235, 0.05)', fontFamily: 'monospace', borderRight: '1px solid #F1F5F9' }}>
                         {hinovMargin.toLocaleString('fr-FR')} F
                       </td>
 
                       {/* 12. Payé */}
-                      <td style={{ textAlign: 'right', fontWeight: 600, color: '#0D9488' }}>
+                      <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700, color: '#0D9488', fontFamily: 'monospace', borderRight: '1px solid #F1F5F9' }}>
                         {paid.toLocaleString('fr-FR')} F
                       </td>
 
                       {/* 13. Reste */}
-                      <td style={{ textAlign: 'right', fontWeight: 800 }}>
-                        <div style={{ color: remaining === 0 ? '#059669' : '#E11D48' }}>
+                      <td style={{ padding: '10px', textAlign: 'right', borderRight: '1px solid #F1F5F9' }}>
+                        <div style={{ fontWeight: 800, fontFamily: 'monospace', color: remaining === 0 ? '#059669' : '#E11D48', fontSize: '0.88rem' }}>
                           {remaining.toLocaleString('fr-FR')} F
                         </div>
-                        <span className="badge-status" style={{
+                        <span style={{
                           fontSize: '9px',
-                          padding: '1px 5px',
-                          background: isFullyPaid ? 'rgba(16, 185, 129, 0.12)' : (isPartiallyPaid ? 'rgba(217, 119, 6, 0.12)' : 'rgba(225, 29, 72, 0.12)'),
-                          color: isFullyPaid ? '#059669' : (isPartiallyPaid ? '#D97706' : '#E11D48')
+                          fontWeight: 700,
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          display: 'inline-block',
+                          marginTop: '2px',
+                          background: isFullyPaid ? 'rgba(16, 185, 129, 0.15)' : (isPartiallyPaid ? 'rgba(217, 119, 6, 0.15)' : 'rgba(225, 29, 72, 0.15)'),
+                          color: isFullyPaid ? '#059669' : (isPartiallyPaid ? '#B45309' : '#BE123C')
                         }}>
                           {isFullyPaid ? 'PAYÉ' : (isPartiallyPaid ? 'PARTIEL' : 'NON PAYÉ')}
                         </span>
                       </td>
 
                       {/* Actions */}
-                      <td style={{ textAlign: 'center' }}>
+                      <td style={{ padding: '8px', textAlign: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                           {remaining > 0 && (
                             <button
                               onClick={() => handleOpenPaymentModal(inv)}
                               className="btn btn-secondary"
-                              style={{ padding: '4px 6px', color: '#0D9488' }}
+                              style={{ padding: '5px 7px', color: '#0D9488', borderRadius: '6px' }}
                               title="Encaisser un règlement"
                             >
                               <CreditCard size={13} />
@@ -1217,7 +1229,7 @@ export function Factures() {
                             <button
                               onClick={() => handleSendWhatsApp(inv)}
                               className="btn btn-secondary"
-                              style={{ padding: '4px 6px', color: '#059669' }}
+                              style={{ padding: '5px 7px', color: '#059669', borderRadius: '6px' }}
                               title="Relance WhatsApp"
                             >
                               <Share2 size={13} />
@@ -1226,7 +1238,7 @@ export function Factures() {
                           <button
                             onClick={() => handleEditTrackingRow(inv)}
                             className="btn btn-secondary"
-                            style={{ padding: '4px 6px', color: 'var(--color-primary)' }}
+                            style={{ padding: '5px 7px', color: 'var(--color-primary)', borderRadius: '6px' }}
                             title="Modifier"
                           >
                             <Edit3 size={13} />
@@ -1234,7 +1246,7 @@ export function Factures() {
                           <button
                             onClick={() => handleDelete(inv)}
                             className="btn btn-secondary"
-                            style={{ padding: '4px 6px', color: 'var(--color-error)' }}
+                            style={{ padding: '5px 7px', color: '#E11D48', borderRadius: '6px' }}
                             title="Supprimer"
                           >
                             <Trash2 size={13} />
@@ -1247,35 +1259,35 @@ export function Factures() {
               )}
             </tbody>
 
-            {/* ─── LIGNE DE TOTAL DU MOIS (FOOTER STRICT CONFORME EXCEL) ─── */}
+            {/* ─── LIGNE DE TOTAL DU MOIS (FOOTER CONFORME EXCEL) ─── */}
             {filteredInvoices.length > 0 && (
               <tfoot>
-                <tr style={{ background: 'var(--color-surface-alt)', fontWeight: 800, fontSize: '0.85rem', borderTop: '2px solid var(--color-border)' }}>
-                  <td colSpan={6} style={{ padding: '12px', color: 'var(--color-primary)', textTransform: 'uppercase' }}>
+                <tr style={{ background: '#0F172A', color: '#FFFFFF', fontWeight: 800, fontSize: '0.85rem', borderTop: '2px solid #0F172A' }}>
+                  <td colSpan={6} style={{ padding: '14px 12px', color: '#38BDF8', textTransform: 'uppercase', letterSpacing: '0.5px', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                     TOTAL DU MOIS ({selectedMonthName.toUpperCase()} {selectedYear})
                   </td>
-                  <td style={{ textAlign: 'right', padding: '12px' }}>
+                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#FFFFFF', fontFamily: 'monospace', fontSize: '0.9rem', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                     {monthlyTotals.totalToPay.toLocaleString('fr-FR')} F
                   </td>
-                  <td style={{ textAlign: 'right', padding: '12px', color: '#D97706' }}>
+                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#FBBF24', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                     {monthlyTotals.totalUsed.toLocaleString('fr-FR')} F
                   </td>
-                  <td style={{ textAlign: 'right', padding: '12px', color: '#059669', background: 'rgba(16, 185, 129, 0.08)' }}>
+                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#34D399', background: 'rgba(16, 185, 129, 0.15)', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                     {monthlyTotals.totalGrossMargin.toLocaleString('fr-FR')} F
                   </td>
-                  <td style={{ textAlign: 'right', padding: '12px', color: '#8B5CF6' }}>
+                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#C084FC', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                     {monthlyTotals.totalCommission.toLocaleString('fr-FR')} F
                   </td>
-                  <td style={{ textAlign: 'right', padding: '12px', color: 'var(--color-primary)', background: 'rgba(60, 125, 175, 0.08)' }}>
+                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#60A5FA', background: 'rgba(37, 99, 235, 0.15)', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                     {monthlyTotals.totalHinovMargin.toLocaleString('fr-FR')} F
                   </td>
-                  <td style={{ textAlign: 'right', padding: '12px', color: '#0D9488' }}>
+                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#2DD4BF', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                     {monthlyTotals.totalPaid.toLocaleString('fr-FR')} F
                   </td>
-                  <td style={{ textAlign: 'right', padding: '12px', color: '#E11D48' }}>
+                  <td style={{ textAlign: 'right', padding: '14px 10px', color: '#FB7185', fontFamily: 'monospace', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                     {monthlyTotals.totalRemaining.toLocaleString('fr-FR')} F
                   </td>
-                  <td></td>
+                  <td style={{ padding: '14px 8px' }}></td>
                 </tr>
               </tfoot>
             )}
