@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Calendar, CheckCircle, Clock, AlertCircle, FileText, Send, Download, 
   Eye, Plus, Trash2, ChevronLeft, ChevronRight, Bell, Shield, 
-  Filter, Search, User as UserIcon, Building, MessageSquare, Lock, ClipboardCheck
+  Filter, Search, User as UserIcon, Building, MessageSquare, Lock, ClipboardCheck,
+  Sparkles, Tag, CheckCircle2, RotateCcw, AlignLeft, AlertTriangle, Layers, Zap
 } from 'lucide-react';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAppContext, type V2WeeklyReport, type V2DailyReport, type V2Task, type User } from '../../context/AppContext';
@@ -15,6 +16,14 @@ import './CrmWeeklyReports.css';
 
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 const TASK_CATEGORIES = ['Opérationnel', 'Commercial', 'Support & Client', 'Technique', 'Administratif', 'Réunion & Stratégie'];
+const QUICK_SUGGESTIONS = [
+  { label: '🎯 RDV Client', prefix: 'Rendez-vous client ' },
+  { label: '📑 Devis & Offre', prefix: 'Élaboration devis / offre ' },
+  { label: '📦 Livraison', prefix: 'Livraison commande ' },
+  { label: '🛠️ Intervention', prefix: 'Intervention technique ' },
+  { label: '📞 Relance', prefix: 'Relance commerciale ' },
+  { label: '🤝 Réunion', prefix: 'Réunion d\'équipe ' }
+];
 
 export function CrmWeeklyReports() {
   const { currentUser } = useAuth();
@@ -658,77 +667,179 @@ export function CrmWeeklyReports() {
               )}
             </div>
 
-            {/* FORMULAIRE D'AJOUT RAPIDE */}
+            {/* FORMULAIRE D'AJOUT RAPIDE ENRICHI */}
             {!isWeekLocked ? (
-              <div style={{ background: 'var(--color-background)', padding: '20px', borderRadius: '10px', border: '1px solid var(--color-border)', marginBottom: '24px' }}>
-                <h4 style={{ margin: '0 0 16px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
-                  <Plus size={18} color="var(--color-primary)" /> Ajouter une nouvelle tâche / activité
-                </h4>
-
-                <form onSubmit={handleAddTask} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.88rem', fontWeight: 600 }}>Titre de l'activité *</label>
-                    <input 
-                      className="table-input" 
-                      placeholder="Ex: Rendez-vous client BOA, Conception maquette catalogue, Livraison commande #402..."
-                      value={taskTitle}
-                      onChange={e => setTaskTitle(e.target.value)}
-                      required
-                    />
+              <div className={`crm-task-form-card form-${selectedDay.toLowerCase()}`}>
+                <div className="crm-task-form-header">
+                  <div className="crm-form-badge-title">
+                    <div className="crm-form-icon-pill">
+                      <Sparkles size={18} />
+                    </div>
+                    <div>
+                      <h4 className="crm-form-title-text">Ajouter une nouvelle tâche / activité</h4>
+                      <p className="crm-form-subtitle-text">Enregistrez vos réalisations et points clés pour la consolidation de fin de semaine</p>
+                    </div>
                   </div>
 
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.88rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Description détaillée de l'activité (optionnel)</label>
-                    <textarea 
-                      className="table-input" 
-                      rows={2}
-                      placeholder="Détails de l'intervention, points abordés, actions menées, résultat obtenu..."
-                      value={taskDescription}
-                      onChange={e => setTaskDescription(e.target.value)}
-                      style={{ width: '100%', resize: 'vertical' }}
-                    />
+                  <span style={{ 
+                    fontSize: '0.78rem', 
+                    fontWeight: 700, 
+                    padding: '4px 10px', 
+                    borderRadius: '20px', 
+                    background: 'var(--color-surface-alt)',
+                    color: 'var(--color-text-muted)',
+                    border: '1px solid var(--color-border)'
+                  }}>
+                    Jour : <strong>{selectedDay}</strong>
+                  </span>
+                </div>
+
+                {/* Suggestions d'amorçage rapide */}
+                <div className="crm-quick-tags-container">
+                  <span className="crm-quick-tags-label">💡 Modèles rapides :</span>
+                  {QUICK_SUGGESTIONS.map(s => (
+                    <button
+                      key={s.label}
+                      type="button"
+                      className="crm-quick-tag-chip"
+                      onClick={() => {
+                        setTaskTitle(prev => prev ? `${prev} - ${s.prefix}` : s.prefix);
+                      }}
+                      title={`Insérer "${s.prefix}" dans le titre`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+
+                <form onSubmit={handleAddTask} className="crm-form-grid">
+                  {/* Titre de l'activité */}
+                  <div className="crm-form-field col-full">
+                    <label className="crm-form-label">
+                      <span>Titre de l'activité <span className="required">*</span></span>
+                      {taskTitle.length > 0 && <span className="optional-badge">{taskTitle.length} car.</span>}
+                    </label>
+                    <div className="crm-input-with-icon">
+                      <FileText size={16} className="crm-input-prefix-icon" />
+                      <input 
+                        className="crm-input-styled" 
+                        placeholder="Ex: Rendez-vous client BOA, Conception maquette catalogue, Livraison commande #402..."
+                        value={taskTitle}
+                        onChange={e => setTaskTitle(e.target.value)}
+                        required
+                        autoFocus={false}
+                      />
+                    </div>
                   </div>
 
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.82rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Catégorie</label>
-                    <select className="table-input" value={taskCategory} onChange={e => setTaskCategory(e.target.value)}>
-                      {TASK_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                  {/* Description détaillée */}
+                  <div className="crm-form-field col-full">
+                    <label className="crm-form-label">
+                      <span>Description détaillée de l'activité</span>
+                      <span className="optional-badge">Optionnel</span>
+                    </label>
+                    <div className="crm-input-with-icon crm-textarea-wrapper">
+                      <AlignLeft size={16} className="crm-input-prefix-icon" />
+                      <textarea 
+                        className="crm-textarea-styled" 
+                        rows={2}
+                        placeholder="Détails de l'intervention, points abordés, actions menées, résultat obtenu..."
+                        value={taskDescription}
+                        onChange={e => setTaskDescription(e.target.value)}
+                      />
+                    </div>
                   </div>
 
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.82rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Statut</label>
-                    <select className="table-input" value={taskStatus} onChange={e => setTaskStatus(e.target.value as V2Task['status'])}>
-                      <option value="Effectuée">✅ Terminée / Effectuée</option>
-                      <option value="En cours">⏳ En cours</option>
-                      <option value="Restante">📌 En attente / Restante</option>
-                      <option value="Bloquée">⚠️ Bloquée</option>
-                    </select>
+                  {/* Catégorie */}
+                  <div className="crm-form-field">
+                    <label className="crm-form-label">
+                      <span>Catégorie</span>
+                    </label>
+                    <div className="crm-input-with-icon">
+                      <Tag size={16} className="crm-input-prefix-icon" />
+                      <select 
+                        className="crm-select-styled" 
+                        value={taskCategory} 
+                        onChange={e => setTaskCategory(e.target.value)}
+                      >
+                        {TASK_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
                   </div>
 
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.82rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Difficulté / Point bloquant (optionnel)</label>
-                    <input 
-                      className="table-input" 
-                      placeholder="Ex: Attente retour client..."
-                      value={taskDifficulty}
-                      onChange={e => setTaskDifficulty(e.target.value)}
-                    />
+                  {/* Statut */}
+                  <div className="crm-form-field">
+                    <label className="crm-form-label">
+                      <span>Statut</span>
+                    </label>
+                    <div className="crm-input-with-icon">
+                      <CheckCircle2 size={16} className="crm-input-prefix-icon" />
+                      <select 
+                        className="crm-select-styled" 
+                        value={taskStatus} 
+                        onChange={e => setTaskStatus(e.target.value as V2Task['status'])}
+                      >
+                        <option value="Effectuée">✅ Terminée / Effectuée</option>
+                        <option value="En cours">⏳ En cours</option>
+                        <option value="Restante">📌 En attente / Restante</option>
+                        <option value="Bloquée">⚠️ Bloquée</option>
+                      </select>
+                    </div>
                   </div>
 
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.82rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Temps passé (optionnel)</label>
-                    <input 
-                      className="table-input" 
-                      placeholder="Ex: 1h30, 2h..."
-                      value={taskTimeSpent}
-                      onChange={e => setTaskTimeSpent(e.target.value)}
-                    />
+                  {/* Difficulté / Point bloquant */}
+                  <div className="crm-form-field">
+                    <label className="crm-form-label">
+                      <span>Difficulté / Point bloquant</span>
+                      <span className="optional-badge">Optionnel</span>
+                    </label>
+                    <div className="crm-input-with-icon">
+                      <AlertTriangle size={16} className="crm-input-prefix-icon" />
+                      <input 
+                        className="crm-input-styled" 
+                        placeholder="Ex: Attente retour client, validation technique..."
+                        value={taskDifficulty}
+                        onChange={e => setTaskDifficulty(e.target.value)}
+                      />
+                    </div>
                   </div>
 
-                  <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
-                    <button type="submit" className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px', fontWeight: 600 }}>
-                      <Plus size={16} /> Enregistrer l'activité
+                  {/* Temps passé */}
+                  <div className="crm-form-field">
+                    <label className="crm-form-label">
+                      <span>Temps passé</span>
+                      <span className="optional-badge">Optionnel</span>
+                    </label>
+                    <div className="crm-input-with-icon">
+                      <Clock size={16} className="crm-input-prefix-icon" />
+                      <input 
+                        className="crm-input-styled" 
+                        placeholder="Ex: 1h30, 45 min, 3h..."
+                        value={taskTimeSpent}
+                        onChange={e => setTaskTimeSpent(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Footer d'action */}
+                  <div className="crm-form-actions-footer">
+                    {(taskTitle || taskDescription || taskDifficulty || taskTimeSpent) ? (
+                      <button
+                        type="button"
+                        className="crm-btn-reset-form"
+                        onClick={() => {
+                          setTaskTitle('');
+                          setTaskDescription('');
+                          setTaskDifficulty('');
+                          setTaskTimeSpent('');
+                        }}
+                      >
+                        <RotateCcw size={13} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Effacer le formulaire
+                      </button>
+                    ) : <div />}
+
+                    <button type="submit" className="crm-btn-submit-activity">
+                      <Plus size={18} /> Enregistrer l'activité
                     </button>
                   </div>
                 </form>
