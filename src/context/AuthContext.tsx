@@ -118,6 +118,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const error = response?.error;
 
       if (data && !error) {
+        let cachedUser: User | undefined;
+        try {
+          const { db } = await import('../lib/db');
+          const cachedList = await db.profiles.getItem<User[]>('data');
+          cachedUser = cachedList?.find(u => u.id === data.id);
+        } catch {}
+
+        const isDir = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(data.role);
+        const resolveBool = (dbVal: any, localVal: any, defaultVal: boolean) => {
+          if (dbVal === true) return true;
+          if (dbVal === false) return false;
+          if (localVal === true) return true;
+          if (localVal === false) return false;
+          return defaultVal;
+        };
+
         const userObj: User = {
           id: data.id,
           name: data.name,
@@ -129,24 +145,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           active: data.active !== false,
           photo: data.photo || undefined,
           geminiApiKey: data.gemini_api_key || undefined,
-          posReturnsEnabled: data.pos_returns_enabled === true,
-          posCatalogueEnabled: data.pos_catalogue_enabled === true,
-          posSupplyEnabled: data.pos_supply_enabled === true,
-          posInventoryEnabled: data.pos_inventory_enabled === true,
-          posStockEnabled: data.pos_stock_enabled === true,
-          posRole: data.pos_role || null,
-          crmPrestationsEnabled: data.crm_prestations_enabled === true,
-          crmCaisseEnabled: data.crm_caisse_enabled === true,
-          crmMaintenanceEnabled: data.crm_maintenance_enabled === true,
-          crmStocksEnabled: data.crm_stocks_enabled === true,
-          crmTiersEnabled: data.crm_tiers_enabled === true,
-          crmCommerciauxEnabled: data.crm_commerciaux_enabled === true,
-          crmCommissionsEnabled: data.crm_commissions_enabled === true,
-          crmFacturationEnabled: data.crm_facturation_enabled === true,
-          crmReportsEnabled: data.crm_reports_enabled !== undefined ? (data.crm_reports_enabled !== false) : !['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(data.role),
-          crmTeamReportsEnabled: data.crm_team_reports_enabled !== undefined 
-            ? (['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(data.role) ? data.crm_team_reports_enabled !== false : data.crm_team_reports_enabled === true) 
-            : ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(data.role)
+          posReturnsEnabled: resolveBool(data.pos_returns_enabled, cachedUser?.posReturnsEnabled, false),
+          posCatalogueEnabled: resolveBool(data.pos_catalogue_enabled, cachedUser?.posCatalogueEnabled, false),
+          posSupplyEnabled: resolveBool(data.pos_supply_enabled, cachedUser?.posSupplyEnabled, false),
+          posInventoryEnabled: resolveBool(data.pos_inventory_enabled, cachedUser?.posInventoryEnabled, false),
+          posStockEnabled: resolveBool(data.pos_stock_enabled, cachedUser?.posStockEnabled, false),
+          posRole: data.pos_role || cachedUser?.posRole || null,
+          crmPrestationsEnabled: resolveBool(data.crm_prestations_enabled, cachedUser?.crmPrestationsEnabled, true),
+          crmCaisseEnabled: resolveBool(data.crm_caisse_enabled, cachedUser?.crmCaisseEnabled, true),
+          crmMaintenanceEnabled: resolveBool(data.crm_maintenance_enabled, cachedUser?.crmMaintenanceEnabled, true),
+          crmStocksEnabled: resolveBool(data.crm_stocks_enabled, cachedUser?.crmStocksEnabled, true),
+          crmTiersEnabled: resolveBool(data.crm_tiers_enabled, cachedUser?.crmTiersEnabled, true),
+          crmCommerciauxEnabled: resolveBool(data.crm_commerciaux_enabled, cachedUser?.crmCommerciauxEnabled, true),
+          crmCommissionsEnabled: resolveBool(data.crm_commissions_enabled, cachedUser?.crmCommissionsEnabled, true),
+          crmFacturationEnabled: resolveBool(data.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, true),
+          crmReportsEnabled: resolveBool(data.crm_reports_enabled, cachedUser?.crmReportsEnabled, !isDir),
+          crmTeamReportsEnabled: resolveBool(data.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
         };
 
         setCurrentUser(userObj);
@@ -260,6 +274,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void supabase.from('profiles').update({ last_login: new Date().toISOString() }).eq('id', data.user.id);
       
       if (profile) {
+        let cachedUser: User | undefined;
+        try {
+          const { db } = await import('../lib/db');
+          const cachedList = await db.profiles.getItem<User[]>('data');
+          cachedUser = cachedList?.find(u => u.id === profile.id);
+        } catch {}
+
+        const isDir = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(profile.role);
+        const resolveBool = (dbVal: any, localVal: any, defaultVal: boolean) => {
+          if (dbVal === true) return true;
+          if (dbVal === false) return false;
+          if (localVal === true) return true;
+          if (localVal === false) return false;
+          return defaultVal;
+        };
+
         const userObj: User = {
           id: profile.id,
           name: profile.name,
@@ -271,24 +301,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           active: profile.active !== false,
           photo: profile.photo || undefined,
           geminiApiKey: profile.gemini_api_key || undefined,
-          posReturnsEnabled: profile.pos_returns_enabled === true,
-          posCatalogueEnabled: profile.pos_catalogue_enabled === true,
-          posSupplyEnabled: profile.pos_supply_enabled === true,
-          posInventoryEnabled: profile.pos_inventory_enabled === true,
-          posStockEnabled: profile.pos_stock_enabled === true,
-          posRole: profile.pos_role || null,
-          crmPrestationsEnabled: profile.crm_prestations_enabled === true,
-          crmCaisseEnabled: profile.crm_caisse_enabled === true,
-          crmMaintenanceEnabled: profile.crm_maintenance_enabled === true,
-          crmStocksEnabled: profile.crm_stocks_enabled === true,
-          crmTiersEnabled: profile.crm_tiers_enabled === true,
-          crmCommerciauxEnabled: profile.crm_commerciaux_enabled === true,
-          crmCommissionsEnabled: profile.crm_commissions_enabled === true,
-          crmFacturationEnabled: profile.crm_facturation_enabled === true,
-          crmReportsEnabled: profile.crm_reports_enabled !== undefined ? (profile.crm_reports_enabled !== false) : !['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(profile.role),
-          crmTeamReportsEnabled: profile.crm_team_reports_enabled !== undefined 
-            ? (['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(profile.role) ? profile.crm_team_reports_enabled !== false : profile.crm_team_reports_enabled === true) 
-            : ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(profile.role)
+          posReturnsEnabled: resolveBool(profile.pos_returns_enabled, cachedUser?.posReturnsEnabled, false),
+          posCatalogueEnabled: resolveBool(profile.pos_catalogue_enabled, cachedUser?.posCatalogueEnabled, false),
+          posSupplyEnabled: resolveBool(profile.pos_supply_enabled, cachedUser?.posSupplyEnabled, false),
+          posInventoryEnabled: resolveBool(profile.pos_inventory_enabled, cachedUser?.posInventoryEnabled, false),
+          posStockEnabled: resolveBool(profile.pos_stock_enabled, cachedUser?.posStockEnabled, false),
+          posRole: profile.pos_role || cachedUser?.posRole || null,
+          crmPrestationsEnabled: resolveBool(profile.crm_prestations_enabled, cachedUser?.crmPrestationsEnabled, true),
+          crmCaisseEnabled: resolveBool(profile.crm_caisse_enabled, cachedUser?.crmCaisseEnabled, true),
+          crmMaintenanceEnabled: resolveBool(profile.crm_maintenance_enabled, cachedUser?.crmMaintenanceEnabled, true),
+          crmStocksEnabled: resolveBool(profile.crm_stocks_enabled, cachedUser?.crmStocksEnabled, true),
+          crmTiersEnabled: resolveBool(profile.crm_tiers_enabled, cachedUser?.crmTiersEnabled, true),
+          crmCommerciauxEnabled: resolveBool(profile.crm_commerciaux_enabled, cachedUser?.crmCommerciauxEnabled, true),
+          crmCommissionsEnabled: resolveBool(profile.crm_commissions_enabled, cachedUser?.crmCommissionsEnabled, true),
+          crmFacturationEnabled: resolveBool(profile.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, true),
+          crmReportsEnabled: resolveBool(profile.crm_reports_enabled, cachedUser?.crmReportsEnabled, !isDir),
+          crmTeamReportsEnabled: resolveBool(profile.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
         };
         setCurrentUser(userObj);
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userObj));

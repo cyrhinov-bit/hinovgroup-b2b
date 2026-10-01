@@ -983,36 +983,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ] = await fetchInBatches(fetchTasks, 6);
 
         if (profilesData && profilesData.length > 0) {
-          const parsedUsers = profilesData.map((p: any) => ({
-            id: p.id,
-            name: p.name,
-            email: p.email,
-            role: p.role as User['role'],
-            serviceId: p.service_id,
-            pin: p.pin,
-            lastLogin: p.last_login,
-            active: p.active !== false, // true par défaut si null
-            photo: p.photo || undefined,
-            posReturnsEnabled: p.pos_returns_enabled === true,
-            posCatalogueEnabled: p.pos_catalogue_enabled === true,
-            posSupplyEnabled: p.pos_supply_enabled === true,
-            posInventoryEnabled: p.pos_inventory_enabled === true,
-            posStockEnabled: p.pos_stock_enabled === true,
-            posRole: p.pos_role || null,
-            geminiApiKey: p.gemini_api_key || undefined,
-            crmPrestationsEnabled: p.crm_prestations_enabled === true,
-            crmCaisseEnabled: p.crm_caisse_enabled === true,
-            crmMaintenanceEnabled: p.crm_maintenance_enabled === true,
-            crmStocksEnabled: p.crm_stocks_enabled === true,
-            crmTiersEnabled: p.crm_tiers_enabled === true,
-            crmCommerciauxEnabled: p.crm_commerciaux_enabled === true,
-            crmCommissionsEnabled: p.crm_commissions_enabled === true,
-            crmFacturationEnabled: p.crm_facturation_enabled === true,
-            crmReportsEnabled: p.crm_reports_enabled !== undefined ? (p.crm_reports_enabled !== false) : !['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(p.role),
-            crmTeamReportsEnabled: p.crm_team_reports_enabled !== undefined 
-              ? (['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(p.role) ? p.crm_team_reports_enabled !== false : p.crm_team_reports_enabled === true) 
-              : ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(p.role)
-          }));
+          const parsedUsers = profilesData.map((p: any) => {
+            const cachedUser = cachedUsers?.find((u: any) => u.id === p.id);
+            const isDir = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(p.role);
+            
+            const resolveBool = (dbVal: any, localVal: any, defaultVal: boolean) => {
+              if (dbVal === true) return true;
+              if (dbVal === false) return false;
+              if (localVal === true) return true;
+              if (localVal === false) return false;
+              return defaultVal;
+            };
+
+            return {
+              id: p.id,
+              name: p.name,
+              email: p.email,
+              role: p.role as User['role'],
+              serviceId: p.service_id,
+              pin: p.pin,
+              lastLogin: p.last_login,
+              active: p.active !== false,
+              photo: p.photo || undefined,
+              posReturnsEnabled: resolveBool(p.pos_returns_enabled, cachedUser?.posReturnsEnabled, false),
+              posCatalogueEnabled: resolveBool(p.pos_catalogue_enabled, cachedUser?.posCatalogueEnabled, false),
+              posSupplyEnabled: resolveBool(p.pos_supply_enabled, cachedUser?.posSupplyEnabled, false),
+              posInventoryEnabled: resolveBool(p.pos_inventory_enabled, cachedUser?.posInventoryEnabled, false),
+              posStockEnabled: resolveBool(p.pos_stock_enabled, cachedUser?.posStockEnabled, false),
+              posRole: p.pos_role || cachedUser?.posRole || null,
+              geminiApiKey: p.gemini_api_key || cachedUser?.geminiApiKey || undefined,
+              crmPrestationsEnabled: resolveBool(p.crm_prestations_enabled, cachedUser?.crmPrestationsEnabled, true),
+              crmCaisseEnabled: resolveBool(p.crm_caisse_enabled, cachedUser?.crmCaisseEnabled, true),
+              crmMaintenanceEnabled: resolveBool(p.crm_maintenance_enabled, cachedUser?.crmMaintenanceEnabled, true),
+              crmStocksEnabled: resolveBool(p.crm_stocks_enabled, cachedUser?.crmStocksEnabled, true),
+              crmTiersEnabled: resolveBool(p.crm_tiers_enabled, cachedUser?.crmTiersEnabled, true),
+              crmCommerciauxEnabled: resolveBool(p.crm_commerciaux_enabled, cachedUser?.crmCommerciauxEnabled, true),
+              crmCommissionsEnabled: resolveBool(p.crm_commissions_enabled, cachedUser?.crmCommissionsEnabled, true),
+              crmFacturationEnabled: resolveBool(p.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, true),
+              crmReportsEnabled: resolveBool(p.crm_reports_enabled, cachedUser?.crmReportsEnabled, !isDir),
+              crmTeamReportsEnabled: resolveBool(p.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
+            };
+          });
           const mergedUsers = mergeData(cachedUsers, parsedUsers);
           setUsers(mergedUsers); await db.profiles.setItem('data', mergedUsers);
           if (currentUser) {
