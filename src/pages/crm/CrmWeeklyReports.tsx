@@ -30,6 +30,7 @@ export function CrmWeeklyReports() {
 
   const isDirection = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
   const isSupervisionRoute = location.pathname.includes('rapports-equipe');
+  const showSupervision = isSupervisionRoute || (isDirection && !location.pathname.includes('/crm/rapports'));
 
   // Helper date for Monday
   const getMondayOf = (d: Date) => {
@@ -42,7 +43,7 @@ export function CrmWeeklyReports() {
 
   const currentMondayStr = useMemo(() => getMondayOf(new Date()), []);
   const initialWeek = searchParams.get('week') || currentMondayStr;
-  const initialTab = isDirection ? 'supervision' : (searchParams.get('tab') || 'daily');
+  const initialTab = showSupervision ? 'supervision' : (searchParams.get('tab') || 'daily');
 
   const [currentWeekStart, setCurrentWeekStart] = useState<string>(initialWeek);
   const [activeTab, setActiveTab] = useState<string>(initialTab);
@@ -77,23 +78,25 @@ export function CrmWeeklyReports() {
 
   // Synchroniser paramètres URL et routes
   useEffect(() => {
-    if (isDirection) {
+    if (showSupervision) {
       setActiveTab('supervision');
     } else {
       const pTab = searchParams.get('tab');
       if (pTab && ['daily', 'report', 'history'].includes(pTab)) {
         setActiveTab(pTab);
+      } else {
+        setActiveTab('daily');
       }
     }
     const pWeek = searchParams.get('week');
     if (pWeek && pWeek !== currentWeekStart) {
       setCurrentWeekStart(pWeek);
     }
-  }, [searchParams, location.pathname, isDirection]);
+  }, [searchParams, location.pathname, showSupervision]);
 
-  // Marquer automatiquement les notifications de rapports comme lues lorsque la Direction consulte la supervision
+  // Marquer automatiquement les notifications de rapports comme lues lorsque la supervision est consultée
   useEffect(() => {
-    if (isDirection && currentUser) {
+    if ((showSupervision || isDirection) && currentUser) {
       const unreadReportNotifs = (notifications || []).filter(n => 
         n.user_id === currentUser.id && 
         !n.is_read && 
@@ -103,10 +106,10 @@ export function CrmWeeklyReports() {
         markNotificationAsRead(notif.id);
       }
     }
-  }, [isDirection, currentUser, notifications, markNotificationAsRead]);
+  }, [showSupervision, isDirection, currentUser, notifications, markNotificationAsRead]);
 
   const handleTabChange = (newTab: string) => {
-    if (isDirection) return;
+    if (showSupervision) return;
     setActiveTab(newTab);
     setSearchParams({ tab: newTab, week: currentWeekStart });
   };
@@ -447,28 +450,31 @@ export function CrmWeeklyReports() {
     setReviewComment('');
   };
 
-  if (isDirection && currentUser?.crmTeamReportsEnabled === false) {
-    return (
-      <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
-        <Shield size={48} color="#DC2626" style={{ margin: '0 auto 16px' }} />
-        <h2>Module "Rapports Équipe" désactivé</h2>
-        <p style={{ color: 'var(--color-text-muted)', maxWidth: '500px', margin: '8px auto 0' }}>
-          Ce module n'est pas activé pour votre profil. Rendez-vous dans <strong>Activation Modules</strong> pour l'activer.
-        </p>
-      </div>
-    );
-  }
-
-  if (!isDirection && currentUser?.crmReportsEnabled === false) {
-    return (
-      <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
-        <Shield size={48} color="#DC2626" style={{ margin: '0 auto 16px' }} />
-        <h2>Module "Rapports Hebdo" désactivé</h2>
-        <p style={{ color: 'var(--color-text-muted)', maxWidth: '500px', margin: '8px auto 0' }}>
-          Le module de reporting hebdomadaire n'est pas activé pour votre compte. Veuillez contacter la Direction.
-        </p>
-      </div>
-    );
+  if (showSupervision) {
+    const hasTeamAccess = isDirection ? currentUser?.crmTeamReportsEnabled !== false : currentUser?.crmTeamReportsEnabled === true;
+    if (!hasTeamAccess) {
+      return (
+        <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
+          <Shield size={48} color="#DC2626" style={{ margin: '0 auto 16px' }} />
+          <h2>Module "Rapports Équipe" désactivé</h2>
+          <p style={{ color: 'var(--color-text-muted)', maxWidth: '500px', margin: '8px auto 0' }}>
+            Ce module n'est pas activé pour votre profil. Rendez-vous dans <strong>Activation Modules</strong> ou contactez la Direction.
+          </p>
+        </div>
+      );
+    }
+  } else {
+    if (currentUser?.crmReportsEnabled === false) {
+      return (
+        <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
+          <Shield size={48} color="#DC2626" style={{ margin: '0 auto 16px' }} />
+          <h2>Module "Rapports Hebdo" désactivé</h2>
+          <p style={{ color: 'var(--color-text-muted)', maxWidth: '500px', margin: '8px auto 0' }}>
+            Le module de reporting hebdomadaire n'est pas activé pour votre compte. Veuillez contacter la Direction.
+          </p>
+        </div>
+      );
+    }
   }
 
   return (
@@ -477,7 +483,7 @@ export function CrmWeeklyReports() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {isDirection ? (
+            {showSupervision ? (
               <>
                 <ClipboardCheck size={24} color="#7C3AED" /> Rapports d'Activité de l'Équipe
               </>
@@ -488,7 +494,7 @@ export function CrmWeeklyReports() {
             )}
           </h2>
           <p style={{ margin: '4px 0 0', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-            {isDirection 
+            {showSupervision 
               ? "Cockpit de supervision, consultation des rapports soumis et relance de l'équipe"
               : "Suivi journalier des activités, consolidation des comptes-rendus et transmission à la Direction"
             }
@@ -519,8 +525,8 @@ export function CrmWeeklyReports() {
         </div>
       </div>
 
-      {/* NAVIGATION PAR ONGLETS (Uniquement pour les collaborateurs opérationnels) */}
-      {!isDirection && (
+      {/* NAVIGATION PAR ONGLETS (Uniquement pour la saisie opérationnelle individuelle) */}
+      {!showSupervision && (
         <div style={{ display: 'flex', gap: '8px', borderBottom: '2px solid var(--color-border)', marginBottom: '24px', flexWrap: 'wrap' }}>
           <button 
             className={`tab-button ${activeTab === 'daily' ? 'active' : ''}`}
@@ -565,7 +571,7 @@ export function CrmWeeklyReports() {
       )}
 
       {/* ================= ONGLET 1 : SAISIE JOURNALIÈRE ================= */}
-      {!isDirection && activeTab === 'daily' && (
+      {!showSupervision && activeTab === 'daily' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
           {/* BANDEAU JOURS DE LA SEMAINE - CARTES ANIMÉES MULTI-COULEURS */}
           <div className="crm-days-grid">
@@ -829,7 +835,7 @@ export function CrmWeeklyReports() {
       )}
 
       {/* ================= ONGLET 2 : MON RAPPORT HEBDOMADAIRE ================= */}
-      {!isDirection && activeTab === 'report' && (
+      {!showSupervision && activeTab === 'report' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {/* BANDEAU D'ÉTAT DU RAPPORT */}
           <div className="card" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', borderLeft: isWeekLocked ? '4px solid #10B981' : '4px solid #F59E0B' }}>
@@ -957,7 +963,7 @@ export function CrmWeeklyReports() {
       )}
 
       {/* ================= ONGLET 3 : MES RAPPORTS SOUMIS (HISTORIQUE) ================= */}
-      {!isDirection && activeTab === 'history' && (
+      {!showSupervision && activeTab === 'history' && (
         <div className="card" style={{ padding: '20px' }}>
           <h3 style={{ margin: '0 0 16px', fontSize: '1.05rem' }}>
             Historique de mes rapports hebdomadaires
@@ -1026,7 +1032,7 @@ export function CrmWeeklyReports() {
       )}
 
       {/* ================= COCKPIT SUPERVISION DIRECTION : RAPPORTS ÉQUIPE ================= */}
-      {isDirection && (
+      {showSupervision && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {/* COCKPIT KPIS DIRECTION */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
