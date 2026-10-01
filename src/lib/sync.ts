@@ -1077,34 +1077,76 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_V2_DAILY_REPORT': {
-          const { error } = await supabase.from('v2_daily_reports').insert([{
-            id: action.payload.id, author_id: action.payload.authorId, date: action.payload.date, project: action.payload.project,
-            objectives: action.payload.objectives, tasks: action.payload.tasks, results: action.payload.results,
-            difficulties: action.payload.difficulties, observations: action.payload.observations, status: action.payload.status
-          }]);
+          const payload = action.payload;
+          let { error } = await supabase.from('v2_daily_reports').upsert([{
+            id: payload.id, 
+            author_id: payload.authorId, 
+            date: payload.date, 
+            project: payload.project || 'Général',
+            objectives: payload.objectives || '', 
+            tasks: payload.tasks || [], 
+            results: payload.results || '',
+            difficulties: payload.difficulties || '', 
+            observations: payload.observations || '',
+            is_locked: !!payload.isLocked,
+            category: payload.category || 'Opérationnel'
+          }], { onConflict: 'id' });
+
+          if (error && (error.code === '42703' || error.message?.includes('column'))) {
+            const fallbackRes = await supabase.from('v2_daily_reports').upsert([{
+              id: payload.id, 
+              author_id: payload.authorId, 
+              date: payload.date, 
+              project: payload.project || 'Général',
+              objectives: payload.objectives || '', 
+              tasks: payload.tasks || [], 
+              results: payload.results || '',
+              difficulties: payload.difficulties || '', 
+              observations: payload.observations || ''
+            }], { onConflict: 'id' });
+            error = fallbackRes.error;
+          }
+
           if (error) console.error('[Sync] INSERT_V2_DAILY_REPORT échoué :', error.message);
           success = checkResult(error);
           break;
         }
         case 'UPDATE_V2_DAILY_REPORT': {
-          const { error } = await supabase.from('v2_daily_reports').update({
-            date: action.payload.date, project: action.payload.project,
-            objectives: action.payload.objectives, tasks: action.payload.tasks, results: action.payload.results,
-            difficulties: action.payload.difficulties, observations: action.payload.observations, status: action.payload.status,
-            updated_at: action.payload.updatedAt || new Date().toISOString()
-          }).eq('id', action.payload.id);
+          const payload = action.payload;
+          const mapped: any = {
+            date: payload.date, 
+            project: payload.project,
+            objectives: payload.objectives, 
+            tasks: payload.tasks, 
+            results: payload.results,
+            difficulties: payload.difficulties, 
+            observations: payload.observations,
+            updated_at: payload.updatedAt || new Date().toISOString()
+          };
+          if (payload.isLocked !== undefined) mapped.is_locked = !!payload.isLocked;
+          if (payload.category !== undefined) mapped.category = payload.category;
+
+          let { error } = await supabase.from('v2_daily_reports').update(mapped).eq('id', payload.id);
+
+          if (error && (error.code === '42703' || error.message?.includes('column'))) {
+            delete mapped.is_locked;
+            delete mapped.category;
+            const fallbackRes = await supabase.from('v2_daily_reports').update(mapped).eq('id', payload.id);
+            error = fallbackRes.error;
+          }
+
           if (error) console.error('[Sync] UPDATE_V2_DAILY_REPORT échoué :', error.message);
           success = checkResult(error);
           break;
         }
         case 'INSERT_V2_WEEKLY_REPORT': {
           const r = action.payload;
-          const { error } = await supabase.from('v2_weekly_reports').insert([{
+          const insertPayload: any = {
             id: r.id,
             author_id: r.authorId,
             week_start: r.weekStart,
             week_end: r.weekEnd || null,
-            project: r.project || null,
+            project: r.project || 'Général',
             daily_report_ids: r.dailyReportIds || [],
             weekly_objectives: r.weeklyObjectives || '',
             tasks_by_day: r.tasksByDay || {},
@@ -1118,10 +1160,49 @@ export const processSyncQueue = async () => {
             director_comment: r.directorComment || null,
             submitted_at: r.submittedAt || null,
             reviewed_at: r.reviewedAt || null,
-            reviewed_by: r.reviewedBy || null,
-            status: r.status || 'Brouillon'
-          }]);
-          if (error) console.error('[Sync] INSERT_V2_WEEKLY_REPORT échoué :', error.message);
+            reviewed_by: (r.reviewedBy && isUuid(r.reviewedBy)) ? r.reviewedBy : null,
+            status: r.status || 'Brouillon',
+            is_locked: !!r.isLocked,
+            pdf_url: r.pdfUrl || null
+          };
+
+          let { error } = await supabase.from('v2_weekly_reports').upsert([insertPayload], { onConflict: 'id' });
+
+          // Auto-réparation 1 : Erreur contrainte CHECK de statut
+          if (error && (error.code === '23514' || error.message?.includes('check constraint') || error.message?.includes('status'))) {
+            console.warn('[Sync] INSERT_V2_WEEKLY_REPORT contrainte de statut, auto-réparation avec statut compatible');
+            insertPayload.status = (insertPayload.status === 'Validé' || insertPayload.status === 'Relu') ? 'Validé' : 'Brouillon';
+            const fallbackRes = await supabase.from('v2_weekly_reports').upsert([insertPayload], { onConflict: 'id' });
+            error = fallbackRes.error;
+          }
+
+          // Auto-réparation 2 : Colonnes manquantes dans la table
+          if (error && (error.code === '42703' || error.message?.includes('column') || error.message?.includes('schema'))) {
+            console.warn('[Sync] INSERT_V2_WEEKLY_REPORT colonnes manquantes, repli sur le schéma de base');
+            const safeBaseInsert: any = {
+              id: r.id,
+              author_id: r.authorId,
+              week_start: r.weekStart,
+              project: r.project || 'Général',
+              daily_report_ids: r.dailyReportIds || [],
+              weekly_objectives: r.weeklyObjectives || '',
+              tasks_by_day: r.tasksByDay || {},
+              pending_tasks: r.pendingTasks || [],
+              summary: [
+                r.summary || r.aiSummary || '',
+                r.achievements ? `\n\n[Réalisations]\n${r.achievements}` : '',
+                r.difficulties ? `\n\n[Difficultés]\n${r.difficulties}` : '',
+                r.directorComment ? `\n\n[Commentaire Direction]\n${r.directorComment}` : ''
+              ].filter(Boolean).join(''),
+              next_week_objectives: r.nextWeekObjectives || '',
+              conclusion: r.conclusion || '',
+              status: (r.status === 'Validé' || r.status === 'Relu') ? 'Validé' : 'Brouillon'
+            };
+            const fallbackRes = await supabase.from('v2_weekly_reports').upsert([safeBaseInsert], { onConflict: 'id' });
+            error = fallbackRes.error;
+          }
+
+          if (error) console.error('[Sync] INSERT_V2_WEEKLY_REPORT échoué après auto-réparation :', error.message);
           success = checkResult(error);
           break;
         }
@@ -1145,11 +1226,48 @@ export const processSyncQueue = async () => {
           if (r.directorComment !== undefined) mapped.director_comment = r.directorComment;
           if (r.submittedAt !== undefined) mapped.submitted_at = r.submittedAt;
           if (r.reviewedAt !== undefined) mapped.reviewed_at = r.reviewedAt;
-          if (r.reviewedBy !== undefined) mapped.reviewed_by = r.reviewedBy;
+          if (r.reviewedBy !== undefined && isUuid(r.reviewedBy)) mapped.reviewed_by = r.reviewedBy;
           if (r.status !== undefined) mapped.status = r.status;
+          if (r.isLocked !== undefined) mapped.is_locked = !!r.isLocked;
+          if (r.pdfUrl !== undefined) mapped.pdf_url = r.pdfUrl;
 
-          const { error } = await supabase.from('v2_weekly_reports').update(mapped).eq('id', r.id);
-          if (error) console.error('[Sync] UPDATE_V2_WEEKLY_REPORT échoué :', error.message);
+          let { error } = await supabase.from('v2_weekly_reports').update(mapped).eq('id', r.id);
+
+          // Auto-réparation 1 : Si erreur de contrainte CHECK sur le statut (ex: status='Soumis' ou 'Relu' non supporté par l'ancien schéma)
+          if (error && (error.code === '23514' || error.message?.includes('check constraint') || error.message?.includes('status'))) {
+            console.warn('[Sync] UPDATE_V2_WEEKLY_REPORT contrainte de statut détectée, auto-réparation avec statut compatible');
+            const safeStatus = (mapped.status === 'Validé' || mapped.status === 'Relu') ? 'Validé' : 'Brouillon';
+            const fallbackMapped = { ...mapped, status: safeStatus };
+            const fallbackRes = await supabase.from('v2_weekly_reports').update(fallbackMapped).eq('id', r.id);
+            error = fallbackRes.error;
+          }
+
+          // Auto-réparation 2 : Si colonnes récentes manquantes (ex: 42703 / PGRST204 column does not exist)
+          if (error && (error.code === '42703' || error.message?.includes('column') || error.message?.includes('schema'))) {
+            console.warn('[Sync] UPDATE_V2_WEEKLY_REPORT colonnes manquantes détectées, repli sur le schéma de base');
+            const safeBaseMapped: any = {
+              updated_at: mapped.updated_at,
+              weekly_objectives: mapped.weekly_objectives,
+              tasks_by_day: mapped.tasks_by_day,
+              pending_tasks: mapped.pending_tasks,
+              summary: [
+                mapped.summary || '',
+                mapped.achievements ? `\n\n[Réalisations]\n${mapped.achievements}` : '',
+                mapped.difficulties ? `\n\n[Difficultés]\n${mapped.difficulties}` : '',
+                mapped.director_comment ? `\n\n[Commentaire Direction]\n${mapped.director_comment}` : ''
+              ].filter(Boolean).join(''),
+              next_week_objectives: mapped.next_week_objectives,
+              conclusion: mapped.conclusion,
+              status: (mapped.status === 'Validé' || mapped.status === 'Relu') ? 'Validé' : 'Brouillon'
+            };
+            if (mapped.project) safeBaseMapped.project = mapped.project;
+            if (mapped.daily_report_ids) safeBaseMapped.daily_report_ids = mapped.daily_report_ids;
+            
+            const fallbackRes = await supabase.from('v2_weekly_reports').update(safeBaseMapped).eq('id', r.id);
+            error = fallbackRes.error;
+          }
+
+          if (error) console.error('[Sync] UPDATE_V2_WEEKLY_REPORT échoué après auto-réparation :', error.message);
           success = checkResult(error);
           break;
         }
