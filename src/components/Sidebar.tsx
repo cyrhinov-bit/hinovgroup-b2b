@@ -98,7 +98,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
   // CRM nav items
   const crmNavItems: NavItemConfig[] = [
     { label: 'Dashboard', icon: Home, path: '/', color: '#2563EB', bg: '#EFF6FF', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'] },
-    { label: 'Dashboard', icon: Home, path: '/commercial', color: '#2563EB', bg: '#EFF6FF', roles: ['Commercial'] },
+    { label: 'Dashboard', icon: Home, path: '/commercial', color: '#2563EB', bg: '#EFF6FF', roles: ['Commercial', 'SuperAdmin'] },
     // Modules CRM Responsables de Service & Collaborateurs
     { label: 'Commandes', icon: ShoppingBag, path: '/crm/prestations', color: '#10B981', bg: '#ECFDF5', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmPrestationsEnabled' },
     { label: 'Caisse & Dépenses', icon: Wallet, path: '/crm/caisse', color: '#EF4444', bg: '#FEF2F2', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmCaisseEnabled' },
@@ -164,31 +164,56 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
 
   const userRole = normalizeRole(currentUser?.role);
   const userPosRole = normalizeRole(currentUser?.posRole);
-  
-  // Le mode POS ne s'active que pour les rôles ayant explicitement accès au POS
+  const isCommercial = userRole === 'Commercial';
+  const isSuperAdminInCommercial = userRole === 'SuperAdmin' && location.pathname.startsWith('/commercial');
+
+  const isCrmRoute = location.pathname.startsWith('/commercial') || 
+                     location.pathname.startsWith('/crm') || 
+                     location.pathname.startsWith('/devis') || 
+                     location.pathname.startsWith('/clients') || 
+                     location.pathname.startsWith('/documents') || 
+                     location.pathname.startsWith('/factures') ||
+                     location.pathname.startsWith('/services') ||
+                     location.pathname.startsWith('/prestations') ||
+                     location.pathname.startsWith('/utilisateurs') ||
+                     location.pathname.startsWith('/parametres');
+
+  // Le mode POS ne s'active que pour les rôles autorisés et jamais pour un commercial pur ou sur route CRM
   const canAccessPos = isDirection || userRole === 'Caissier' || userRole === 'Gerant' || !!userPosRole;
-  const isPos = posWorkspace.active && canAccessPos;
+  const isPos = canAccessPos && !isCommercial && !isCrmRoute && (location.pathname.startsWith('/pos') || posWorkspace.active);
   const navItems = isPos ? posNavItems : crmNavItems;
-  const effectiveRole = (isPos && userPosRole) ? userPosRole : userRole;
+  const effectiveRole = (isPos && userPosRole) ? userPosRole : (isSuperAdminInCommercial ? 'Commercial' : userRole);
 
   // Filtrer les éléments selon le rôle de l'utilisateur connecté et ses permissions
   const visibleNavItems = navItems.filter(item => {
     if (!currentUser) return false;
-    
+
+    // Espace Commercial (Commercial connecté ou SuperAdmin navigant dans l'espace commercial)
+    if (isCommercial || isSuperAdminInCommercial) {
+      if (item.path === '/') return false;
+      const hasCommercialRole = item.roles.some(r => r.toLowerCase() === 'commercial');
+      if (!hasCommercialRole) return false;
+
+      // Par défaut actif pour les commerciaux sauf si explicitement désactivé à false
+      if (item.permissionKey) {
+        if (currentUser[item.permissionKey] === false) return false;
+        if (item.permissionKey === 'crmTeamReportsEnabled' && !currentUser.crmTeamReportsEnabled) return false;
+      }
+      return true;
+    }
+
+    // Vue SuperAdmin standard hors espace commercial
+    if (userRole === 'SuperAdmin' && item.path === '/commercial') {
+      return false;
+    }
+
     const hasRole = item.roles.some(r => r.toLowerCase() === effectiveRole.toLowerCase());
     if (!hasRole) return false;
 
-    // Isoler la vue SuperAdmin entre Admin et Commercial
-    if (userRole === 'SuperAdmin') {
-      const isCommercialSpace = location.pathname.startsWith('/commercial');
-      const isCommercialRoute = item.path.startsWith('/commercial');
-      if (isCommercialSpace && !isCommercialRoute) return false;
-      if (!isCommercialSpace && isCommercialRoute) return false;
-    }
-
-    // Permissions CRM granulaires pour tous les collaborateurs (y compris Directeurs)
+    // Permissions CRM granulaires pour tous les collaborateurs
     if (!isPos && item.permissionKey) {
-      if (!currentUser[item.permissionKey]) return false;
+      if (currentUser[item.permissionKey] === false) return false;
+      if (item.permissionKey === 'crmTeamReportsEnabled' && !currentUser.crmTeamReportsEnabled && !isDirection) return false;
     }
 
     if (isPos && effectiveRole === 'Caissier') {
