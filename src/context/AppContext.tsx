@@ -64,6 +64,7 @@ export interface User {
   crmCommissionsEnabled?: boolean;
   crmFacturationEnabled?: boolean;
   crmReportsEnabled?: boolean;
+  crmTeamReportsEnabled?: boolean;
 }
 export type AffaireStatus = 'PROSPECTION' | 'QUALIFIEE' | 'PROPOSITION' | 'NEGOCIATION' | 'GAGNEE' | 'EN_COURS' | 'CLOTUREE' | 'PERDUE' | 'ANNULEE';
 export interface Affaire {
@@ -1007,7 +1008,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             crmCommerciauxEnabled: p.crm_commerciaux_enabled === true,
             crmCommissionsEnabled: p.crm_commissions_enabled === true,
             crmFacturationEnabled: p.crm_facturation_enabled === true,
-            crmReportsEnabled: p.crm_reports_enabled !== false
+            crmReportsEnabled: p.crm_reports_enabled !== false,
+            crmTeamReportsEnabled: p.crm_team_reports_enabled !== false
           }));
           const mergedUsers = mergeData(cachedUsers, parsedUsers);
           setUsers(mergedUsers); await db.profiles.setItem('data', mergedUsers);
@@ -3747,7 +3749,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       crmTiersEnabled: user.crmTiersEnabled ?? true,
       crmCommerciauxEnabled: user.crmCommerciauxEnabled ?? true,
       crmCommissionsEnabled: user.crmCommissionsEnabled ?? true,
-      crmFacturationEnabled: user.crmFacturationEnabled ?? true
+      crmFacturationEnabled: user.crmFacturationEnabled ?? true,
+      crmReportsEnabled: user.crmReportsEnabled ?? true,
+      crmTeamReportsEnabled: user.crmTeamReportsEnabled ?? true
     };
     const newUsers = [...users, newUser];
     setUsers(newUsers);
@@ -3776,6 +3780,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (data.crmCommerciauxEnabled !== undefined) payload.crm_commerciaux_enabled = data.crmCommerciauxEnabled;
     if (data.crmCommissionsEnabled !== undefined) payload.crm_commissions_enabled = data.crmCommissionsEnabled;
     if (data.crmFacturationEnabled !== undefined) payload.crm_facturation_enabled = data.crmFacturationEnabled;
+    if (data.crmReportsEnabled !== undefined) payload.crm_reports_enabled = data.crmReportsEnabled;
+    if (data.crmTeamReportsEnabled !== undefined) payload.crm_team_reports_enabled = data.crmTeamReportsEnabled;
     if (currentUser && currentUser.id === id) {
       updateCurrentUser(data);
     }

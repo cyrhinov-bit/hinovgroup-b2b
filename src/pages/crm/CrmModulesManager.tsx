@@ -18,7 +18,8 @@ import {
   Layers,
   Filter,
   Receipt,
-  ClipboardList
+  ClipboardList,
+  ClipboardCheck
 } from 'lucide-react';
 
 interface ModuleDef {
@@ -31,7 +32,8 @@ interface ModuleDef {
     'crmCommerciauxEnabled' | 
     'crmCommissionsEnabled' |
     'crmFacturationEnabled' |
-    'crmReportsEnabled'
+    'crmReportsEnabled' |
+    'crmTeamReportsEnabled'
   >;
   label: string;
   shortDesc: string;
@@ -107,11 +109,19 @@ const CRM_MODULES: ModuleDef[] = [
   },
   {
     key: 'crmReportsEnabled',
-    label: 'Rapports Hebdomadaires',
-    shortDesc: 'Saisie journalière, consolidation hebdo, attestations PDF et supervision Direction',
+    label: 'Rapports Hebdo (Collaborateurs)',
+    shortDesc: 'Saisie journalière des activités, consolidation hebdomadaire et soumission',
     icon: <ClipboardList size={18} />,
     color: '#059669',
     badge: 'Module 9'
+  },
+  {
+    key: 'crmTeamReportsEnabled',
+    label: 'Rapports Équipe (Supervision Direction)',
+    shortDesc: 'Cockpit de supervision d\'équipe, KPIs, réception, relance et validation des rapports',
+    icon: <ClipboardCheck size={18} />,
+    color: '#7C3AED',
+    badge: 'Module 10'
   }
 ];
 

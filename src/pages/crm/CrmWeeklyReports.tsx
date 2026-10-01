@@ -447,6 +447,30 @@ export function CrmWeeklyReports() {
     setReviewComment('');
   };
 
+  if (isDirection && currentUser?.crmTeamReportsEnabled === false) {
+    return (
+      <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <Shield size={48} color="#DC2626" style={{ margin: '0 auto 16px' }} />
+        <h2>Module "Rapports Équipe" désactivé</h2>
+        <p style={{ color: 'var(--color-text-muted)', maxWidth: '500px', margin: '8px auto 0' }}>
+          Ce module n'est pas activé pour votre profil. Rendez-vous dans <strong>Activation Modules</strong> pour l'activer.
+        </p>
+      </div>
+    );
+  }
+
+  if (!isDirection && currentUser?.crmReportsEnabled === false) {
+    return (
+      <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <Shield size={48} color="#DC2626" style={{ margin: '0 auto 16px' }} />
+        <h2>Module "Rapports Hebdo" désactivé</h2>
+        <p style={{ color: 'var(--color-text-muted)', maxWidth: '500px', margin: '8px auto 0' }}>
+          Le module de reporting hebdomadaire n'est pas activé pour votre compte. Veuillez contacter la Direction.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="dashboard">
       {/* HEADER PRINCIPAL */}
