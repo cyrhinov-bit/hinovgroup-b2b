@@ -1,7 +1,12 @@
 import { jsPDF } from 'jspdf';
-import type { User, V2WeeklyReport, AppSettings } from '../../../context/AppContext';
+import type { User, V2WeeklyReport, V2DailyReport, V2Task, AppSettings } from '../../../context/AppContext';
 
-export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | null | undefined, settings?: AppSettings): jsPDF {
+export function buildV2WeeklyReportPdf(
+  report: V2WeeklyReport, 
+  author: User | null | undefined, 
+  settings?: AppSettings,
+  allDailyReports?: V2DailyReport[]
+): jsPDF {
   const doc = new jsPDF();
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -133,8 +138,16 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
   const cleanPdfText = (text?: string | null): string => {
     if (!text) return '';
     return text
-      .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '') // Supprime les paires surrogates (emojis)
-      .replace(/[\u2600-\u27BF]/g, '') // Supprime les symboles divers
+      .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '') // Emojis surrogates
+      .replace(/[\u2600-\u27BF]/g, '') // Symbols
+      .replace(/[\u2018\u2019]/g, "'") // Smart single quotes / apostrophes
+      .replace(/[\u201C\u201D]/g, '"') // Smart double quotes
+      .replace(/\u2026/g, '...') // Ellipsis
+      .replace(/[\u2013\u2014]/g, '-') // En-dash & Em-dash
+      .replace(/\u2022/g, '-') // Bullet
+      .replace(/\u00A0/g, ' ') // Non-breaking space
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
       .trim();
   };
 
@@ -167,7 +180,9 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
   );
 
   // Section 3 : Journal détaillé des tâches (Lundi -> Samedi)
-  let rawTasksByDay: Record<string, any[]> = {};
+  const standardDays = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+  let rawTasksByDay: Record<string, V2Task[]> = {};
+
   if (typeof report.tasksByDay === 'string') {
     try {
       rawTasksByDay = JSON.parse(report.tasksByDay);
@@ -175,20 +190,78 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
       rawTasksByDay = {};
     }
   } else if (report.tasksByDay && typeof report.tasksByDay === 'object') {
-    rawTasksByDay = report.tasksByDay as any;
+    rawTasksByDay = { ...report.tasksByDay };
   }
 
-  const standardDays = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-  const allDayKeys = Array.from(new Set([...standardDays, ...Object.keys(rawTasksByDay)]));
-  const taskDays = allDayKeys.filter(d => {
-    const list = rawTasksByDay[d] || rawTasksByDay[d.toLowerCase()] || rawTasksByDay[d.toUpperCase()] || [];
-    return Array.isArray(list) && list.length > 0;
+  // Hydratation / Fallback automatique depuis allDailyReports si nécessaire
+  const authorId = report.authorId || author?.id || '';
+  if (allDailyReports && allDailyReports.length > 0 && report.weekStart) {
+    try {
+      const startDate = new Date(report.weekStart + 'T00:00:00');
+      for (let i = 0; i < 6; i++) {
+        const d = new Date(startDate);
+        d.setDate(d.getDate() + i);
+        const yStr = d.getFullYear();
+        const mStr = String(d.getMonth() + 1).padStart(2, '0');
+        const dStr = String(d.getDate()).padStart(2, '0');
+        const formattedDate = `${yStr}-${mStr}-${dStr}`;
+        const frenchDay = standardDays[i];
+
+        const existingTasks = rawTasksByDay[frenchDay] || rawTasksByDay[frenchDay.toLowerCase()] || [];
+        if (!Array.isArray(existingTasks) || existingTasks.length === 0) {
+          const matchDaily = allDailyReports.find(dr => 
+            dr.authorId === authorId && 
+            (dr.date === formattedDate || dr.date?.startsWith(formattedDate))
+          );
+          if (matchDaily && Array.isArray(matchDaily.tasks) && matchDaily.tasks.length > 0) {
+            rawTasksByDay[frenchDay] = matchDaily.tasks;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Erreur lors du fallback des activités quotidiennes:', err);
+    }
+  }
+
+  // Construction de la liste ordonnée des jours avec tâches
+  const displayDays: { dayLabel: string; tasks: V2Task[] }[] = [];
+
+  // 1. Jours standards Lundi -> Samedi
+  standardDays.forEach(day => {
+    const matchedKey = Object.keys(rawTasksByDay).find(k => k.toLowerCase() === day.toLowerCase());
+    const tasks = matchedKey ? rawTasksByDay[matchedKey] : (rawTasksByDay[day] || []);
+    if (Array.isArray(tasks) && tasks.length > 0) {
+      displayDays.push({ dayLabel: day, tasks });
+    }
+  });
+
+  // 2. Autres clés éventuelles (ex: dates ISO YYYY-MM-DD ou Dimanche)
+  Object.keys(rawTasksByDay).forEach(key => {
+    const isStandard = standardDays.some(sd => sd.toLowerCase() === key.toLowerCase());
+    if (!isStandard) {
+      const tasks = rawTasksByDay[key];
+      if (Array.isArray(tasks) && tasks.length > 0) {
+        let label = key;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(key)) {
+          try {
+            const d = new Date(key + 'T00:00:00');
+            const dayName = d.toLocaleDateString('fr-FR', { weekday: 'long' });
+            const dayCapitalized = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+            const formattedDate = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+            label = `${dayCapitalized} (${formattedDate})`;
+          } catch {
+            label = key;
+          }
+        }
+        displayDays.push({ dayLabel: label, tasks });
+      }
+    }
   });
 
   drawSectionHeading(3, "Journal détaillé des tâches quotidiennes");
 
-  if (taskDays.length > 0) {
-    taskDays.forEach(day => {
+  if (displayDays.length > 0) {
+    displayDays.forEach(({ dayLabel, tasks }) => {
       checkNewPage(18);
       
       // Puce vectorielle élégante pour le jour
@@ -198,24 +271,26 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
       doc.setFontSize(9.5);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(13, 148, 136);
-      doc.text(day.toUpperCase(), 26, y);
+      doc.text(dayLabel.toUpperCase(), 26, y);
       y += 6;
 
-      const tasks = rawTasksByDay[day] || rawTasksByDay[day.toLowerCase()] || rawTasksByDay[day.toUpperCase()] || [];
       tasks.forEach((t: any) => {
         checkNewPage(12);
         
         const status = typeof t === 'object' && t ? (t.status || 'Effectuée') : 'Effectuée';
         const difficulty = typeof t === 'object' && t ? t.difficulty : undefined;
         const timeSpent = typeof t === 'object' && t ? t.timeSpent : undefined;
+        const category = typeof t === 'object' && t ? t.category : undefined;
 
         // Puce vectorielle colorée selon le statut
         if (status === 'Effectuée') {
-          doc.setFillColor(5, 150, 105);
+          doc.setFillColor(5, 150, 105); // Vert
         } else if (status === 'Bloquée') {
-          doc.setFillColor(220, 38, 38);
+          doc.setFillColor(220, 38, 38); // Rouge
+        } else if (status === 'En cours') {
+          doc.setFillColor(37, 99, 235); // Bleu
         } else {
-          doc.setFillColor(217, 119, 6);
+          doc.setFillColor(217, 119, 6); // Ambre
         }
         doc.circle(25, y - 1, 1.2, 'F');
 
@@ -235,10 +310,11 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
         }
         
         let taskDesc = cleanPdfText(rawDesc);
+        if (category) taskDesc = `[${cleanPdfText(category)}] ${taskDesc}`;
         if (difficulty) taskDesc += ` [Difficulté: ${cleanPdfText(difficulty)}]`;
         if (timeSpent) taskDesc += ` (${cleanPdfText(timeSpent)})`;
 
-        const lines = doc.splitTextToSize(taskDesc || 'Tâche effectuée', pageW - 56);
+        const lines = doc.splitTextToSize(taskDesc || 'Activité enregistrée', pageW - 56);
         lines.forEach((l: string, i: number) => {
           if (i > 0) checkNewPage(6);
           doc.text(l, 30, y);
@@ -319,19 +395,19 @@ function drawInitialsBadge(doc: jsPDF, cx: number, cy: number, r: number, name: 
   doc.text(initials, cx, cy + 2.5, { align: 'center' });
 }
 
-export function generateV2WeeklyReportPdf(report: V2WeeklyReport, author: User | null | undefined, settings?: AppSettings) {
-  const doc = buildV2WeeklyReportPdf(report, author, settings);
+export function generateV2WeeklyReportPdf(report: V2WeeklyReport, author: User | null | undefined, settings?: AppSettings, allDailyReports?: V2DailyReport[]) {
+  const doc = buildV2WeeklyReportPdf(report, author, settings, allDailyReports);
   const authorName = (author?.name || 'collaborateur').toLowerCase().replace(/\s+/g, '_');
   doc.save(`rapport_hebdo_${authorName}_${report.weekStart}.pdf`);
 }
 
-export function getV2WeeklyReportPdfBlobUrl(report: V2WeeklyReport, author: User | null | undefined, settings?: AppSettings): string {
-  const doc = buildV2WeeklyReportPdf(report, author, settings);
+export function getV2WeeklyReportPdfBlobUrl(report: V2WeeklyReport, author: User | null | undefined, settings?: AppSettings, allDailyReports?: V2DailyReport[]): string {
+  const doc = buildV2WeeklyReportPdf(report, author, settings, allDailyReports);
   const blob = doc.output('blob');
   return URL.createObjectURL(blob);
 }
 
-export function getV2WeeklyReportPdfDataUrl(report: V2WeeklyReport, author: User | null | undefined, settings?: AppSettings): string {
-  const doc = buildV2WeeklyReportPdf(report, author, settings);
+export function getV2WeeklyReportPdfDataUrl(report: V2WeeklyReport, author: User | null | undefined, settings?: AppSettings, allDailyReports?: V2DailyReport[]): string {
+  const doc = buildV2WeeklyReportPdf(report, author, settings, allDailyReports);
   return doc.output('dataurlstring');
 }

@@ -10,7 +10,7 @@ import './TeamReportsView.css';
 
 export function TeamReportsView() {
   const { currentUser } = useAuth();
-  const { v2WeeklyReports, users, services, settings, reviewV2WeeklyReport } = useAppContext();
+  const { v2WeeklyReports, v2DailyReports, users, services, settings, reviewV2WeeklyReport } = useAppContext();
   const { confirm } = useConfirm();
 
   const [filterUser, setFilterUser] = useState('');
@@ -47,13 +47,13 @@ export function TeamReportsView() {
 
   const handlePreviewPdf = (report: V2WeeklyReport) => {
     const author = getAuthor(report.authorId);
-    const blobUrl = getV2WeeklyReportPdfBlobUrl(report, author, settings);
+    const blobUrl = getV2WeeklyReportPdfBlobUrl(report, author, settings, v2DailyReports);
     const safeName = author?.name ? author.name.toLowerCase().replace(/\s+/g, '_') : 'collaborateur';
     setPreview({
       blobUrl,
       filename: `rapport_hebdo_${safeName}_${report.weekStart}.pdf`,
       title: `Rapport Hebdomadaire — ${author?.name || 'Collaborateur'} (Semaine du ${new Date(report.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')})`,
-      onDownload: () => generateV2WeeklyReportPdf(report, author, settings)
+      onDownload: () => generateV2WeeklyReportPdf(report, author, settings, v2DailyReports)
     });
   };
 
@@ -199,7 +199,7 @@ export function TeamReportsView() {
                   <button
                     type="button"
                     className="icon-button text-teal-700"
-                    onClick={() => generateV2WeeklyReportPdf(report, author, settings)}
+                    onClick={() => generateV2WeeklyReportPdf(report, author, settings, v2DailyReports)}
                     title="Télécharger une copie PDF"
                   >
                     <Download size={17} />
@@ -333,7 +333,7 @@ export function TeamReportsView() {
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={() => generateV2WeeklyReportPdf(selectedReport, getAuthor(selectedReport.authorId), settings)}
+                  onClick={() => generateV2WeeklyReportPdf(selectedReport, getAuthor(selectedReport.authorId), settings, v2DailyReports)}
                   style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                 >
                   <Download size={16} />

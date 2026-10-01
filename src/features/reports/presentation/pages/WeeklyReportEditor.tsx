@@ -271,18 +271,18 @@ export function WeeklyReportEditor() {
 
   const handleDownloadPdf = () => {
     const reportObj = getCurrentReportObject();
-    generateV2WeeklyReportPdf(reportObj, currentUser, settings);
+    generateV2WeeklyReportPdf(reportObj, currentUser, settings, v2DailyReports);
   };
 
   const handlePreviewPdf = () => {
     const reportObj = getCurrentReportObject();
-    const blobUrl = getV2WeeklyReportPdfBlobUrl(reportObj, currentUser, settings);
+    const blobUrl = getV2WeeklyReportPdfBlobUrl(reportObj, currentUser, settings, v2DailyReports);
     const authorName = (currentUser?.name || 'collaborateur').toLowerCase().replace(/\s+/g, '_');
     setPreview({
       blobUrl,
       filename: `rapport_hebdo_${authorName}_${reportObj.weekStart}.pdf`,
       title: `Aperçu du Rapport Hebdomadaire — ${currentUser?.name || 'Mon Rapport'}`,
-      onDownload: () => generateV2WeeklyReportPdf(reportObj, currentUser, settings)
+      onDownload: () => generateV2WeeklyReportPdf(reportObj, currentUser, settings, v2DailyReports)
     });
   };
 

@@ -41,13 +41,21 @@ export function CrmWeeklyReports() {
   const isSupervisionRoute = location.pathname.includes('rapports-equipe');
   const showSupervision = isSupervisionRoute || (isDirection && !location.pathname.includes('/crm/rapports'));
 
+  // Format local Date as YYYY-MM-DD
+  const formatYMD = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dayNum = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dayNum}`;
+  };
+
   // Helper date for Monday
   const getMondayOf = (d: Date) => {
     const date = new Date(d);
     const day = date.getDay();
     const diff = date.getDate() - day + (day === 0 ? -6 : 1);
     const mon = new Date(date.setDate(diff));
-    return mon.toISOString().slice(0, 10);
+    return formatYMD(mon);
   };
 
   const currentMondayStr = useMemo(() => getMondayOf(new Date()), []);
@@ -130,7 +138,7 @@ export function CrmWeeklyReports() {
     DAYS.forEach((day, idx) => {
       const d = new Date(startDate);
       d.setDate(d.getDate() + idx);
-      dates[day] = d.toISOString().slice(0, 10);
+      dates[day] = formatYMD(d);
     });
     return dates;
   }, [currentWeekStart]);
@@ -363,36 +371,61 @@ export function CrmWeeklyReports() {
 
   // 7. Aperçu PDF Certifié
   const handlePreviewPdf = (reportToPreview?: V2WeeklyReport) => {
+    const targetWeekStart = reportToPreview?.weekStart || currentWeekStart;
     const authorId = reportToPreview ? reportToPreview.authorId : (currentUser?.id || '');
-    const tasksByDayRecord: Record<string, V2Task[]> = {};
-    DAYS.forEach(day => {
-      const rep = v2DailyReports.find(d => d.authorId === authorId && d.date === weekDates[day]);
-      tasksByDayRecord[day] = rep?.tasks || [];
+    
+    // Calculer les dates exactes de la semaine cible (du Lundi au Samedi)
+    const targetStartDate = new Date(targetWeekStart + 'T00:00:00');
+    const targetWeekDates: Record<string, string> = {};
+    DAYS.forEach((day, idx) => {
+      const d = new Date(targetStartDate);
+      d.setDate(d.getDate() + idx);
+      targetWeekDates[day] = formatYMD(d);
     });
 
-    const reportObj: V2WeeklyReport = reportToPreview || {
-      id: currentWeeklyReport?.id || 'temp-id',
-      authorId: currentUser?.id || '',
-      weekStart: currentWeekStart,
-      weekEnd: weekDates['Samedi'],
-      weeklyObjectives,
-      tasksByDay: tasksByDayRecord,
-      summary,
-      achievements,
-      difficulties,
-      nextWeekObjectives,
-      status: currentWeeklyReport?.status || 'Brouillon'
-    };
+    const tasksByDayRecord: Record<string, V2Task[]> = {};
+    DAYS.forEach(day => {
+      const targetDate = targetWeekDates[day];
+      const rep = v2DailyReports.find(d => 
+        d.authorId === authorId && 
+        (d.date === targetDate || d.date?.startsWith(targetDate))
+      );
+      const existingInReport = (reportToPreview?.tasksByDay && typeof reportToPreview.tasksByDay === 'object') 
+        ? ((reportToPreview.tasksByDay as any)[day] || [])
+        : [];
+      tasksByDayRecord[day] = (rep?.tasks && rep.tasks.length > 0) ? rep.tasks : existingInReport;
+    });
+
+    const reportObj: V2WeeklyReport = reportToPreview 
+      ? {
+          ...reportToPreview,
+          tasksByDay: (Object.values(tasksByDayRecord).some(arr => Array.isArray(arr) && arr.length > 0)) 
+            ? tasksByDayRecord 
+            : reportToPreview.tasksByDay
+        }
+      : {
+          id: currentWeeklyReport?.id || 'temp-id',
+          authorId: currentUser?.id || '',
+          weekStart: currentWeekStart,
+          weekEnd: weekDates['Samedi'],
+          weeklyObjectives,
+          tasksByDay: tasksByDayRecord,
+          summary,
+          achievements,
+          difficulties,
+          nextWeekObjectives,
+          status: currentWeeklyReport?.status || 'Brouillon'
+        };
 
     const targetAuthor = users.find(u => u.id === reportObj.authorId) || currentUser;
-    const blobUrl = getV2WeeklyReportPdfBlobUrl(reportObj, targetAuthor, settings);
+    const blobUrl = getV2WeeklyReportPdfBlobUrl(reportObj, targetAuthor, settings, v2DailyReports);
     const safeName = targetAuthor?.name ? targetAuthor.name.toLowerCase().replace(/\s+/g, '_') : 'collaborateur';
 
     setPreview({
       blobUrl,
       filename: `rapport_hebdo_${safeName}_${reportObj.weekStart}.pdf`,
       title: `Rapport Hebdomadaire — ${targetAuthor?.name || 'Collaborateur'} (Semaine du ${new Date(reportObj.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')})`,
-      onDownload: () => generateV2WeeklyReportPdf(reportObj, targetAuthor, settings)
+      onDownload: () => generateV2WeeklyReportPdf(reportObj, targetAuthor, settings, v2DailyReports)
     });
   };
 

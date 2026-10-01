@@ -10,7 +10,7 @@ import { generateV2WeeklyReportPdf, getV2WeeklyReportPdfBlobUrl } from '../../se
 import { ReportPdfPreview, type ReportPdfPreviewData } from '../../../../components/ReportPdfPreview';
 
 export const ReportsHistory: React.FC = () => {
-  const { v2WeeklyReports, users, settings } = useAppContext();
+  const { v2WeeklyReports, v2DailyReports, users, settings } = useAppContext();
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
@@ -56,13 +56,13 @@ export const ReportsHistory: React.FC = () => {
 
   const handlePreviewPdf = (report: V2WeeklyReport) => {
     const author = users?.find((u: any) => u.id === report.authorId) || currentUser;
-    const blobUrl = getV2WeeklyReportPdfBlobUrl(report, author, settings);
-    const safeName = author?.name ? author.name.toLowerCase().replace(/s+/g, '_') : 'collaborateur';
+    const blobUrl = getV2WeeklyReportPdfBlobUrl(report, author, settings, v2DailyReports);
+    const safeName = author?.name ? author.name.toLowerCase().replace(/\s+/g, '_') : 'collaborateur';
     setPreview({
       blobUrl,
       filename: `rapport_hebdo_${safeName}_${report.weekStart}.pdf`,
       title: `Rapport Hebdomadaire — ${author?.name || 'Moi'} (Semaine du ${formatWeekRange(report.weekStart)})`,
-      onDownload: () => generateV2WeeklyReportPdf(report, author, settings)
+      onDownload: () => generateV2WeeklyReportPdf(report, author, settings, v2DailyReports)
     });
   };
 
@@ -313,7 +313,7 @@ export const ReportsHistory: React.FC = () => {
 
                     <button
                       className="btn btn-outline btn-sm"
-                      onClick={() => generateV2WeeklyReportPdf(report, author, settings)}
+                      onClick={() => generateV2WeeklyReportPdf(report, author, settings, v2DailyReports)}
                       title="Télécharger le fichier PDF"
                       style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 600 }}
                     >
