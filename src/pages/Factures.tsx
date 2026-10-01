@@ -193,6 +193,30 @@ export function Factures() {
     return 'GÉNÉRAL';
   };
 
+  // Liste consolidée de tous les services créés dans le système
+  const allAvailableServices = useMemo(() => {
+    const serviceList: { id?: string; name: string }[] = [];
+    const seen = new Set<string>();
+
+    // 1. Tous les services créés dans la base de données
+    (services || []).forEach(s => {
+      if (s.name && !seen.has(s.name.trim().toUpperCase())) {
+        seen.add(s.name.trim().toUpperCase());
+        serviceList.push({ id: s.id, name: s.name.trim() });
+      }
+    });
+
+    // 2. Services prédéfinis / métiers supplémentaires
+    PREDEFINED_SERVICES.forEach(ps => {
+      if (!seen.has(ps.trim().toUpperCase())) {
+        seen.add(ps.trim().toUpperCase());
+        serviceList.push({ name: ps.trim() });
+      }
+    });
+
+    return serviceList;
+  }, [services]);
+
   // Helper de formatage avec séparateurs de milliers (ex: 1 000 000)
   const handleFormattedNumberChange = (setter: (val: number) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/\s/g, '').replace(/[^0-9]/g, '');
@@ -1088,11 +1112,11 @@ export function Factures() {
               value={serviceFilter}
               onChange={e => setServiceFilter(e.target.value)}
               className="table-input"
-              style={{ padding: '6px 10px', minWidth: '130px' }}
+              style={{ padding: '6px 10px', minWidth: '140px' }}
             >
               <option value="">Tous les services</option>
-              {PREDEFINED_SERVICES.map(s => (
-                <option key={s} value={s}>{s}</option>
+              {allAvailableServices.map(s => (
+                <option key={s.id || s.name} value={s.name}>{s.name}</option>
               ))}
             </select>
 
@@ -1626,22 +1650,31 @@ export function Factures() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
-                    Service
+                    Service (Département / Activité) *
                   </label>
-                  <input
-                    type="text"
-                    list="services-list-modal"
+                  <select
+                    required
                     value={formServiceName}
-                    onChange={e => setFormServiceName(e.target.value.toUpperCase())}
-                    placeholder="INFORMATIQUE, IMPRIMERIE..."
+                    onChange={e => {
+                      const selectedName = e.target.value;
+                      setFormServiceName(selectedName);
+                      const matching = (services || []).find(s => s.name.toUpperCase() === selectedName.toUpperCase());
+                      if (matching) {
+                        setFormServiceId(matching.id);
+                      } else {
+                        setFormServiceId('');
+                      }
+                    }}
                     className="table-input"
-                    style={{ width: '100%', padding: '8px 12px', fontWeight: 600 }}
-                  />
-                  <datalist id="services-list-modal">
-                    {PREDEFINED_SERVICES.map(s => (
-                      <option key={s} value={s} />
+                    style={{ width: '100%', padding: '8px 12px', fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-primary)' }}
+                  >
+                    <option value="">Sélectionner un service...</option>
+                    {allAvailableServices.map(s => (
+                      <option key={s.id || s.name} value={s.name}>
+                        {s.name}
+                      </option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
 
                 <div>
