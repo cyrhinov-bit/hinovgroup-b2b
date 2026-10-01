@@ -97,8 +97,9 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
 
   // CRM nav items
   const crmNavItems: NavItemConfig[] = [
-    { label: 'Dashboard', icon: Home, path: '/', color: '#2563EB', bg: '#EFF6FF', roles: ['Directeur', 'Responsable'] },
-    // Modules CRM Responsables de Service
+    { label: 'Dashboard', icon: Home, path: '/', color: '#2563EB', bg: '#EFF6FF', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'] },
+    { label: 'Dashboard', icon: Home, path: '/commercial', color: '#2563EB', bg: '#EFF6FF', roles: ['Commercial'] },
+    // Modules CRM Responsables de Service & Collaborateurs
     { label: 'Commandes', icon: ShoppingBag, path: '/crm/prestations', color: '#10B981', bg: '#ECFDF5', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmPrestationsEnabled' },
     { label: 'Caisse & Dépenses', icon: Wallet, path: '/crm/caisse', color: '#EF4444', bg: '#FEF2F2', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmCaisseEnabled' },
     { label: 'Maintenance', icon: Wrench, path: '/crm/maintenance', color: '#F59E0B', bg: '#FFFBEB', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmMaintenanceEnabled' },
@@ -118,8 +119,6 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Activation Modules', icon: ToggleRight, path: '/crm/modules', color: '#3B82F6', bg: '#EFF6FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Utilisateurs', icon: Shield, path: '/utilisateurs', color: '#475569', bg: '#F8FAFC', roles: ['Directeur', 'SuperAdmin'] },
     { label: 'Paramètres', icon: Settings, path: '/parametres', color: '#64748B', bg: '#F1F5F9', roles: ['Directeur'] },
-    // Espace Commercial
-    { label: 'Dashboard', icon: Home, path: '/commercial', color: '#2563EB', bg: '#EFF6FF', roles: ['Commercial'] },
   ];
 
   // POS nav items avec couleurs distinctives
@@ -150,18 +149,37 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Inventaire', icon: ClipboardList, path: '/pos/inventory', color: '#0D9488', bg: '#F0FDFA', roles: ['Directeur', 'Gerant', 'Caissier'] },
   ];
 
-  const isPos = posWorkspace.active;
+  const normalizeRole = (role?: string | null): string => {
+    if (!role) return '';
+    const r = role.toLowerCase().trim();
+    if (r.includes('commercial')) return 'Commercial';
+    if (r.includes('directeur adjoint') || r.includes('adjoint')) return 'Directeur adjoint';
+    if (r.includes('directeur')) return 'Directeur';
+    if (r.includes('responsable')) return 'Responsable';
+    if (r.includes('superadmin') || r.includes('admin')) return 'SuperAdmin';
+    if (r.includes('caissier')) return 'Caissier';
+    if (r.includes('gerant') || r.includes('gérant')) return 'Gerant';
+    return role;
+  };
+
+  const userRole = normalizeRole(currentUser?.role);
+  const userPosRole = normalizeRole(currentUser?.posRole);
+  
+  // Le mode POS ne s'active que pour les rôles ayant explicitement accès au POS
+  const canAccessPos = isDirection || userRole === 'Caissier' || userRole === 'Gerant' || !!userPosRole;
+  const isPos = posWorkspace.active && canAccessPos;
   const navItems = isPos ? posNavItems : crmNavItems;
+  const effectiveRole = (isPos && userPosRole) ? userPosRole : userRole;
 
   // Filtrer les éléments selon le rôle de l'utilisateur connecté et ses permissions
   const visibleNavItems = navItems.filter(item => {
     if (!currentUser) return false;
-    const effectiveRole = (isPos && currentUser.posRole) ? currentUser.posRole : currentUser.role;
     
-    if (!item.roles.includes(effectiveRole as any)) return false;
+    const hasRole = item.roles.some(r => r.toLowerCase() === effectiveRole.toLowerCase());
+    if (!hasRole) return false;
 
     // Isoler la vue SuperAdmin entre Admin et Commercial
-    if (currentUser.role === 'SuperAdmin') {
+    if (userRole === 'SuperAdmin') {
       const isCommercialSpace = location.pathname.startsWith('/commercial');
       const isCommercialRoute = item.path.startsWith('/commercial');
       if (isCommercialSpace && !isCommercialRoute) return false;
