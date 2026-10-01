@@ -2944,17 +2944,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addService = async (service: Service) => {
-    const newServices = [...services, { ...service, id: service.id.length > 20 ? service.id : uuidv4() }];
+    const serviceId = service.id && service.id.length > 20 ? service.id : uuidv4();
+    const cleanService = { ...service, id: serviceId, name: service.name.trim() };
+    const newServices = [...services.filter(s => s.id !== cleanService.id), cleanService];
     setServices(newServices);
     await db.services.setItem('data', newServices);
-    await queueSyncAction('INSERT_SERVICE', newServices[newServices.length - 1]);
+    await queueSyncAction('INSERT_SERVICE', cleanService);
   };
 
   const updateService = async (id: string, service: Partial<Service>) => {
-    const newServices = services.map(s => s.id === id ? { ...s, ...service } : s);
+    const updatedName = service.name !== undefined ? service.name.trim() : undefined;
+    const newServices = services.map(s => s.id === id ? { ...s, ...service, ...(updatedName ? { name: updatedName } : {}) } : s);
     setServices(newServices);
     await db.services.setItem('data', newServices);
-    await queueSyncAction('UPDATE_SERVICE', { id, name: service.name, description: service.description, members: service.members, commissionRate: service.commissionRate });
+    await queueSyncAction('UPDATE_SERVICE', { id, name: updatedName, description: service.description, members: service.members, commissionRate: service.commissionRate });
   };
 
   const deleteService = async (id: string) => {

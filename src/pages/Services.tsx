@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
 import { useAppContext } from '../context/AppContext';
 import { useConfirm } from '../components/ConfirmModal';
 import type { Service } from '../context/AppContext';
@@ -15,16 +16,16 @@ export function Services() {
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newService.name) {
+    if (newService.name && newService.name.trim()) {
       addService({
-        id: Date.now().toString(),
-        name: newService.name,
+        id: uuidv4(),
+        name: newService.name.trim(),
         members: newService.members || 1,
-        description: newService.description || '',
+        description: newService.description?.trim() || '',
         commissionRate: newService.commissionRate !== undefined ? Number(newService.commissionRate) : 10
       });
       setShowForm(false);
-      setNewService({ commissionRate: 10 });
+      setNewService({ commissionRate: 10, name: '', description: '' });
     }
   };
 
@@ -41,8 +42,12 @@ export function Services() {
 
   const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingService) return;
-    updateService(editingService.id, editForm);
+    if (!editingService || !editForm.name.trim()) return;
+    updateService(editingService.id, {
+      ...editForm,
+      name: editForm.name.trim(),
+      description: editForm.description.trim()
+    });
     setEditingService(null);
   };
 
@@ -70,7 +75,7 @@ export function Services() {
           <form onSubmit={handleAdd} className="responsive-form-grid">
             <input
               className="table-input"
-              placeholder="Nom du service *"
+              placeholder="Nom du service (ex: Librairie-Papeterie) *"
               value={newService.name || ''}
               required
               onChange={e => setNewService({ ...newService, name: e.target.value })}
@@ -92,6 +97,13 @@ export function Services() {
               step="0.5"
               value={newService.commissionRate !== undefined ? newService.commissionRate : ''}
               onChange={e => setNewService({ ...newService, commissionRate: Number(e.target.value) })}
+            />
+            <input
+              className="table-input"
+              placeholder="Description (optionnelle)"
+              value={newService.description || ''}
+              onChange={e => setNewService({ ...newService, description: e.target.value })}
+              style={{ gridColumn: '1 / -1' }}
             />
             <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Annuler</button>
@@ -136,6 +148,15 @@ export function Services() {
                 value={editForm.commissionRate !== undefined ? editForm.commissionRate : 10}
                 required
                 onChange={e => setEditForm({ ...editForm, commissionRate: Number(e.target.value) })}
+              />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Description</label>
+              <input
+                className="table-input"
+                placeholder="Description du service"
+                value={editForm.description}
+                onChange={e => setEditForm({ ...editForm, description: e.target.value })}
               />
             </div>
             <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
