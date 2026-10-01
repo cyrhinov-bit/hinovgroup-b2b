@@ -62,6 +62,7 @@ export interface User {
   crmCommerciauxEnabled?: boolean;
   crmCommissionsEnabled?: boolean;
   crmFacturationEnabled?: boolean;
+  crmReportsEnabled?: boolean;
 }
 export type AffaireStatus = 'PROSPECTION' | 'QUALIFIEE' | 'PROPOSITION' | 'NEGOCIATION' | 'GAGNEE' | 'EN_COURS' | 'CLOTUREE' | 'PERDUE' | 'ANNULEE';
 export interface Affaire {
@@ -442,6 +443,7 @@ interface AppState {
   saveV2DailyReport: (report: V2DailyReport) => Promise<void>;
   saveV2WeeklyReport: (report: V2WeeklyReport) => Promise<void>;
   submitV2WeeklyReport: (id: string) => Promise<void>;
+  sendWeeklyReportReminder: (userIds: string[], weekStart: string) => Promise<void>;
   reviewV2WeeklyReport: (id: string, comment?: string, status?: 'Validé' | 'Relu') => Promise<void>;
   deleteV2WeeklyReport: (id: string) => Promise<void>;
   updateMyProfile: (data: Partial<Pick<User, 'photo' | 'name'>>) => Promise<void>;
@@ -1001,7 +1003,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             crmTiersEnabled: p.crm_tiers_enabled === true,
             crmCommerciauxEnabled: p.crm_commerciaux_enabled === true,
             crmCommissionsEnabled: p.crm_commissions_enabled === true,
-            crmFacturationEnabled: p.crm_facturation_enabled === true
+            crmFacturationEnabled: p.crm_facturation_enabled === true,
+            crmReportsEnabled: p.crm_reports_enabled !== false
           }));
           const mergedUsers = mergeData(cachedUsers, parsedUsers);
           setUsers(mergedUsers); await db.profiles.setItem('data', mergedUsers);
@@ -2834,27 +2837,71 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.v2WeeklyReports.setItem('data', newReports);
     await queueSyncAction('UPDATE_V2_WEEKLY_REPORT', updated);
 
-    // Notify direction and supervisors
+    // Lock all daily reports of this week for the author
+    const startDate = new Date(report.weekStart + 'T00:00:00');
+    const authorDailyReports = v2DailyReports.filter(d => {
+      if (d.authorId !== report.authorId) return false;
+      const dDate = new Date(d.date + 'T00:00:00');
+      const diffDays = Math.round((dDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      return diffDays >= 0 && diffDays <= 6;
+    });
+
+    if (authorDailyReports.length > 0) {
+      const lockedDaily = v2DailyReports.map(d => {
+        if (authorDailyReports.some(ad => ad.id === d.id)) {
+          return { ...d, status: 'Soumis' as const, updatedAt: now };
+        }
+        return d;
+      });
+      setV2DailyReports(lockedDaily);
+      await db.v2DailyReports.setItem('data', lockedDaily);
+    }
+
+    // Seule la Direction reçoit les rapports soumis
     const author = users.find(u => u.id === report.authorId);
     const authorName = author?.name || 'Un collaborateur';
-    const recipientUsers = users.filter(u => 
-      ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(u.role) ||
-      (u.role === 'Responsable' && author?.serviceId && u.serviceId === author.serviceId)
+    const directionUsers = users.filter(u => 
+      ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(u.role)
     );
-    if (recipientUsers.length > 0) {
-      const newNotifs: AppNotification[] = recipientUsers.map(d => ({
+    if (directionUsers.length > 0) {
+      const newNotifs: AppNotification[] = directionUsers.map(d => ({
         id: uuidv4(),
         user_id: d.id,
-        title: 'Nouveau rapport d\'activité hebdomadaire',
+        title: 'Nouveau rapport hebdomadaire soumis',
         message: `${authorName} a soumis son rapport pour la semaine du ${new Date(report.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')}.`,
         type: 'info',
         is_read: false,
-        link: '/rapports-equipe',
+        link: `/crm/rapports?tab=supervision&week=${report.weekStart}`,
         created_at: now
       }));
       const updatedNotifs = [...notifications, ...newNotifs];
       setNotifications(updatedNotifs);
       await db.notifications.setItem('data', updatedNotifs);
+      for (const notif of newNotifs) {
+        await queueSyncAction('INSERT_NOTIFICATION', notif);
+      }
+    }
+  };
+
+  const sendWeeklyReportReminder = async (userIds: string[], weekStart: string) => {
+    if (!userIds || userIds.length === 0) return;
+    const now = new Date().toISOString();
+    const weekDateStr = new Date(weekStart + 'T00:00:00').toLocaleDateString('fr-FR');
+    const newNotifs: AppNotification[] = userIds.map(uid => ({
+      id: uuidv4(),
+      user_id: uid,
+      title: 'Rappel Direction : Rapport Hebdo en attente',
+      message: `La Direction vous invite à compléter et soumettre votre rapport d'activité pour la semaine du ${weekDateStr}.`,
+      type: 'warning',
+      is_read: false,
+      link: `/crm/rapports?week=${weekStart}&tab=report`,
+      created_at: now
+    }));
+    const updatedNotifs = [...notifications, ...newNotifs];
+    setNotifications(updatedNotifs);
+    await db.notifications.setItem('data', updatedNotifs);
+    for (const notif of newNotifs) {
+      await queueSyncAction('INSERT_NOTIFICATION', notif);
     }
   };
 
@@ -4948,7 +4995,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, reviewV2WeeklyReport, deleteV2WeeklyReport, updateMyProfile, addCrmDocument, updateCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData, reconcilePosData: reconcileLocalPosDataWithCloud,
+      users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, sendWeeklyReportReminder, reviewV2WeeklyReport, deleteV2WeeklyReport, updateMyProfile, addCrmDocument, updateCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData, reconcilePosData: reconcileLocalPosDataWithCloud,
       // CRM Modules Responsables
       crmTiers, crmCommerciaux, crmPrestations, crmCaisse, crmCommissions, crmArticles, crmMaintenance, crmTechniciens,
       addCrmTier, updateCrmTier, deleteCrmTier,

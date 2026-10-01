@@ -17,7 +17,8 @@ import {
   Sparkles,
   Layers,
   Filter,
-  Receipt
+  Receipt,
+  ClipboardList
 } from 'lucide-react';
 
 interface ModuleDef {
@@ -29,7 +30,8 @@ interface ModuleDef {
     'crmTiersEnabled' | 
     'crmCommerciauxEnabled' | 
     'crmCommissionsEnabled' |
-    'crmFacturationEnabled'
+    'crmFacturationEnabled' |
+    'crmReportsEnabled'
   >;
   label: string;
   shortDesc: string;
@@ -102,6 +104,14 @@ const CRM_MODULES: ModuleDef[] = [
     icon: <Receipt size={18} />,
     color: '#0284C7',
     badge: 'Module 8'
+  },
+  {
+    key: 'crmReportsEnabled',
+    label: 'Rapports Hebdomadaires',
+    shortDesc: 'Saisie journalière, consolidation hebdo, attestations PDF et supervision Direction',
+    icon: <ClipboardList size={18} />,
+    color: '#059669',
+    badge: 'Module 9'
   }
 ];
 

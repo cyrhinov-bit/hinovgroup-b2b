@@ -69,7 +69,7 @@ export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT'
                               'INSERT_IMPORT_ERROR' |
                               'INSERT_DOCUMENT' | 'UPDATE_DOCUMENT' | 'DELETE_DOCUMENT' |
                               'INSERT_CRM_FOLDER' | 'UPDATE_CRM_FOLDER' | 'DELETE_CRM_FOLDER' |
-                              'MARK_NOTIFICATION_READ' | 'MARK_ALL_NOTIFICATIONS_READ';
+                              'INSERT_NOTIFICATION' | 'MARK_NOTIFICATION_READ' | 'MARK_ALL_NOTIFICATIONS_READ';
 
 export interface SyncAction {
   id: string;
@@ -1337,6 +1337,21 @@ export const processSyncQueue = async () => {
               console.warn('[Sync] DELETE_DOCUMENT Storage remove warning:', err);
             }
           }
+          success = checkResult(error);
+          break;
+        }
+        case 'INSERT_NOTIFICATION': {
+          const { error } = await supabase.from('notifications').insert([{
+            id: action.payload.id,
+            user_id: action.payload.user_id,
+            title: action.payload.title,
+            message: action.payload.message,
+            type: action.payload.type,
+            is_read: !!action.payload.is_read,
+            link: action.payload.link || null,
+            created_at: action.payload.created_at || new Date().toISOString()
+          }]);
+          if (error) console.error('[Sync] INSERT_NOTIFICATION échoué :', error.message);
           success = checkResult(error);
           break;
         }

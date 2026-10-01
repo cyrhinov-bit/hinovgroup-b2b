@@ -31,8 +31,7 @@ import { CrmTiers } from './pages/crm/CrmTiers';
 import { CrmCommerciaux } from './pages/crm/CrmCommerciaux';
 import { CrmCommissions } from './pages/crm/CrmCommissions';
 import CrmModulesManager from './pages/crm/CrmModulesManager';
-
-// AI Weekly Reports (Deleted)
+import { CrmWeeklyReports } from './pages/crm/CrmWeeklyReports';
 
 // POS Pages (lazy loaded)
 import { lazy, Suspense } from 'react';
@@ -183,6 +182,9 @@ function App() {
                     <Route path="crm/tiers" element={<CrmTiers />} />
                     <Route path="crm/commerciaux" element={<CrmCommerciaux />} />
                     <Route path="crm/commissions" element={<CrmCommissions />} />
+                    <Route path="crm/rapports" element={<CrmWeeklyReports />} />
+                    <Route path="rapports-equipe" element={<Navigate to="/crm/rapports?tab=supervision" replace />} />
+                    <Route path="rapports-hebdo" element={<Navigate to="/crm/rapports" replace />} />
                     <Route path="crm/modules" element={<CrmModulesManager />} />
 
                     {/* Commercial routes */}
