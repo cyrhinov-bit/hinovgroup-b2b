@@ -107,6 +107,8 @@ export function parseListItems(raw?: string | null): { title?: string; body: str
   for (let line of rawLines) {
     // Nettoyage de puce de début de ligne
     line = line.replace(/^[-*•\d.)\]]\s*/, '').trim();
+    // Suppression des préfixes de catégorie génériques comme [Opérationnel]
+    line = line.replace(/^\[(?:Op[eé]rationnel|Operationnel)\]\s*(?::\s*)?/i, '').trim();
     if (!line) continue;
 
     // Détection motif [Titre du module / tâche] : Description
@@ -527,10 +529,9 @@ export function buildV2WeeklyReportPdf(
         }
 
         let taskTitle = cleanPdfText(rawTitle) || 'Activite enregistree';
-        if (category) {
-          taskTitle = `[${cleanPdfText(category)}] ${taskTitle}`;
-        }
-        const taskDesc = cleanPdfText(rawDesc);
+        // Supprimer d'éventuels préfixes de catégorie résiduels (ex: [Opérationnel], [Operationnel])
+        taskTitle = taskTitle.replace(/^\[(?:Op[eé]rationnel|Operationnel)\]\s*(?::\s*)?/i, '');
+        const taskDesc = cleanPdfText(rawDesc).replace(/^\[(?:Op[eé]rationnel|Operationnel)\]\s*(?::\s*)?/i, '');
 
         // 1. TITRE DE L'ACTIVITÉ : Ligne dédiée, en couleur spécifique du jour et SOULIGNÉ
         doc.setFont('helvetica', 'bold');
