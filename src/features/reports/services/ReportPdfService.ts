@@ -88,6 +88,58 @@ export function getDayColor(dayName: string): { r: number; g: number; b: number 
 }
 
 /**
+ * Découpe intelligemment un texte brut ou une liste en éléments structurés (Titre / Description).
+ */
+export function parseListItems(raw?: string | null): { title?: string; body: string }[] {
+  if (!raw || !raw.trim()) return [];
+
+  let text = String(raw)
+    .replace(/[\u2018\u2019\u201A\u201B\u0060\u00B4]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F\u00AB\u00BB]/g, '"')
+    .replace(/[\u2013\u2014\u2015\u2212]/g, '-')
+    .replace(/[\u2022\u2023\u25E6\u2043\u2219\u25AA\u25CF\u25CB]/g, '\n- ')
+    .replace(/\s+-\s*\[/g, '\n[') // Sépare " - [Module]" sur une nouvelle ligne
+    .replace(/\s+;\s+/g, '\n- '); // Sépare les " ; " sur une nouvelle ligne
+
+  const rawLines = text.split(/\r?\n+/).map(l => l.trim()).filter(Boolean);
+  const items: { title?: string; body: string }[] = [];
+
+  for (let line of rawLines) {
+    // Nettoyage de puce de début de ligne
+    line = line.replace(/^[-*•\d.)\]]\s*/, '').trim();
+    if (!line) continue;
+
+    // Détection motif [Titre du module / tâche] : Description
+    const bracketMatch = line.match(/^\[([^\]]+)\]\s*(?::\s*)?(.*)$/);
+    if (bracketMatch) {
+      const tagTitle = bracketMatch[1].trim();
+      const tagBody = bracketMatch[2].trim();
+      items.push({
+        title: tagTitle,
+        body: tagBody || tagTitle
+      });
+      continue;
+    }
+
+    // Détection motif "Titre Court : Description"
+    const colonMatch = line.match(/^([^:]{3,45})\s*:\s+(.+)$/);
+    if (colonMatch && !colonMatch[1].includes('http') && !colonMatch[1].includes('/')) {
+      items.push({
+        title: colonMatch[1].trim(),
+        body: colonMatch[2].trim()
+      });
+      continue;
+    }
+
+    items.push({
+      body: line
+    });
+  }
+
+  return items;
+}
+
+/**
  * Construit l'objet jsPDF du Rapport Hebdomadaire V2 avec un rendu propre, garanti sans page blanche.
  */
 export function buildV2WeeklyReportPdf(
@@ -244,15 +296,82 @@ export function buildV2WeeklyReportPdf(
     y += 3.5;
   };
 
+  const drawStructuredSection = (num: number, title: string, content?: string | null, fallback = 'Neant') => {
+    drawSectionHeading(num, title);
+
+    const items = parseListItems(content);
+    if (items.length === 0) {
+      drawParagraph(undefined, fallback);
+      return;
+    }
+
+    items.forEach((item) => {
+      checkNewPage(14);
+
+      // Puce vectorielle colorée
+      doc.setFillColor(13, 148, 136);
+      doc.circle(22, y - 1, 1.2, 'F');
+
+      if (item.title) {
+        // 1. TITRE / MODULE DU POINT : En couleur Teal (#0D9488), Gras et Souligné
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(13, 148, 136); // Teal
+        doc.setDrawColor(13, 148, 136);
+        doc.setLineWidth(0.35);
+
+        const cleanTitle = cleanPdfText(item.title.startsWith('[') ? item.title : `[${item.title}]`);
+        const titleLines = doc.splitTextToSize(cleanTitle, pageW - 48);
+        titleLines.forEach((tLine: string, idx: number) => {
+          if (idx > 0) checkNewPage(5.5);
+          doc.text(tLine, 26, y);
+          const tWidth = doc.getTextWidth(tLine);
+          doc.line(26, y + 0.9, 26 + Math.min(tWidth, pageW - 54), y + 0.9);
+          y += 5.2;
+        });
+
+        // 2. DESCRIPTION DU POINT : Indentée en dessous, texte régulier Slate-700
+        if (item.body && item.body.toLowerCase().trim() !== item.title.toLowerCase().trim()) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8.5);
+          doc.setTextColor(51, 65, 85); // Slate-700
+          const cleanBody = cleanPdfText(item.body);
+          const bodyLines = doc.splitTextToSize(cleanBody, pageW - 48);
+          bodyLines.forEach((bLine: string) => {
+            checkNewPage(5);
+            doc.text(bLine, 26, y);
+            y += 4.6;
+          });
+        }
+      } else {
+        // Élément simple sans titre séparé
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(51, 65, 85); // Slate-700
+        const cleanBody = cleanPdfText(item.body);
+        const bodyLines = doc.splitTextToSize(cleanBody, pageW - 48);
+        bodyLines.forEach((bLine: string, idx: number) => {
+          if (idx > 0) checkNewPage(5);
+          doc.text(bLine, 26, y);
+          y += 4.6;
+        });
+      }
+
+      y += 2.5; // Espacement entre éléments
+    });
+
+    y += 2.5;
+  };
+
   // ================= 3. SECTIONS DU RAPPORT =================
 
   // Section 1 : Objectifs de la semaine
-  drawSectionHeading(1, "Objectifs de la semaine");
-  drawParagraph(report.weeklyObjectives, "Poursuite et traitement des affaires courantes.");
+  drawStructuredSection(1, "Objectifs de la semaine", report.weeklyObjectives, "Poursuite et traitement des affaires courantes.");
 
   // Section 2 : Synthèse générale & Faits marquants
-  drawSectionHeading(2, "Synthese globale & Faits marquants");
-  drawParagraph(
+  drawStructuredSection(
+    2, 
+    "Synthese globale & Faits marquants", 
     report.aiSummary || report.summary || report.conclusion,
     "Ce rapport hebdomadaire recapitule l'ensemble des activites, echanges commerciaux et livrables realises par le collaborateur."
   );
@@ -470,22 +589,25 @@ export function buildV2WeeklyReportPdf(
   }
 
   // Section 4 : Principaux résultats & Réalisations
-  drawSectionHeading(4, "Principaux resultats & Realisations");
-  drawParagraph(
+  drawStructuredSection(
+    4, 
+    "Principaux resultats & Realisations", 
     report.achievements || report.conclusion,
     "Execution conforme des missions, traitement des requetes et suivi des objectifs hebdomadaires."
   );
 
   // Section 5 : Difficultés rencontrées & Demandes d'arbitrage
-  drawSectionHeading(5, "Difficultes rencontrees & Besoins d'arbitrage");
-  drawParagraph(
+  drawStructuredSection(
+    5, 
+    "Difficultes rencontrees & Besoins d'arbitrage", 
     report.difficulties,
     "Aucun point de blocage majeur ni arbitrage particulier a signaler pour cette periode."
   );
 
   // Section 6 : Plan d'action & Perspectives semaine N+1
-  drawSectionHeading(6, "Plan d'action & Perspectives (Semaine N+1)");
-  drawParagraph(
+  drawStructuredSection(
+    6, 
+    "Plan d'action & Perspectives (Semaine N+1)", 
     report.nextWeekObjectives,
     "Assurer la continuite des affaires, le suivi des dossiers clients et la prospection commerciale."
   );
