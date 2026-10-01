@@ -1470,27 +1470,63 @@ export const processSyncQueue = async () => {
             success = true;
             break;
           }
-          const { error } = await supabase.from('pos_products').upsert([{
+
+          const validFamily = (fam === 'Livre' || fam === 'Fourniture' || fam === 'Service') ? fam : 'Fourniture';
+          const safeRef = ref || `REF-${resolvedId.slice(0, 8).toUpperCase()}`;
+          const safeName = action.payload.name || 'Produit';
+
+          const buildProductPayload = (opts: { stripFk?: boolean; stripBarcode?: boolean; stripImage?: boolean } = {}) => ({
             id: resolvedId,
-            reference: action.payload.reference, 
-            barcode: action.payload.barcode ? action.payload.barcode : null,
-            isbn: action.payload.isbn ? action.payload.isbn : null, 
-            name: action.payload.name,
-            family: action.payload.family,
-            category_id: isUuid(action.payload.categoryId) ? action.payload.categoryId : null,
-            brand_id: isUuid(action.payload.brandId) ? action.payload.brandId : null,
-            supplier_id: isUuid(action.payload.supplierId) ? action.payload.supplierId : null,
-            purchase_price: action.payload.purchasePrice ?? 0,
-            selling_price: action.payload.sellingPrice ?? 0,
-            quantity: action.payload.quantity ?? 0,
-            min_stock: action.payload.minStock ?? 0,
-            image_url: action.payload.imageUrl || null,
+            reference: safeRef,
+            barcode: (!opts.stripBarcode && action.payload.barcode) ? String(action.payload.barcode).trim() : null,
+            isbn: action.payload.isbn ? String(action.payload.isbn).trim() : null,
+            name: safeName,
+            family: validFamily,
+            category_id: (!opts.stripFk && isUuid(action.payload.categoryId)) ? action.payload.categoryId : null,
+            brand_id: (!opts.stripFk && isUuid(action.payload.brandId)) ? action.payload.brandId : null,
+            supplier_id: (!opts.stripFk && isUuid(action.payload.supplierId)) ? action.payload.supplierId : null,
+            purchase_price: Number(action.payload.purchasePrice) || 0,
+            selling_price: Number(action.payload.sellingPrice) || 0,
+            quantity: Number(action.payload.quantity) || 0,
+            min_stock: Number(action.payload.minStock) || 0,
+            image_url: (!opts.stripImage && action.payload.imageUrl) ? action.payload.imageUrl : null,
             description: action.payload.description || null,
             unit: action.payload.unit || null,
+            status: action.payload.isActive !== false ? 'Active' : 'Inactive',
             is_active: action.payload.isActive !== false,
             updated_at: action.payload.updatedAt || new Date().toISOString()
-          }], { onConflict: 'id' });
-          if (error) console.error('[Sync] INSERT_POS_PRODUCT échoué :', error);
+          });
+
+          let payloadToInsert = buildProductPayload();
+          let { error } = await supabase.from('pos_products').upsert([payloadToInsert], { onConflict: 'id' });
+
+          // 1. Auto-réparation FK si category_id, brand_id ou supplier_id inexistant dans Supabase
+          if (error && isForeignKeyError(error)) {
+            console.warn('[Sync] INSERT_POS_PRODUCT violation FK détectée, auto-réparation sans relations');
+            payloadToInsert = buildProductPayload({ stripFk: true });
+            const retryFk = await supabase.from('pos_products').upsert([payloadToInsert], { onConflict: 'id' });
+            error = retryFk.error;
+          }
+
+          // 2. Auto-réparation Barcode / Code-barres en doublon
+          if (error && (error.code === '23505' || String(error.message).toLowerCase().includes('barcode') || String(error.message).toLowerCase().includes('code-barre'))) {
+            console.warn('[Sync] INSERT_POS_PRODUCT code-barres doublon détecté, auto-réparation sans barcode');
+            payloadToInsert = buildProductPayload({ stripFk: true, stripBarcode: true });
+            const retryBarcode = await supabase.from('pos_products').upsert([payloadToInsert], { onConflict: 'id' });
+            error = retryBarcode.error;
+          }
+
+          // 3. Auto-réparation Image volumineuse ou payload
+          if (error && (error.code === '413' || String(error.message).toLowerCase().includes('payload') || String(error.message).toLowerCase().includes('image'))) {
+            console.warn('[Sync] INSERT_POS_PRODUCT image volumineuse détectée, auto-réparation sans image');
+            payloadToInsert = buildProductPayload({ stripFk: true, stripBarcode: true, stripImage: true });
+            const retryImg = await supabase.from('pos_products').upsert([payloadToInsert], { onConflict: 'id' });
+            error = retryImg.error;
+          }
+
+          if (error) {
+            console.error('[Sync] INSERT_POS_PRODUCT échoué :', error);
+          }
           success = checkResult(error);
           break;
         }
@@ -1508,26 +1544,71 @@ export const processSyncQueue = async () => {
             success = true;
             break;
           }
-          const mapped: any = { id: resolvedId };
-          if (data.reference !== undefined) mapped.reference = data.reference;
-          if (data.barcode !== undefined) mapped.barcode = data.barcode ? data.barcode : null;
-          if (data.isbn !== undefined) mapped.isbn = data.isbn ? data.isbn : null;
-          if (data.name !== undefined) mapped.name = data.name;
-          if (data.family !== undefined) mapped.family = data.family;
-          if (data.categoryId !== undefined) mapped.category_id = isUuid(data.categoryId) ? data.categoryId : null;
-          if (data.brandId !== undefined) mapped.brand_id = isUuid(data.brandId) ? data.brandId : null;
-          if (data.supplierId !== undefined) mapped.supplier_id = isUuid(data.supplierId) ? data.supplierId : null;
-          if (data.purchasePrice !== undefined) mapped.purchase_price = data.purchasePrice;
-          if (data.sellingPrice !== undefined) mapped.selling_price = data.sellingPrice;
-          if (data.quantity !== undefined) mapped.quantity = Math.max(0, data.quantity);
-          if (data.minStock !== undefined) mapped.min_stock = data.minStock;
-          if (data.imageUrl !== undefined) mapped.image_url = data.imageUrl || null;
-          if (data.description !== undefined) mapped.description = data.description || null;
-          if (data.unit !== undefined) mapped.unit = data.unit || null;
-          if (data.isActive !== undefined) mapped.is_active = data.isActive;
-          mapped.updated_at = new Date().toISOString();
-          const { error } = await supabase.from('pos_products').upsert([mapped], { onConflict: 'id' });
-          if (error) console.error('[Sync] UPDATE_POS_PRODUCT échoué :', error);
+
+          const buildUpdateMapped = (opts: { stripFk?: boolean; stripBarcode?: boolean; stripImage?: boolean } = {}) => {
+            const mapped: any = { id: resolvedId };
+            if (data.reference !== undefined) mapped.reference = data.reference;
+            if (data.barcode !== undefined) {
+              mapped.barcode = (!opts.stripBarcode && data.barcode) ? String(data.barcode).trim() : null;
+            }
+            if (data.isbn !== undefined) mapped.isbn = data.isbn ? String(data.isbn).trim() : null;
+            if (data.name !== undefined) mapped.name = data.name;
+            if (data.family !== undefined) {
+              mapped.family = (data.family === 'Livre' || data.family === 'Fourniture' || data.family === 'Service') ? data.family : 'Fourniture';
+            }
+            if (data.categoryId !== undefined) {
+              mapped.category_id = (!opts.stripFk && isUuid(data.categoryId)) ? data.categoryId : null;
+            }
+            if (data.brandId !== undefined) {
+              mapped.brand_id = (!opts.stripFk && isUuid(data.brandId)) ? data.brandId : null;
+            }
+            if (data.supplierId !== undefined) {
+              mapped.supplier_id = (!opts.stripFk && isUuid(data.supplierId)) ? data.supplierId : null;
+            }
+            if (data.purchasePrice !== undefined) mapped.purchase_price = Number(data.purchasePrice) || 0;
+            if (data.sellingPrice !== undefined) mapped.selling_price = Number(data.sellingPrice) || 0;
+            if (data.quantity !== undefined) mapped.quantity = Math.max(0, Number(data.quantity) || 0);
+            if (data.minStock !== undefined) mapped.min_stock = Number(data.minStock) || 0;
+            if (data.imageUrl !== undefined) {
+              mapped.image_url = (!opts.stripImage && data.imageUrl) ? data.imageUrl : null;
+            }
+            if (data.description !== undefined) mapped.description = data.description || null;
+            if (data.unit !== undefined) mapped.unit = data.unit || null;
+            if (data.isActive !== undefined) {
+              mapped.is_active = data.isActive;
+              mapped.status = data.isActive ? 'Active' : 'Inactive';
+            }
+            mapped.updated_at = new Date().toISOString();
+            return mapped;
+          };
+
+          let updatePayload = buildUpdateMapped();
+          let { error } = await supabase.from('pos_products').upsert([updatePayload], { onConflict: 'id' });
+
+          if (error && isForeignKeyError(error)) {
+            console.warn('[Sync] UPDATE_POS_PRODUCT violation FK détectée, auto-réparation sans relations');
+            updatePayload = buildUpdateMapped({ stripFk: true });
+            const retryFk = await supabase.from('pos_products').upsert([updatePayload], { onConflict: 'id' });
+            error = retryFk.error;
+          }
+
+          if (error && (error.code === '23505' || String(error.message).toLowerCase().includes('barcode') || String(error.message).toLowerCase().includes('code-barre'))) {
+            console.warn('[Sync] UPDATE_POS_PRODUCT barcode doublon détecté, auto-réparation sans barcode');
+            updatePayload = buildUpdateMapped({ stripFk: true, stripBarcode: true });
+            const retryBarcode = await supabase.from('pos_products').upsert([updatePayload], { onConflict: 'id' });
+            error = retryBarcode.error;
+          }
+
+          if (error && (error.code === '413' || String(error.message).toLowerCase().includes('payload') || String(error.message).toLowerCase().includes('image'))) {
+            console.warn('[Sync] UPDATE_POS_PRODUCT image volumineuse détectée, auto-réparation sans image');
+            updatePayload = buildUpdateMapped({ stripFk: true, stripBarcode: true, stripImage: true });
+            const retryImg = await supabase.from('pos_products').upsert([updatePayload], { onConflict: 'id' });
+            error = retryImg.error;
+          }
+
+          if (error) {
+            console.error('[Sync] UPDATE_POS_PRODUCT échoué :', error);
+          }
           success = checkResult(error);
           break;
         }
