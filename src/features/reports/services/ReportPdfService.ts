@@ -358,32 +358,76 @@ export function buildV2WeeklyReportPdf(
         }
         doc.circle(25, y - 1, 1.2, 'F');
 
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8.5);
-        doc.setTextColor(51, 65, 85);
-        
+        // Extraire le titre et la description
+        let rawTitle = '';
         let rawDesc = '';
+
         if (typeof t === 'string') {
-          rawDesc = t;
+          rawTitle = t;
+          rawDesc = '';
         } else if (typeof t === 'object' && t) {
-          if (t.title && t.description && t.title.trim() !== t.description.trim()) {
-            rawDesc = `[${t.title.trim()}] ${t.description.trim()}`;
-          } else {
-            rawDesc = t.title || t.description || t.label || t.task || t.content || JSON.stringify(t);
+          rawTitle = t.title || t.label || t.task || '';
+          rawDesc = t.description || t.content || '';
+          if (!rawTitle && rawDesc) {
+            rawTitle = rawDesc;
+            rawDesc = '';
           }
         }
-        
-        let taskDesc = cleanPdfText(rawDesc);
-        if (category) taskDesc = `[${cleanPdfText(category)}] ${taskDesc}`;
-        if (difficulty) taskDesc += ` [Difficulte: ${cleanPdfText(difficulty)}]`;
-        if (timeSpent) taskDesc += ` (${cleanPdfText(timeSpent)})`;
 
-        const lines = doc.splitTextToSize(taskDesc || 'Activite enregistree', pageW - 56);
-        lines.forEach((l: string, i: number) => {
-          if (i > 0) checkNewPage(5.5);
-          doc.text(l, 30, y);
-          y += 4.8;
+        let taskTitle = cleanPdfText(rawTitle) || 'Activite enregistree';
+        if (category) {
+          taskTitle = `[${cleanPdfText(category)}] ${taskTitle}`;
+        }
+        const taskDesc = cleanPdfText(rawDesc);
+
+        // 1. TITRE DE L'ACTIVITÉ : Ligne dédiée, en couleur (Teal #0D9488) et SOULIGNÉ
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(13, 148, 136); // Teal #0D9488
+        doc.setDrawColor(13, 148, 136);
+        doc.setLineWidth(0.35);
+
+        const titleLines = doc.splitTextToSize(taskTitle, pageW - 56);
+        titleLines.forEach((tLine: string, i: number) => {
+          if (i > 0) checkNewPage(6);
+          doc.text(tLine, 30, y);
+          const tWidth = doc.getTextWidth(tLine);
+          // Trait de soulignement sous le texte du titre
+          doc.line(30, y + 0.9, 30 + Math.min(tWidth, pageW - 60), y + 0.9);
+          y += 5.2;
         });
+
+        // 2. DESCRIPTION DÉTAILLÉE : Positionnée en dessous, texte normal non souligné
+        if (taskDesc && taskDesc.toLowerCase().trim() !== cleanPdfText(rawTitle).toLowerCase().trim()) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8.5);
+          doc.setTextColor(51, 65, 85); // Slate-700
+          const descLines = doc.splitTextToSize(taskDesc, pageW - 56);
+          descLines.forEach((dLine: string) => {
+            checkNewPage(5.5);
+            doc.text(dLine, 30, y);
+            y += 4.8;
+          });
+        }
+
+        // 3. MÉTADONNÉES : Difficulté, Temps passé, Statut si spécifique
+        const metaParts: string[] = [];
+        if (timeSpent) metaParts.push(`Duree: ${cleanPdfText(timeSpent)}`);
+        if (difficulty) metaParts.push(`Difficulte / Blocage: ${cleanPdfText(difficulty)}`);
+        if (status && status !== 'Effectuée' && status !== 'Effectuee') metaParts.push(`Statut: ${cleanPdfText(status)}`);
+
+        if (metaParts.length > 0) {
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(7.8);
+          doc.setTextColor(100, 116, 139); // Slate-500
+          const metaStr = metaParts.join('  |  ');
+          const metaLines = doc.splitTextToSize(metaStr, pageW - 56);
+          metaLines.forEach((mLine: string) => {
+            checkNewPage(5);
+            doc.text(mLine, 30, y);
+            y += 4.2;
+          });
+        }
       });
       y += 2.5;
     });
