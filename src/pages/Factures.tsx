@@ -18,7 +18,10 @@ import {
   CheckCircle2,
   TrendingUp,
   Award,
-  DollarSign
+  DollarSign,
+  User,
+  ChevronDown,
+  Check
 } from 'lucide-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
@@ -117,6 +120,46 @@ export function Factures() {
   const [payMethod, setPayMethod] = useState<string>('Espèces');
   const [payRef, setPayRef] = useState<string>('');
   const [payNotes, setPayNotes] = useState<string>('');
+
+  // Commercial Search Dropdown State
+  const [commercialSearchTerm, setCommercialSearchTerm] = useState<string>('');
+  const [isCommercialDropdownOpen, setIsCommercialDropdownOpen] = useState<boolean>(false);
+  const commercialDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (commercialDropdownRef.current && !commercialDropdownRef.current.contains(event.target as Node)) {
+        setIsCommercialDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredUsersForModal = useMemo(() => {
+    if (!commercialSearchTerm.trim()) return users;
+    const term = commercialSearchTerm.toLowerCase();
+    return users.filter(u => 
+      u.name.toLowerCase().includes(term) || 
+      (u.role && u.role.toLowerCase().includes(term)) ||
+      (u.email && u.email.toLowerCase().includes(term))
+    );
+  }, [users, commercialSearchTerm]);
+
+  const handleSelectCommercial = (user: { id: string; name: string }) => {
+    setFormCommercialId(user.id);
+    setFormCommercialName(user.name);
+    setIsCommercialDropdownOpen(false);
+    setCommercialSearchTerm('');
+  };
+
+  const handleClearCommercial = () => {
+    setFormCommercialId('');
+    setFormCommercialName('');
+    setIsCommercialDropdownOpen(false);
+    setCommercialSearchTerm('');
+  };
 
   const isDirector = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
   const isResponsable = currentUser?.role === 'Responsable';
@@ -1395,28 +1438,187 @@ export function Factures() {
                   </datalist>
                 </div>
 
-                <div>
+                {/* ─── CHAMP COMMERCIAL AVEC RECHERCHE ET SÉLECTION D'UTILISATEURS ─── */}
+                <div style={{ position: 'relative' }} ref={commercialDropdownRef}>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
-                    Commercial
+                    Commercial (Utilisateur)
                   </label>
-                  <input
-                    type="text"
-                    list="commerciaux-list-modal"
-                    value={formCommercialName}
-                    onChange={e => {
-                      setFormCommercialName(e.target.value);
-                      const matching = users.find(u => u.name.toLowerCase() === e.target.value.toLowerCase());
-                      if (matching) setFormCommercialId(matching.id);
-                    }}
-                    placeholder="Ex: BOSSO, AKOSSI, DIALLO..."
+                  
+                  <div
+                    onClick={() => setIsCommercialDropdownOpen(!isCommercialDropdownOpen)}
                     className="table-input"
-                    style={{ width: '100%', padding: '8px 12px' }}
-                  />
-                  <datalist id="commerciaux-list-modal">
-                    {users.map(u => (
-                      <option key={u.id} value={u.name} />
-                    ))}
-                  </datalist>
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      background: 'var(--color-surface)',
+                      borderColor: isCommercialDropdownOpen ? 'var(--color-primary)' : undefined,
+                      borderRadius: 'var(--radius-sm)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                      <User size={15} color={formCommercialName ? 'var(--color-primary)' : 'var(--color-text-muted)'} />
+                      <span style={{ fontWeight: formCommercialName ? 700 : 400, color: formCommercialName ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                        {formCommercialName || 'Sélectionner un commercial...'}
+                      </span>
+                      {formCommercialName && (
+                        <span style={{ fontSize: '10px', background: 'rgba(60, 125, 175, 0.12)', color: 'var(--color-primary)', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                          {users.find(u => u.name === formCommercialName || u.id === formCommercialId)?.role || 'Commercial'}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {formCommercialName && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleClearCommercial();
+                          }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: 'var(--color-text-muted)', display: 'flex' }}
+                          title="Effacer la sélection"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                      <ChevronDown size={15} color="var(--color-text-muted)" style={{ transform: isCommercialDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                    </div>
+                  </div>
+
+                  {/* Menu déroulant avec barre de recherche filtrée */}
+                  {isCommercialDropdownOpen && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      zIndex: 60,
+                      marginTop: '4px',
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-md)',
+                      boxShadow: '0 10px 15px -3px rgba(0,0,0,0.12), 0 4px 6px -2px rgba(0,0,0,0.06)',
+                      maxHeight: '280px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      overflow: 'hidden'
+                    }}>
+                      {/* Champ de recherche d'utilisateur */}
+                      <div style={{ padding: '8px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface-alt)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Search size={14} color="var(--color-text-muted)" />
+                        <input
+                          type="text"
+                          autoFocus
+                          placeholder="Filtrer par nom, rôle ou email..."
+                          value={commercialSearchTerm}
+                          onChange={e => setCommercialSearchTerm(e.target.value)}
+                          onClick={e => e.stopPropagation()}
+                          className="table-input"
+                          style={{ width: '100%', padding: '5px 8px', fontSize: '0.8rem', background: 'var(--color-surface)' }}
+                        />
+                        {commercialSearchTerm && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setCommercialSearchTerm(''); }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '2px' }}
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Liste déroulante des utilisateurs */}
+                      <div style={{ overflowY: 'auto', maxHeight: '220px' }}>
+                        <div
+                          onClick={handleClearCommercial}
+                          style={{
+                            padding: '8px 12px',
+                            fontSize: '0.82rem',
+                            cursor: 'pointer',
+                            color: 'var(--color-text-muted)',
+                            borderBottom: '1px dashed var(--color-border)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                          }}
+                        >
+                          <span>— Aucun commercial (Non assigné)</span>
+                        </div>
+
+                        {filteredUsersForModal.length === 0 ? (
+                          <div style={{ padding: '14px', textAlign: 'center', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                            Aucun utilisateur trouvé pour « {commercialSearchTerm} »
+                          </div>
+                        ) : (
+                          filteredUsersForModal.map(u => {
+                            const isSelected = formCommercialId === u.id || formCommercialName === u.name;
+                            return (
+                              <div
+                                key={u.id}
+                                onClick={() => handleSelectCommercial(u)}
+                                style={{
+                                  padding: '8px 12px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  cursor: 'pointer',
+                                  background: isSelected ? 'rgba(60, 125, 175, 0.08)' : 'transparent',
+                                  borderBottom: '1px solid #F1F5F9',
+                                  transition: 'background-color 0.15s'
+                                }}
+                                onMouseEnter={e => { if (!isSelected) (e.currentTarget.style.backgroundColor = '#F8FAFC'); }}
+                                onMouseLeave={e => { if (!isSelected) (e.currentTarget.style.backgroundColor = 'transparent'); }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <div style={{
+                                    width: '24px',
+                                    height: '24px',
+                                    borderRadius: '50%',
+                                    background: isSelected ? 'var(--color-primary)' : '#E2E8F0',
+                                    color: isSelected ? '#FFFFFF' : '#475569',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '11px',
+                                    fontWeight: 700
+                                  }}>
+                                    {u.name.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: isSelected ? 700 : 600, color: isSelected ? 'var(--color-primary)' : 'var(--color-text)' }}>
+                                      {u.name}
+                                    </div>
+                                    {u.email && (
+                                      <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>
+                                        {u.email}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{
+                                    fontSize: '10px',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    background: isSelected ? 'var(--color-primary)' : '#EEF2F6',
+                                    color: isSelected ? '#FFFFFF' : '#64748B',
+                                    fontWeight: 600
+                                  }}>
+                                    {u.role || 'Utilisateur'}
+                                  </span>
+                                  {isSelected && <Check size={14} color="var(--color-primary)" />}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
