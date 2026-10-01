@@ -253,7 +253,9 @@ export interface WeeklyReport { id: string; authorId: string; role: User['role']
 
 export interface V2Task {
   id: string;
+  title?: string;
   description: string;
+  category?: string;
   status: 'Effectuée' | 'En cours' | 'Restante' | 'Bloquée';
   difficulty?: string;
   affaireId?: string;

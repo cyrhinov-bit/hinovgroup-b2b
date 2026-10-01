@@ -227,7 +227,11 @@ export function buildV2WeeklyReportPdf(report: V2WeeklyReport, author: User | nu
         if (typeof t === 'string') {
           rawDesc = t;
         } else if (typeof t === 'object' && t) {
-          rawDesc = t.description || t.label || t.task || t.title || t.content || JSON.stringify(t);
+          if (t.title && t.description && t.title.trim() !== t.description.trim()) {
+            rawDesc = `[${t.title.trim()}] ${t.description.trim()}`;
+          } else {
+            rawDesc = t.title || t.description || t.label || t.task || t.content || JSON.stringify(t);
+          }
         }
         
         let taskDesc = cleanPdfText(rawDesc);

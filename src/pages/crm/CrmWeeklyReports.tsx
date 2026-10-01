@@ -53,6 +53,7 @@ export function CrmWeeklyReports() {
 
   // Daily task form state
   const [taskTitle, setTaskTitle] = useState('');
+  const [taskDescription, setTaskDescription] = useState('');
   const [taskCategory, setTaskCategory] = useState('Opérationnel');
   const [taskStatus, setTaskStatus] = useState<V2Task['status']>('Effectuée');
   const [taskDifficulty, setTaskDifficulty] = useState('');
@@ -146,9 +147,14 @@ export function CrmWeeklyReports() {
       return;
     }
 
+    const cleanTitle = taskTitle.trim();
+    const cleanDesc = taskDescription.trim() || cleanTitle;
+
     const newTask: V2Task = {
       id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
-      description: taskTitle.trim(),
+      title: cleanTitle,
+      description: cleanDesc,
+      category: taskCategory,
       status: taskStatus,
       difficulty: taskDifficulty.trim() || undefined,
       timeSpent: taskTimeSpent.trim() || undefined
@@ -170,6 +176,7 @@ export function CrmWeeklyReports() {
 
     await saveV2DailyReport(reportToSave);
     setTaskTitle('');
+    setTaskDescription('');
     setTaskDifficulty('');
     setTaskTimeSpent('');
     toast.success('Activité ajoutée avec succès.');
@@ -224,8 +231,18 @@ export function CrmWeeklyReports() {
 
     // Auto-déduction des réalisations et difficultés
     const allTasks = Object.values(tasksByDayMap).flat();
-    const completedTasks = allTasks.filter(t => t.status === 'Effectuée').map(t => `• ${t.description}`);
-    const blockedTasks = allTasks.filter(t => t.status === 'Bloquée' || t.difficulty).map(t => `• ${t.description} ${t.difficulty ? `(${t.difficulty})` : ''}`);
+    const formatTaskLine = (t: V2Task) => {
+      if (t.title && t.description && t.title.trim() !== t.description.trim()) {
+        return `• [${t.title.trim()}] : ${t.description.trim()}`;
+      }
+      return `• ${t.title || t.description}`;
+    };
+
+    const completedTasks = allTasks.filter(t => t.status === 'Effectuée').map(formatTaskLine);
+    const blockedTasks = allTasks.filter(t => t.status === 'Bloquée' || t.difficulty).map(t => {
+      const base = formatTaskLine(t);
+      return `${base} ${t.difficulty ? `(Point bloquant : ${t.difficulty})` : ''}`;
+    });
 
     if (!achievements && completedTasks.length > 0) {
       setAchievements(completedTasks.join('\n'));
@@ -544,12 +561,25 @@ export function CrmWeeklyReports() {
 
               <form onSubmit={handleAddTask} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
                 <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: 600 }}>Titre de l'activité *</label>
                   <input 
                     className="table-input" 
-                    placeholder="Description de l'activité réalisée (ex: Appel client ABC, rédaction devis, livraison)... *"
+                    placeholder="Ex: Rendez-vous client BOA, Conception maquette catalogue, Livraison commande #402..."
                     value={taskTitle}
                     onChange={e => setTaskTitle(e.target.value)}
                     required
+                  />
+                </div>
+
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Description détaillée de l'activité</label>
+                  <textarea 
+                    className="table-input" 
+                    rows={2}
+                    placeholder="Détails de l'intervention, points abordés, actions menées, résultat obtenu..."
+                    value={taskDescription}
+                    onChange={e => setTaskDescription(e.target.value)}
+                    style={{ width: '100%', resize: 'vertical' }}
                   />
                 </div>
 
@@ -633,42 +663,50 @@ export function CrmWeeklyReports() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {dailyTasks.map((t, idx) => (
-                  <div 
-                    key={t.id || idx}
-                    style={{
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      padding: '12px 16px', borderRadius: '8px', background: 'var(--color-background)',
-                      border: '1px solid var(--color-border)', flexWrap: 'wrap', gap: '10px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '240px' }}>
-                      <button 
-                        onClick={() => handleToggleTaskStatus(t.id)}
-                        disabled={isWeekLocked}
-                        style={{ background: 'none', border: 'none', cursor: isWeekLocked ? 'default' : 'pointer', padding: 0 }}
-                        title="Cliquer pour changer de statut"
-                      >
-                        {t.status === 'Effectuée' && <CheckCircle size={20} color="#10B981" />}
-                        {t.status === 'En cours' && <Clock size={20} color="#3B82F6" />}
-                        {t.status === 'Restante' && <AlertCircle size={20} color="#F59E0B" />}
-                        {t.status === 'Bloquée' && <AlertCircle size={20} color="#EF4444" />}
-                      </button>
+                {dailyTasks.map((t, idx) => {
+                  const hasSubtitle = t.title && t.description && t.title.trim() !== t.description.trim();
+                  const displayTitle = t.title || t.description;
 
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.95rem', textDecoration: t.status === 'Effectuée' ? 'line-through' : 'none', color: t.status === 'Effectuée' ? 'var(--color-text-muted)' : 'inherit' }}>
-                          {t.description}
-                        </div>
-                        {(t.difficulty || t.timeSpent) && (
-                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '2px', display: 'flex', gap: '12px' }}>
+                  return (
+                    <div 
+                      key={t.id || idx}
+                      style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '12px 16px', borderRadius: '8px', background: 'var(--color-background)',
+                        border: '1px solid var(--color-border)', flexWrap: 'wrap', gap: '10px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1, minWidth: '240px' }}>
+                        <button 
+                          onClick={() => handleToggleTaskStatus(t.id)}
+                          disabled={isWeekLocked}
+                          style={{ background: 'none', border: 'none', cursor: isWeekLocked ? 'default' : 'pointer', padding: 0, marginTop: '2px' }}
+                          title="Cliquer pour changer de statut"
+                        >
+                          {t.status === 'Effectuée' && <CheckCircle size={20} color="#10B981" />}
+                          {t.status === 'En cours' && <Clock size={20} color="#3B82F6" />}
+                          {t.status === 'Restante' && <AlertCircle size={20} color="#F59E0B" />}
+                          {t.status === 'Bloquée' && <AlertCircle size={20} color="#EF4444" />}
+                        </button>
+
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '0.95rem', textDecoration: t.status === 'Effectuée' ? 'line-through' : 'none', color: t.status === 'Effectuée' ? 'var(--color-text-muted)' : 'inherit' }}>
+                            {displayTitle}
+                          </div>
+                          {hasSubtitle && (
+                            <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                              {t.description}
+                            </div>
+                          )}
+                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                            {t.category && <span style={{ background: 'var(--color-card)', padding: '1px 6px', borderRadius: '4px', border: '1px solid var(--color-border)' }}>🏷️ {t.category}</span>}
                             {t.difficulty && <span style={{ color: '#EF4444' }}>⚠️ Difficulté : {t.difficulty}</span>}
                             {t.timeSpent && <span>⏱️ Durée : {t.timeSpent}</span>}
                           </div>
-                        )}
+                        </div>
                       </div>
-                    </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span 
                         onClick={() => handleToggleTaskStatus(t.id)}
                         style={{
@@ -688,7 +726,8 @@ export function CrmWeeklyReports() {
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
