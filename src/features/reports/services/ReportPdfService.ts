@@ -272,30 +272,30 @@ export function buildV2WeeklyReportPdf(
 
   // ================= HELPERS DE SECTIONS =================
   const drawSectionHeading = (num: number, title: string) => {
-    checkNewPage(18);
+    checkNewPage(22);
     doc.setFillColor(13, 148, 136); // Teal
-    doc.rect(18, y - 4, 3, 9, 'F');
+    doc.rect(18, y - 5, 3.5, 11, 'F');
 
-    doc.setFontSize(10.5);
+    doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(15, 23, 42);
-    doc.text(cleanPdfText(`${num}. ${title.toUpperCase()}`), 24, y + 2.5);
-    y += 8.5;
+    doc.text(cleanPdfText(`${num}. ${title.toUpperCase()}`), 25, y + 3);
+    y += 10;
   };
 
   const drawParagraph = (text?: string, fallback = 'Neant') => {
-    doc.setFontSize(9);
+    doc.setFontSize(9.8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(51, 65, 85);
     const cleaned = cleanPdfText(text);
     const content = cleaned ? cleaned : cleanPdfText(fallback);
     const lines = doc.splitTextToSize(content, pageW - 40);
     lines.forEach((line: string) => {
-      checkNewPage(7);
+      checkNewPage(8);
       doc.text(line, 22, y);
-      y += 5.2;
+      y += 5.6;
     });
-    y += 3.5;
+    y += 4;
   };
 
   const drawStructuredSection = (num: number, title: string, content?: string | null, fallback = 'Neant') => {
@@ -308,61 +308,61 @@ export function buildV2WeeklyReportPdf(
     }
 
     items.forEach((item) => {
-      checkNewPage(14);
+      checkNewPage(16);
 
       // Puce vectorielle colorée
       doc.setFillColor(13, 148, 136);
-      doc.circle(22, y - 1, 1.2, 'F');
+      doc.circle(22, y - 1, 1.3, 'F');
 
       if (item.title) {
         // 1. TITRE / MODULE DU POINT : En couleur Teal (#0D9488), Gras et Souligné
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
+        doc.setFontSize(10.5);
         doc.setTextColor(13, 148, 136); // Teal
         doc.setDrawColor(13, 148, 136);
-        doc.setLineWidth(0.35);
+        doc.setLineWidth(0.4);
 
         const cleanTitle = cleanPdfText(item.title.startsWith('[') ? item.title : `[${item.title}]`);
         const titleLines = doc.splitTextToSize(cleanTitle, pageW - 48);
         titleLines.forEach((tLine: string, idx: number) => {
-          if (idx > 0) checkNewPage(5.5);
+          if (idx > 0) checkNewPage(6);
           doc.text(tLine, 26, y);
           const tWidth = doc.getTextWidth(tLine);
-          doc.line(26, y + 0.9, 26 + Math.min(tWidth, pageW - 54), y + 0.9);
-          y += 5.2;
+          doc.line(26, y + 1, 26 + Math.min(tWidth, pageW - 54), y + 1);
+          y += 5.8;
         });
 
         // 2. DESCRIPTION DU POINT : Indentée en dessous, texte régulier Slate-700
         if (item.body && item.body.toLowerCase().trim() !== item.title.toLowerCase().trim()) {
           doc.setFont('helvetica', 'normal');
-          doc.setFontSize(8.5);
+          doc.setFontSize(9.5);
           doc.setTextColor(51, 65, 85); // Slate-700
           const cleanBody = cleanPdfText(item.body);
           const bodyLines = doc.splitTextToSize(cleanBody, pageW - 48);
           bodyLines.forEach((bLine: string) => {
-            checkNewPage(5);
+            checkNewPage(5.5);
             doc.text(bLine, 26, y);
-            y += 4.6;
+            y += 5.2;
           });
         }
       } else {
         // Élément simple sans titre séparé
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8.5);
+        doc.setFontSize(9.5);
         doc.setTextColor(51, 65, 85); // Slate-700
         const cleanBody = cleanPdfText(item.body);
         const bodyLines = doc.splitTextToSize(cleanBody, pageW - 48);
         bodyLines.forEach((bLine: string, idx: number) => {
-          if (idx > 0) checkNewPage(5);
+          if (idx > 0) checkNewPage(5.5);
           doc.text(bLine, 26, y);
-          y += 4.6;
+          y += 5.2;
         });
       }
 
-      y += 2.5; // Espacement entre éléments
+      y += 3.5; // Espacement entre éléments
     });
 
-    y += 2.5;
+    y += 3;
   };
 
   // ================= 3. SECTIONS DU RAPPORT =================
@@ -469,36 +469,48 @@ export function buildV2WeeklyReportPdf(
   drawSectionHeading(3, "Journal detaille des activites quotidiennes");
 
   if (displayDays.length > 0) {
-    displayDays.forEach(({ dayLabel, tasks }) => {
-      checkNewPage(18);
-      const dayCol = getDayColor(dayLabel);
-      
-      // Puce colorée pour le jour
-      doc.setFillColor(dayCol.r, dayCol.g, dayCol.b);
-      doc.circle(22, y - 1, 1.4, 'F');
-
-      doc.setFontSize(9.5);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(dayCol.r, dayCol.g, dayCol.b);
-      const dayText = cleanPdfText(dayLabel.toUpperCase());
-      doc.text(dayText, 26, y);
-
-      // Trait d'accentuation discret sur la droite du jour
-      const dayTextWidth = doc.getTextWidth(dayText);
-      doc.setDrawColor(dayCol.r, dayCol.g, dayCol.b);
-      doc.setLineWidth(0.3);
-      if (26 + dayTextWidth + 4 < pageW - 20) {
-        doc.line(26 + dayTextWidth + 4, y - 0.7, pageW - 20, y - 0.7);
+    displayDays.forEach(({ dayLabel, tasks }, dayIndex) => {
+      // Séparation nette et aérée avant chaque jour
+      if (dayIndex > 0) {
+        y += 7;
+        checkNewPage(24);
+        doc.setDrawColor(226, 232, 240); // Ligne fine de démarcation inter-jours
+        doc.setLineWidth(0.6);
+        doc.line(18, y, pageW - 18, y);
+        y += 7;
+      } else {
+        checkNewPage(22);
+        y += 2;
       }
-      y += 5.5;
+
+      const dayCol = getDayColor(dayLabel);
+      const dayText = cleanPdfText(dayLabel.toUpperCase());
+
+      // Bandeau d'en-tête du jour stylisé avec fond coloré plein
+      doc.setFillColor(dayCol.r, dayCol.g, dayCol.b);
+      doc.roundedRect(18, y - 4.5, pageW - 36, 10, 1.5, 1.5, 'F');
+
+      // Libellé du jour en blanc contrasté
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(255, 255, 255);
+      doc.text(dayText, 24, y + 2.3);
+
+      // Compteur d'activités sur la droite du bandeau
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(255, 255, 255);
+      const countText = `${tasks.length} activite${tasks.length > 1 ? 's' : ''}`;
+      doc.text(countText, pageW - 24, y + 2.3, { align: 'right' });
+
+      y += 11; // Espace généreux après l'en-tête du jour
 
       tasks.forEach((t: any) => {
-        checkNewPage(12);
+        checkNewPage(16);
         
         const status = typeof t === 'object' && t ? (t.status || 'Effectuée') : 'Effectuée';
         const difficulty = typeof t === 'object' && t ? t.difficulty : undefined;
         const timeSpent = typeof t === 'object' && t ? t.timeSpent : undefined;
-        const category = typeof t === 'object' && t ? t.category : undefined;
 
         // Puce colorée selon le statut
         if (status === 'Effectuée' || status === 'Effectuee') {
@@ -510,7 +522,7 @@ export function buildV2WeeklyReportPdf(
         } else {
           doc.setFillColor(217, 119, 6); // Ambre
         }
-        doc.circle(25, y - 1, 1.2, 'F');
+        doc.circle(24, y - 1, 1.3, 'F');
 
         // Extraire le titre et la description
         let rawTitle = '';
@@ -535,31 +547,31 @@ export function buildV2WeeklyReportPdf(
 
         // 1. TITRE DE L'ACTIVITÉ : Ligne dédiée, en couleur spécifique du jour et SOULIGNÉ
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
+        doc.setFontSize(10.5); // Police augmentée
         doc.setTextColor(dayCol.r, dayCol.g, dayCol.b);
         doc.setDrawColor(dayCol.r, dayCol.g, dayCol.b);
-        doc.setLineWidth(0.35);
+        doc.setLineWidth(0.4);
 
         const titleLines = doc.splitTextToSize(taskTitle, pageW - 56);
         titleLines.forEach((tLine: string, i: number) => {
           if (i > 0) checkNewPage(6);
-          doc.text(tLine, 30, y);
+          doc.text(tLine, 28, y);
           const tWidth = doc.getTextWidth(tLine);
           // Trait de soulignement sous le texte du titre
-          doc.line(30, y + 0.9, 30 + Math.min(tWidth, pageW - 60), y + 0.9);
-          y += 5.2;
+          doc.line(28, y + 1, 28 + Math.min(tWidth, pageW - 58), y + 1);
+          y += 5.8;
         });
 
         // 2. DESCRIPTION DÉTAILLÉE : Positionnée en dessous, texte normal non souligné
         if (taskDesc && taskDesc.toLowerCase().trim() !== cleanPdfText(rawTitle).toLowerCase().trim()) {
           doc.setFont('helvetica', 'normal');
-          doc.setFontSize(8.5);
+          doc.setFontSize(9.5); // Police augmentée
           doc.setTextColor(51, 65, 85); // Slate-700
           const descLines = doc.splitTextToSize(taskDesc, pageW - 56);
           descLines.forEach((dLine: string) => {
             checkNewPage(5.5);
-            doc.text(dLine, 30, y);
-            y += 4.8;
+            doc.text(dLine, 28, y);
+            y += 5.2;
           });
         }
 
@@ -571,20 +583,23 @@ export function buildV2WeeklyReportPdf(
 
         if (metaParts.length > 0) {
           doc.setFont('helvetica', 'italic');
-          doc.setFontSize(7.8);
+          doc.setFontSize(8.5); // Police augmentée
           doc.setTextColor(100, 116, 139); // Slate-500
           const metaStr = metaParts.join('  |  ');
           const metaLines = doc.splitTextToSize(metaStr, pageW - 56);
           metaLines.forEach((mLine: string) => {
             checkNewPage(5);
-            doc.text(mLine, 30, y);
-            y += 4.2;
+            doc.text(mLine, 28, y);
+            y += 4.6;
           });
         }
+
+        y += 3.5; // Espacement aéré entre activités
       });
-      y += 2.5;
+
+      y += 3; // Espacement additionnel en fin de journée
     });
-    y += 3.5;
+    y += 4;
   } else {
     drawParagraph(undefined, "Aucune tache journaliere detaillee n'a ete enregistree pour cette semaine.");
   }
@@ -615,18 +630,18 @@ export function buildV2WeeklyReportPdf(
 
   // Section 7 : Visa & Commentaire Direction (si présent)
   if (report.directorComment || report.status === 'Validé' || report.status === 'Relu') {
-    checkNewPage(26);
+    checkNewPage(28);
     doc.setFillColor(248, 250, 252);
-    doc.roundedRect(18, y, pageW - 36, 20, 2, 2, 'F');
-    doc.setFontSize(8.5);
+    doc.roundedRect(18, y, pageW - 36, 22, 2, 2, 'F');
+    doc.setFontSize(9.5);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(15, 23, 42);
-    doc.text("VISA & COMMENTAIRE DE LA DIRECTION :", 24, y + 6.5);
+    doc.text("VISA & COMMENTAIRE DE LA DIRECTION :", 24, y + 7);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(71, 85, 105);
     const comment = cleanPdfText(report.directorComment || "Rapport valide sans reserve par la Direction.");
-    doc.text(comment, 24, y + 13);
-    y += 26;
+    doc.text(comment, 24, y + 14);
+    y += 28;
   }
 
   // ================= 4. PIED DE PAGE AUTOMATIQUE SUR TOUTES LES PAGES =================
