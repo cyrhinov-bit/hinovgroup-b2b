@@ -47,16 +47,6 @@ const MONTH_NAMES = [
   { num: 12, name: 'Décembre', short: 'Déc' },
 ];
 
-const PREDEFINED_SERVICES = [
-  'INFORMATIQUE',
-  'IMPRIMERIE',
-  'ÉVÉNEMENTIEL',
-  'MAINTENANCE',
-  'BTP & LOGISTIQUE',
-  'FOURNITURES',
-  'AUTRE'
-];
-
 export function Factures() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -103,7 +93,7 @@ export function Factures() {
   const [formCommercialId, setFormCommercialId] = useState<string>('');
   const [formCommercialName, setFormCommercialName] = useState<string>('');
   const [formServiceId, setFormServiceId] = useState<string>('');
-  const [formServiceName, setFormServiceName] = useState<string>('INFORMATIQUE');
+  const [formServiceName, setFormServiceName] = useState<string>('');
   const [formCategory, setFormCategory] = useState<string>('');
   const [formDeliveryDate, setFormDeliveryDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [formPaymentDate, setFormPaymentDate] = useState<string>('');
@@ -193,28 +183,9 @@ export function Factures() {
     return 'GÉNÉRAL';
   };
 
-  // Liste consolidée de tous les services créés dans le système
-  const allAvailableServices = useMemo(() => {
-    const serviceList: { id?: string; name: string }[] = [];
-    const seen = new Set<string>();
-
-    // 1. Tous les services créés dans la base de données
-    (services || []).forEach(s => {
-      if (s.name && !seen.has(s.name.trim().toUpperCase())) {
-        seen.add(s.name.trim().toUpperCase());
-        serviceList.push({ id: s.id, name: s.name.trim() });
-      }
-    });
-
-    // 2. Services prédéfinis / métiers supplémentaires
-    PREDEFINED_SERVICES.forEach(ps => {
-      if (!seen.has(ps.trim().toUpperCase())) {
-        seen.add(ps.trim().toUpperCase());
-        serviceList.push({ name: ps.trim() });
-      }
-    });
-
-    return serviceList;
+  // Liste STRICTE des services créés dans le module Services
+  const createdServices = useMemo(() => {
+    return (services || []).filter(s => s && s.name && s.name.trim() !== '');
   }, [services]);
 
   // Helper de formatage avec séparateurs de milliers (ex: 1 000 000)
@@ -266,7 +237,7 @@ export function Factures() {
     setFormCommercialName(comm?.name || '');
     setFormServiceId(quote.serviceId || '');
     const srv = services.find(s => s.id === quote.serviceId);
-    setFormServiceName(srv?.name || 'INFORMATIQUE');
+    setFormServiceName(srv?.name || (createdServices.length > 0 ? createdServices[0].name : ''));
     setFormCategory(quote.lines?.[0]?.description || '');
     const today = new Date().toISOString().split('T')[0];
     setFormDeliveryDate(today);
@@ -292,9 +263,9 @@ export function Factures() {
     setFormClientName('');
     setFormCommercialId(currentUser?.id || '');
     setFormCommercialName(currentUser?.name || '');
-    setFormServiceId(currentUser?.serviceId || '');
     const currentSrv = services.find(s => s.id === currentUser?.serviceId);
-    setFormServiceName(currentSrv?.name || 'INFORMATIQUE');
+    setFormServiceId(currentSrv?.id || (createdServices.length > 0 ? createdServices[0].id : ''));
+    setFormServiceName(currentSrv?.name || (createdServices.length > 0 ? createdServices[0].name : ''));
     setFormCategory('');
     const defaultDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
     setFormDeliveryDate(defaultDate);
@@ -360,6 +331,8 @@ export function Factures() {
       ? (invoices.find(i => i.id === editingInvoiceId)?.invoiceNumber || `FAC-${periodYear}-${String(periodMonth).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`)
       : `FAC-${periodYear}-${String(periodMonth).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
+    const matchedService = createdServices.find(s => s.name === formServiceName || s.id === formServiceId);
+
     const invoicePayload: Partial<Invoice> = {
       invoiceNumber,
       quoteId: formQuoteId || undefined,
@@ -367,8 +340,8 @@ export function Factures() {
       clientName: formClientName.trim(),
       commercialId: formCommercialId || undefined,
       commercialName: formCommercialName.trim() || undefined,
-      serviceId: formServiceId || undefined,
-      serviceName: formServiceName.trim() || 'INFORMATIQUE',
+      serviceId: formServiceId || matchedService?.id || undefined,
+      serviceName: formServiceName.trim() || matchedService?.name || undefined,
       category: formCategory.trim() || undefined,
       periodYear,
       periodMonth,
@@ -1115,8 +1088,8 @@ export function Factures() {
               style={{ padding: '6px 10px', minWidth: '140px' }}
             >
               <option value="">Tous les services</option>
-              {allAvailableServices.map(s => (
-                <option key={s.id || s.name} value={s.name}>{s.name}</option>
+              {createdServices.map(s => (
+                <option key={s.id} value={s.name}>{s.name}</option>
               ))}
             </select>
 
@@ -1650,7 +1623,7 @@ export function Factures() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
-                    Service (Département / Activité) *
+                    Service *
                   </label>
                   <select
                     required
@@ -1658,7 +1631,7 @@ export function Factures() {
                     onChange={e => {
                       const selectedName = e.target.value;
                       setFormServiceName(selectedName);
-                      const matching = (services || []).find(s => s.name.toUpperCase() === selectedName.toUpperCase());
+                      const matching = createdServices.find(s => s.name.toUpperCase() === selectedName.toUpperCase());
                       if (matching) {
                         setFormServiceId(matching.id);
                       } else {
@@ -1669,11 +1642,15 @@ export function Factures() {
                     style={{ width: '100%', padding: '8px 12px', fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-primary)' }}
                   >
                     <option value="">Sélectionner un service...</option>
-                    {allAvailableServices.map(s => (
-                      <option key={s.id || s.name} value={s.name}>
-                        {s.name}
-                      </option>
-                    ))}
+                    {createdServices.length === 0 ? (
+                      <option value="" disabled>Aucun service créé dans le module Services</option>
+                    ) : (
+                      createdServices.map(s => (
+                        <option key={s.id} value={s.name}>
+                          {s.name}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 
