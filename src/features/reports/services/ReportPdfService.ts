@@ -65,6 +65,29 @@ export function ensureTasksArray(raw: any): V2Task[] {
 }
 
 /**
+ * Palette de couleurs distinctes et élégantes pour chaque jour de la semaine.
+ */
+export const DAY_COLORS: Record<string, { r: number; g: number; b: number }> = {
+  lundi: { r: 29, g: 78, b: 216 },      // Bleu Royal (#1D4ED8)
+  mardi: { r: 13, g: 148, b: 136 },    // Sarcelle / Teal (#0D9488)
+  mercredi: { r: 126, g: 34, b: 206 }, // Pourpre / Violet (#7E22CE)
+  jeudi: { r: 194, g: 65, b: 12 },     // Ambre / Bronze (#C2410C)
+  vendredi: { r: 3, g: 105, b: 161 },  // Cyan Océan (#0369A1)
+  samedi: { r: 4, g: 120, b: 87 },     // Émeraude / Vert Forêt (#047857)
+  dimanche: { r: 190, g: 18, b: 60 }   // Rose Carmin (#BE123C)
+};
+
+export function getDayColor(dayName: string): { r: number; g: number; b: number } {
+  const clean = String(dayName || '').toLowerCase().trim();
+  for (const key of Object.keys(DAY_COLORS)) {
+    if (clean.includes(key)) {
+      return DAY_COLORS[key];
+    }
+  }
+  return { r: 13, g: 148, b: 136 }; // Teal par défaut
+}
+
+/**
  * Construit l'objet jsPDF du Rapport Hebdomadaire V2 avec un rendu propre, garanti sans page blanche.
  */
 export function buildV2WeeklyReportPdf(
@@ -327,15 +350,25 @@ export function buildV2WeeklyReportPdf(
   if (displayDays.length > 0) {
     displayDays.forEach(({ dayLabel, tasks }) => {
       checkNewPage(18);
+      const dayCol = getDayColor(dayLabel);
       
-      // Puce pour le jour
-      doc.setFillColor(13, 148, 136);
+      // Puce colorée pour le jour
+      doc.setFillColor(dayCol.r, dayCol.g, dayCol.b);
       doc.circle(22, y - 1, 1.4, 'F');
 
       doc.setFontSize(9.5);
       doc.setFont('helvetica', 'bold');
-      doc.setTextColor(13, 148, 136);
-      doc.text(cleanPdfText(dayLabel.toUpperCase()), 26, y);
+      doc.setTextColor(dayCol.r, dayCol.g, dayCol.b);
+      const dayText = cleanPdfText(dayLabel.toUpperCase());
+      doc.text(dayText, 26, y);
+
+      // Trait d'accentuation discret sur la droite du jour
+      const dayTextWidth = doc.getTextWidth(dayText);
+      doc.setDrawColor(dayCol.r, dayCol.g, dayCol.b);
+      doc.setLineWidth(0.3);
+      if (26 + dayTextWidth + 4 < pageW - 20) {
+        doc.line(26 + dayTextWidth + 4, y - 0.7, pageW - 20, y - 0.7);
+      }
       y += 5.5;
 
       tasks.forEach((t: any) => {
@@ -380,11 +413,11 @@ export function buildV2WeeklyReportPdf(
         }
         const taskDesc = cleanPdfText(rawDesc);
 
-        // 1. TITRE DE L'ACTIVITÉ : Ligne dédiée, en couleur (Teal #0D9488) et SOULIGNÉ
+        // 1. TITRE DE L'ACTIVITÉ : Ligne dédiée, en couleur spécifique du jour et SOULIGNÉ
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(9);
-        doc.setTextColor(13, 148, 136); // Teal #0D9488
-        doc.setDrawColor(13, 148, 136);
+        doc.setTextColor(dayCol.r, dayCol.g, dayCol.b);
+        doc.setDrawColor(dayCol.r, dayCol.g, dayCol.b);
         doc.setLineWidth(0.35);
 
         const titleLines = doc.splitTextToSize(taskTitle, pageW - 56);
