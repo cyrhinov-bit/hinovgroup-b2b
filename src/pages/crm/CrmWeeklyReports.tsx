@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Calendar, CheckCircle, Clock, AlertCircle, FileText, Send, Download, 
   Eye, Plus, Trash2, ChevronLeft, ChevronRight, Bell, Shield, 
-  Filter, Search, User as UserIcon, Building, MessageSquare, Lock, ClipboardCheck,
+  Filter, Search, User as UserIcon, Users, Building, MessageSquare, Lock, ClipboardCheck,
   Sparkles, Tag, CheckCircle2, RotateCcw, AlignLeft, AlertTriangle, Layers, Zap
 } from 'lucide-react';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
@@ -433,19 +433,34 @@ export function CrmWeeklyReports() {
 
   // ================= SUPERVISION DIRECTION DATA & KPIs =================
   const activeStaff = useMemo(() => {
-    return users.filter(u => 
-      u.active !== false && 
-      u.crmReportsEnabled !== false &&
-      !['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(u.role)
-    );
-  }, [users]);
+    return users.filter(u => {
+      if (u.active === false) return false;
+      // Tout collaborateur ayant un rapport créé ou soumis apparaît dans le cockpit
+      const hasReport = v2WeeklyReports.some(r => r.authorId === u.id);
+      if (hasReport) return true;
+      if (['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(u.role)) return false;
+      return u.crmReportsEnabled !== false;
+    });
+  }, [users, v2WeeklyReports]);
 
+  // Tous les rapports soumis (indépendamment de la semaine sélectionnée)
+  const allSubmittedReports = useMemo(() => {
+    return v2WeeklyReports
+      .filter(r => r.status === 'Soumis' || r.status === 'Validé' || r.status === 'Relu')
+      .sort((a, b) => {
+        const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : new Date(a.weekStart).getTime();
+        const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : new Date(b.weekStart).getTime();
+        return dateB - dateA;
+      });
+  }, [v2WeeklyReports]);
+
+  // Rapports pour la semaine active sélectionnée
   const weeklyReportsForSelectedWeek = useMemo(() => {
     return v2WeeklyReports.filter(r => r.weekStart === currentWeekStart);
   }, [v2WeeklyReports, currentWeekStart]);
 
   const submittedStaffIds = useMemo(() => {
-    return weeklyReportsForSelectedWeek.filter(r => r.status === 'Soumis' || r.status === 'Validé').map(r => r.authorId);
+    return weeklyReportsForSelectedWeek.filter(r => r.status === 'Soumis' || r.status === 'Validé' || r.status === 'Relu').map(r => r.authorId);
   }, [weeklyReportsForSelectedWeek]);
 
   const pendingStaff = useMemo(() => {
@@ -456,7 +471,25 @@ export function CrmWeeklyReports() {
     ? Math.round((submittedStaffIds.length / activeStaff.length) * 100) 
     : 0;
 
-  // Filtrage du cockpit de supervision
+  // Filtrage des rapports soumis
+  const filteredSubmittedReports = useMemo(() => {
+    return allSubmittedReports.filter(r => {
+      const author = users.find(u => u.id === r.authorId);
+      const matchSearch = searchQuery ? (
+        (author?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (author?.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (r.project || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (r.summary || '').toLowerCase().includes(searchQuery.toLowerCase())
+      ) : true;
+      const matchService = serviceFilter === 'ALL' ? true : author?.serviceId === serviceFilter;
+      const matchStatus = statusFilter === 'ALL' ? true : (
+        statusFilter === 'SOUMIS' ? (r.status === 'Soumis') : (r.status === statusFilter)
+      );
+      return matchSearch && matchService && matchStatus;
+    });
+  }, [allSubmittedReports, searchQuery, serviceFilter, statusFilter, users]);
+
+  // Filtrage du cockpit de supervision (équipe)
   const filteredStaffList = useMemo(() => {
     return activeStaff.filter(u => {
       const matchSearch = searchQuery ? u.name.toLowerCase().includes(searchQuery.toLowerCase()) || u.email.toLowerCase().includes(searchQuery.toLowerCase()) : true;
@@ -1252,8 +1285,118 @@ export function CrmWeeklyReports() {
             )}
           </div>
 
-          {/* TABLEAU DES COLLABORATEURS ET DES RAPPORTS */}
+          {/* 1. SECTION PRINCIPALE : FLUX DE TOUS LES RAPPORTS SOUMIS PAR L'ÉQUIPE */}
           <div className="card" style={{ padding: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ClipboardCheck size={20} color="#7C3AED" /> Rapports Soumis par l'Équipe ({filteredSubmittedReports.length})
+                </h3>
+                <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
+                  Liste complète des comptes-rendus hebdomadaires officiellement transmis à la Direction
+                </p>
+              </div>
+              <span className="badge-status bg-primary" style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
+                {allSubmittedReports.filter(r => r.status === 'Soumis').length} en attente de validation
+              </span>
+            </div>
+
+            <div className="table-responsive">
+              <table className="data-table responsive-table">
+                <thead>
+                  <tr>
+                    <th>Collaborateur</th>
+                    <th>Département</th>
+                    <th>Semaine concernée</th>
+                    <th>Date de soumission</th>
+                    <th>Statut</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSubmittedReports.map(report => {
+                    const author = users.find(u => u.id === report.authorId);
+                    const serviceName = services.find(s => s.id === author?.serviceId)?.name || 'Général';
+                    const isValide = report.status === 'Validé';
+
+                    return (
+                      <tr key={report.id}>
+                        <td data-label="Collaborateur">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {author?.photo ? (
+                              <img src={author.photo} alt={author.name} style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
+                            ) : (
+                              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--color-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                                {(author?.name || '?').charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <div>
+                              <strong>{author?.name || 'Inconnu'}</strong>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{author?.email || author?.role || ''}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td data-label="Département">{serviceName}</td>
+                        <td data-label="Semaine concernée">
+                          <strong>Semaine du {new Date(report.weekStart + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
+                        </td>
+                        <td data-label="Date de soumission">
+                          {report.submittedAt ? new Date(report.submittedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
+                        </td>
+                        <td data-label="Statut">
+                          <span className={`badge-status ${isValide ? 'bg-success' : 'bg-info'}`}>
+                            {isValide ? '✅ Validé' : '📩 Reçu (À valider)'}
+                          </span>
+                        </td>
+                        <td data-label="Actions">
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button 
+                              className="btn btn-secondary" 
+                              style={{ fontSize: '0.8rem', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              onClick={() => handlePreviewPdf(report)}
+                              title="Consulter / Télécharger le PDF officiel"
+                            >
+                              <Eye size={14} /> PDF
+                            </button>
+                            <button 
+                              className="btn btn-primary" 
+                              style={{ fontSize: '0.8rem', padding: '5px 10px', background: '#7C3AED', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              onClick={() => { setReviewingReport(report); setReviewComment(report.directorComment || ''); }}
+                              title="Annoter et Valider ce rapport"
+                            >
+                              <MessageSquare size={14} /> Annoter / Valider
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredSubmittedReports.length === 0 && (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--color-text-muted)' }}>
+                        <FileText size={36} color="var(--color-text-muted)" style={{ margin: '0 auto 8px', opacity: 0.6 }} />
+                        <div>Aucun rapport soumis trouvé pour ces critères de recherche.</div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 2. SECTION SUIVI DE COMPLÉTION & RELANCES HEBDOMADAIRES */}
+          <div className="card" style={{ padding: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Users size={18} color="var(--color-primary)" /> Suivi de Complétion — Semaine du {new Date(currentWeekStart + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </h3>
+                <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
+                  État de soumission collaborateur par collaborateur pour la semaine en cours
+                </p>
+              </div>
+            </div>
+
             <div className="table-responsive">
               <table className="data-table responsive-table">
                 <thead>
@@ -1261,7 +1404,7 @@ export function CrmWeeklyReports() {
                     <th>Collaborateur</th>
                     <th>Département</th>
                     <th>Rôle</th>
-                    <th>Statut Rapport</th>
+                    <th>Statut Semaine</th>
                     <th>Date Soumission</th>
                     <th>Actions</th>
                   </tr>
@@ -1269,16 +1412,20 @@ export function CrmWeeklyReports() {
                 <tbody>
                   {filteredStaffList.map(member => {
                     const memberReport = weeklyReportsForSelectedWeek.find(r => r.authorId === member.id);
-                    const isSubmitted = memberReport?.status === 'Soumis' || memberReport?.status === 'Validé';
+                    const isSubmitted = memberReport?.status === 'Soumis' || memberReport?.status === 'Validé' || memberReport?.status === 'Relu';
                     const serviceName = services.find(s => s.id === member.serviceId)?.name || 'Général';
 
                     return (
                       <tr key={member.id}>
                         <td data-label="Collaborateur">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--color-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                              {member.name.charAt(0).toUpperCase()}
-                            </div>
+                            {member.photo ? (
+                              <img src={member.photo} alt={member.name} style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
+                            ) : (
+                              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--color-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                                {member.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
                             <div>
                               <strong>{member.name}</strong>
                               <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{member.email}</div>
@@ -1287,7 +1434,7 @@ export function CrmWeeklyReports() {
                         </td>
                         <td data-label="Département">{serviceName}</td>
                         <td data-label="Rôle">{member.role}</td>
-                        <td data-label="Statut Rapport">
+                        <td data-label="Statut Semaine">
                           {isSubmitted ? (
                             <span className={`badge-status ${memberReport?.status === 'Validé' ? 'bg-success' : 'bg-info'}`}>
                               {memberReport?.status === 'Validé' ? '✅ Validé' : '📩 Reçu (Soumis)'}
