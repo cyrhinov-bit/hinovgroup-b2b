@@ -3,7 +3,7 @@ import { db } from '../lib/db';
 import { 
   Home, Users, Briefcase, FileText, Folder, Shield, PieChart, Settings, 
   UserCircle, LogOut, Receipt, Coins, Target, ShoppingCart, Package, Truck, 
-  ClipboardList, Warehouse, Tag, BarChart3, DollarSign, RotateCcw, 
+  ClipboardList, ClipboardCheck, Warehouse, Tag, BarChart3, DollarSign, RotateCcw, 
   FileSpreadsheet, Wallet, ToggleRight, Trophy, Sparkles, Bot, Building2, ShieldAlert,
   History, ShoppingBag, Wrench, UserCheck, Award
 } from 'lucide-react';
@@ -28,10 +28,21 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
   const location = useLocation();
   const navigate = useNavigate();
   const { currentUser: authUser, logout } = useAuth();
-  const { posWorkspace, services, users } = useAppContext();
+  const { posWorkspace, services, users, notifications } = useAppContext();
   const currentUser = users.find(u => u.id === authUser?.id) || authUser;
   const [clickedPath, setClickedPath] = useState<string | null>(null);
   const [syncErrorsCount, setSyncErrorsCount] = useState<number>(0);
+
+  const isDirection = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
+
+  const unreadTeamReportsCount = React.useMemo(() => {
+    if (!currentUser || !isDirection) return 0;
+    return (notifications || []).filter(n => 
+      n.user_id === currentUser.id && 
+      !n.is_read && 
+      (n.title?.toLowerCase().includes('rapport') || n.link?.includes('rapports') || n.link?.includes('supervision'))
+    ).length;
+  }, [notifications, currentUser, isDirection]);
 
   useEffect(() => {
     const checkErrors = async () => {
@@ -99,6 +110,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Devis', icon: FileText, path: '/devis', color: '#D97706', bg: '#FFFBEB', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Suivi des factures', icon: Receipt, path: '/factures', color: '#0284C7', bg: '#F0F9FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmFacturationEnabled' },
     { label: 'Rapports Hebdo', icon: ClipboardList, path: '/crm/rapports', color: '#059669', bg: '#ECFDF5', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmReportsEnabled' },
+    { label: 'Rapports Equipe', icon: ClipboardCheck, path: '/crm/rapports-equipe', color: '#7C3AED', bg: '#FAF5FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmReportsEnabled' },
     { label: 'Clients', icon: Users, path: '/clients', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Services', icon: Briefcase, path: '/services', color: '#4F46E5', bg: '#EEF2FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Prestations', icon: FileText, path: '/prestations', color: '#6366F1', bg: '#EEF2FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
@@ -197,7 +209,10 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
       <nav className="nav-menu">
         <ul className="nav-list">
           {uniqueVisibleNavItems.map((item) => {
-            const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
+            const isActive = location.pathname === item.path || 
+              (item.path === '/crm/rapports-equipe' && (location.pathname === '/crm/rapports-equipe' || (location.pathname === '/crm/rapports' && location.search.includes('tab=supervision')))) ||
+              (item.path === '/crm/rapports' && location.pathname === '/crm/rapports' && !location.search.includes('tab=supervision')) ||
+              (item.path !== '/' && item.path !== '/crm/rapports' && item.path !== '/crm/rapports-equipe' && location.pathname.startsWith(item.path));
             const isClicked = clickedPath === item.path;
 
             return (
@@ -224,6 +239,11 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
                   {item.path === '/pos/sync-errors' && syncErrorsCount > 0 && (
                     <span className="sidebar-sync-badge" title={`${syncErrorsCount} action(s) en erreur`}>
                       {syncErrorsCount > 99 ? '99+' : syncErrorsCount}
+                    </span>
+                  )}
+                  {item.path === '/crm/rapports-equipe' && unreadTeamReportsCount > 0 && (
+                    <span className="sidebar-report-badge" title={`${unreadTeamReportsCount} nouveau(x) rapport(s) d'activité reçu(s)`}>
+                      {unreadTeamReportsCount > 99 ? '99+' : unreadTeamReportsCount}
                     </span>
                   )}
                 </Link>

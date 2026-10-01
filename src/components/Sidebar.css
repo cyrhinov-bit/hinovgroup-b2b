@@ -262,3 +262,32 @@
   }
 }
 
+.sidebar-report-badge {
+  background: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  min-width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.4);
+  animation: pulse-report-badge 2.5s infinite ease-in-out;
+  margin-left: auto;
+}
+
+@keyframes pulse-report-badge {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 2px 6px rgba(124, 58, 237, 0.4);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 3px 10px rgba(124, 58, 237, 0.7);
+  }
+}
+
+

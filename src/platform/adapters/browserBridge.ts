@@ -34,7 +34,23 @@ export const browserBridge: PlatformBridge = {
     clear: async () => navigator.clipboard.writeText(''),
   },
   notifications: {
-    showNotification: async (title, body) => { console.log('Web Notification:', title, body); },
+    showNotification: async (title, body) => {
+      try {
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+          if (Notification.permission === 'granted') {
+            new Notification(title, { body, icon: '/favicon.ico' });
+          } else if (Notification.permission !== 'denied') {
+            Notification.requestPermission().then(permission => {
+              if (permission === 'granted') {
+                new Notification(title, { body, icon: '/favicon.ico' });
+              }
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Web Notification error:', err);
+      }
+    },
   },
   network: {
     isOnline: async () => navigator.onLine,

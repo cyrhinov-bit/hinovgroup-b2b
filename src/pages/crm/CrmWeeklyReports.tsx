@@ -2,9 +2,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Calendar, CheckCircle, Clock, AlertCircle, FileText, Send, Download, 
   Eye, Plus, Trash2, ChevronLeft, ChevronRight, Bell, Shield, 
-  Filter, Search, User as UserIcon, Building, MessageSquare, Lock
+  Filter, Search, User as UserIcon, Building, MessageSquare, Lock, ClipboardCheck
 } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAppContext, type V2WeeklyReport, type V2DailyReport, type V2Task, type User } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
@@ -19,14 +19,17 @@ const TASK_CATEGORIES = ['Opérationnel', 'Commercial', 'Support & Client', 'Tec
 export function CrmWeeklyReports() {
   const { currentUser } = useAuth();
   const { 
-    v2WeeklyReports, v2DailyReports, users, services, settings, 
+    v2WeeklyReports, v2DailyReports, users, services, settings, notifications,
     saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, 
-    sendWeeklyReportReminder, reviewV2WeeklyReport 
+    sendWeeklyReportReminder, reviewV2WeeklyReport, markNotificationAsRead 
   } = useAppContext();
   const { confirm } = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const isDirection = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
+  const isSupervisionRoute = location.pathname.includes('rapports-equipe');
 
   // Helper date for Monday
   const getMondayOf = (d: Date) => {
@@ -39,7 +42,7 @@ export function CrmWeeklyReports() {
 
   const currentMondayStr = useMemo(() => getMondayOf(new Date()), []);
   const initialWeek = searchParams.get('week') || currentMondayStr;
-  const initialTab = searchParams.get('tab') || 'daily';
+  const initialTab = searchParams.get('tab') || (isSupervisionRoute && isDirection ? 'supervision' : 'daily');
 
   const [currentWeekStart, setCurrentWeekStart] = useState<string>(initialWeek);
   const [activeTab, setActiveTab] = useState<string>(initialTab);
@@ -72,17 +75,46 @@ export function CrmWeeklyReports() {
   const [serviceFilter, setServiceFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
-  // Synchroniser paramètres URL
+  // Synchroniser paramètres URL et routes
   useEffect(() => {
-    const pTab = searchParams.get('tab');
-    if (pTab && ['daily', 'report', 'history', 'supervision'].includes(pTab)) {
-      setActiveTab(pTab);
+    if (location.pathname.includes('rapports-equipe')) {
+      setActiveTab('supervision');
+    } else {
+      const pTab = searchParams.get('tab');
+      if (pTab && ['daily', 'report', 'history', 'supervision'].includes(pTab)) {
+        setActiveTab(pTab);
+      }
     }
     const pWeek = searchParams.get('week');
     if (pWeek && pWeek !== currentWeekStart) {
       setCurrentWeekStart(pWeek);
     }
-  }, [searchParams]);
+  }, [searchParams, location.pathname]);
+
+  // Marquer automatiquement les notifications de rapports comme lues lorsque la Direction consulte la supervision
+  useEffect(() => {
+    if (activeTab === 'supervision' && isDirection && currentUser) {
+      const unreadReportNotifs = (notifications || []).filter(n => 
+        n.user_id === currentUser.id && 
+        !n.is_read && 
+        (n.title?.toLowerCase().includes('rapport') || n.link?.includes('rapports') || n.link?.includes('supervision'))
+      );
+      for (const notif of unreadReportNotifs) {
+        markNotificationAsRead(notif.id);
+      }
+    }
+  }, [activeTab, isDirection, currentUser, notifications, markNotificationAsRead]);
+
+  const handleTabChange = (newTab: string) => {
+    setActiveTab(newTab);
+    if (location.pathname.includes('rapports-equipe') && newTab !== 'supervision') {
+      navigate(`/crm/rapports?tab=${newTab}&week=${currentWeekStart}`);
+    } else if (!location.pathname.includes('rapports-equipe') && newTab === 'supervision') {
+      navigate(`/crm/rapports-equipe?week=${currentWeekStart}`);
+    } else {
+      setSearchParams({ tab: newTab, week: currentWeekStart });
+    }
+  };
 
   // Calcul des dates de la semaine courante
   const weekDates = useMemo(() => {
@@ -457,7 +489,7 @@ export function CrmWeeklyReports() {
       <div style={{ display: 'flex', gap: '8px', borderBottom: '2px solid var(--color-border)', marginBottom: '24px', flexWrap: 'wrap' }}>
         <button 
           className={`tab-button ${activeTab === 'daily' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('daily'); setSearchParams({ tab: 'daily', week: currentWeekStart }); }}
+          onClick={() => handleTabChange('daily')}
           style={{
             padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer',
             borderBottom: activeTab === 'daily' ? '3px solid var(--color-primary)' : '3px solid transparent',
@@ -470,7 +502,7 @@ export function CrmWeeklyReports() {
 
         <button 
           className={`tab-button ${activeTab === 'report' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('report'); setSearchParams({ tab: 'report', week: currentWeekStart }); }}
+          onClick={() => handleTabChange('report')}
           style={{
             padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer',
             borderBottom: activeTab === 'report' ? '3px solid var(--color-primary)' : '3px solid transparent',
@@ -484,7 +516,7 @@ export function CrmWeeklyReports() {
 
         <button 
           className={`tab-button ${activeTab === 'history' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('history'); setSearchParams({ tab: 'history', week: currentWeekStart }); }}
+          onClick={() => handleTabChange('history')}
           style={{
             padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer',
             borderBottom: activeTab === 'history' ? '3px solid var(--color-primary)' : '3px solid transparent',
@@ -498,7 +530,7 @@ export function CrmWeeklyReports() {
         {isDirection && (
           <button 
             className={`tab-button ${activeTab === 'supervision' ? 'active' : ''}`}
-            onClick={() => { setActiveTab('supervision'); setSearchParams({ tab: 'supervision', week: currentWeekStart }); }}
+            onClick={() => handleTabChange('supervision')}
             style={{
               padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer',
               borderBottom: activeTab === 'supervision' ? '3px solid #7C3AED' : '3px solid transparent',
@@ -506,7 +538,7 @@ export function CrmWeeklyReports() {
               fontWeight: activeTab === 'supervision' ? 700 : 500, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px'
             }}
           >
-            <Shield size={16} color="#7C3AED" /> 4. Supervision Direction
+            <ClipboardCheck size={16} color="#7C3AED" /> 4. Rapports Équipe (Supervision)
             {pendingStaff.length > 0 && (
               <span style={{ background: '#EF4444', color: '#fff', fontSize: '0.75rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>
                 {pendingStaff.length} en attente

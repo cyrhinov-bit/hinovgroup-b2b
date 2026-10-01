@@ -183,7 +183,8 @@ function App() {
                     <Route path="crm/commerciaux" element={<CrmCommerciaux />} />
                     <Route path="crm/commissions" element={<CrmCommissions />} />
                     <Route path="crm/rapports" element={<CrmWeeklyReports />} />
-                    <Route path="rapports-equipe" element={<Navigate to="/crm/rapports?tab=supervision" replace />} />
+                    <Route path="crm/rapports-equipe" element={<CrmWeeklyReports />} />
+                    <Route path="rapports-equipe" element={<Navigate to="/crm/rapports-equipe" replace />} />
                     <Route path="rapports-hebdo" element={<Navigate to="/crm/rapports" replace />} />
                     <Route path="crm/modules" element={<CrmModulesManager />} />
 

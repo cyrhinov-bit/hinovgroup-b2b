@@ -10,6 +10,7 @@ import { isProductComplete } from '../features/products/services/ProductService'
 import type { ProductPersistence } from '../features/products/data/repositories/ProductRepository';
 import { productService } from '../features/products/services/ProductService';
 import { toLocalDayKey } from '../lib/dates';
+import { platform } from '../platform';
 
 const isUuid = (value?: string) => !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
@@ -2862,6 +2863,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Seule la Direction reçoit les rapports soumis
     const author = users.find(u => u.id === report.authorId);
     const authorName = author?.name || 'Un collaborateur';
+    const authorService = services.find(s => s.id === author?.serviceId)?.name || '';
+    const serviceSuffix = authorService ? ` (${authorService})` : '';
     const directionUsers = users.filter(u => 
       ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(u.role)
     );
@@ -2869,11 +2872,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const newNotifs: AppNotification[] = directionUsers.map(d => ({
         id: uuidv4(),
         user_id: d.id,
-        title: 'Nouveau rapport hebdomadaire soumis',
-        message: `${authorName} a soumis son rapport pour la semaine du ${new Date(report.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')}.`,
+        title: 'Nouveau rapport d\'activité reçu',
+        message: `${authorName}${serviceSuffix} a soumis son rapport d'activité pour la semaine du ${new Date(report.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')}.`,
         type: 'info',
         is_read: false,
-        link: `/crm/rapports?tab=supervision&week=${report.weekStart}`,
+        link: `/crm/rapports-equipe?week=${report.weekStart}`,
         created_at: now
       }));
       const updatedNotifs = [...notifications, ...newNotifs];
@@ -2881,6 +2884,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await db.notifications.setItem('data', updatedNotifs);
       for (const notif of newNotifs) {
         await queueSyncAction('INSERT_NOTIFICATION', notif);
+      }
+
+      // Déclencher une notification bureau / système pour la Direction connectée
+      if (currentUser && ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser.role)) {
+        try {
+          await platform.notifications.showNotification(
+            'Nouveau rapport d\'activité reçu',
+            `${authorName}${serviceSuffix} a soumis son rapport hebdomadaire.`
+          );
+        } catch (e) {
+          console.warn('Erreur notification desktop:', e);
+        }
       }
     }
   };
