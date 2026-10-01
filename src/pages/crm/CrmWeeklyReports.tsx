@@ -11,6 +11,7 @@ import { useConfirm } from '../../components/ConfirmModal';
 import { generateV2WeeklyReportPdf, getV2WeeklyReportPdfBlobUrl } from '../../features/reports/services/ReportPdfService';
 import { ReportPdfPreview, type ReportPdfPreviewData } from '../../components/ReportPdfPreview';
 import toast from 'react-hot-toast';
+import './CrmWeeklyReports.css';
 
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 const TASK_CATEGORIES = ['Opérationnel', 'Commercial', 'Support & Client', 'Technique', 'Administratif', 'Réunion & Stratégie'];
@@ -518,218 +519,263 @@ export function CrmWeeklyReports() {
       {/* ================= ONGLET 1 : SAISIE JOURNALIÈRE ================= */}
       {activeTab === 'daily' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
-          {/* BANDEAU JOURS DE LA SEMAINE */}
-          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '6px' }}>
+          {/* BANDEAU JOURS DE LA SEMAINE - CARTES ANIMÉES MULTI-COULEURS */}
+          <div className="crm-days-grid">
             {DAYS.map(day => {
               const dStr = weekDates[day];
               const dayRep = v2DailyReports.find(d => d.authorId === currentUser?.id && d.date === dStr);
-              const count = dayRep?.tasks?.length || 0;
+              const tasks = dayRep?.tasks || [];
+              const count = tasks.length;
+              const completedCount = tasks.filter(t => t.status === 'Effectuée').length;
+              const progressPct = count > 0 ? Math.round((completedCount / count) * 100) : 0;
               const isSelected = selectedDay === day;
+              const dayClass = `day-${day.toLowerCase()}`;
 
               return (
-                <button
+                <div
                   key={day}
+                  className={`crm-day-card ${dayClass} ${isSelected ? 'selected' : ''}`}
                   onClick={() => setSelectedDay(day)}
-                  style={{
-                    flex: '1 1 auto', minWidth: '120px', padding: '12px 14px', borderRadius: '10px',
-                    border: isSelected ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                    background: isSelected ? 'var(--color-card)' : 'var(--color-background)',
-                    cursor: 'pointer', textAlign: 'left', transition: 'all 0.2s',
-                    boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,0.06)' : 'none'
-                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelectedDay(day); }}
                 >
-                  <div style={{ fontSize: '0.85rem', color: isSelected ? 'var(--color-primary)' : 'var(--color-text-muted)', fontWeight: 600 }}>
-                    {day}
+                  <div>
+                    <div className="day-header">
+                      <div>
+                        <div className="day-name">{day}</div>
+                        <div className="day-date">
+                          {new Date(dStr + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+                        </div>
+                      </div>
+                      <span className="day-badge">
+                        {count > 0 ? `${completedCount}/${count}` : '0 act.'}
+                      </span>
+                    </div>
+
+                    <div className="day-progress-bar">
+                      <div 
+                        className="day-progress-fill" 
+                        style={{ 
+                          width: `${progressPct}%`, 
+                          background: count > 0 && progressPct === 100 ? '#10B981' : 'currentColor' 
+                        }} 
+                      />
+                    </div>
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                    {new Date(dStr + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+
+                  <div className="day-footer">
+                    <span className="day-count-label">
+                      {count} {count > 1 ? 'activités' : 'activité'}
+                    </span>
+                    <span className="day-status-pill">
+                      {count === 0 ? 'À renseigner' : progressPct === 100 ? '✅ Clôturé' : `${progressPct}% fait`}
+                    </span>
                   </div>
-                  <div style={{ marginTop: '6px', fontSize: '0.8rem', fontWeight: 600, color: count > 0 ? '#10B981' : 'var(--color-text-muted)' }}>
-                    {count} {count > 1 ? 'activités' : 'activité'}
-                  </div>
-                </button>
+                </div>
               );
             })}
           </div>
 
-          {/* FORMULAIRE D'AJOUT RAPIDE */}
-          {!isWeekLocked ? (
-            <div className="card" style={{ padding: '20px' }}>
-              <h3 style={{ margin: '0 0 16px', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Plus size={18} color="var(--color-primary)" /> Ajouter une activité pour {selectedDay} ({new Date(currentDayDate + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'long' })})
-              </h3>
-
-              <form onSubmit={handleAddTask} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: 600 }}>Titre de l'activité *</label>
-                  <input 
-                    className="table-input" 
-                    placeholder="Ex: Rendez-vous client BOA, Conception maquette catalogue, Livraison commande #402..."
-                    value={taskTitle}
-                    onChange={e => setTaskTitle(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Description détaillée de l'activité</label>
-                  <textarea 
-                    className="table-input" 
-                    rows={2}
-                    placeholder="Détails de l'intervention, points abordés, actions menées, résultat obtenu..."
-                    value={taskDescription}
-                    onChange={e => setTaskDescription(e.target.value)}
-                    style={{ width: '100%', resize: 'vertical' }}
-                  />
-                </div>
-
+          {/* STUDIO D'ÉDITION DU JOUR SÉLECTIONNÉ */}
+          <div className="crm-active-day-studio">
+            {/* EN-TÊTE DYNAMIQUE DU JOUR */}
+            <div className={`crm-day-banner-header day-${selectedDay.toLowerCase()}`}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Calendar size={22} />
                 <div>
-                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Catégorie</label>
-                  <select className="table-input" value={taskCategory} onChange={e => setTaskCategory(e.target.value)}>
-                    {TASK_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#fff' }}>
+                    Activités du {selectedDay} {new Date(currentDayDate + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  </h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.85rem', opacity: 0.9 }}>
+                    {dailyTasks.length} {dailyTasks.length > 1 ? 'activités enregistrées' : 'activité enregistrée'} • Semaine du {new Date(currentWeekStart + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+                  </p>
                 </div>
-
-                <div>
-                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Statut</label>
-                  <select className="table-input" value={taskStatus} onChange={e => setTaskStatus(e.target.value as V2Task['status'])}>
-                    <option value="Effectuée">✅ Terminée / Effectuée</option>
-                    <option value="En cours">⏳ En cours</option>
-                    <option value="Restante">📌 En attente / Restante</option>
-                    <option value="Bloquée">⚠️ Bloquée</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Difficulté / Point bloquant (optionnel)</label>
-                  <input 
-                    className="table-input" 
-                    placeholder="Ex: Attente retour client..."
-                    value={taskDifficulty}
-                    onChange={e => setTaskDifficulty(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Temps passé (optionnel)</label>
-                  <input 
-                    className="table-input" 
-                    placeholder="Ex: 1h30, 2h..."
-                    value={taskTimeSpent}
-                    onChange={e => setTaskTimeSpent(e.target.value)}
-                  />
-                </div>
-
-                <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
-                  <button type="submit" className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Plus size={16} /> Enregistrer l'activité
-                  </button>
-                </div>
-              </form>
-            </div>
-          ) : (
-            <div className="card" style={{ padding: '16px', background: '#ECFDF5', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Lock size={20} color="#059669" />
-              <div>
-                <strong style={{ color: '#065F46' }}>Semaine officielle verrouillée</strong>
-                <p style={{ margin: '2px 0 0', color: '#047857', fontSize: '0.85rem' }}>
-                  Votre rapport hebdomadaire pour cette semaine a été soumis à la Direction. Les activités quotidiennes sont verrouillées.
-                </p>
               </div>
-            </div>
-          )}
 
-          {/* LISTE DES ACTIVITÉS DU JOUR */}
-          <div className="card" style={{ padding: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, fontSize: '1.05rem' }}>
-                Activités de {selectedDay} ({dailyTasks.length})
-              </h3>
               {dailyTasks.length > 0 && !isWeekLocked && (
                 <button 
                   className="btn btn-secondary" 
-                  style={{ fontSize: '0.85rem', padding: '6px 12px' }}
+                  style={{ fontSize: '0.85rem', padding: '6px 14px', background: 'rgba(255,255,255,0.95)', color: '#1E293B', border: 'none', fontWeight: 700 }}
                   onClick={() => { setActiveTab('report'); setSearchParams({ tab: 'report', week: currentWeekStart }); }}
                 >
-                  ➡️ Passer au rapport hebdomadaire
+                  ➡️ Passer au rapport hebdo
                 </button>
               )}
             </div>
 
-            {dailyTasks.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--color-text-muted)' }}>
-                <Clock size={36} style={{ opacity: 0.4, marginBottom: '8px' }} />
-                <p style={{ margin: 0 }}>Aucune activité enregistrée pour ce {selectedDay}.</p>
+            {/* FORMULAIRE D'AJOUT RAPIDE */}
+            {!isWeekLocked ? (
+              <div style={{ background: 'var(--color-background)', padding: '20px', borderRadius: '10px', border: '1px solid var(--color-border)', marginBottom: '24px' }}>
+                <h4 style={{ margin: '0 0 16px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
+                  <Plus size={18} color="var(--color-primary)" /> Ajouter une nouvelle tâche / activité
+                </h4>
+
+                <form onSubmit={handleAddTask} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.88rem', fontWeight: 600 }}>Titre de l'activité *</label>
+                    <input 
+                      className="table-input" 
+                      placeholder="Ex: Rendez-vous client BOA, Conception maquette catalogue, Livraison commande #402..."
+                      value={taskTitle}
+                      onChange={e => setTaskTitle(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.88rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Description détaillée de l'activité (optionnel)</label>
+                    <textarea 
+                      className="table-input" 
+                      rows={2}
+                      placeholder="Détails de l'intervention, points abordés, actions menées, résultat obtenu..."
+                      value={taskDescription}
+                      onChange={e => setTaskDescription(e.target.value)}
+                      style={{ width: '100%', resize: 'vertical' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.82rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Catégorie</label>
+                    <select className="table-input" value={taskCategory} onChange={e => setTaskCategory(e.target.value)}>
+                      {TASK_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.82rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Statut</label>
+                    <select className="table-input" value={taskStatus} onChange={e => setTaskStatus(e.target.value as V2Task['status'])}>
+                      <option value="Effectuée">✅ Terminée / Effectuée</option>
+                      <option value="En cours">⏳ En cours</option>
+                      <option value="Restante">📌 En attente / Restante</option>
+                      <option value="Bloquée">⚠️ Bloquée</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.82rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Difficulté / Point bloquant (optionnel)</label>
+                    <input 
+                      className="table-input" 
+                      placeholder="Ex: Attente retour client..."
+                      value={taskDifficulty}
+                      onChange={e => setTaskDifficulty(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.82rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Temps passé (optionnel)</label>
+                    <input 
+                      className="table-input" 
+                      placeholder="Ex: 1h30, 2h..."
+                      value={taskTimeSpent}
+                      onChange={e => setTaskTimeSpent(e.target.value)}
+                    />
+                  </div>
+
+                  <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
+                    <button type="submit" className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px', fontWeight: 600 }}>
+                      <Plus size={16} /> Enregistrer l'activité
+                    </button>
+                  </div>
+                </form>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {dailyTasks.map((t, idx) => {
-                  const hasSubtitle = t.title && t.description && t.title.trim() !== t.description.trim();
-                  const displayTitle = t.title || t.description;
-
-                  return (
-                    <div 
-                      key={t.id || idx}
-                      style={{
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        padding: '12px 16px', borderRadius: '8px', background: 'var(--color-background)',
-                        border: '1px solid var(--color-border)', flexWrap: 'wrap', gap: '10px'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1, minWidth: '240px' }}>
-                        <button 
-                          onClick={() => handleToggleTaskStatus(t.id)}
-                          disabled={isWeekLocked}
-                          style={{ background: 'none', border: 'none', cursor: isWeekLocked ? 'default' : 'pointer', padding: 0, marginTop: '2px' }}
-                          title="Cliquer pour changer de statut"
-                        >
-                          {t.status === 'Effectuée' && <CheckCircle size={20} color="#10B981" />}
-                          {t.status === 'En cours' && <Clock size={20} color="#3B82F6" />}
-                          {t.status === 'Restante' && <AlertCircle size={20} color="#F59E0B" />}
-                          {t.status === 'Bloquée' && <AlertCircle size={20} color="#EF4444" />}
-                        </button>
-
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.95rem', textDecoration: t.status === 'Effectuée' ? 'line-through' : 'none', color: t.status === 'Effectuée' ? 'var(--color-text-muted)' : 'inherit' }}>
-                            {displayTitle}
-                          </div>
-                          {hasSubtitle && (
-                            <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                              {t.description}
-                            </div>
-                          )}
-                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                            {t.category && <span style={{ background: 'var(--color-card)', padding: '1px 6px', borderRadius: '4px', border: '1px solid var(--color-border)' }}>🏷️ {t.category}</span>}
-                            {t.difficulty && <span style={{ color: '#EF4444' }}>⚠️ Difficulté : {t.difficulty}</span>}
-                            {t.timeSpent && <span>⏱️ Durée : {t.timeSpent}</span>}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span 
-                        onClick={() => handleToggleTaskStatus(t.id)}
-                        style={{
-                          fontSize: '0.75rem', fontWeight: 600, padding: '3px 8px', borderRadius: '12px', cursor: isWeekLocked ? 'default' : 'pointer',
-                          background: t.status === 'Effectuée' ? '#ECFDF5' : t.status === 'En cours' ? '#EFF6FF' : t.status === 'Bloquée' ? '#FEF2F2' : '#FFFBEB',
-                          color: t.status === 'Effectuée' ? '#059669' : t.status === 'En cours' ? '#2563EB' : t.status === 'Bloquée' ? '#DC2626' : '#D97706',
-                          border: '1px solid currentColor'
-                        }}
-                      >
-                        {t.status}
-                      </span>
-
-                      {!isWeekLocked && (
-                        <button className="icon-button text-error" onClick={() => handleDeleteTask(t.id)} title="Supprimer">
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  );
-                })}
+              <div style={{ padding: '16px', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                <Lock size={20} color="#059669" />
+                <div>
+                  <strong style={{ color: '#065F46' }}>Semaine officielle verrouillée</strong>
+                  <p style={{ margin: '2px 0 0', color: '#047857', fontSize: '0.85rem' }}>
+                    Votre rapport hebdomadaire pour cette semaine a été soumis à la Direction. Les activités quotidiennes sont verrouillées.
+                  </p>
+                </div>
               </div>
             )}
+
+            {/* LISTE DES ACTIVITÉS DU JOUR */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                  Liste des activités enregistrées ({dailyTasks.length})
+                </h4>
+              </div>
+
+              {dailyTasks.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '36px 16px', background: 'var(--color-background)', borderRadius: '10px', border: '1px dashed var(--color-border)', color: 'var(--color-text-muted)' }}>
+                  <Clock size={36} style={{ opacity: 0.4, marginBottom: '8px' }} />
+                  <p style={{ margin: 0, fontWeight: 500 }}>Aucune activité enregistrée pour ce {selectedDay}.</p>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.82rem', opacity: 0.8 }}>Utilisez le formulaire ci-dessus pour ajouter vos réalisations.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {dailyTasks.map((t, idx) => {
+                    const hasSubtitle = t.title && t.description && t.title.trim() !== t.description.trim();
+                    const displayTitle = t.title || t.description;
+
+                    return (
+                      <div 
+                        key={t.id || idx}
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '14px 18px', borderRadius: '10px', background: 'var(--color-background)',
+                          border: '1px solid var(--color-border)', flexWrap: 'wrap', gap: '12px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1, minWidth: '240px' }}>
+                          <button 
+                            onClick={() => handleToggleTaskStatus(t.id)}
+                            disabled={isWeekLocked}
+                            style={{ background: 'none', border: 'none', cursor: isWeekLocked ? 'default' : 'pointer', padding: 0, marginTop: '2px' }}
+                            title="Cliquer pour changer de statut"
+                          >
+                            {t.status === 'Effectuée' && <CheckCircle size={20} color="#10B981" />}
+                            {t.status === 'En cours' && <Clock size={20} color="#3B82F6" />}
+                            {t.status === 'Restante' && <AlertCircle size={20} color="#F59E0B" />}
+                            {t.status === 'Bloquée' && <AlertCircle size={20} color="#EF4444" />}
+                          </button>
+
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: '0.95rem', textDecoration: t.status === 'Effectuée' ? 'line-through' : 'none', color: t.status === 'Effectuée' ? 'var(--color-text-muted)' : 'var(--color-text)' }}>
+                              {displayTitle}
+                            </div>
+                            {hasSubtitle && (
+                              <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '3px' }}>
+                                {t.description}
+                              </div>
+                            )}
+                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '5px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                              {t.category && <span style={{ background: 'var(--color-card)', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--color-border)', fontWeight: 600 }}>🏷️ {t.category}</span>}
+                              {t.difficulty && <span style={{ color: '#EF4444', fontWeight: 500 }}>⚠️ Difficulté : {t.difficulty}</span>}
+                              {t.timeSpent && <span>⏱️ Durée : {t.timeSpent}</span>}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span 
+                            onClick={() => handleToggleTaskStatus(t.id)}
+                            style={{
+                              fontSize: '0.75rem', fontWeight: 700, padding: '4px 10px', borderRadius: '12px', cursor: isWeekLocked ? 'default' : 'pointer',
+                              background: t.status === 'Effectuée' ? '#ECFDF5' : t.status === 'En cours' ? '#EFF6FF' : t.status === 'Bloquée' ? '#FEF2F2' : '#FFFBEB',
+                              color: t.status === 'Effectuée' ? '#059669' : t.status === 'En cours' ? '#2563EB' : t.status === 'Bloquée' ? '#DC2626' : '#D97706',
+                              border: '1px solid currentColor'
+                            }}
+                          >
+                            {t.status}
+                          </span>
+
+                          {!isWeekLocked && (
+                            <button className="icon-button text-error" onClick={() => handleDeleteTask(t.id)} title="Supprimer">
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

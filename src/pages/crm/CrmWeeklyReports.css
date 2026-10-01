@@ -1,0 +1,272 @@
+/* CrmWeeklyReports.css - Styles professionnels avec animations et palettes par jour */
+
+.crm-days-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.crm-day-card {
+  position: relative;
+  border-radius: 14px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 120px;
+  overflow: hidden;
+  text-align: left;
+  border: 1.5px solid transparent;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.crm-day-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 14px 14px 0 0;
+  opacity: 0.8;
+  transition: height 0.25s ease;
+}
+
+/* Survol animé (Hover) */
+.crm-day-card:hover {
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.12);
+}
+
+.crm-day-card:hover::before {
+  height: 6px;
+}
+
+/* Carte active / sélectionnée */
+.crm-day-card.selected {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 14px 28px -4px rgba(0, 0, 0, 0.16);
+  border-width: 2px;
+}
+
+/* --- THEMES COULEURS SPECIFIQUES PAR JOUR --- */
+
+/* LUNDI : Bleu Royal */
+.crm-day-card.day-lundi {
+  background: linear-gradient(145deg, #F0F7FF 0%, #DBEAFE 100%);
+  border-color: #BFDBFE;
+}
+.crm-day-card.day-lundi::before {
+  background: #2563EB;
+}
+.crm-day-card.day-lundi.selected {
+  border-color: #2563EB;
+  box-shadow: 0 10px 25px -4px rgba(37, 99, 235, 0.28);
+}
+.crm-day-card.day-lundi .day-name {
+  color: #1D4ED8;
+}
+.crm-day-card.day-lundi .day-badge {
+  background: #2563EB;
+  color: #FFFFFF;
+}
+
+/* MARDI : Violet Améthyste */
+.crm-day-card.day-mardi {
+  background: linear-gradient(145deg, #FAF5FF 0%, #EDE9FE 100%);
+  border-color: #DDD6FE;
+}
+.crm-day-card.day-mardi::before {
+  background: #7C3AED;
+}
+.crm-day-card.day-mardi.selected {
+  border-color: #7C3AED;
+  box-shadow: 0 10px 25px -4px rgba(124, 58, 237, 0.28);
+}
+.crm-day-card.day-mardi .day-name {
+  color: #6D28D9;
+}
+.crm-day-card.day-mardi .day-badge {
+  background: #7C3AED;
+  color: #FFFFFF;
+}
+
+/* MERCREDI : Vert Émeraude / Vitalité */
+.crm-day-card.day-mercredi {
+  background: linear-gradient(145deg, #F0FDF4 0%, #DCFCE7 100%);
+  border-color: #BBF7D0;
+}
+.crm-day-card.day-mercredi::before {
+  background: #059669;
+}
+.crm-day-card.day-mercredi.selected {
+  border-color: #059669;
+  box-shadow: 0 10px 25px -4px rgba(5, 150, 105, 0.28);
+}
+.crm-day-card.day-mercredi .day-name {
+  color: #047857;
+}
+.crm-day-card.day-mercredi .day-badge {
+  background: #059669;
+  color: #FFFFFF;
+}
+
+/* JEUDI : Ambre & Or / Dynamisme */
+.crm-day-card.day-jeudi {
+  background: linear-gradient(145deg, #FFFBEB 0%, #FEF3C7 100%);
+  border-color: #FDE68A;
+}
+.crm-day-card.day-jeudi::before {
+  background: #D97706;
+}
+.crm-day-card.day-jeudi.selected {
+  border-color: #D97706;
+  box-shadow: 0 10px 25px -4px rgba(217, 119, 6, 0.28);
+}
+.crm-day-card.day-jeudi .day-name {
+  color: #B45309;
+}
+.crm-day-card.day-jeudi .day-badge {
+  background: #D97706;
+  color: #FFFFFF;
+}
+
+/* VENDREDI : Rose Corail / Clôture */
+.crm-day-card.day-vendredi {
+  background: linear-gradient(145deg, #FFF1F2 0%, #FFE4E6 100%);
+  border-color: #FECDD3;
+}
+.crm-day-card.day-vendredi::before {
+  background: #E11D48;
+}
+.crm-day-card.day-vendredi.selected {
+  border-color: #E11D48;
+  box-shadow: 0 10px 25px -4px rgba(225, 29, 72, 0.28);
+}
+.crm-day-card.day-vendredi .day-name {
+  color: #BE123C;
+}
+.crm-day-card.day-vendredi .day-badge {
+  background: #E11D48;
+  color: #FFFFFF;
+}
+
+/* SAMEDI : Ardoise & Cyan */
+.crm-day-card.day-samedi {
+  background: linear-gradient(145deg, #F8FAFC 0%, #E2E8F0 100%);
+  border-color: #CBD5E1;
+}
+.crm-day-card.day-samedi::before {
+  background: #475569;
+}
+.crm-day-card.day-samedi.selected {
+  border-color: #475569;
+  box-shadow: 0 10px 25px -4px rgba(71, 85, 105, 0.28);
+}
+.crm-day-card.day-samedi .day-name {
+  color: #334155;
+}
+.crm-day-card.day-samedi .day-badge {
+  background: #475569;
+  color: #FFFFFF;
+}
+
+/* Typographie & éléments internes aux cartes */
+.crm-day-card .day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.crm-day-card .day-name {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.crm-day-card .day-date {
+  font-size: 0.8rem;
+  color: #64748B;
+  font-weight: 500;
+  margin-top: 1px;
+}
+
+.crm-day-card .day-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.crm-day-card .day-footer {
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.crm-day-card .day-count-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #1E293B;
+}
+
+.crm-day-card .day-status-pill {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(4px);
+  color: #334155;
+}
+
+/* Barre de progression mini par jour */
+.crm-day-card .day-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.crm-day-card .day-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* Studio d'édition du jour sélectionné */
+.crm-active-day-studio {
+  background: var(--color-card);
+  border-radius: 14px;
+  padding: 24px;
+  border: 1.5px solid var(--color-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.crm-day-banner-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  color: #FFFFFF;
+}
+
+.crm-day-banner-header.day-lundi { background: linear-gradient(135deg, #1D4ED8 0%, #2563EB 100%); }
+.crm-day-banner-header.day-mardi { background: linear-gradient(135deg, #6D28D9 0%, #7C3AED 100%); }
+.crm-day-banner-header.day-mercredi { background: linear-gradient(135deg, #047857 0%, #059669 100%); }
+.crm-day-banner-header.day-jeudi { background: linear-gradient(135deg, #B45309 0%, #D97706 100%); }
+.crm-day-banner-header.day-vendredi { background: linear-gradient(135deg, #BE123C 0%, #E11D48 100%); }
+.crm-day-banner-header.day-samedi { background: linear-gradient(135deg, #334155 0%, #475569 100%); }
