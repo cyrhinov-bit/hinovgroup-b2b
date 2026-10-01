@@ -42,7 +42,7 @@ export function CrmWeeklyReports() {
 
   const currentMondayStr = useMemo(() => getMondayOf(new Date()), []);
   const initialWeek = searchParams.get('week') || currentMondayStr;
-  const initialTab = searchParams.get('tab') || (isSupervisionRoute && isDirection ? 'supervision' : 'daily');
+  const initialTab = isDirection ? 'supervision' : (searchParams.get('tab') || 'daily');
 
   const [currentWeekStart, setCurrentWeekStart] = useState<string>(initialWeek);
   const [activeTab, setActiveTab] = useState<string>(initialTab);
@@ -77,11 +77,11 @@ export function CrmWeeklyReports() {
 
   // Synchroniser paramètres URL et routes
   useEffect(() => {
-    if (location.pathname.includes('rapports-equipe')) {
+    if (isDirection) {
       setActiveTab('supervision');
     } else {
       const pTab = searchParams.get('tab');
-      if (pTab && ['daily', 'report', 'history', 'supervision'].includes(pTab)) {
+      if (pTab && ['daily', 'report', 'history'].includes(pTab)) {
         setActiveTab(pTab);
       }
     }
@@ -89,11 +89,11 @@ export function CrmWeeklyReports() {
     if (pWeek && pWeek !== currentWeekStart) {
       setCurrentWeekStart(pWeek);
     }
-  }, [searchParams, location.pathname]);
+  }, [searchParams, location.pathname, isDirection]);
 
   // Marquer automatiquement les notifications de rapports comme lues lorsque la Direction consulte la supervision
   useEffect(() => {
-    if (activeTab === 'supervision' && isDirection && currentUser) {
+    if (isDirection && currentUser) {
       const unreadReportNotifs = (notifications || []).filter(n => 
         n.user_id === currentUser.id && 
         !n.is_read && 
@@ -103,17 +103,12 @@ export function CrmWeeklyReports() {
         markNotificationAsRead(notif.id);
       }
     }
-  }, [activeTab, isDirection, currentUser, notifications, markNotificationAsRead]);
+  }, [isDirection, currentUser, notifications, markNotificationAsRead]);
 
   const handleTabChange = (newTab: string) => {
+    if (isDirection) return;
     setActiveTab(newTab);
-    if (location.pathname.includes('rapports-equipe') && newTab !== 'supervision') {
-      navigate(`/crm/rapports?tab=${newTab}&week=${currentWeekStart}`);
-    } else if (!location.pathname.includes('rapports-equipe') && newTab === 'supervision') {
-      navigate(`/crm/rapports-equipe?week=${currentWeekStart}`);
-    } else {
-      setSearchParams({ tab: newTab, week: currentWeekStart });
-    }
+    setSearchParams({ tab: newTab, week: currentWeekStart });
   };
 
   // Calcul des dates de la semaine courante
@@ -391,7 +386,11 @@ export function CrmWeeklyReports() {
 
   // ================= SUPERVISION DIRECTION DATA & KPIs =================
   const activeStaff = useMemo(() => {
-    return users.filter(u => u.active !== false && u.crmReportsEnabled !== false);
+    return users.filter(u => 
+      u.active !== false && 
+      u.crmReportsEnabled !== false &&
+      !['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(u.role)
+    );
   }, [users]);
 
   const weeklyReportsForSelectedWeek = useMemo(() => {
@@ -454,10 +453,21 @@ export function CrmWeeklyReports() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <FileText size={24} color="var(--color-primary)" /> Rapports d'Activité Hebdomadaires
+            {isDirection ? (
+              <>
+                <ClipboardCheck size={24} color="#7C3AED" /> Rapports d'Activité de l'Équipe
+              </>
+            ) : (
+              <>
+                <FileText size={24} color="var(--color-primary)" /> Rapports d'Activité Hebdomadaires
+              </>
+            )}
           </h2>
           <p style={{ margin: '4px 0 0', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-            Suivi journalier des activités, consolidation des comptes-rendus et supervision de l'équipe
+            {isDirection 
+              ? "Cockpit de supervision, consultation des rapports soumis et relance de l'équipe"
+              : "Suivi journalier des activités, consolidation des comptes-rendus et transmission à la Direction"
+            }
           </p>
         </div>
 
@@ -485,71 +495,53 @@ export function CrmWeeklyReports() {
         </div>
       </div>
 
-      {/* NAVIGATION PAR ONGLETS */}
-      <div style={{ display: 'flex', gap: '8px', borderBottom: '2px solid var(--color-border)', marginBottom: '24px', flexWrap: 'wrap' }}>
-        <button 
-          className={`tab-button ${activeTab === 'daily' ? 'active' : ''}`}
-          onClick={() => handleTabChange('daily')}
-          style={{
-            padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer',
-            borderBottom: activeTab === 'daily' ? '3px solid var(--color-primary)' : '3px solid transparent',
-            color: activeTab === 'daily' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-            fontWeight: activeTab === 'daily' ? 700 : 500, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px'
-          }}
-        >
-          <Clock size={16} /> 1. Saisie Journalière (Lun - Ven)
-        </button>
-
-        <button 
-          className={`tab-button ${activeTab === 'report' ? 'active' : ''}`}
-          onClick={() => handleTabChange('report')}
-          style={{
-            padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer',
-            borderBottom: activeTab === 'report' ? '3px solid var(--color-primary)' : '3px solid transparent',
-            color: activeTab === 'report' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-            fontWeight: activeTab === 'report' ? 700 : 500, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px'
-          }}
-        >
-          <FileText size={16} /> 2. Mon Rapport Hebdomadaire
-          {isWeekLocked && <span title="Semaine soumise et verrouillée"><Lock size={14} color="#10B981" /></span>}
-        </button>
-
-        <button 
-          className={`tab-button ${activeTab === 'history' ? 'active' : ''}`}
-          onClick={() => handleTabChange('history')}
-          style={{
-            padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer',
-            borderBottom: activeTab === 'history' ? '3px solid var(--color-primary)' : '3px solid transparent',
-            color: activeTab === 'history' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-            fontWeight: activeTab === 'history' ? 700 : 500, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px'
-          }}
-        >
-          <CheckCircle size={16} /> 3. Mes Rapports Soumis
-        </button>
-
-        {isDirection && (
+      {/* NAVIGATION PAR ONGLETS (Uniquement pour les collaborateurs opérationnels) */}
+      {!isDirection && (
+        <div style={{ display: 'flex', gap: '8px', borderBottom: '2px solid var(--color-border)', marginBottom: '24px', flexWrap: 'wrap' }}>
           <button 
-            className={`tab-button ${activeTab === 'supervision' ? 'active' : ''}`}
-            onClick={() => handleTabChange('supervision')}
+            className={`tab-button ${activeTab === 'daily' ? 'active' : ''}`}
+            onClick={() => handleTabChange('daily')}
             style={{
               padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer',
-              borderBottom: activeTab === 'supervision' ? '3px solid #7C3AED' : '3px solid transparent',
-              color: activeTab === 'supervision' ? '#7C3AED' : 'var(--color-text-muted)',
-              fontWeight: activeTab === 'supervision' ? 700 : 500, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px'
+              borderBottom: activeTab === 'daily' ? '3px solid var(--color-primary)' : '3px solid transparent',
+              color: activeTab === 'daily' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+              fontWeight: activeTab === 'daily' ? 700 : 500, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px'
             }}
           >
-            <ClipboardCheck size={16} color="#7C3AED" /> 4. Rapports Équipe (Supervision)
-            {pendingStaff.length > 0 && (
-              <span style={{ background: '#EF4444', color: '#fff', fontSize: '0.75rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>
-                {pendingStaff.length} en attente
-              </span>
-            )}
+            <Clock size={16} /> 1. Saisie Journalière (Lun - Sam)
           </button>
-        )}
-      </div>
+
+          <button 
+            className={`tab-button ${activeTab === 'report' ? 'active' : ''}`}
+            onClick={() => handleTabChange('report')}
+            style={{
+              padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer',
+              borderBottom: activeTab === 'report' ? '3px solid var(--color-primary)' : '3px solid transparent',
+              color: activeTab === 'report' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+              fontWeight: activeTab === 'report' ? 700 : 500, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px'
+            }}
+          >
+            <FileText size={16} /> 2. Mon Rapport Hebdomadaire
+            {isWeekLocked && <span title="Semaine soumise et verrouillée"><Lock size={14} color="#10B981" /></span>}
+          </button>
+
+          <button 
+            className={`tab-button ${activeTab === 'history' ? 'active' : ''}`}
+            onClick={() => handleTabChange('history')}
+            style={{
+              padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer',
+              borderBottom: activeTab === 'history' ? '3px solid var(--color-primary)' : '3px solid transparent',
+              color: activeTab === 'history' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+              fontWeight: activeTab === 'history' ? 700 : 500, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px'
+            }}
+          >
+            <CheckCircle size={16} /> 3. Mes Rapports Soumis
+          </button>
+        </div>
+      )}
 
       {/* ================= ONGLET 1 : SAISIE JOURNALIÈRE ================= */}
-      {activeTab === 'daily' && (
+      {!isDirection && activeTab === 'daily' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
           {/* BANDEAU JOURS DE LA SEMAINE - CARTES ANIMÉES MULTI-COULEURS */}
           <div className="crm-days-grid">
@@ -813,7 +805,7 @@ export function CrmWeeklyReports() {
       )}
 
       {/* ================= ONGLET 2 : MON RAPPORT HEBDOMADAIRE ================= */}
-      {activeTab === 'report' && (
+      {!isDirection && activeTab === 'report' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {/* BANDEAU D'ÉTAT DU RAPPORT */}
           <div className="card" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', borderLeft: isWeekLocked ? '4px solid #10B981' : '4px solid #F59E0B' }}>
@@ -941,7 +933,7 @@ export function CrmWeeklyReports() {
       )}
 
       {/* ================= ONGLET 3 : MES RAPPORTS SOUMIS (HISTORIQUE) ================= */}
-      {activeTab === 'history' && (
+      {!isDirection && activeTab === 'history' && (
         <div className="card" style={{ padding: '20px' }}>
           <h3 style={{ margin: '0 0 16px', fontSize: '1.05rem' }}>
             Historique de mes rapports hebdomadaires
@@ -1009,8 +1001,8 @@ export function CrmWeeklyReports() {
         </div>
       )}
 
-      {/* ================= ONGLET 4 : SUPERVISION DIRECTION ================= */}
-      {activeTab === 'supervision' && isDirection && (
+      {/* ================= COCKPIT SUPERVISION DIRECTION : RAPPORTS ÉQUIPE ================= */}
+      {isDirection && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {/* COCKPIT KPIS DIRECTION */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
