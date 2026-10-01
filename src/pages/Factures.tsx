@@ -107,6 +107,7 @@ export function Factures() {
   const [formAmountToPay, setFormAmountToPay] = useState<number>(0);
   const [formAmountUsed, setFormAmountUsed] = useState<number>(0);
   const [formCommissionRate, setFormCommissionRate] = useState<number>(10);
+  const [formCommissionAmount, setFormCommissionAmount] = useState<number>(0);
   const [formAmountPaid, setFormAmountPaid] = useState<number>(0);
   const [formNotes, setFormNotes] = useState<string>('');
 
@@ -149,15 +150,22 @@ export function Factures() {
     return 'GÉNÉRAL';
   };
 
-  // Live calculations for Form
+  // Helper de formatage avec séparateurs de milliers (ex: 1 000 000)
+  const handleFormattedNumberChange = (setter: (val: number) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\s/g, '').replace(/[^0-9]/g, '');
+    const num = raw === '' ? 0 : parseInt(raw, 10);
+    setter(num);
+  };
+
+  const formatNumberDisplay = (num?: number): string => {
+    if (num === undefined || num === null || num === 0) return '';
+    return num.toLocaleString('fr-FR');
+  };
+
+  // Live calculations for Form (Marge brute, Marge HINOV, Reste)
   const formGrossMargin = useMemo(() => {
     return Math.max(0, formAmountToPay - formAmountUsed);
   }, [formAmountToPay, formAmountUsed]);
-
-  const formCommissionAmount = useMemo(() => {
-    if (!formCommercialName && !formCommercialId) return 0;
-    return formGrossMargin > 0 ? Math.round(formGrossMargin * (formCommissionRate / 100)) : 0;
-  }, [formGrossMargin, formCommissionRate, formCommercialName, formCommercialId]);
 
   const formHinovMargin = useMemo(() => {
     return formGrossMargin - formCommissionAmount;
@@ -196,9 +204,12 @@ export function Factures() {
     const today = new Date().toISOString().split('T')[0];
     setFormDeliveryDate(today);
     setFormPaymentDate('');
-    setFormAmountToPay(quote.total || 0);
+    const totalToPay = quote.total || 0;
+    setFormAmountToPay(totalToPay);
     const estimatedCost = (quote.lines || []).reduce((sum, l) => sum + ((l.costPrice || 0) * (l.quantity || 1)), 0);
     setFormAmountUsed(estimatedCost);
+    const gross = Math.max(0, totalToPay - estimatedCost);
+    setFormCommissionAmount(comm?.name ? Math.round(gross * 0.1) : 0);
     setFormCommissionRate(10);
     setFormAmountPaid(0);
     setFormNotes(quote.notes || `Devis N° ${quote.quoteNumber}`);
@@ -223,6 +234,7 @@ export function Factures() {
     setFormPaymentDate('');
     setFormAmountToPay(0);
     setFormAmountUsed(0);
+    setFormCommissionAmount(0);
     setFormCommissionRate(10);
     setFormAmountPaid(0);
     setFormNotes('');
@@ -247,6 +259,7 @@ export function Factures() {
     setFormPaymentDate(inv.paymentDate || '');
     setFormAmountToPay(inv.totalAmount || 0);
     setFormAmountUsed(inv.costAmount || 0);
+    setFormCommissionAmount(inv.commissionAmount !== undefined ? inv.commissionAmount : 0);
     setFormCommissionRate(inv.commissionRate ?? 10);
     setFormAmountPaid(inv.amountPaid ?? 0);
     setFormNotes(inv.notes || '');
@@ -271,11 +284,10 @@ export function Factures() {
     const periodMonth = Number(formPeriodMonth) || selectedMonth;
 
     const grossMargin = Math.max(0, formAmountToPay - formAmountUsed);
-    const commissionAmount = (formCommercialName || formCommercialId) && grossMargin > 0
-      ? Math.round(grossMargin * (formCommissionRate / 100))
-      : 0;
+    const commissionAmount = Number(formCommissionAmount) || 0;
     const hinovMargin = grossMargin - commissionAmount;
     const remainingAmount = Math.max(0, formAmountToPay - formAmountPaid);
+    const commissionRate = grossMargin > 0 ? Math.round((commissionAmount / grossMargin) * 100) : 0;
 
     const invoiceNumber = editingInvoiceId 
       ? (invoices.find(i => i.id === editingInvoiceId)?.invoiceNumber || `FAC-${periodYear}-${String(periodMonth).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`)
@@ -303,7 +315,7 @@ export function Factures() {
       discountAmount: 0,
       totalAmount: formAmountToPay,
       costAmount: formAmountUsed,
-      commissionRate: formCommissionRate,
+      commissionRate,
       commissionAmount,
       grossMargin,
       hinovMargin,
@@ -1475,79 +1487,117 @@ export function Factures() {
                 </div>
               </div>
 
-              {/* Bloc Montants & Coûts */}
-              <div className="card" style={{ padding: '16px', background: 'var(--color-surface-alt)', border: '1px solid var(--color-border)' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '14px' }}>
+              {/* Bloc Montants & Coûts avec séparateurs de milliers */}
+              <div className="card" style={{ padding: '16px', background: 'var(--color-surface-alt)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '14px' }}>
+                  
+                  {/* 1. Total à Payer */}
                   <div>
                     <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
                       Total à Payer (FCFA) *
                     </label>
                     <input
-                      type="number"
-                      min="0"
-                      step="100"
+                      type="text"
+                      inputMode="numeric"
                       required
-                      value={formAmountToPay || ''}
-                      onChange={e => setFormAmountToPay(Number(e.target.value) || 0)}
-                      placeholder="0"
+                      value={formatNumberDisplay(formAmountToPay)}
+                      onChange={handleFormattedNumberChange(setFormAmountToPay)}
+                      placeholder="Ex: 1 000 000"
                       className="table-input"
-                      style={{ width: '100%', padding: '8px 10px', fontWeight: 700, fontSize: '1rem' }}
+                      style={{ width: '100%', padding: '8px 10px', fontWeight: 800, fontSize: '1.05rem', color: '#0F172A' }}
                     />
                   </div>
 
+                  {/* 2. Montant Utilisé */}
                   <div>
                     <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px', color: '#D97706' }}>
                       Montant Utilisé / Coût (FCFA)
                     </label>
                     <input
-                      type="number"
-                      min="0"
-                      step="100"
-                      value={formAmountUsed || ''}
-                      onChange={e => setFormAmountUsed(Number(e.target.value) || 0)}
-                      placeholder="0"
+                      type="text"
+                      inputMode="numeric"
+                      value={formatNumberDisplay(formAmountUsed)}
+                      onChange={handleFormattedNumberChange(setFormAmountUsed)}
+                      placeholder="Ex: 500 000"
                       className="table-input"
-                      style={{ width: '100%', padding: '8px 10px', fontWeight: 700, color: '#D97706', fontSize: '1rem' }}
+                      style={{ width: '100%', padding: '8px 10px', fontWeight: 700, color: '#D97706', fontSize: '1.05rem' }}
                     />
                   </div>
 
+                  {/* 3. Prime Commercial (Saisie manuelle libre) */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#7C3AED' }}>
+                        Prime Commercial (FCFA)
+                      </label>
+                      {formGrossMargin > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setFormCommissionAmount(Math.round(formGrossMargin * 0.1))}
+                          style={{
+                            background: 'rgba(124, 58, 237, 0.1)',
+                            color: '#7C3AED',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '1px 6px',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                          title="Calculer 10% de la marge brute"
+                        >
+                          Auto 10%
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={formatNumberDisplay(formCommissionAmount)}
+                      onChange={handleFormattedNumberChange(setFormCommissionAmount)}
+                      placeholder="Ex: 50 000"
+                      className="table-input"
+                      style={{ width: '100%', padding: '8px 10px', fontWeight: 700, color: '#7C3AED', fontSize: '1.05rem' }}
+                    />
+                  </div>
+
+                  {/* 4. Total Payé */}
                   <div>
                     <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px', color: '#0D9488' }}>
-                      Total Payé (FCFA)
+                      Total Déjà Payé (FCFA)
                     </label>
                     <input
-                      type="number"
-                      min="0"
-                      step="100"
-                      value={formAmountPaid || ''}
-                      onChange={e => setFormAmountPaid(Number(e.target.value) || 0)}
-                      placeholder="0"
+                      type="text"
+                      inputMode="numeric"
+                      value={formatNumberDisplay(formAmountPaid)}
+                      onChange={handleFormattedNumberChange(setFormAmountPaid)}
+                      placeholder="Ex: 300 000"
                       className="table-input"
-                      style={{ width: '100%', padding: '8px 10px', fontWeight: 700, color: '#0D9488', fontSize: '1rem' }}
+                      style={{ width: '100%', padding: '8px 10px', fontWeight: 700, color: '#0D9488', fontSize: '1.05rem' }}
                     />
                   </div>
                 </div>
 
-                {/* Calculs automatiques temps réel */}
+                {/* Synthèse des calculs automatiques en temps réel */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', paddingTop: '10px', borderTop: '1px solid var(--color-border)', textAlign: 'center' }}>
-                  <div style={{ background: 'var(--color-surface)', padding: '6px', borderRadius: 'var(--radius-sm)' }}>
-                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Marge Brute</span>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#059669' }}>{formGrossMargin.toLocaleString('fr-FR')} F</span>
+                  <div style={{ background: 'var(--color-surface)', padding: '8px 6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
+                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Marge Brute (Auto)</span>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 800, color: '#059669', fontFamily: 'monospace' }}>{formGrossMargin.toLocaleString('fr-FR')} F</span>
                   </div>
 
-                  <div style={{ background: 'var(--color-surface)', padding: '6px', borderRadius: 'var(--radius-sm)' }}>
-                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Prime (10%)</span>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#8B5CF6' }}>{formCommissionAmount.toLocaleString('fr-FR')} F</span>
+                  <div style={{ background: 'var(--color-surface)', padding: '8px 6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
+                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Prime Saisie</span>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 800, color: '#7C3AED', fontFamily: 'monospace' }}>{formCommissionAmount.toLocaleString('fr-FR')} F</span>
                   </div>
 
-                  <div style={{ background: 'var(--color-surface)', padding: '6px', borderRadius: 'var(--radius-sm)' }}>
-                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Marge HINOV</span>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-primary)' }}>{formHinovMargin.toLocaleString('fr-FR')} F</span>
+                  <div style={{ background: 'var(--color-surface)', padding: '8px 6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
+                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Marge HINOV (Auto)</span>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--color-primary)', fontFamily: 'monospace' }}>{formHinovMargin.toLocaleString('fr-FR')} F</span>
                   </div>
 
-                  <div style={{ background: 'var(--color-surface)', padding: '6px', borderRadius: 'var(--radius-sm)' }}>
-                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Reste à Payer</span>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: formRemainingAmount === 0 ? '#059669' : '#E11D48' }}>{formRemainingAmount.toLocaleString('fr-FR')} F</span>
+                  <div style={{ background: 'var(--color-surface)', padding: '8px 6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
+                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Reste à Payer (Auto)</span>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 800, color: formRemainingAmount === 0 ? '#059669' : '#E11D48', fontFamily: 'monospace' }}>{formRemainingAmount.toLocaleString('fr-FR')} F</span>
                   </div>
                 </div>
               </div>
@@ -1633,14 +1683,14 @@ export function Factures() {
                   Montant encaissé (FCFA) *
                 </label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   required
-                  min="1"
-                  max={selectedInvoice.remainingAmount ?? selectedInvoice.totalAmount}
-                  value={payAmount || ''}
-                  onChange={e => setPayAmount(Number(e.target.value) || 0)}
+                  value={formatNumberDisplay(payAmount)}
+                  onChange={handleFormattedNumberChange(setPayAmount)}
+                  placeholder="Ex: 300 000"
                   className="table-input"
-                  style={{ width: '100%', padding: '8px 10px', fontWeight: 700, fontSize: '1rem' }}
+                  style={{ width: '100%', padding: '8px 10px', fontWeight: 700, fontSize: '1.05rem', color: '#0D9488' }}
                 />
               </div>
 
