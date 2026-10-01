@@ -194,20 +194,37 @@ export function buildV2WeeklyReportPdf(
   const cx = pageW - 24;
   const cy = 20;
   const r = 9;
-
-  // Dessin du badge utilisateur avec initiales
-  doc.setFillColor(241, 245, 249); // Slate-100
-  doc.circle(cx, cy, r, 'F');
-  doc.setDrawColor(203, 213, 225); // Slate-300
-  doc.setLineWidth(0.5);
-  doc.circle(cx, cy, r, 'S');
-
   const authorName = author?.name || 'Collaborateur';
-  const initials = authorName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || '?';
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(13, 148, 136);
-  doc.text(cleanPdfText(initials), cx, cy + 3, { align: 'center' });
+
+  let photoDrawn = false;
+  if (author?.photo && typeof author.photo === 'string' && author.photo.startsWith('data:image/')) {
+    try {
+      const isPng = author.photo.includes('image/png');
+      const format = isPng ? 'PNG' : 'JPEG';
+      doc.addImage(author.photo, format, cx - r, cy - r, r * 2, r * 2);
+      doc.setDrawColor(203, 213, 225); // Slate-300
+      doc.setLineWidth(0.6);
+      doc.roundedRect(cx - r, cy - r, r * 2, r * 2, 2, 2, 'S');
+      photoDrawn = true;
+    } catch {
+      photoDrawn = false;
+    }
+  }
+
+  if (!photoDrawn) {
+    // Dessin du badge utilisateur avec initiales si pas de photo
+    doc.setFillColor(241, 245, 249); // Slate-100
+    doc.circle(cx, cy, r, 'F');
+    doc.setDrawColor(203, 213, 225); // Slate-300
+    doc.setLineWidth(0.5);
+    doc.circle(cx, cy, r, 'S');
+
+    const initials = authorName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || '?';
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(13, 148, 136);
+    doc.text(cleanPdfText(initials), cx, cy + 3, { align: 'center' });
+  }
 
   // Nom & Rôle du collaborateur
   doc.setFontSize(10);
