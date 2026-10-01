@@ -114,27 +114,13 @@ export function ReportPdfPreview({ preview, onClose }: ReportPdfPreviewProps) {
       }
     >
       {preview && activeUrl ? (
-        <div style={{ width: '100%', height: '75vh', backgroundColor: '#334155', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
-          <object
-            data={`${activeUrl}#toolbar=1&navpanes=0`}
-            type="application/pdf"
-            width="100%"
-            height="100%"
-            style={{ display: 'block', width: '100%', height: '100%' }}
-          >
-            <embed
-              src={`${activeUrl}#toolbar=1`}
-              type="application/pdf"
-              width="100%"
-              height="100%"
-            />
-            <iframe
-              id="report-pdf-iframe"
-              src={activeUrl}
-              title={preview.title}
-              style={{ width: '100%', height: '100%', border: 'none' }}
-            />
-          </object>
+        <div style={{ width: '100%', height: '75vh', backgroundColor: '#525659', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+          <iframe
+            id="report-pdf-iframe"
+            src={activeUrl}
+            title={preview.title}
+            style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#ffffff', display: 'block' }}
+          />
         </div>
       ) : (
         <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' }}>

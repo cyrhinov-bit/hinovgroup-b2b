@@ -9,7 +9,7 @@ import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAppContext, type V2WeeklyReport, type V2DailyReport, type V2Task, type User } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
-import { generateV2WeeklyReportPdf, getV2WeeklyReportPdfBlobUrl } from '../../features/reports/services/ReportPdfService';
+import { generateV2WeeklyReportPdf, getV2WeeklyReportPdfBlobUrl, getV2WeeklyReportPdfDataUrl } from '../../features/reports/services/ReportPdfService';
 import { ReportPdfPreview, type ReportPdfPreviewData } from '../../components/ReportPdfPreview';
 import toast from 'react-hot-toast';
 import './CrmWeeklyReports.css';
@@ -273,7 +273,7 @@ export function CrmWeeklyReports() {
     const tasksByDayMap: Record<string, V2Task[]> = {};
     DAYS.forEach(day => {
       const dStr = weekDates[day];
-      const rep = v2DailyReports.find(d => d.authorId === currentUser?.id && d.date === dStr);
+      const rep = v2DailyReports.find(d => d.authorId === currentUser?.id && (d.date === dStr || d.date?.startsWith(dStr)));
       tasksByDayMap[day] = rep?.tasks || [];
     });
 
@@ -307,7 +307,7 @@ export function CrmWeeklyReports() {
     const tasksByDayMap: Record<string, V2Task[]> = {};
     DAYS.forEach(day => {
       const dStr = weekDates[day];
-      const rep = v2DailyReports.find(d => d.authorId === currentUser?.id && d.date === dStr);
+      const rep = v2DailyReports.find(d => d.authorId === currentUser?.id && (d.date === dStr || d.date?.startsWith(dStr)));
       tasksByDayMap[day] = rep?.tasks || [];
     });
 
@@ -342,7 +342,7 @@ export function CrmWeeklyReports() {
         const tasksByDayMap: Record<string, V2Task[]> = {};
         DAYS.forEach(day => {
           const dStr = weekDates[day];
-          const rep = v2DailyReports.find(d => d.authorId === currentUser?.id && d.date === dStr);
+          const rep = v2DailyReports.find(d => d.authorId === currentUser?.id && (d.date === dStr || d.date?.startsWith(dStr)));
           tasksByDayMap[day] = rep?.tasks || [];
         });
 
@@ -419,10 +419,12 @@ export function CrmWeeklyReports() {
 
     const targetAuthor = users.find(u => u.id === reportObj.authorId) || currentUser;
     const blobUrl = getV2WeeklyReportPdfBlobUrl(reportObj, targetAuthor, settings, v2DailyReports);
+    const dataUrl = getV2WeeklyReportPdfDataUrl(reportObj, targetAuthor, settings, v2DailyReports);
     const safeName = targetAuthor?.name ? targetAuthor.name.toLowerCase().replace(/\s+/g, '_') : 'collaborateur';
 
     setPreview({
       blobUrl,
+      dataUrl,
       filename: `rapport_hebdo_${safeName}_${reportObj.weekStart}.pdf`,
       title: `Rapport Hebdomadaire — ${targetAuthor?.name || 'Collaborateur'} (Semaine du ${new Date(reportObj.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')})`,
       onDownload: () => generateV2WeeklyReportPdf(reportObj, targetAuthor, settings, v2DailyReports)

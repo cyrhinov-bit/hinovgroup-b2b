@@ -26,17 +26,14 @@ export function buildV2WeeklyReportPdf(
   // Logo entreprise (Haut gauche - Espace élargi)
   if (settings?.headerLogoBase64) {
     try {
-      doc.addImage(settings.headerLogoBase64, 'PNG', 18, 8, 90, 25);
+      const isPng = settings.headerLogoBase64.includes('image/png') || settings.headerLogoBase64.startsWith('data:image/png');
+      const format = isPng ? 'PNG' : 'JPEG';
+      doc.addImage(settings.headerLogoBase64, format, 18, 8, 90, 25);
     } catch {
-      try {
-        doc.addImage(settings.headerLogoBase64, 'JPEG', 18, 8, 90, 25);
-      } catch {
-        // fallback text
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(13, 148, 136); // Teal
-        doc.text(settings?.companyName || 'HINOV GROUP', 18, 20);
-      }
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(13, 148, 136); // Teal
+      doc.text(settings?.companyName || 'HINOV GROUP', 18, 20);
     }
   } else {
     doc.setFontSize(16);
@@ -50,17 +47,26 @@ export function buildV2WeeklyReportPdf(
   const cy = 20;
   const r = 10;
 
+  let photoDrawn = false;
   if (author?.photo) {
     try {
+      const isPng = author.photo.includes('image/png') || author.photo.startsWith('data:image/png');
+      const format = isPng ? 'PNG' : 'JPEG';
       doc.saveGraphicsState();
-      doc.circle(cx, cy, r, 'S');
-      doc.clip();
-      doc.addImage(author.photo, 'PNG', cx - r, cy - r, r * 2, r * 2);
-      doc.restoreGraphicsState();
+      try {
+        doc.circle(cx, cy, r, 'S');
+        doc.clip();
+        doc.addImage(author.photo, format, cx - r, cy - r, r * 2, r * 2);
+        photoDrawn = true;
+      } finally {
+        doc.restoreGraphicsState();
+      }
     } catch {
-      drawInitialsBadge(doc, cx, cy, r, author?.name || '?');
+      photoDrawn = false;
     }
-  } else {
+  }
+
+  if (!photoDrawn) {
     drawInitialsBadge(doc, cx, cy, r, author?.name || '?');
   }
 
@@ -194,25 +200,26 @@ export function buildV2WeeklyReportPdf(
   }
 
   // Hydratation / Fallback automatique depuis allDailyReports si nécessaire
-  const authorId = report.authorId || author?.id || '';
+  const candidateAuthorIds = [report.authorId, author?.id].filter(Boolean) as string[];
   if (allDailyReports && allDailyReports.length > 0 && report.weekStart) {
     try {
       const startDate = new Date(report.weekStart + 'T00:00:00');
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 7; i++) {
         const d = new Date(startDate);
         d.setDate(d.getDate() + i);
         const yStr = d.getFullYear();
         const mStr = String(d.getMonth() + 1).padStart(2, '0');
         const dStr = String(d.getDate()).padStart(2, '0');
         const formattedDate = `${yStr}-${mStr}-${dStr}`;
-        const frenchDay = standardDays[i];
+        const frenchDay = standardDays[i] || 'Dimanche';
 
         const existingTasks = rawTasksByDay[frenchDay] || rawTasksByDay[frenchDay.toLowerCase()] || [];
         if (!Array.isArray(existingTasks) || existingTasks.length === 0) {
-          const matchDaily = allDailyReports.find(dr => 
-            dr.authorId === authorId && 
-            (dr.date === formattedDate || dr.date?.startsWith(formattedDate))
-          );
+          const matchDaily = allDailyReports.find(dr => {
+            const authorMatches = candidateAuthorIds.length === 0 || candidateAuthorIds.includes(dr.authorId);
+            const dateMatches = dr.date === formattedDate || dr.date?.startsWith(formattedDate);
+            return authorMatches && dateMatches;
+          });
           if (matchDaily && Array.isArray(matchDaily.tasks) && matchDaily.tasks.length > 0) {
             rawTasksByDay[frenchDay] = matchDaily.tasks;
           }
