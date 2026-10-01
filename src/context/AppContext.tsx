@@ -1008,8 +1008,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             crmCommerciauxEnabled: p.crm_commerciaux_enabled === true,
             crmCommissionsEnabled: p.crm_commissions_enabled === true,
             crmFacturationEnabled: p.crm_facturation_enabled === true,
-            crmReportsEnabled: p.crm_reports_enabled !== false,
-            crmTeamReportsEnabled: p.crm_team_reports_enabled !== false
+            crmReportsEnabled: p.crm_reports_enabled !== undefined ? (p.crm_reports_enabled !== false) : !['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(p.role),
+            crmTeamReportsEnabled: p.crm_team_reports_enabled !== undefined 
+              ? (['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(p.role) ? p.crm_team_reports_enabled !== false : p.crm_team_reports_enabled === true) 
+              : ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(p.role)
           }));
           const mergedUsers = mergeData(cachedUsers, parsedUsers);
           setUsers(mergedUsers); await db.profiles.setItem('data', mergedUsers);
@@ -3750,8 +3752,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       crmCommerciauxEnabled: user.crmCommerciauxEnabled ?? true,
       crmCommissionsEnabled: user.crmCommissionsEnabled ?? true,
       crmFacturationEnabled: user.crmFacturationEnabled ?? true,
-      crmReportsEnabled: user.crmReportsEnabled ?? true,
-      crmTeamReportsEnabled: user.crmTeamReportsEnabled ?? true
+      crmReportsEnabled: user.crmReportsEnabled ?? !['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(user.role),
+      crmTeamReportsEnabled: user.crmTeamReportsEnabled ?? (['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(user.role) ? true : false)
     };
     const newUsers = [...users, newUser];
     setUsers(newUsers);

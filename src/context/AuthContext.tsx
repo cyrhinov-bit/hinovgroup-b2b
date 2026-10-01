@@ -142,7 +142,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           crmTiersEnabled: data.crm_tiers_enabled === true,
           crmCommerciauxEnabled: data.crm_commerciaux_enabled === true,
           crmCommissionsEnabled: data.crm_commissions_enabled === true,
-          crmFacturationEnabled: data.crm_facturation_enabled === true
+          crmFacturationEnabled: data.crm_facturation_enabled === true,
+          crmReportsEnabled: data.crm_reports_enabled !== undefined ? (data.crm_reports_enabled !== false) : !['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(data.role),
+          crmTeamReportsEnabled: data.crm_team_reports_enabled !== undefined 
+            ? (['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(data.role) ? data.crm_team_reports_enabled !== false : data.crm_team_reports_enabled === true) 
+            : ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(data.role)
         };
 
         setCurrentUser(userObj);
@@ -280,7 +284,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           crmTiersEnabled: profile.crm_tiers_enabled === true,
           crmCommerciauxEnabled: profile.crm_commerciaux_enabled === true,
           crmCommissionsEnabled: profile.crm_commissions_enabled === true,
-          crmFacturationEnabled: profile.crm_facturation_enabled === true
+          crmFacturationEnabled: profile.crm_facturation_enabled === true,
+          crmReportsEnabled: profile.crm_reports_enabled !== undefined ? (profile.crm_reports_enabled !== false) : !['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(profile.role),
+          crmTeamReportsEnabled: profile.crm_team_reports_enabled !== undefined 
+            ? (['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(profile.role) ? profile.crm_team_reports_enabled !== false : profile.crm_team_reports_enabled === true) 
+            : ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(profile.role)
         };
         setCurrentUser(userObj);
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userObj));
@@ -296,6 +304,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginAsTestUser = (role: User['role']) => {
+    const isDir = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(role);
     const testUser: User = {
       id: 'test-' + role.toLowerCase(),
       name: role === 'Caissier' ? 'Caissier Test' : role === 'Gerant' ? 'Gérant Test' : role + ' Test',
@@ -306,6 +315,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       active: true,
       posReturnsEnabled: true,
       posCatalogueEnabled: true,
+      crmReportsEnabled: !isDir,
+      crmTeamReportsEnabled: isDir,
     };
     setCurrentUser(testUser);
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(testUser));

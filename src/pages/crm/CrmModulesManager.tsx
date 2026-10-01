@@ -173,6 +173,7 @@ export default function CrmModulesManager() {
 
   const setAllModules = async (user: User, state: boolean) => {
     setSavingUserId(user.id);
+    const isDir = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(user.role);
     try {
       await updateUser(user.id, {
         name: user.name,
@@ -185,7 +186,9 @@ export default function CrmModulesManager() {
         crmTiersEnabled: state,
         crmCommerciauxEnabled: state,
         crmCommissionsEnabled: state,
-        crmFacturationEnabled: state
+        crmFacturationEnabled: state,
+        crmReportsEnabled: isDir ? false : state,
+        crmTeamReportsEnabled: isDir ? state : false
       });
     } finally {
       setSavingUserId(null);
