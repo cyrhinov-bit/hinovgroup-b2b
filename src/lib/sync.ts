@@ -1015,28 +1015,7 @@ export const processSyncQueue = async () => {
           success = checkResult(error);
           break;
         }
-        case 'UPDATE_PROFILE': {
-          const { id, ...updateData } = action.payload;
-          let { error } = await supabase.from('profiles').update(updateData).eq('id', id);
-          if (error && (error.message?.includes('crm_team_reports_enabled') || error.message?.includes('crm_reports_enabled') || error.message?.includes('column') || error.message?.includes('schema cache'))) {
-            console.warn('[Sync] Retrying UPDATE_PROFILE without optional newly added columns:', error.message);
-            const fallbackMapped = { ...updateData };
-            delete fallbackMapped.crm_team_reports_enabled;
-            delete fallbackMapped.crm_reports_enabled;
-            const retryRes = await supabase.from('profiles').update(fallbackMapped).eq('id', id);
-            if (!retryRes.error) {
-              error = null;
-            }
-          }
-          if (error) console.error('[Sync] UPDATE_PROFILE échoué :', error.message);
-          success = checkResult(error);
-          break;
-        }
-        case 'DELETE_PROFILE': {
-          const { error } = await supabase.from('profiles').delete().eq('id', action.payload.id);
-          success = checkResult(error);
-          break;
-        }
+
         case 'INSERT_ACTIVITY_REPORT': { // @deprecated V1
           const { error } = await supabase.from('activity_reports').insert([{
             id: action.payload.id,
@@ -2085,7 +2064,7 @@ export const processSyncQueue = async () => {
           if (data.crm_team_reports_enabled !== undefined) mapped.crm_team_reports_enabled = data.crm_team_reports_enabled;
 
           let { error } = await supabase.from('profiles').update(mapped).eq('id', id);
-          if (error && (error.message?.includes('crm_team_reports_enabled') || error.message?.includes('crm_reports_enabled') || error.message?.includes('column') || error.message?.includes('schema cache'))) {
+          if (error && (error.message?.includes('column') || error.message?.includes('schema cache') || (error as any).code === 'PGRST204')) {
             console.warn('[Sync] Retrying UPDATE_PROFILE without optional newly added columns:', error.message);
             const fallbackMapped = { ...mapped };
             delete fallbackMapped.crm_team_reports_enabled;
@@ -2093,6 +2072,20 @@ export const processSyncQueue = async () => {
             const retryRes = await supabase.from('profiles').update(fallbackMapped).eq('id', id);
             if (!retryRes.error) {
               error = null;
+            } else {
+              // Ultime fallback: uniquement les colonnes de base standard de profiles
+              console.warn('[Sync] Retrying UPDATE_PROFILE with base profile columns only:', retryRes.error.message);
+              const coreMapped: any = { updated_at: mapped.updated_at };
+              if (mapped.name !== undefined) coreMapped.name = mapped.name;
+              if (mapped.role !== undefined) coreMapped.role = mapped.role;
+              if (mapped.active !== undefined) coreMapped.active = mapped.active;
+              if (mapped.photo !== undefined) coreMapped.photo = mapped.photo;
+              const coreRes = await supabase.from('profiles').update(coreMapped).eq('id', id);
+              if (!coreRes.error) {
+                error = null;
+              } else {
+                error = coreRes.error;
+              }
             }
           }
           if (error) console.error('[Sync] UPDATE_PROFILE échoué :', error.message);
