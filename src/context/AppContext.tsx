@@ -1365,17 +1365,64 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setWeeklyReports(merged); await db.weeklyReports.setItem('data', merged);
         }
         if (v2DailyReportsData && v2DailyReportsData.length > 0) {
+          const parseTasks = (raw: any): V2Task[] => {
+            if (Array.isArray(raw)) return raw;
+            if (typeof raw === 'string') {
+              try {
+                const parsed = JSON.parse(raw);
+                return Array.isArray(parsed) ? parsed : [];
+              } catch {
+                return [];
+              }
+            }
+            return [];
+          };
+
           const parsed = v2DailyReportsData.map((r: any) => ({
-            id: r.id, authorId: r.author_id, date: r.date, project: r.project,
-            objectives: r.objectives || '', tasks: r.tasks || [], results: r.results || '',
-            difficulties: r.difficulties || '', observations: r.observations || '',
+            id: r.id, 
+            authorId: r.author_id, 
+            date: r.date, 
+            project: r.project,
+            objectives: r.objectives || '', 
+            tasks: parseTasks(r.tasks), 
+            results: r.results || '',
+            difficulties: r.difficulties || '', 
+            observations: r.observations || '',
             status: r.status || 'Brouillon',
-            createdAt: r.created_at, updatedAt: r.updated_at
+            createdAt: r.created_at, 
+            updatedAt: r.updated_at
           }));
           const merged = mergeData(cachedV2DailyReports, parsed);
           setV2DailyReports(merged); await db.v2DailyReports.setItem('data', merged);
         }
         if (v2WeeklyReportsData && v2WeeklyReportsData.length > 0) {
+          const parseTasksByDay = (raw: any): Record<string, V2Task[]> => {
+            if (typeof raw === 'string') {
+              try {
+                raw = JSON.parse(raw);
+              } catch {
+                return {};
+              }
+            }
+            if (typeof raw === 'object' && raw !== null) {
+              const res: Record<string, V2Task[]> = {};
+              Object.keys(raw).forEach(k => {
+                const v = raw[k];
+                if (Array.isArray(v)) res[k] = v;
+                else if (typeof v === 'string') {
+                  try {
+                    const pv = JSON.parse(v);
+                    res[k] = Array.isArray(pv) ? pv : [];
+                  } catch {
+                    res[k] = [];
+                  }
+                }
+              });
+              return res;
+            }
+            return {};
+          };
+
           const parsed = v2WeeklyReportsData.map((r: any) => ({
             id: r.id, 
             authorId: r.author_id, 
@@ -1384,8 +1431,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             project: r.project,
             dailyReportIds: r.daily_report_ids || [], 
             weeklyObjectives: r.weekly_objectives || '',
-            tasksByDay: r.tasks_by_day || {}, 
-            pendingTasks: r.pending_tasks || [], 
+            tasksByDay: parseTasksByDay(r.tasks_by_day), 
+            pendingTasks: Array.isArray(r.pending_tasks) ? r.pending_tasks : [], 
             summary: r.summary || r.ai_summary || '',
             aiSummary: r.ai_summary || r.summary || '',
             achievements: r.achievements || '',

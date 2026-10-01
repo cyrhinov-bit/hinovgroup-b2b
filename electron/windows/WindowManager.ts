@@ -78,6 +78,7 @@ export class WindowManager {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: false,
+        plugins: true,
         preload: path.join(__dirname, '../main/preload.js'),
       },
     });

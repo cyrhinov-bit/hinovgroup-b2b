@@ -143,18 +143,47 @@ export function buildV2WeeklyReportPdf(
 
   const cleanPdfText = (text?: string | null): string => {
     if (!text) return '';
-    return text
-      .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '') // Emojis surrogates
-      .replace(/[\u2600-\u27BF]/g, '') // Symbols
-      .replace(/[\u2018\u2019]/g, "'") // Smart single quotes / apostrophes
-      .replace(/[\u201C\u201D]/g, '"') // Smart double quotes
-      .replace(/\u2026/g, '...') // Ellipsis
-      .replace(/[\u2013\u2014]/g, '-') // En-dash & Em-dash
-      .replace(/\u2022/g, '-') // Bullet
-      .replace(/\u00A0/g, ' ') // Non-breaking space
-      .replace(/\r\n/g, '\n')
-      .replace(/\r/g, '\n')
-      .trim();
+    let str = String(text);
+
+    // Remplacements typographiques standards
+    str = str
+      .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+      .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+      .replace(/[\u2013\u2014\u2015]/g, '-')
+      .replace(/\u2026/g, '...')
+      .replace(/[\u2022\u2023\u25E6\u2043\u2219]/g, '-')
+      .replace(/\u00A0/g, ' ')
+      .replace(/\u20AC/g, 'EUR')
+      .replace(/[\r\n]+/g, ' ');
+
+    // Suppression sécurisée des emojis et symboles non-supportés par Helvetica
+    str = str
+      .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '')
+      .replace(/[\uFE00-\uFE0F]/g, '')
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/[\u2190-\u21FF]/g, '')
+      .replace(/[\u2300-\u23FF]/g, '')
+      .replace(/[\u2600-\u27BF]/g, '')
+      .replace(/[\u2B50-\u2B55]/g, '')
+      .replace(/[^\x00-\xFF]/g, '');
+
+    return str.trim();
+  };
+
+  const ensureTasksArray = (raw: any): V2Task[] => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+        if (typeof parsed === 'object' && parsed !== null) return [parsed as V2Task];
+      } catch {
+        return [{ id: '1', description: raw, status: 'Effectuée' }];
+      }
+    }
+    if (typeof raw === 'object' && raw !== null) return [raw as V2Task];
+    return [];
   };
 
   const drawParagraph = (text?: string, fallback = 'Néant') => {
@@ -199,6 +228,11 @@ export function buildV2WeeklyReportPdf(
     rawTasksByDay = { ...report.tasksByDay };
   }
 
+  // S'assurer que chaque jour contient bien un tableau
+  Object.keys(rawTasksByDay).forEach(k => {
+    rawTasksByDay[k] = ensureTasksArray(rawTasksByDay[k]);
+  });
+
   // Hydratation / Fallback automatique depuis allDailyReports si nécessaire
   const candidateAuthorIds = [report.authorId, author?.id].filter(Boolean) as string[];
   if (allDailyReports && allDailyReports.length > 0 && report.weekStart) {
@@ -220,8 +254,11 @@ export function buildV2WeeklyReportPdf(
             const dateMatches = dr.date === formattedDate || dr.date?.startsWith(formattedDate);
             return authorMatches && dateMatches;
           });
-          if (matchDaily && Array.isArray(matchDaily.tasks) && matchDaily.tasks.length > 0) {
-            rawTasksByDay[frenchDay] = matchDaily.tasks;
+          if (matchDaily) {
+            const parsedDailyTasks = ensureTasksArray(matchDaily.tasks);
+            if (parsedDailyTasks.length > 0) {
+              rawTasksByDay[frenchDay] = parsedDailyTasks;
+            }
           }
         }
       }
