@@ -592,30 +592,6 @@ export default function DashboardPos() {
         </div>
       </div>
 
-      {/* 📊 GRAPHIQUE ÉVOLUTIF PRINCIPAL : CA & MARGE */}
-      <PosEvolutionChart
-        data={evolutionData}
-        title={`📈 Diagramme d'Évolution des Ventes & Marges (${periodLabels[period]})`}
-        subtitle="Courbe de progression temporelle du Chiffre d'Affaires et de la Marge Brute générée"
-        series1Name="Chiffre d'Affaires"
-        series2Name="Marge Brute"
-        color1="#0D9488"
-        color2="#3B82F6"
-        height={300}
-      />
-
-      {/* ⏰ GRAPHIQUES D'AFFLUENCE ET RÉPARTITIONS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '20px' }}>
-        <PosHourlyChart data={hourlyData} />
-      </div>
-
-      {/* 🍩 RÉPARTITION PAR FAMILLE ET MIX DE PAIEMENT */}
-      <PosFamilyDistributionChart
-        families={familyBreakdown}
-        payments={paymentBreakdown}
-        totalRevenue={currentTotalRevenue}
-      />
-
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
           📦 SECTION : KPIs MOUVEMENTS DE STOCK
       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
@@ -626,7 +602,7 @@ export default function DashboardPos() {
             <Boxes size={18} color="#F97316" />
           </div>
           <div>
-            <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A', margin: 0 }}>Gestion du Stock</h2>
+            <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A', margin: 0 }}>Gestion & Mouvements du Stock</h2>
             <p style={{ fontSize: '12px', color: '#64748B', margin: 0 }}>Valorisation instantanée du stock physique + flux sur la période sélectionnée</p>
           </div>
         </div>
@@ -689,12 +665,12 @@ export default function DashboardPos() {
           </div>
 
           {/* Produits en Stock Critique */}
-          <div style={{
-            background: 'white',
-            borderRadius: 'var(--radius-lg, 12px)',
-            padding: '16px 18px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-            border: `1px solid ${stockKpis.criticalCount > 0 ? '#FCA5A5' : '#E2E8F0'}`,
+          <div style={{ 
+            background: 'white', 
+            borderRadius: 'var(--radius-lg, 12px)', 
+            padding: '16px 18px', 
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)', 
+            border: `1px solid ${stockKpis.criticalCount > 0 ? '#FCA5A5' : '#E2E8F0'}` 
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
@@ -779,37 +755,31 @@ export default function DashboardPos() {
             </div>
           </div>
         </div>
-
-        {/* Lien vers module stock */}
-        <div
-          style={{
-            marginTop: '14px',
-            background: 'white',
-            borderRadius: 'var(--radius-lg, 12px)',
-            padding: '16px 20px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-            border: '1px solid #E2E8F0',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease'
-          }}
-          onClick={() => navigate('/pos/stock')}
-          onMouseOver={e => e.currentTarget.style.borderColor = '#F97316'}
-          onMouseOut={e => e.currentTarget.style.borderColor = '#E2E8F0'}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div style={{ background: '#FFF7ED', borderRadius: '10px', padding: '12px' }}>
-              <Warehouse size={22} color="#F97316" />
-            </div>
-            <div>
-              <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A' }}>Module Gestion du Stock</div>
-              <div style={{ fontSize: '13px', color: '#64748B' }}>Gérer les entrées, bons de commande, inventaires et ajustements de stock.</div>
-            </div>
-            <div style={{ marginLeft: 'auto', color: '#F97316', fontWeight: 700, fontSize: '14px' }}>
-              Accéder →
-            </div>
-          </div>
-        </div>
       </div>
+
+      {/* 📊 GRAPHIQUE ÉVOLUTIF PRINCIPAL : CA & MARGE */}
+      <PosEvolutionChart
+        data={evolutionData}
+        title={`📈 Diagramme d'Évolution des Ventes & Marges (${periodLabels[period]})`}
+        subtitle="Courbe de progression temporelle du Chiffre d'Affaires et de la Marge Brute générée"
+        series1Name="Chiffre d'Affaires"
+        series2Name="Marge Brute"
+        color1="#0D9488"
+        color2="#3B82F6"
+        height={300}
+      />
+
+      {/* ⏰ GRAPHIQUES D'AFFLUENCE ET RÉPARTITIONS */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '20px' }}>
+        <PosHourlyChart data={hourlyData} />
+      </div>
+
+      {/* 🍩 RÉPARTITION PAR FAMILLE ET MIX DE PAIEMENT */}
+      <PosFamilyDistributionChart
+        families={familyBreakdown}
+        payments={paymentBreakdown}
+        totalRevenue={currentTotalRevenue}
+      />
 
       {/* BLOC ÉTAT SESSION DE CAISSE */}
       <div style={{ background: 'white', borderRadius: 'var(--radius-lg, 12px)', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid var(--color-border, #E2E8F0)' }}>
@@ -829,31 +799,63 @@ export default function DashboardPos() {
         )}
       </div>
 
-      {/* LIEN VERS LE MODULE FINANCE */}
-      <div 
-        style={{ 
-          background: 'white', 
-          borderRadius: 'var(--radius-lg, 12px)', 
-          padding: '20px', 
-          boxShadow: '0 1px 3px rgba(0,0,0,0.06)', 
-          border: '1px solid var(--color-border, #E2E8F0)', 
-          cursor: 'pointer',
-          transition: 'all 0.2s ease'
-        }} 
-        onClick={() => navigate('/pos/finance')}
-        onMouseOver={e => e.currentTarget.style.borderColor = 'var(--color-primary, #0D9488)'}
-        onMouseOut={e => e.currentTarget.style.borderColor = 'var(--color-border, #E2E8F0)'}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ background: 'var(--color-success-tint, #ECFDF5)', borderRadius: '10px', padding: '12px' }}>
-            <DollarSign size={24} color="var(--color-success, #10B981)" />
+      {/* LIENS VERS LES MODULES AVANCÉS */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
+        {/* Lien vers module stock */}
+        <div
+          style={{
+            background: 'white',
+            borderRadius: 'var(--radius-lg, 12px)',
+            padding: '20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+            border: '1px solid var(--color-border, #E2E8F0)',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+          onClick={() => navigate('/pos/stock')}
+          onMouseOver={e => e.currentTarget.style.borderColor = '#F97316'}
+          onMouseOut={e => e.currentTarget.style.borderColor = 'var(--color-border, #E2E8F0)'}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{ background: '#FFF7ED', borderRadius: '10px', padding: '12px' }}>
+              <Warehouse size={24} color="#F97316" />
+            </div>
+            <div>
+              <div style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A' }}>Module Gestion du Stock</div>
+              <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Entrées, réapprovisionnements, inventaires et mouvements détaillés.</div>
+            </div>
+            <div style={{ marginLeft: 'auto', color: '#F97316', fontWeight: 700, fontSize: '14px' }}>
+              Accéder →
+            </div>
           </div>
-          <div>
-            <div style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A' }}>Module Finance Avancé</div>
-            <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Consultez les mouvements financiers, le rapprochement de caisse et l'analyse de rentabilité détaillée.</div>
-          </div>
-          <div style={{ marginLeft: 'auto', color: 'var(--color-primary, #0D9488)', fontWeight: 700, fontSize: '14px' }}>
-            Accéder →
+        </div>
+
+        {/* Lien vers module finance */}
+        <div 
+          style={{ 
+            background: 'white', 
+            borderRadius: 'var(--radius-lg, 12px)', 
+            padding: '20px', 
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)', 
+            border: '1px solid var(--color-border, #E2E8F0)', 
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }} 
+          onClick={() => navigate('/pos/finance')}
+          onMouseOver={e => e.currentTarget.style.borderColor = 'var(--color-primary, #0D9488)'}
+          onMouseOut={e => e.currentTarget.style.borderColor = 'var(--color-border, #E2E8F0)'}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{ background: 'var(--color-success-tint, #ECFDF5)', borderRadius: '10px', padding: '12px' }}>
+              <DollarSign size={24} color="var(--color-success, #10B981)" />
+            </div>
+            <div>
+              <div style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A' }}>Module Finance Avancé</div>
+              <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Mouvements financiers, rapprochement de caisse et rentabilité.</div>
+            </div>
+            <div style={{ marginLeft: 'auto', color: 'var(--color-primary, #0D9488)', fontWeight: 700, fontSize: '14px' }}>
+              Accéder →
+            </div>
           </div>
         </div>
       </div>
