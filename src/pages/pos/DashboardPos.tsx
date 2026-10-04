@@ -385,37 +385,63 @@ export default function DashboardPos() {
     const stockMarginRate = stockValVente > 0 ? ((stockBenefice / stockValVente) * 100).toFixed(1) : '0';
     const criticalProducts = physProd.filter(p => p.minStock > 0 && (p.quantity || 0) <= p.minStock);
 
-    // --- Entrées de stock filtrées par période ---
-    const now = new Date();
-    const getPeriodStart = (): Date | null => {
+    // --- Filtre de date unifié et robuste (aligné sur evolutionData et toLocalDayKey) ---
+    const selectedDateKeys = new Set(evolutionData.map(d => d.dateKey).filter(Boolean));
+    const isDateInPeriod = (dateStr?: string): boolean => {
+      if (!dateStr) return false;
       if (period === 'today') {
-        const d = new Date(now); d.setHours(0, 0, 0, 0); return d;
-      } else if (period === '7d') {
-        const d = new Date(now); d.setDate(now.getDate() - 6); d.setHours(0, 0, 0, 0); return d;
-      } else if (period === '30d') {
-        const d = new Date(now); d.setDate(now.getDate() - 29); d.setHours(0, 0, 0, 0); return d;
-      } else if (period === '12m') {
-        const d = new Date(now.getFullYear(), now.getMonth() - 11, 1); return d;
+        return toLocalDayKey(dateStr) === today;
       }
-      return null;
-    };
-    const periodStart = getPeriodStart();
-
-    const isInPeriod = (dateStr: string): boolean => {
-      if (!periodStart) return true;
-      return new Date(dateStr) >= periodStart;
+      if (period === '12m') {
+        return selectedDateKeys.has(dateStr.substring(0, 7));
+      }
+      return selectedDateKeys.has(toLocalDayKey(dateStr));
     };
 
-    const validEntries = posStockEntries.filter(e => e.status === 'Validé' && isInPeriod(e.date));
+    // --- Entrées de stock validées ---
+    const validEntries = posStockEntries.filter(e => e.status === 'Validé' && isDateInPeriod(e.date));
     const entreesValeur = validEntries.reduce((s, e) => s + (e.totalAmount || 0), 0);
     const entreesCount = validEntries.length;
 
-    const filteredMovements = posStockMovements.filter(m => isInPeriod(m.date));
-    const mouvementsTotal = filteredMovements.length;
-    const mouvementsVente = filteredMovements.filter(m => m.type === 'Vente').length;
-    const mouvementsAppro = filteredMovements.filter(m => m.type === 'Approvisionnement').length;
-    const mouvementsRetour = filteredMovements.filter(m => m.type === 'Retour').length;
-    const mouvementsAjust = filteredMovements.filter(m => m.type === 'Ajustement Manuel' || m.type === 'Inventaire').length;
+    // --- Mouvements de stock explicites dans la période ---
+    const explicitMovements = posStockMovements.filter(m => isDateInPeriod(m.date));
+    const explicitSaleRefs = new Set(explicitMovements.filter(m => m.type === 'Vente').map(m => m.reference).filter(Boolean));
+    const explicitApproRefs = new Set(explicitMovements.filter(m => m.type === 'Approvisionnement').map(m => m.reference).filter(Boolean));
+    const explicitReturnRefs = new Set(explicitMovements.filter(m => m.type === 'Retour').map(m => m.reference).filter(Boolean));
+
+    // --- Ventes dans la période (consolidation automatique si non doublonnées) ---
+    const validTransactions = posTransactions.filter(t => t.status === 'Validée' && isDateInPeriod(t.date));
+    let ventesCount = explicitMovements.filter(m => m.type === 'Vente').length;
+    validTransactions.forEach(t => {
+      if (!explicitSaleRefs.has(t.transactionNumber)) {
+        const physicalLines = t.lines.filter(l => {
+          const prod = l.productId ? posProducts.find(p => p.id === l.productId) : undefined;
+          return prod?.family !== 'Service';
+        });
+        ventesCount += physicalLines.length > 0 ? physicalLines.length : (t.lines.length || 1);
+      }
+    });
+
+    // --- Approvisionnements (consolidation) ---
+    let approCount = explicitMovements.filter(m => m.type === 'Approvisionnement').length;
+    validEntries.forEach(e => {
+      if (!explicitApproRefs.has(e.reference)) {
+        approCount += e.lines?.length || 1;
+      }
+    });
+
+    // --- Retours (consolidation) ---
+    let retourCount = explicitMovements.filter(m => m.type === 'Retour').length;
+    (posReturns || []).filter(r => r.status !== 'Annulé' && isDateInPeriod(r.date)).forEach(r => {
+      if (!explicitReturnRefs.has(r.returnNumber)) {
+        retourCount += r.lines?.length || 1;
+      }
+    });
+
+    // --- Ajustements & Inventaires ---
+    const ajustCount = explicitMovements.filter(m => m.type === 'Ajustement Manuel' || m.type === 'Inventaire').length;
+
+    const mouvementsTotal = ventesCount + approCount + retourCount + ajustCount;
 
     return {
       stockValAchat,
@@ -426,12 +452,12 @@ export default function DashboardPos() {
       entreesValeur,
       entreesCount,
       mouvementsTotal,
-      mouvementsVente,
-      mouvementsAppro,
-      mouvementsRetour,
-      mouvementsAjust,
+      mouvementsVente: ventesCount,
+      mouvementsAppro: approCount,
+      mouvementsRetour: retourCount,
+      mouvementsAjust: ajustCount,
     };
-  }, [posProducts, posStockEntries, posStockMovements, period]);
+  }, [posProducts, posStockEntries, posStockMovements, posTransactions, posReturns, period, today, evolutionData]);
 
   const periodLabels: Record<PeriodType, string> = {
     'today': "Aujourd'hui",
