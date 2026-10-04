@@ -497,22 +497,57 @@ export default function DashboardPos() {
           </Button>
         </div>
       </div>
+      {/* Styles interactifs et animations pour les cartes KPI */}
+      <style>{`
+        .pos-kpi-card {
+          border-radius: var(--radius-lg, 12px);
+          padding: 18px 20px;
+          border-width: 1px;
+          border-style: solid;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+          transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.22s ease;
+          cursor: default;
+          position: relative;
+          overflow: hidden;
+        }
+        .pos-kpi-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 12px 22px -6px rgba(0, 0, 0, 0.08), 0 4px 8px -2px rgba(0, 0, 0, 0.04);
+        }
+        .pos-kpi-card .kpi-icon-box {
+          transition: transform 0.22s ease;
+          border-radius: 8px;
+          padding: 8px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .pos-kpi-card:hover .kpi-icon-box {
+          transform: scale(1.12) rotate(2deg);
+        }
+      `}</style>
 
       {/* Cartes de synthèse dynamique selon la période choisie */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
         {/* CA Période */}
-        <div style={{ background: 'white', borderRadius: 'var(--radius-lg, 12px)', padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid var(--color-border, #E2E8F0)' }}>
+        <div 
+          className="pos-kpi-card"
+          style={{ 
+            background: 'linear-gradient(135deg, #ECFDF5 0%, #FFFFFF 100%)', 
+            borderColor: '#A7F3D0' 
+          }}
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted, #64748B)' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#047857' }}>
                 CA RÉALISÉ ({periodLabels[period].toUpperCase()})
               </div>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#064E3B', marginTop: '4px' }}>
                 {currentTotalRevenue.toLocaleString('fr-FR')} FCFA
               </div>
             </div>
-            <div style={{ background: 'var(--color-success-tint, #ECFDF5)', borderRadius: '8px', padding: '8px' }}>
-              <TrendingUp size={22} color="var(--color-success, #10B981)" />
+            <div className="kpi-icon-box" style={{ background: '#D1FAE5' }}>
+              <TrendingUp size={22} color="#059669" />
             </div>
           </div>
           <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600 }}>
@@ -520,50 +555,62 @@ export default function DashboardPos() {
               color: isPositiveGrowth ? '#059669' : '#DC2626', 
               display: 'inline-flex', 
               alignItems: 'center',
-              backgroundColor: isPositiveGrowth ? '#ECFDF5' : '#FEF2F2',
+              backgroundColor: isPositiveGrowth ? '#D1FAE5' : '#FEE2E2',
               padding: '2px 6px',
               borderRadius: '4px'
             }}>
               {isPositiveGrowth ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
               {isPositiveGrowth ? `+${growthRate}%` : `${growthRate}%`}
             </span>
-            <span style={{ color: '#94A3B8' }}>vs période précédente</span>
+            <span style={{ color: '#6B7280' }}>vs période précédente</span>
           </div>
         </div>
 
         {/* Marge Brute Période */}
-        <div style={{ background: 'white', borderRadius: 'var(--radius-lg, 12px)', padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid var(--color-border, #E2E8F0)' }}>
+        <div 
+          className="pos-kpi-card"
+          style={{ 
+            background: 'linear-gradient(135deg, #F0FDFA 0%, #FFFFFF 100%)', 
+            borderColor: '#99F6E4' 
+          }}
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted, #64748B)' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#0F766E' }}>
                 MARGE BRUTE ESTIMÉE
               </div>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--color-primary, #0D9488)', marginTop: '4px' }}>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#134E4A', marginTop: '4px' }}>
                 {currentTotalMargin.toLocaleString('fr-FR')} FCFA
               </div>
             </div>
-            <div style={{ background: '#F0FDFA', borderRadius: '8px', padding: '8px' }}>
+            <div className="kpi-icon-box" style={{ background: '#CCFBF1' }}>
               <DollarSign size={22} color="#0D9488" />
             </div>
           </div>
           <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748B' }}>
-            Taux de marge moyen : <strong style={{ color: '#0F172A' }}>{currentTotalRevenue > 0 ? ((currentTotalMargin / currentTotalRevenue) * 100).toFixed(1) : 0}%</strong>
+            Taux de marge moyen : <strong style={{ color: '#0F766E' }}>{currentTotalRevenue > 0 ? ((currentTotalMargin / currentTotalRevenue) * 100).toFixed(1) : 0}%</strong>
           </div>
         </div>
 
         {/* Volume Tickets */}
-        <div style={{ background: 'white', borderRadius: 'var(--radius-lg, 12px)', padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid var(--color-border, #E2E8F0)' }}>
+        <div 
+          className="pos-kpi-card"
+          style={{ 
+            background: 'linear-gradient(135deg, #EFF6FF 0%, #FFFFFF 100%)', 
+            borderColor: '#BFDBFE' 
+          }}
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted, #64748B)' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#1D4ED8' }}>
                 TRANSACTIONS / TICKETS
               </div>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#1E3A8A', marginTop: '4px' }}>
                 {currentTicketCount}
               </div>
             </div>
-            <div style={{ background: '#EFF6FF', borderRadius: '8px', padding: '8px' }}>
-              <Activity size={22} color="#3B82F6" />
+            <div className="kpi-icon-box" style={{ background: '#DBEAFE' }}>
+              <Activity size={22} color="#2563EB" />
             </div>
           </div>
           <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748B' }}>
@@ -572,18 +619,24 @@ export default function DashboardPos() {
         </div>
 
         {/* Panier Moyen */}
-        <div style={{ background: 'white', borderRadius: 'var(--radius-lg, 12px)', padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid var(--color-border, #E2E8F0)' }}>
+        <div 
+          className="pos-kpi-card"
+          style={{ 
+            background: 'linear-gradient(135deg, #F5F3FF 0%, #FFFFFF 100%)', 
+            borderColor: '#DDD6FE' 
+          }}
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted, #64748B)' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#6D28D9' }}>
                 PANIER MOYEN
               </div>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#8B5CF6', marginTop: '4px' }}>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#4C1D95', marginTop: '4px' }}>
                 {avgBasket.toLocaleString('fr-FR')} FCFA
               </div>
             </div>
-            <div style={{ background: '#F5F3FF', borderRadius: '8px', padding: '8px' }}>
-              <Zap size={22} color="#8B5CF6" />
+            <div className="kpi-icon-box" style={{ background: '#EDE9FE' }}>
+              <Zap size={22} color="#7C3AED" />
             </div>
           </div>
           <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748B' }}>
@@ -599,7 +652,7 @@ export default function DashboardPos() {
         {/* Titre de section */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
           <div style={{ background: '#FFF7ED', borderRadius: '8px', padding: '6px 8px' }}>
-            <Boxes size={18} color="#F97316" />
+            <Boxes size={18} color="#EA580C" />
           </div>
           <div>
             <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A', margin: 0 }}>Gestion & Mouvements du Stock</h2>
@@ -611,34 +664,46 @@ export default function DashboardPos() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '14px' }}>
 
           {/* Valeur Achat Stock */}
-          <div style={{ background: 'white', borderRadius: 'var(--radius-lg, 12px)', padding: '16px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid #E2E8F0' }}>
+          <div 
+            className="pos-kpi-card"
+            style={{ 
+              background: 'linear-gradient(135deg, #FFF7ED 0%, #FFFFFF 100%)', 
+              borderColor: '#FED7AA' 
+            }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Valeur Achat Stock</div>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Valeur Achat Stock</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#7C2D12', marginTop: '4px' }}>
                   {stockKpis.stockValAchat.toLocaleString('fr-FR')} FCFA
                 </div>
               </div>
-              <div style={{ background: '#FFF7ED', borderRadius: '8px', padding: '8px' }}>
-                <PackageOpen size={20} color="#F97316" />
+              <div className="kpi-icon-box" style={{ background: '#FFEDD5' }}>
+                <PackageOpen size={20} color="#EA580C" />
               </div>
             </div>
-            <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748B' }}>
+            <div style={{ marginTop: '8px', fontSize: '11px', color: '#78716C' }}>
               Coût d'acquisition du stock actuel
             </div>
           </div>
 
           {/* Valeur Vente Estimée */}
-          <div style={{ background: 'white', borderRadius: 'var(--radius-lg, 12px)', padding: '16px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid #E2E8F0' }}>
+          <div 
+            className="pos-kpi-card"
+            style={{ 
+              background: 'linear-gradient(135deg, #F0F9FF 0%, #FFFFFF 100%)', 
+              borderColor: '#BAE6FD' 
+            }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Valeur Vente Estimée</div>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#3B82F6', marginTop: '4px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#0369A1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Valeur Vente Estimée</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#0C4A6E', marginTop: '4px' }}>
                   {stockKpis.stockValVente.toLocaleString('fr-FR')} FCFA
                 </div>
               </div>
-              <div style={{ background: '#EFF6FF', borderRadius: '8px', padding: '8px' }}>
-                <ShoppingCart size={20} color="#3B82F6" />
+              <div className="kpi-icon-box" style={{ background: '#E0F2FE' }}>
+                <ShoppingCart size={20} color="#0284C7" />
               </div>
             </div>
             <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748B' }}>
@@ -647,44 +712,68 @@ export default function DashboardPos() {
           </div>
 
           {/* Bénéfice Potentiel */}
-          <div style={{ background: 'white', borderRadius: 'var(--radius-lg, 12px)', padding: '16px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid #E2E8F0' }}>
+          <div 
+            className="pos-kpi-card"
+            style={{ 
+              background: 'linear-gradient(135deg, #F0FDF4 0%, #FFFFFF 100%)', 
+              borderColor: '#BBF7D0' 
+            }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Bénéfice Potentiel</div>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#0D9488', marginTop: '4px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#15803D', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Bénéfice Potentiel</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#14532D', marginTop: '4px' }}>
                   {stockKpis.stockBenefice.toLocaleString('fr-FR')} FCFA
                 </div>
               </div>
-              <div style={{ background: '#F0FDFA', borderRadius: '8px', padding: '8px' }}>
-                <TrendingUp size={20} color="#0D9488" />
+              <div className="kpi-icon-box" style={{ background: '#DCFCE7' }}>
+                <TrendingUp size={20} color="#16A34A" />
               </div>
             </div>
             <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748B' }}>
-              Marge brute potentielle : <strong style={{ color: '#0F172A' }}>{stockKpis.stockMarginRate}%</strong>
+              Marge brute potentielle : <strong style={{ color: '#15803D' }}>{stockKpis.stockMarginRate}%</strong>
             </div>
           </div>
 
           {/* Produits en Stock Critique */}
-          <div style={{ 
-            background: 'white', 
-            borderRadius: 'var(--radius-lg, 12px)', 
-            padding: '16px 18px', 
-            boxShadow: '0 1px 3px rgba(0,0,0,0.06)', 
-            border: `1px solid ${stockKpis.criticalCount > 0 ? '#FCA5A5' : '#E2E8F0'}` 
-          }}>
+          <div 
+            className="pos-kpi-card"
+            style={{ 
+              background: stockKpis.criticalCount > 0 
+                ? 'linear-gradient(135deg, #FEF2F2 0%, #FFFFFF 100%)' 
+                : 'linear-gradient(135deg, #ECFDF5 0%, #FFFFFF 100%)', 
+              borderColor: stockKpis.criticalCount > 0 ? '#FECACA' : '#A7F3D0' 
+            }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Stock Critique</div>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: stockKpis.criticalCount > 0 ? '#DC2626' : '#10B981', marginTop: '4px' }}>
+                <div style={{ 
+                  fontSize: '11px', 
+                  fontWeight: 600, 
+                  color: stockKpis.criticalCount > 0 ? '#B91C1C' : '#047857', 
+                  textTransform: 'uppercase', 
+                  letterSpacing: '0.04em' 
+                }}>
+                  Stock Critique
+                </div>
+                <div style={{ 
+                  fontSize: '20px', 
+                  fontWeight: 800, 
+                  color: stockKpis.criticalCount > 0 ? '#991B1B' : '#064E3B', 
+                  marginTop: '4px' 
+                }}>
                   {stockKpis.criticalCount} produit{stockKpis.criticalCount !== 1 ? 's' : ''}
                 </div>
               </div>
-              <div style={{ background: stockKpis.criticalCount > 0 ? '#FEF2F2' : '#ECFDF5', borderRadius: '8px', padding: '8px' }}>
+              <div 
+                className="kpi-icon-box" 
+                style={{ background: stockKpis.criticalCount > 0 ? '#FEE2E2' : '#D1FAE5' }}
+              >
                 <AlertTriangle size={20} color={stockKpis.criticalCount > 0 ? '#DC2626' : '#10B981'} />
               </div>
             </div>
-            <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748B' }}>
-              {stockKpis.criticalCount > 0 ? 'En-dessous du stock minimum' : 'Tous les produits sont bien approvisionnés'}
+            <div style={{ marginTop: '8px', fontSize: '11px', color: stockKpis.criticalCount > 0 ? '#991B1B' : '#065F46' }}>
+              {stockKpis.criticalCount > 0 ? 'En-dessous du stock minimum' : 'Tous les stocks sont à un niveau optimal'}
             </div>
           </div>
         </div>
@@ -693,59 +782,71 @@ export default function DashboardPos() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
 
           {/* Entrées de stock sur la période */}
-          <div style={{ background: 'white', borderRadius: 'var(--radius-lg, 12px)', padding: '16px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid #E2E8F0' }}>
+          <div 
+            className="pos-kpi-card"
+            style={{ 
+              background: 'linear-gradient(135deg, #EEF2FF 0%, #FFFFFF 100%)', 
+              borderColor: '#C7D2FE' 
+            }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#4338CA', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   Entrées de Stock ({periodLabels[period]})
                 </div>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#8B5CF6', marginTop: '4px' }}>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#312E81', marginTop: '4px' }}>
                   {stockKpis.entreesValeur.toLocaleString('fr-FR')} FCFA
                 </div>
               </div>
-              <div style={{ background: '#F5F3FF', borderRadius: '8px', padding: '8px' }}>
-                <Truck size={20} color="#8B5CF6" />
+              <div className="kpi-icon-box" style={{ background: '#E0E7FF' }}>
+                <Truck size={20} color="#4F46E5" />
               </div>
             </div>
             <div style={{ fontSize: '11px', color: '#64748B' }}>
-              <strong style={{ color: '#0F172A' }}>{stockKpis.entreesCount}</strong> bon{stockKpis.entreesCount !== 1 ? 's' : ''} d'entrée validé{stockKpis.entreesCount !== 1 ? 's' : ''} sur la période
+              <strong style={{ color: '#312E81' }}>{stockKpis.entreesCount}</strong> bon{stockKpis.entreesCount !== 1 ? 's' : ''} d'entrée validé{stockKpis.entreesCount !== 1 ? 's' : ''} sur la période
             </div>
           </div>
 
           {/* Mouvements de stock sur la période */}
-          <div style={{ background: 'white', borderRadius: 'var(--radius-lg, 12px)', padding: '16px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid #E2E8F0' }}>
+          <div 
+            className="pos-kpi-card"
+            style={{ 
+              background: 'linear-gradient(135deg, #F8FAFC 0%, #FFFFFF 100%)', 
+              borderColor: '#CBD5E1' 
+            }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   Mouvements de Stock ({periodLabels[period]})
                 </div>
                 <div style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
                   {stockKpis.mouvementsTotal} mouvement{stockKpis.mouvementsTotal !== 1 ? 's' : ''}
                 </div>
               </div>
-              <div style={{ background: '#F1F5F9', borderRadius: '8px', padding: '8px' }}>
-                <PackageCheck size={20} color="#475569" />
+              <div className="kpi-icon-box" style={{ background: '#E2E8F0' }}>
+                <PackageCheck size={20} color="#334155" />
               </div>
             </div>
             {/* Détail par type */}
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               {stockKpis.mouvementsVente > 0 && (
-                <span style={{ fontSize: '11px', background: '#ECFDF5', color: '#059669', padding: '2px 8px', borderRadius: '99px', fontWeight: 600 }}>
+                <span style={{ fontSize: '11px', background: '#ECFDF5', color: '#059669', padding: '2px 8px', borderRadius: '99px', fontWeight: 600, border: '1px solid #A7F3D0' }}>
                   🛒 {stockKpis.mouvementsVente} vente{stockKpis.mouvementsVente !== 1 ? 's' : ''}
                 </span>
               )}
               {stockKpis.mouvementsAppro > 0 && (
-                <span style={{ fontSize: '11px', background: '#EFF6FF', color: '#3B82F6', padding: '2px 8px', borderRadius: '99px', fontWeight: 600 }}>
+                <span style={{ fontSize: '11px', background: '#EFF6FF', color: '#2563EB', padding: '2px 8px', borderRadius: '99px', fontWeight: 600, border: '1px solid #BFDBFE' }}>
                   📦 {stockKpis.mouvementsAppro} appro
                 </span>
               )}
               {stockKpis.mouvementsRetour > 0 && (
-                <span style={{ fontSize: '11px', background: '#FFF7ED', color: '#F97316', padding: '2px 8px', borderRadius: '99px', fontWeight: 600 }}>
+                <span style={{ fontSize: '11px', background: '#FFF7ED', color: '#EA580C', padding: '2px 8px', borderRadius: '99px', fontWeight: 600, border: '1px solid #FED7AA' }}>
                   ↩️ {stockKpis.mouvementsRetour} retour{stockKpis.mouvementsRetour !== 1 ? 's' : ''}
                 </span>
               )}
               {stockKpis.mouvementsAjust > 0 && (
-                <span style={{ fontSize: '11px', background: '#F5F3FF', color: '#8B5CF6', padding: '2px 8px', borderRadius: '99px', fontWeight: 600 }}>
+                <span style={{ fontSize: '11px', background: '#F5F3FF', color: '#7C3AED', padding: '2px 8px', borderRadius: '99px', fontWeight: 600, border: '1px solid #DDD6FE' }}>
                   🔧 {stockKpis.mouvementsAjust} ajust.
                 </span>
               )}
