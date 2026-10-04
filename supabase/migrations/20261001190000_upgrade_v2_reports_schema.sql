@@ -26,3 +26,4 @@ ALTER TABLE v2_weekly_reports ADD COLUMN IF NOT EXISTS pdf_url TEXT;
 ALTER TABLE v2_daily_reports ADD COLUMN IF NOT EXISTS is_locked BOOLEAN DEFAULT false;
 ALTER TABLE v2_daily_reports ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Opérationnel';
 ALTER TABLE v2_daily_reports ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Brouillon';
+
