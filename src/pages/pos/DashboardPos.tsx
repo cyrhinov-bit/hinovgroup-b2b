@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Package, Warehouse, TrendingUp, AlertTriangle, DollarSign, RotateCcw, 
   ShoppingBag, RefreshCw, CloudUpload, Calendar, ArrowUpRight, ArrowDownRight, 
-  BarChart2, Activity, Zap
+  BarChart2, Activity, Zap, PackageCheck, PackageOpen, Boxes, ShoppingCart, Truck
 } from 'lucide-react';
 import { todayLocalKey, toLocalDayKey } from '../../lib/dates';
 import { Button } from '../../components/ui/Button';
@@ -16,7 +16,7 @@ import { toast } from 'react-hot-toast';
 type PeriodType = 'today' | '7d' | '30d' | '12m';
 
 export default function DashboardPos() {
-  const { posProducts, posTransactions, posCashSessions, posReturns, posPayments, refreshData, reconcilePosData } = useAppContext();
+  const { posProducts, posTransactions, posCashSessions, posReturns, posPayments, posStockEntries, posStockMovements, refreshData, reconcilePosData } = useAppContext();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
   const [period, setPeriod] = useState<PeriodType>('today');
@@ -375,6 +375,64 @@ export default function DashboardPos() {
     return { familyBreakdown: families, paymentBreakdown: payments };
   }, [posTransactions, posProducts, evolutionData, period, today]);
 
+  // 6. KPIs Mouvements de Stock
+  const stockKpis = useMemo(() => {
+    // --- Snapshot actuel du stock (indépendant de la période) ---
+    const physProd = posProducts.filter(p => p.family !== 'Service');
+    const stockValAchat = physProd.reduce((s, p) => s + (p.purchasePrice || 0) * (p.quantity || 0), 0);
+    const stockValVente = physProd.reduce((s, p) => s + (p.sellingPrice || 0) * (p.quantity || 0), 0);
+    const stockBenefice = stockValVente - stockValAchat;
+    const stockMarginRate = stockValVente > 0 ? ((stockBenefice / stockValVente) * 100).toFixed(1) : '0';
+    const criticalProducts = physProd.filter(p => p.minStock > 0 && (p.quantity || 0) <= p.minStock);
+
+    // --- Entrées de stock filtrées par période ---
+    const now = new Date();
+    const getPeriodStart = (): Date | null => {
+      if (period === 'today') {
+        const d = new Date(now); d.setHours(0, 0, 0, 0); return d;
+      } else if (period === '7d') {
+        const d = new Date(now); d.setDate(now.getDate() - 6); d.setHours(0, 0, 0, 0); return d;
+      } else if (period === '30d') {
+        const d = new Date(now); d.setDate(now.getDate() - 29); d.setHours(0, 0, 0, 0); return d;
+      } else if (period === '12m') {
+        const d = new Date(now.getFullYear(), now.getMonth() - 11, 1); return d;
+      }
+      return null;
+    };
+    const periodStart = getPeriodStart();
+
+    const isInPeriod = (dateStr: string): boolean => {
+      if (!periodStart) return true;
+      return new Date(dateStr) >= periodStart;
+    };
+
+    const validEntries = posStockEntries.filter(e => e.status === 'Validé' && isInPeriod(e.date));
+    const entreesValeur = validEntries.reduce((s, e) => s + (e.totalAmount || 0), 0);
+    const entreesCount = validEntries.length;
+
+    const filteredMovements = posStockMovements.filter(m => isInPeriod(m.date));
+    const mouvementsTotal = filteredMovements.length;
+    const mouvementsVente = filteredMovements.filter(m => m.type === 'Vente').length;
+    const mouvementsAppro = filteredMovements.filter(m => m.type === 'Approvisionnement').length;
+    const mouvementsRetour = filteredMovements.filter(m => m.type === 'Retour').length;
+    const mouvementsAjust = filteredMovements.filter(m => m.type === 'Ajustement Manuel' || m.type === 'Inventaire').length;
+
+    return {
+      stockValAchat,
+      stockValVente,
+      stockBenefice,
+      stockMarginRate,
+      criticalCount: criticalProducts.length,
+      entreesValeur,
+      entreesCount,
+      mouvementsTotal,
+      mouvementsVente,
+      mouvementsAppro,
+      mouvementsRetour,
+      mouvementsAjust,
+    };
+  }, [posProducts, posStockEntries, posStockMovements, period]);
+
   const periodLabels: Record<PeriodType, string> = {
     'today': "Aujourd'hui",
     '7d': '7 Derniers Jours',
@@ -557,6 +615,201 @@ export default function DashboardPos() {
         payments={paymentBreakdown}
         totalRevenue={currentTotalRevenue}
       />
+
+      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          📦 SECTION : KPIs MOUVEMENTS DE STOCK
+      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <div>
+        {/* Titre de section */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+          <div style={{ background: '#FFF7ED', borderRadius: '8px', padding: '6px 8px' }}>
+            <Boxes size={18} color="#F97316" />
+          </div>
+          <div>
+            <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A', margin: 0 }}>Gestion du Stock</h2>
+            <p style={{ fontSize: '12px', color: '#64748B', margin: 0 }}>Valorisation instantanée du stock physique + flux sur la période sélectionnée</p>
+          </div>
+        </div>
+
+        {/* Rangée 1 : Snapshot du stock actuel (4 cartes) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '14px' }}>
+
+          {/* Valeur Achat Stock */}
+          <div style={{ background: 'white', borderRadius: 'var(--radius-lg, 12px)', padding: '16px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid #E2E8F0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Valeur Achat Stock</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
+                  {stockKpis.stockValAchat.toLocaleString('fr-FR')} FCFA
+                </div>
+              </div>
+              <div style={{ background: '#FFF7ED', borderRadius: '8px', padding: '8px' }}>
+                <PackageOpen size={20} color="#F97316" />
+              </div>
+            </div>
+            <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748B' }}>
+              Coût d'acquisition du stock actuel
+            </div>
+          </div>
+
+          {/* Valeur Vente Estimée */}
+          <div style={{ background: 'white', borderRadius: 'var(--radius-lg, 12px)', padding: '16px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid #E2E8F0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Valeur Vente Estimée</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#3B82F6', marginTop: '4px' }}>
+                  {stockKpis.stockValVente.toLocaleString('fr-FR')} FCFA
+                </div>
+              </div>
+              <div style={{ background: '#EFF6FF', borderRadius: '8px', padding: '8px' }}>
+                <ShoppingCart size={20} color="#3B82F6" />
+              </div>
+            </div>
+            <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748B' }}>
+              Potentiel de CA si tout est vendu
+            </div>
+          </div>
+
+          {/* Bénéfice Potentiel */}
+          <div style={{ background: 'white', borderRadius: 'var(--radius-lg, 12px)', padding: '16px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid #E2E8F0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Bénéfice Potentiel</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#0D9488', marginTop: '4px' }}>
+                  {stockKpis.stockBenefice.toLocaleString('fr-FR')} FCFA
+                </div>
+              </div>
+              <div style={{ background: '#F0FDFA', borderRadius: '8px', padding: '8px' }}>
+                <TrendingUp size={20} color="#0D9488" />
+              </div>
+            </div>
+            <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748B' }}>
+              Marge brute potentielle : <strong style={{ color: '#0F172A' }}>{stockKpis.stockMarginRate}%</strong>
+            </div>
+          </div>
+
+          {/* Produits en Stock Critique */}
+          <div style={{
+            background: 'white',
+            borderRadius: 'var(--radius-lg, 12px)',
+            padding: '16px 18px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+            border: `1px solid ${stockKpis.criticalCount > 0 ? '#FCA5A5' : '#E2E8F0'}`,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Stock Critique</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: stockKpis.criticalCount > 0 ? '#DC2626' : '#10B981', marginTop: '4px' }}>
+                  {stockKpis.criticalCount} produit{stockKpis.criticalCount !== 1 ? 's' : ''}
+                </div>
+              </div>
+              <div style={{ background: stockKpis.criticalCount > 0 ? '#FEF2F2' : '#ECFDF5', borderRadius: '8px', padding: '8px' }}>
+                <AlertTriangle size={20} color={stockKpis.criticalCount > 0 ? '#DC2626' : '#10B981'} />
+              </div>
+            </div>
+            <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748B' }}>
+              {stockKpis.criticalCount > 0 ? 'En-dessous du stock minimum' : 'Tous les produits sont bien approvisionnés'}
+            </div>
+          </div>
+        </div>
+
+        {/* Rangée 2 : Flux sur la période (2 cartes) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+
+          {/* Entrées de stock sur la période */}
+          <div style={{ background: 'white', borderRadius: 'var(--radius-lg, 12px)', padding: '16px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid #E2E8F0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Entrées de Stock ({periodLabels[period]})
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#8B5CF6', marginTop: '4px' }}>
+                  {stockKpis.entreesValeur.toLocaleString('fr-FR')} FCFA
+                </div>
+              </div>
+              <div style={{ background: '#F5F3FF', borderRadius: '8px', padding: '8px' }}>
+                <Truck size={20} color="#8B5CF6" />
+              </div>
+            </div>
+            <div style={{ fontSize: '11px', color: '#64748B' }}>
+              <strong style={{ color: '#0F172A' }}>{stockKpis.entreesCount}</strong> bon{stockKpis.entreesCount !== 1 ? 's' : ''} d'entrée validé{stockKpis.entreesCount !== 1 ? 's' : ''} sur la période
+            </div>
+          </div>
+
+          {/* Mouvements de stock sur la période */}
+          <div style={{ background: 'white', borderRadius: 'var(--radius-lg, 12px)', padding: '16px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid #E2E8F0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Mouvements de Stock ({periodLabels[period]})
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
+                  {stockKpis.mouvementsTotal} mouvement{stockKpis.mouvementsTotal !== 1 ? 's' : ''}
+                </div>
+              </div>
+              <div style={{ background: '#F1F5F9', borderRadius: '8px', padding: '8px' }}>
+                <PackageCheck size={20} color="#475569" />
+              </div>
+            </div>
+            {/* Détail par type */}
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {stockKpis.mouvementsVente > 0 && (
+                <span style={{ fontSize: '11px', background: '#ECFDF5', color: '#059669', padding: '2px 8px', borderRadius: '99px', fontWeight: 600 }}>
+                  🛒 {stockKpis.mouvementsVente} vente{stockKpis.mouvementsVente !== 1 ? 's' : ''}
+                </span>
+              )}
+              {stockKpis.mouvementsAppro > 0 && (
+                <span style={{ fontSize: '11px', background: '#EFF6FF', color: '#3B82F6', padding: '2px 8px', borderRadius: '99px', fontWeight: 600 }}>
+                  📦 {stockKpis.mouvementsAppro} appro
+                </span>
+              )}
+              {stockKpis.mouvementsRetour > 0 && (
+                <span style={{ fontSize: '11px', background: '#FFF7ED', color: '#F97316', padding: '2px 8px', borderRadius: '99px', fontWeight: 600 }}>
+                  ↩️ {stockKpis.mouvementsRetour} retour{stockKpis.mouvementsRetour !== 1 ? 's' : ''}
+                </span>
+              )}
+              {stockKpis.mouvementsAjust > 0 && (
+                <span style={{ fontSize: '11px', background: '#F5F3FF', color: '#8B5CF6', padding: '2px 8px', borderRadius: '99px', fontWeight: 600 }}>
+                  🔧 {stockKpis.mouvementsAjust} ajust.
+                </span>
+              )}
+              {stockKpis.mouvementsTotal === 0 && (
+                <span style={{ fontSize: '11px', color: '#94A3B8' }}>Aucun mouvement enregistré sur la période</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Lien vers module stock */}
+        <div
+          style={{
+            marginTop: '14px',
+            background: 'white',
+            borderRadius: 'var(--radius-lg, 12px)',
+            padding: '16px 20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+            border: '1px solid #E2E8F0',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+          onClick={() => navigate('/pos/stock')}
+          onMouseOver={e => e.currentTarget.style.borderColor = '#F97316'}
+          onMouseOut={e => e.currentTarget.style.borderColor = '#E2E8F0'}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{ background: '#FFF7ED', borderRadius: '10px', padding: '12px' }}>
+              <Warehouse size={22} color="#F97316" />
+            </div>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A' }}>Module Gestion du Stock</div>
+              <div style={{ fontSize: '13px', color: '#64748B' }}>Gérer les entrées, bons de commande, inventaires et ajustements de stock.</div>
+            </div>
+            <div style={{ marginLeft: 'auto', color: '#F97316', fontWeight: 700, fontSize: '14px' }}>
+              Accéder →
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* BLOC ÉTAT SESSION DE CAISSE */}
       <div style={{ background: 'white', borderRadius: 'var(--radius-lg, 12px)', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid var(--color-border, #E2E8F0)' }}>
