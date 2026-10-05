@@ -263,6 +263,7 @@ export function CrmStocks() {
                 <th style={{ textAlign: 'center' }}>Seuil Alerte</th>
                 <th style={{ textAlign: 'right' }}>Coût Unit. Achat</th>
                 <th style={{ textAlign: 'right' }}>Prix Unit. Vente</th>
+                <th style={{ textAlign: 'right' }}>Marge Unit.</th>
                 <th style={{ textAlign: 'right' }}>Val. Stock Achat</th>
                 <th>État Stock</th>
                 <th>Actions</th>
@@ -273,6 +274,10 @@ export function CrmStocks() {
                 const isAlert = (art.quantite_stock || 0) <= (art.seuil_alerte || 5);
                 const isRupture = (art.quantite_stock || 0) === 0;
                 const totalValAchat = (art.quantite_stock || 0) * (art.cout_unitaire_achat || 0);
+                const coutAchat = art.cout_unitaire_achat || 0;
+                const prixVente = art.prix_unitaire_vente || 0;
+                const margeUnitaire = prixVente - coutAchat;
+                const tauxMarge = coutAchat > 0 ? (margeUnitaire / coutAchat) * 100 : (prixVente > 0 ? 100 : 0);
 
                 return (
                   <tr key={art.id}>
@@ -296,6 +301,12 @@ export function CrmStocks() {
                     </td>
                     <td data-label="Prix Vente" style={{ textAlign: 'right', fontWeight: 600 }}>
                       {(art.prix_unitaire_vente || 0).toLocaleString('fr-FR')} FCFA
+                    </td>
+                    <td data-label="Marge Unit." style={{ textAlign: 'right', fontWeight: 600, color: margeUnitaire > 0 ? '#10B981' : margeUnitaire < 0 ? '#EF4444' : 'var(--color-text-muted)' }}>
+                      <div>{margeUnitaire.toLocaleString('fr-FR')} FCFA</div>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>
+                        {tauxMarge.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %
+                      </span>
                     </td>
                     <td data-label="Val. Achat" style={{ textAlign: 'right', color: '#2563EB', fontWeight: 600 }}>
                       {totalValAchat.toLocaleString('fr-FR')} FCFA
@@ -336,7 +347,7 @@ export function CrmStocks() {
               })}
               {filteredArticles.length === 0 && (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
                     Aucun article trouvé.
                   </td>
                 </tr>
