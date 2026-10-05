@@ -99,7 +99,10 @@ export function CrmTiers() {
   };
 
   const deleteTier = async (id: string) => {
-    await deleteCrmTier(id);
+    const ok = await deleteCrmTier(id);
+    if (!ok) {
+      alert('Suppression impossible : ce tiers est rattaché à des commandes, interventions ou articles en stock.');
+    }
   };
 
   const counts = {
@@ -122,7 +125,7 @@ export function CrmTiers() {
     }
   };
 
-  if (!isAdmin && !currentUser?.crmTiersEnabled) {
+  if (!isAdmin && currentUser?.crmTiersEnabled === false) {
     return (
       <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
         <Building2 size={48} color="var(--color-error)" style={{ margin: '0 auto 16px' }} />

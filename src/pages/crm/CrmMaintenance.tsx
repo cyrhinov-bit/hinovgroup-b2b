@@ -264,11 +264,14 @@ export function CrmMaintenance() {
 
   const handleDeleteTech = (t: TechnicienMaintenance) => {
     const assignedTicketsCount = crmMaintenance.filter(m => m.technicien_assigne === t.nom).length;
+    // Intégrité (M3) : technicien avec tickets = suppression interdite (assignation par nom, pas de FK)
+    if (assignedTicketsCount > 0) {
+      alert(`Suppression impossible : ${t.nom} a ${assignedTicketsCount} ticket(s) assigné(s). Réassignez d'abord ses tickets.`);
+      return;
+    }
     confirm({
       title: 'Supprimer le technicien',
-      message: assignedTicketsCount > 0
-        ? `Le technicien ${t.nom} a actuellement ${assignedTicketsCount} ticket(s) assigné(s). Êtes-vous sûr de vouloir le supprimer ?`
-        : `Êtes-vous sûr de vouloir supprimer le technicien ${t.nom} ?`,
+      message: `Êtes-vous sûr de vouloir supprimer le technicien ${t.nom} ?`,
       confirmLabel: 'Supprimer',
       onConfirm: () => deleteCrmTechnicien(t.id)
     });
@@ -302,6 +305,14 @@ export function CrmMaintenance() {
         return <span className="badge-status bg-success">Clôturé</span>;
       case 'ANNULE':
         return <span className="badge-status bg-error">Annulé</span>;
+      case 'EN_ATTENTE':
+        return <span className="badge-status" style={{ background: 'rgba(217, 119, 6, 0.12)', color: '#D97706' }}>En attente (legacy)</span>;
+      case 'TERMINEE':
+        return <span className="badge-status" style={{ background: 'rgba(13, 148, 136, 0.12)', color: '#0D9488' }}>Terminée (legacy)</span>;
+      case 'ANNULEE':
+        return <span className="badge-status bg-error">Annulée (legacy)</span>;
+      default:
+        return <span className="badge-status" style={{ background: 'rgba(100, 116, 139, 0.12)', color: '#64748B' }}>{s}</span>;
     }
   };
 
@@ -330,7 +341,7 @@ export function CrmMaintenance() {
   const enInterventionCount = crmTechniciens.filter(t => t.statut === 'EN_INTERVENTION').length;
   const indisponiblesCount = crmTechniciens.filter(t => ['CONGE', 'INACTIF'].includes(t.statut)).length;
 
-  if (!isDirecteur && !currentUser?.crmMaintenanceEnabled) {
+  if (!isDirecteur && currentUser?.crmMaintenanceEnabled === false) {
     return (
       <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
         <Wrench size={48} color="var(--color-error)" style={{ margin: '0 auto 16px' }} />
@@ -507,6 +518,9 @@ export function CrmMaintenance() {
                 <option value="TERMINE_A_FACTURER">Terminé à facturer</option>
                 <option value="CLOTURE">Clôturé</option>
                 <option value="ANNULE">Annulé</option>
+                <option value="EN_ATTENTE">En attente (legacy)</option>
+                <option value="TERMINEE">Terminée (legacy)</option>
+                <option value="ANNULEE">Annulée (legacy)</option>
               </select>
 
               <select
@@ -899,6 +913,9 @@ export function CrmMaintenance() {
                   <option value="TERMINE_A_FACTURER">Terminé à facturer</option>
                   <option value="CLOTURE">Clôturé</option>
                   <option value="ANNULE">Annulé</option>
+                  {['EN_ATTENTE', 'TERMINEE', 'ANNULEE'].includes(formData.statut || '') && (
+                    <option value={formData.statut}>{formData.statut} (legacy — modifiez pour migrer)</option>
+                  )}
                 </select>
               </div>
 

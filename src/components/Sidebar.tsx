@@ -35,12 +35,23 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
 
   const isDirection = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
 
-  const unreadTeamReportsCount = React.useMemo(() => {
-    if (!currentUser || (!isDirection && !currentUser.crmTeamReportsEnabled)) return 0;
-    return (notifications || []).filter(n => 
-      n.user_id === currentUser.id && 
-      !n.is_read && 
-      (n.title?.toLowerCase().includes('rapport') || n.link?.includes('rapports') || n.link?.includes('supervision'))
+  // Compteur Direction : uniquement les nouveaux rapports reçus (pas les rappels/validations)
+  const unreadDirectionReportsCount = React.useMemo(() => {
+    if (!currentUser || !isDirection) return 0;
+    return (notifications || []).filter(n =>
+      n.user_id === currentUser.id &&
+      !n.is_read &&
+      (n.title === "Nouveau rapport d'activité reçu" || (n.link?.includes('rapports-equipe') ?? false))
+    ).length;
+  }, [notifications, currentUser, isDirection]);
+
+  // Compteur collaborateur : rappels Direction + validations de ses rapports
+  const unreadMyReportsCount = React.useMemo(() => {
+    if (!currentUser || isDirection) return 0;
+    return (notifications || []).filter(n =>
+      n.user_id === currentUser.id &&
+      !n.is_read &&
+      ((n.link?.startsWith('/crm/rapports?') ?? false) && !n.link?.includes('rapports-equipe'))
     ).length;
   }, [notifications, currentUser, isDirection]);
 
@@ -284,9 +295,14 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
                       {syncErrorsCount > 99 ? '99+' : syncErrorsCount}
                     </span>
                   )}
-                  {item.path === '/crm/rapports-equipe' && unreadTeamReportsCount > 0 && (
-                    <span className="sidebar-report-badge" title={`${unreadTeamReportsCount} nouveau(x) rapport(s) d'activité reçu(s)`}>
-                      {unreadTeamReportsCount > 99 ? '99+' : unreadTeamReportsCount}
+                  {item.path === '/crm/rapports-equipe' && unreadDirectionReportsCount > 0 && (
+                    <span className="sidebar-report-badge" title={`${unreadDirectionReportsCount} nouveau(x) rapport(s) d'activité reçu(s)`}>
+                      {unreadDirectionReportsCount > 99 ? '99+' : unreadDirectionReportsCount}
+                    </span>
+                  )}
+                  {item.path === '/crm/rapports' && unreadMyReportsCount > 0 && (
+                    <span className="sidebar-report-badge" title={`${unreadMyReportsCount} notification(s) : rappel ou retour Direction`}>
+                      {unreadMyReportsCount > 99 ? '99+' : unreadMyReportsCount}
                     </span>
                   )}
                 </Link>

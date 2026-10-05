@@ -44,14 +44,18 @@ export function Utilisateurs() {
       pin: newUser.pin,
       lastLogin: 'Jamais',
       active: true,
-      crmPrestationsEnabled: true,
-      crmCaisseEnabled: true,
-      crmMaintenanceEnabled: true,
-      crmStocksEnabled: true,
-      crmTiersEnabled: true,
-      crmCommerciauxEnabled: true,
-      crmCommissionsEnabled: true,
-      crmFacturationEnabled: true
+      // Défaut par rôle (Caissier/Gerant : pas de CRM) — addUser applique la même règle en repli
+      ...((newUser.role === 'Caissier' || newUser.role === 'Gerant')
+        ? {
+            crmPrestationsEnabled: false, crmCaisseEnabled: false, crmMaintenanceEnabled: false,
+            crmStocksEnabled: false, crmTiersEnabled: false, crmCommerciauxEnabled: false,
+            crmCommissionsEnabled: false, crmFacturationEnabled: false
+          }
+        : {
+            crmPrestationsEnabled: true, crmCaisseEnabled: true, crmMaintenanceEnabled: true,
+            crmStocksEnabled: true, crmTiersEnabled: true, crmCommerciauxEnabled: true,
+            crmCommissionsEnabled: true, crmFacturationEnabled: true
+          })
     });
     setShowForm(false);
     setNewUser({

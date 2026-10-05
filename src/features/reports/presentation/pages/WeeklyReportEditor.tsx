@@ -10,7 +10,7 @@ import { ReportPdfPreview, type ReportPdfPreviewData } from '../../../../compone
 import { getUserGeminiKey } from '../../../../lib/geminiKey';
 import './WeeklyReportEditor.css';
 
-const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 
 export function WeeklyReportEditor() {
   const { currentUser } = useAuth();
@@ -68,17 +68,18 @@ export function WeeklyReportEditor() {
       Mercredi: [],
       Jeudi: [],
       Vendredi: [],
-      Samedi: []
+      Samedi: [],
+      Dimanche: []
     };
 
-    const daysList = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+    const daysList = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
     let collectedObjectives: string[] = [];
     let collectedResults: string[] = [];
     let collectedDifficulties: string[] = [];
     let count = 0;
 
     const startDate = new Date(currentWeekStart + 'T00:00:00');
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 7; i++) {
       const d = new Date(startDate);
       d.setDate(d.getDate() + i);
       const dStr = d.toISOString().slice(0, 10);
@@ -148,7 +149,7 @@ export function WeeklyReportEditor() {
     } else {
       setReportId(Date.now().toString());
       setWeeklyObjectives('');
-      setTasksByDay({ Lundi: [], Mardi: [], Mercredi: [], Jeudi: [], Vendredi: [], Samedi: [] });
+      setTasksByDay({ Lundi: [], Mardi: [], Mercredi: [], Jeudi: [], Vendredi: [], Samedi: [], Dimanche: [] });
       setAiSummary('');
       setAchievements('');
       setDifficulties('');
@@ -168,7 +169,7 @@ export function WeeklyReportEditor() {
 
   const getWeekEnd = (monStr: string) => {
     const d = new Date(monStr + 'T00:00:00');
-    d.setDate(d.getDate() + 4); // Friday
+    d.setDate(d.getDate() + 6); // Dimanche
     return d.toISOString().slice(0, 10);
   };
 
@@ -262,8 +263,7 @@ export function WeeklyReportEditor() {
         const reportObj = getCurrentReportObject();
         reportObj.status = 'Soumis';
         reportObj.submittedAt = new Date().toISOString();
-        await saveV2WeeklyReport(reportObj);
-        await submitV2WeeklyReport(reportObj.id);
+        await submitV2WeeklyReport(reportObj);
         setStatus('Soumis');
       }
     });

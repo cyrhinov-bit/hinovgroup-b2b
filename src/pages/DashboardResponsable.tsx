@@ -168,10 +168,11 @@ export function DashboardResponsable() {
     return (i.status as string) === 'EN_RETARD' || (paid < (i.totalAmount || 0) && due && new Date(due) < new Date());
   }).length;
 
-  // KPIs
-  const totalCommandesVente = filteredServicePrestations.reduce((sum, p) => sum + (p.prix_client_final || p.montant_total_vente || 0), 0);
-  const totalMargeInterne = filteredServicePrestations.reduce((sum, p) => sum + (p.marge_interne || 0), 0);
-  const totalBeneficeNet = filteredServicePrestations.reduce((sum, p) => sum + (p.benefice_net || p.benefice_reel || 0), 0);
+  // KPIs — même règle que la page Prestations : brouillons et annulées exclus du CA piloté
+  const countedPrestations = filteredServicePrestations.filter(p => p.statut !== 'ANNULEE' && p.statut !== 'BROUILLON');
+  const totalCommandesVente = countedPrestations.reduce((sum, p) => sum + (p.prix_client_final || p.montant_total_vente || 0), 0);
+  const totalMargeInterne = countedPrestations.reduce((sum, p) => sum + (p.marge_interne || 0), 0);
+  const totalBeneficeNet = countedPrestations.reduce((sum, p) => sum + (p.benefice_net || p.benefice_reel || 0), 0);
 
   const totalQuotesVal = filteredServiceQuotes.filter(q => q.status !== 'Refusé').reduce((sum, q) => sum + q.total, 0);
   const acceptedQuotes = filteredServiceQuotes.filter(q => q.status === 'Accepté');
@@ -199,7 +200,8 @@ export function DashboardResponsable() {
       const uQAccVal = uAccQuotes.reduce((sum, q) => sum + q.total, 0);
       const uRate = uQuotes.length > 0 ? Math.round((uAccQuotes.length / uQuotes.length) * 100) : 0;
 
-      const uPrest = filteredServicePrestations.filter(p => p.cree_par === u.id || p.commercial_id === u.id);
+      const uPrestAll = filteredServicePrestations.filter(p => p.cree_par === u.id || p.commercial_id === u.id);
+      const uPrest = uPrestAll.filter(p => p.statut !== 'ANNULEE' && p.statut !== 'BROUILLON');
       const uVente = uPrest.reduce((sum, p) => sum + (p.prix_client_final || p.montant_total_vente || 0), 0);
       const uMarge = uPrest.reduce((sum, p) => sum + (p.marge_interne || 0), 0);
       const uBenef = uPrest.reduce((sum, p) => sum + (p.benefice_net || p.benefice_reel || 0), 0);
@@ -213,15 +215,21 @@ export function DashboardResponsable() {
           email: u.email,
           role: u.role,
           serviceName: serviceName,
-          activeModulesCount: 5,
+          activeModulesCount: [
+            u.crmPrestationsEnabled !== false, u.crmCaisseEnabled !== false,
+            u.crmMaintenanceEnabled !== false, u.crmStocksEnabled !== false,
+            u.crmTiersEnabled !== false, u.crmCommerciauxEnabled !== false,
+            u.crmCommissionsEnabled !== false, u.crmFacturationEnabled !== false
+          ].filter(Boolean).length,
           enabled: {
-            prestations: !!u.crmPrestationsEnabled,
-            caisse: !!u.crmCaisseEnabled,
-            maintenance: !!u.crmMaintenanceEnabled,
-            stocks: !!u.crmStocksEnabled,
-            tiers: !!u.crmTiersEnabled,
-            commerciaux: !!u.crmCommerciauxEnabled,
-            commissions: !!u.crmCommissionsEnabled
+            prestations: u.crmPrestationsEnabled !== false,
+            caisse: u.crmCaisseEnabled !== false,
+            maintenance: u.crmMaintenanceEnabled !== false,
+            stocks: u.crmStocksEnabled !== false,
+            tiers: u.crmTiersEnabled !== false,
+            commerciaux: u.crmCommerciauxEnabled !== false,
+            commissions: u.crmCommissionsEnabled !== false,
+            facturation: u.crmFacturationEnabled !== false
           }
         },
         quotes: {

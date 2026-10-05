@@ -30,6 +30,7 @@ export function CrmPrestations() {
   // Encaissement modal
   const [showEncaissementModal, setShowEncaissementModal] = useState(false);
   const [prestationToEncaisser, setPrestationToEncaisser] = useState<PrestationCommande | null>(null);
+  const [isEncaissing, setIsEncaissing] = useState(false);
   const [modeReglement, setModeReglement] = useState('ESPECES');
 
   // Form State
@@ -150,7 +151,8 @@ export function CrmPrestations() {
 
   const handleApporteurSelect = (appId: string) => {
     const selected = apporteursList.find(a => a.id === appId);
-    const calculatedCommission = selected ? Math.round((pt_vente * 10) / 100) : 0;
+    const taux = Number(formData.taux_commission_app) || 0;
+    const calculatedCommission = selected ? Math.round((pt_vente * taux) / 100) : 0;
     setFormData(prev => ({
       ...prev,
       apporteur_id: appId,
@@ -177,6 +179,14 @@ export function CrmPrestations() {
     e.preventDefault();
     if (!formData.client_nom?.trim() || !formData.designation?.trim()) {
       alert('Veuillez sélectionner un client et saisir une désignation.');
+      return;
+    }
+    if (!Number.isFinite(Number(formData.quantite)) || Number(formData.quantite) < 1) {
+      alert('La quantité doit être un nombre supérieur ou égal à 1.');
+      return;
+    }
+    if (Number(formData.cout_unitaire_achat) < 0 || Number(formData.prix_vente_unitaire) < 0) {
+      alert('Les montants ne peuvent pas être négatifs.');
       return;
     }
 
@@ -234,10 +244,18 @@ export function CrmPrestations() {
   };
 
   const handleConfirmEncaissement = async () => {
-    if (!prestationToEncaisser) return;
-    await encaisserCrmPrestation(prestationToEncaisser.id, modeReglement);
-    setShowEncaissementModal(false);
-    setPrestationToEncaisser(null);
+    if (!prestationToEncaisser || isEncaissing) return;
+    setIsEncaissing(true);
+    try {
+      const ok = await encaisserCrmPrestation(prestationToEncaisser.id, modeReglement);
+      if (!ok) {
+        alert('Cette commande est déjà encaissée. Aucune nouvelle entrée créée.');
+      }
+      setShowEncaissementModal(false);
+      setPrestationToEncaisser(null);
+    } finally {
+      setIsEncaissing(false);
+    }
   };
 
   const getStatusBadge = (statut: StatutPrestation) => {
@@ -263,14 +281,15 @@ export function CrmPrestations() {
     }
   };
 
-  // KPIs
+  // KPIs — seuls les statuts engagés comptent (brouillons et annulées exclus du CA piloté)
+  const isCounted = (p: PrestationCommande) => p.statut !== 'ANNULEE' && p.statut !== 'BROUILLON';
   const totalCommandes = crmPrestations.length;
-  const caTotal = crmPrestations.filter(p => p.statut !== 'ANNULEE').reduce((sum, p) => sum + (p.prix_client_final || 0), 0);
-  const margeTotal = crmPrestations.filter(p => p.statut !== 'ANNULEE').reduce((sum, p) => sum + (p.marge_interne || 0), 0);
-  const beneficeNetTotal = crmPrestations.filter(p => p.statut !== 'ANNULEE').reduce((sum, p) => sum + (p.benefice_net || 0), 0);
-  const commissionsTotal = crmPrestations.filter(p => p.statut !== 'ANNULEE').reduce((sum, p) => sum + (p.commission_apporteur || 0) + (p.commission_resp_service || 0) + (p.commission_agent || 0), 0);
+  const caTotal = crmPrestations.filter(isCounted).reduce((sum, p) => sum + (p.prix_client_final || 0), 0);
+  const margeTotal = crmPrestations.filter(isCounted).reduce((sum, p) => sum + (p.marge_interne || 0), 0);
+  const beneficeNetTotal = crmPrestations.filter(isCounted).reduce((sum, p) => sum + (p.benefice_net || 0), 0);
+  const commissionsTotal = crmPrestations.filter(isCounted).reduce((sum, p) => sum + (p.commission_apporteur || 0) + (p.commission_resp_service || 0) + (p.commission_agent || 0), 0);
 
-  if (!isDirecteur && !currentUser?.crmPrestationsEnabled) {
+  if (!isDirecteur && currentUser?.crmPrestationsEnabled === false) {
     return (
       <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
         <ShoppingBag size={48} color="var(--color-error)" style={{ margin: '0 auto 16px' }} />
@@ -511,14 +530,34 @@ export function CrmPrestations() {
                     value={formData.statut}
                     onChange={e => setFormData({ ...formData, statut: e.target.value as StatutPrestation })}
                   >
-                    <option value="BROUILLON">Brouillon</option>
-                    <option value="EN_ATTENTE_VALIDATION">En attente de validation</option>
-                    <option value="VALIDE">Validé</option>
-                    <option value="EN_COURS_EXECUTION">En cours d'exécution</option>
-                    <option value="LIVREE">Livrée</option>
-                    <option value="PAYEE">Payée</option>
-                    <option value="CLOTUREE">Clôturée</option>
-                    <option value="ANNULEE">Annulée</option>
+                    {(() => {
+                      const LABELS: Record<string, string> = {
+                        BROUILLON: 'Brouillon', EN_ATTENTE_VALIDATION: 'En attente de validation',
+                        VALIDE: 'Validé', EN_COURS_EXECUTION: "En cours d'exécution", LIVREE: 'Livrée',
+                        PAYEE: 'Payée', CLOTUREE: 'Clôturée', ANNULEE: 'Annulée',
+                        DEVIS: 'Devis (legacy)', CONFIRMEE: 'Confirmée (legacy)', EN_COURS: 'En cours (legacy)', FACTUREE: 'Facturée (legacy)'
+                      };
+                      // Transitions autorisées (anti-régression pour les non-Direction ; Direction = tous les statuts)
+                      const NEXT: Record<string, string[]> = {
+                        BROUILLON: ['BROUILLON', 'EN_ATTENTE_VALIDATION', 'ANNULEE'],
+                        EN_ATTENTE_VALIDATION: ['EN_ATTENTE_VALIDATION', 'VALIDE', 'BROUILLON', 'ANNULEE'],
+                        VALIDE: ['VALIDE', 'EN_COURS_EXECUTION', 'ANNULEE'],
+                        EN_COURS_EXECUTION: ['EN_COURS_EXECUTION', 'LIVREE', 'ANNULEE'],
+                        LIVREE: ['LIVREE', 'PAYEE', 'ANNULEE'],
+                        PAYEE: ['PAYEE', 'CLOTUREE'],
+                        CLOTUREE: ['CLOTUREE'],
+                        ANNULEE: ['ANNULEE'],
+                        DEVIS: ['DEVIS', 'CONFIRMEE', 'ANNULEE'],
+                        CONFIRMEE: ['CONFIRMEE', 'EN_COURS', 'ANNULEE'],
+                        EN_COURS: ['EN_COURS', 'FACTUREE', 'ANNULEE'],
+                        FACTUREE: ['FACTUREE', 'CLOTUREE', 'ANNULEE']
+                      };
+                      const CANON = ['BROUILLON', 'EN_ATTENTE_VALIDATION', 'VALIDE', 'EN_COURS_EXECUTION', 'LIVREE', 'PAYEE', 'CLOTUREE', 'ANNULEE'];
+                      const current = formData.statut;
+                      const allowed = isDirecteur ? CANON : (NEXT[current] || [current]);
+                      const opts = allowed.includes(current) ? allowed : [...allowed, current];
+                      return opts.map(s => <option key={s} value={s}>{LABELS[s] || s}</option>);
+                    })()}
                   </select>
                 </div>
 
@@ -819,9 +858,9 @@ export function CrmPrestations() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button className="btn btn-secondary" onClick={() => setShowEncaissementModal(false)}>Annuler</button>
-              <button className="btn btn-primary" onClick={handleConfirmEncaissement} style={{ background: '#10B981', borderColor: '#10B981' }}>
-                Confirmer l'Encaissement
+              <button className="btn btn-secondary" onClick={() => setShowEncaissementModal(false)} disabled={isEncaissing}>Annuler</button>
+              <button className="btn btn-primary" onClick={handleConfirmEncaissement} disabled={isEncaissing} style={{ background: '#10B981', borderColor: '#10B981' }}>
+                {isEncaissing ? 'Encaissement en cours...' : "Confirmer l'Encaissement"}
               </button>
             </div>
           </div>

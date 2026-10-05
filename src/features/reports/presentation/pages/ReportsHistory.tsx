@@ -70,7 +70,7 @@ export const ReportsHistory: React.FC = () => {
     try {
       const dStart = new Date(weekStart + 'T00:00:00');
       const dEnd = new Date(dStart);
-      dEnd.setDate(dEnd.getDate() + 5); // Samedi
+      dEnd.setDate(dEnd.getDate() + 6); // Dimanche
       return `du ${dStart.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })} au ${dEnd.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}`;
     } catch {
       return weekStart;
@@ -135,7 +135,7 @@ export const ReportsHistory: React.FC = () => {
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           {isDirector && (
             <Link
-              to="/rapports-equipe"
+              to="/crm/rapports-equipe"
               className="btn btn-outline"
               style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 16px', fontSize: '13px' }}
             >
@@ -144,7 +144,7 @@ export const ReportsHistory: React.FC = () => {
           )}
 
           <Link
-            to="/mon-rapport-hebdo"
+            to="/crm/rapports?tab=daily"
             className="btn btn-primary"
             style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 18px', fontSize: '13px', fontWeight: 600 }}
           >
@@ -252,7 +252,7 @@ export const ReportsHistory: React.FC = () => {
               : "Vous n'avez pas encore rédigé de rapport hebdomadaire. Utilisez l'assistant IA pour créer votre premier compte-rendu."}
           </p>
           <Link
-            to="/mon-rapport-hebdo"
+            to="/crm/rapports?tab=daily"
             className="btn btn-primary"
             style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 18px', fontSize: '13px' }}
           >
@@ -322,7 +322,7 @@ export const ReportsHistory: React.FC = () => {
 
                     <button
                       className="btn btn-primary btn-sm"
-                      onClick={() => navigate(`/mon-rapport-hebdo?week=${report.weekStart}`)}
+                      onClick={() => navigate(`/crm/rapports?week=${report.weekStart}&tab=report`)}
                       title="Ouvrir dans l'éditeur"
                       style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '12px', fontWeight: 600 }}
                     >

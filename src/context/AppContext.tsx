@@ -275,6 +275,8 @@ export interface V2DailyReport {
   difficulties: string;
   observations: string;
   status: 'Brouillon' | 'Soumis' | 'Validé';
+  isLocked?: boolean;
+  category?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -299,6 +301,8 @@ export interface V2WeeklyReport {
   submittedAt?: string;
   reviewedAt?: string;
   reviewedBy?: string;
+  isLocked?: boolean;
+  pdfUrl?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -312,13 +316,13 @@ export interface PosStockEntry { id: string; reference: string; supplierId?: str
 export interface PosInventoryLine { id: string; productId: string; expectedQty: number; countedQty: number; difference: number; }
 export interface PosInventory { id: string; reference: string; date: string; status: 'En cours' | 'Terminé' | 'Annulé'; notes?: string; createdBy?: string; lines: PosInventoryLine[]; }
 export interface PosCashSession { id: string; cashierId?: string; openedAt: string; closedAt?: string; initialFund: number; finalAmount?: number; expectedAmount?: number; difference?: number; status: 'Ouverte' | 'Fermée'; }
-export interface PosTransactionLine { id: string; productId?: string; description: string; quantity: number; unitPrice: number; discountPercent: number; discountAmount: number; total: number; }
+export interface PosTransactionLine { id: string; productId?: string; description: string; quantity: number; unitPrice: number; discountPercent: number; discountAmount: number; total: number; costPrice?: number; }
 export interface PosTransaction { id: string; transactionNumber: string; cashierId?: string; sessionId?: string; date: string; subtotal: number; vat: number; discountAmount: number; total: number; receivedAmount?: number; changeAmount?: number; status: 'Validée' | 'Annulée' | 'Retournée'; lines: PosTransactionLine[]; payments: PosPayment[]; }
 export interface PosPayment { id: string; transactionId?: string; method: 'Espèces' | 'Mobile Money' | 'Mixte'; amount: number; reference?: string; }
 export interface PosDiscount { id: string; name: string; type: 'Pourcentage' | 'Montant'; value: number; maxPercent?: number; maxAmount?: number; active: boolean; }
 export interface PosReturnLine { id: string; productId?: string; description: string; quantity: number; unitPrice: number; total: number; reason: string; }
 export interface ExchangeLine { id: string; productId: string; description: string; quantity: number; unitPrice: number; total: number; }
-export interface PosReturn { id: string; returnNumber: string; transactionId?: string; sessionId?: string; date: string; type: 'Retour simple' | 'Retour avec échange'; totalRefund: number; totalExchange: number; amountToPay: number; status: 'En attente' | 'Traité' | 'Annulé'; lines: PosReturnLine[]; exchangeLines?: ExchangeLine[]; notes?: string; createdBy?: string; }
+export interface PosReturn { id: string; returnNumber: string; transactionId?: string; sessionId?: string; date: string; type: 'Retour simple' | 'Retour avec échange'; totalRefund: number; totalExchange: number; amountToPay: number; refundMethod?: 'Espèces' | 'Mobile Money'; complementTransactionId?: string; status: 'En attente' | 'Traité' | 'Annulé'; lines: PosReturnLine[]; exchangeLines?: ExchangeLine[]; notes?: string; createdBy?: string; }
 export interface PosCartItem { id: string; productId: string; name: string; reference: string; unitPrice: number; quantity: number; discountType: 'none' | 'percent' | 'amount'; discountPercent: number; discountAmount: number; total: number; }
 export interface SuspendedCart { id: string; reference?: string; date: string; cart: PosCartItem[]; }
 
@@ -446,10 +450,11 @@ interface AppState {
   markAllNotificationsAsRead: () => Promise<void>;
   saveV2DailyReport: (report: V2DailyReport) => Promise<void>;
   saveV2WeeklyReport: (report: V2WeeklyReport) => Promise<void>;
-  submitV2WeeklyReport: (id: string) => Promise<void>;
+  submitV2WeeklyReport: (reportOrId: V2WeeklyReport | string) => Promise<void>;
   sendWeeklyReportReminder: (userIds: string[], weekStart: string) => Promise<void>;
   reviewV2WeeklyReport: (id: string, comment?: string, status?: 'Validé' | 'Relu') => Promise<void>;
   deleteV2WeeklyReport: (id: string) => Promise<void>;
+  deleteV2DailyReport: (id: string) => Promise<void>;
   updateMyProfile: (data: Partial<Pick<User, 'photo' | 'name'>>) => Promise<void>;
   addCrmDocument: (file: File, options?: { uploaderId?: string; folderId?: string; affaireId?: string; clientId?: string; category?: CrmDocument['category']; isShared?: boolean } | string, folderIdParam?: string) => Promise<CrmDocument>;
   updateCrmDocument: (id: string, updates: Partial<CrmDocument>, newFileBlob?: Blob) => Promise<void>;
@@ -475,16 +480,16 @@ interface AppState {
   // POS CRUD
   addPosCategory: (cat: PosCategory) => Promise<void>;
   updatePosCategory: (id: string, data: Partial<PosCategory>) => Promise<void>;
-  deletePosCategory: (id: string) => Promise<void>;
+  deletePosCategory: (id: string) => Promise<boolean>;
   addPosBrand: (brand: PosBrand) => Promise<void>;
   updatePosBrand: (id: string, data: Partial<PosBrand>) => Promise<void>;
-  deletePosBrand: (id: string) => Promise<void>;
+  deletePosBrand: (id: string) => Promise<boolean>;
   addPosSupplier: (supplier: PosSupplier) => Promise<void>;
   updatePosSupplier: (id: string, data: Partial<PosSupplier>) => Promise<void>;
-  deletePosSupplier: (id: string) => Promise<void>;
+  deletePosSupplier: (id: string) => Promise<boolean>;
   addPosProduct: (product: PosProduct) => Promise<void>;
   updatePosProduct: (id: string, data: Partial<PosProduct>) => Promise<void>;
-  deletePosProduct: (id: string) => Promise<void>;
+  deletePosProduct: (id: string) => Promise<boolean>;
   // Catalogue central (mêmes produits que le POS)
   findProductByBarcode: (barcode: string) => PosProduct | undefined;
   findProductByReference: (reference: string) => PosProduct | undefined;
@@ -504,7 +509,7 @@ interface AppState {
   updatePosCashSession: (id: string, data: Partial<PosCashSession>) => Promise<void>;
   addPosTransaction: (tx: PosTransaction) => Promise<void>;
   updatePosTransaction: (id: string, data: Partial<PosTransaction>) => Promise<void>;
-  voidPosTransaction: (id: string) => Promise<void>;
+  voidPosTransaction: (id: string) => Promise<boolean>;
   clearPosSalesHistory: () => Promise<void>;
   deletePosMovementsByDateRange: (startDate: string, endDate: string) => Promise<void>;
   addPosDiscount: (discount: PosDiscount) => Promise<void>;
@@ -533,18 +538,18 @@ interface AppState {
   crmTechniciens: TechnicienMaintenance[];
   addCrmTier: (tier: ClientFournisseur) => Promise<void>;
   updateCrmTier: (id: string, tier: Partial<ClientFournisseur>) => Promise<void>;
-  deleteCrmTier: (id: string) => Promise<void>;
+  deleteCrmTier: (id: string) => Promise<boolean>;
   addCrmCommercial: (comm: AgentCommercial) => Promise<void>;
   updateCrmCommercial: (id: string, comm: Partial<AgentCommercial>) => Promise<void>;
-  deleteCrmCommercial: (id: string) => Promise<void>;
+  deleteCrmCommercial: (id: string) => Promise<boolean>;
   addCrmPrestation: (prest: PrestationCommande) => Promise<void>;
   updateCrmPrestation: (id: string, prest: Partial<PrestationCommande>) => Promise<void>;
   deleteCrmPrestation: (id: string) => Promise<void>;
-  encaisserCrmPrestation: (id: string, modeReglement?: string) => Promise<void>;
+  encaisserCrmPrestation: (id: string, modeReglement?: string) => Promise<boolean>;
   addCrmMouvementCaisse: (mvt: MouvementCaisse) => Promise<void>;
   deleteCrmMouvementCaisse: (id: string) => Promise<void>;
   updateCrmCommissionStatus: (id: string, status: CommissionPrestation['statut']) => Promise<void>;
-  payerCrmCommission: (id: string, modeReglement: string) => Promise<void>;
+  payerCrmCommission: (id: string, modeReglement: string) => Promise<boolean>;
   addCrmArticle: (art: CatalogueArticle) => Promise<void>;
   updateCrmArticle: (id: string, art: Partial<CatalogueArticle>) => Promise<void>;
   deleteCrmArticle: (id: string) => Promise<void>;
@@ -986,6 +991,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const parsedUsers = profilesData.map((p: any) => {
             const cachedUser = cachedUsers?.find((u: any) => u.id === p.id);
             const isDir = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(p.role);
+            const crmDefault = !['Caissier', 'Gerant'].includes(p.role);
             
             const resolveBool = (dbVal: any, localVal: any, defaultVal: boolean) => {
               if (dbVal === true) return true;
@@ -1012,14 +1018,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
               posStockEnabled: resolveBool(p.pos_stock_enabled, cachedUser?.posStockEnabled, false),
               posRole: p.pos_role || cachedUser?.posRole || null,
               geminiApiKey: p.gemini_api_key || cachedUser?.geminiApiKey || undefined,
-              crmPrestationsEnabled: resolveBool(p.crm_prestations_enabled, cachedUser?.crmPrestationsEnabled, true),
-              crmCaisseEnabled: resolveBool(p.crm_caisse_enabled, cachedUser?.crmCaisseEnabled, true),
-              crmMaintenanceEnabled: resolveBool(p.crm_maintenance_enabled, cachedUser?.crmMaintenanceEnabled, true),
-              crmStocksEnabled: resolveBool(p.crm_stocks_enabled, cachedUser?.crmStocksEnabled, true),
-              crmTiersEnabled: resolveBool(p.crm_tiers_enabled, cachedUser?.crmTiersEnabled, true),
-              crmCommerciauxEnabled: resolveBool(p.crm_commerciaux_enabled, cachedUser?.crmCommerciauxEnabled, true),
-              crmCommissionsEnabled: resolveBool(p.crm_commissions_enabled, cachedUser?.crmCommissionsEnabled, true),
-              crmFacturationEnabled: resolveBool(p.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, true),
+              crmPrestationsEnabled: resolveBool(p.crm_prestations_enabled, cachedUser?.crmPrestationsEnabled, crmDefault),
+              crmCaisseEnabled: resolveBool(p.crm_caisse_enabled, cachedUser?.crmCaisseEnabled, crmDefault),
+              crmMaintenanceEnabled: resolveBool(p.crm_maintenance_enabled, cachedUser?.crmMaintenanceEnabled, crmDefault),
+              crmStocksEnabled: resolveBool(p.crm_stocks_enabled, cachedUser?.crmStocksEnabled, crmDefault),
+              crmTiersEnabled: resolveBool(p.crm_tiers_enabled, cachedUser?.crmTiersEnabled, crmDefault),
+              crmCommerciauxEnabled: resolveBool(p.crm_commerciaux_enabled, cachedUser?.crmCommerciauxEnabled, crmDefault),
+              crmCommissionsEnabled: resolveBool(p.crm_commissions_enabled, cachedUser?.crmCommissionsEnabled, crmDefault),
+              crmFacturationEnabled: resolveBool(p.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, crmDefault),
               crmReportsEnabled: resolveBool(p.crm_reports_enabled, cachedUser?.crmReportsEnabled, !isDir),
               crmTeamReportsEnabled: resolveBool(p.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
             };
@@ -1389,6 +1395,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             difficulties: r.difficulties || '', 
             observations: r.observations || '',
             status: r.status || 'Brouillon',
+            isLocked: r.is_locked ?? false,
+            category: r.category || 'Opérationnel',
             createdAt: r.created_at, 
             updatedAt: r.updated_at
           }));
@@ -1443,6 +1451,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             submittedAt: r.submitted_at || undefined,
             reviewedAt: r.reviewed_at || undefined,
             reviewedBy: r.reviewed_by || undefined,
+            isLocked: r.is_locked ?? (r.status === 'Soumis' || r.status === 'Validé'),
+            pdfUrl: r.pdf_url || undefined,
             status: r.status,
             createdAt: r.created_at, 
             updatedAt: r.updated_at
@@ -1469,15 +1479,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const parsed = posProductsData
             .filter((p: any) => p.family !== 'Service' && !p.reference?.startsWith('SRV-') && p.id !== '00000000-0000-0000-0000-000000000000')
             .map((p: any) => {
-              let purchasePrice = p.purchase_price;
-              if (p.family === 'Livre' && (!purchasePrice || purchasePrice === 0) && p.selling_price > 0) {
-                purchasePrice = Math.round(p.selling_price * 0.75);
-              }
+              // Valeurs serveur respectées telles quelles : aucun prix fabriqué, aucun seuil imposé
+              // (0 explicite conservé ; 10 par défaut uniquement si NULL/non défini)
               return {
                 id: resolveProductUuid(p.id, p.reference), reference: p.reference, barcode: p.barcode, isbn: p.isbn, name: p.name,
                 family: p.family, categoryId: p.category_id, brandId: p.brand_id, supplierId: p.supplier_id,
-                purchasePrice: purchasePrice ?? 0, sellingPrice: p.selling_price ?? 0, quantity: p.quantity ?? 0,
-                minStock: (p.min_stock !== null && p.min_stock !== undefined && p.min_stock > 0) ? p.min_stock : 10, imageUrl: p.image_url, description: p.description,
+                purchasePrice: p.purchase_price ?? 0, sellingPrice: p.selling_price ?? 0, quantity: p.quantity ?? 0,
+                minStock: (p.min_stock !== null && p.min_stock !== undefined) ? p.min_stock : 10, imageUrl: p.image_url, description: p.description,
                 status: p.status || 'Active', isActive: p.is_active !== false, unit: p.unit, createdAt: p.created_at, updatedAt: p.updated_at
               };
             });
@@ -1535,7 +1543,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             discountAmount: t.discount_amount, total: t.total, status: t.status,
             lines: (t.pos_transaction_lines || []).map((l: any) => ({
               id: l.id, productId: l.product_id, description: l.description, quantity: l.quantity,
-              unitPrice: l.unit_price, discountPercent: l.discount_percent, discountAmount: l.discount_amount, total: l.total
+              unitPrice: l.unit_price, discountPercent: l.discount_percent, discountAmount: l.discount_amount, total: l.total,
+              costPrice: l.cost_price !== null && l.cost_price !== undefined ? Number(l.cost_price) : undefined
             })),
             payments: (t.pos_payments || []).map((p: any) => ({
               id: p.id, transactionId: p.transaction_id, method: p.method, amount: p.amount, reference: p.reference
@@ -1558,7 +1567,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setPosDiscounts(merged); await safeSet(db.posDiscounts, merged);
         }
         if (posSettingsData) {
-          const parsed: PosSettings = { libraryName: posSettingsData.library_name, address: posSettingsData.address, phone: posSettingsData.phone, email: posSettingsData.email, currency: posSettingsData.currency, ticketMessage: posSettingsData.ticket_message, printerType: posSettingsData.printer_type };
+          const parsed: PosSettings = { libraryName: posSettingsData.library_name, address: posSettingsData.address, phone: posSettingsData.phone, email: posSettingsData.email, currency: posSettingsData.currency, ticketMessage: posSettingsData.ticket_message, printerType: posSettingsData.printer_type, whatsappOrderPhone: posSettingsData.whatsapp_order_phone || undefined, catalogBannerText: posSettingsData.catalog_banner_text || undefined, themeColor: posSettingsData.theme_color || undefined };
           setPosSettingsState(parsed); await db.posSettings.setItem('data', parsed);
         }
         
@@ -1567,14 +1576,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
             id: r.id,
             returnNumber: r.return_number,
             transactionId: r.transaction_id || undefined,
+            sessionId: r.session_id || undefined,
             date: r.date,
             type: r.type,
             totalRefund: r.total_refund,
             totalExchange: r.total_exchange || 0,
+            amountToPay: r.amount_to_pay || 0,
+            refundMethod: r.refund_method || 'Espèces',
+            complementTransactionId: r.complement_transaction_id || undefined,
             status: r.status,
             notes: r.notes || '',
             createdBy: r.created_by || undefined,
-            lines: (r.pos_return_lines || []).map((l: any) => ({
+            lines: (r.pos_return_lines || []).filter((l: any) => l.reason !== 'Échange').map((l: any) => ({
               id: l.id,
               productId: l.product_id || undefined,
               description: l.description,
@@ -1583,7 +1596,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
               total: l.total,
               reason: l.reason || ''
             })),
-            exchangeLines: []
+            // Les lignes d'échange partagent la table (reason='Échange') : les reventiler, sinon perdues au refresh
+            exchangeLines: (r.pos_return_lines || []).filter((l: any) => l.reason === 'Échange').map((l: any) => ({
+              id: l.id,
+              productId: l.product_id || undefined,
+              description: l.description,
+              quantity: l.quantity,
+              unitPrice: l.unit_price,
+              total: l.total
+            }))
           }));
           const latestLocalReturns = (await safeGet<PosReturn[]>(db.posReturns)) || cachedPosReturns;
           const merged = mergeData(latestLocalReturns, parsed);
@@ -1669,10 +1690,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
             mode_reglement: m.mode_reglement,
             motif: m.motif,
             module_code: m.module_code || undefined,
+            tier_id: m.tier_id || undefined,
+            tier_type: m.tier_type || undefined,
+            beneficiaire_emetteur: m.beneficiaire_emetteur || undefined,
+            reference_piece: m.reference_piece || undefined,
+            date: m.date || undefined,
             cree_par: m.cree_par,
             cree_par_nom: m.cree_par_nom || undefined,
-            reference_piece: m.reference_piece || undefined,
-            created_at: m.created_at
+            created_at: m.created_at,
+            updated_at: m.updated_at || undefined
           }));
           const merged = mergeData(cachedCrmCaisse, parsed);
           setCrmCaisse(merged); await db.crmCaisse.setItem('data', merged);
@@ -1682,15 +1708,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const parsed: CommissionPrestation[] = crmCommissionsData.map((c: any) => ({
             id: c.id,
             prestation_id: c.prestation_id,
+            prestation_ref: c.prestation_ref || undefined,
             type_beneficiaire: c.type_beneficiaire,
+            type: c.type || undefined,
             beneficiaire_id: c.beneficiaire_id || undefined,
             beneficiaire_nom: c.beneficiaire_nom,
             montant: Number(c.montant) || 0,
+            montant_prestation: c.montant_prestation !== null && c.montant_prestation !== undefined ? Number(c.montant_prestation) : undefined,
+            montant_commission: c.montant_commission !== null && c.montant_commission !== undefined ? Number(c.montant_commission) : undefined,
             statut: c.statut || 'EN_ATTENTE',
             date_reglement: c.date_reglement || undefined,
             mode_reglement: c.mode_reglement || undefined,
+            mouvement_caisse_id: c.mouvement_caisse_id || undefined,
             cree_par: c.cree_par || undefined,
-            created_at: c.created_at
+            created_at: c.created_at,
+            updated_at: c.updated_at || undefined
           }));
           const merged = mergeData(cachedCrmCommissions, parsed);
           setCrmCommissions(merged); await db.crmCommissions.setItem('data', merged);
@@ -1702,10 +1734,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             code_article: a.code_article,
             designation: a.designation,
             categorie: a.categorie || 'Général',
+            type_article: a.type_article || undefined,
             quantite_stock: Number(a.quantite_stock) || 0,
             seuil_alerte: Number(a.seuil_alerte) || 5,
             cout_unitaire_achat: Number(a.cout_unitaire_achat) || 0,
             prix_unitaire_vente: Number(a.prix_unitaire_vente) || 0,
+            unite: a.unite || undefined,
+            fournisseur_id: a.fournisseur_id || undefined,
             cree_par: a.cree_par || undefined,
             cree_par_nom: a.cree_par_nom || undefined,
             created_at: a.created_at,
@@ -1730,6 +1765,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             quantite: Number(m.quantite) || 1,
             prix_unitaire: Number(m.prix_unitaire) || 0,
             prix_total: Number(m.prix_total) || 0,
+            prix: m.prix !== null && m.prix !== undefined ? Number(m.prix) : undefined,
             technicien_assigne: m.technicien_assigne,
             statut: m.statut || 'NOUVEAU',
             date_intervention: m.date_intervention || m.created_at,
@@ -2887,25 +2923,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction(existing ? 'UPDATE_V2_WEEKLY_REPORT' : 'INSERT_V2_WEEKLY_REPORT', newReport);
   };
 
-  const submitV2WeeklyReport = async (id: string) => {
-    const report = v2WeeklyReports.find(r => r.id === id);
-    if (!report) return;
+  const submitV2WeeklyReport = async (reportOrId: V2WeeklyReport | string) => {
+    // Atomique : accepte l'objet complet pour éviter la double-écriture
+    // (save puis submit relisait un state pas encore à jour et perdait la soumission).
+    const base: V2WeeklyReport | undefined = typeof reportOrId === 'string'
+      ? v2WeeklyReports.find(r => r.id === reportOrId)
+      : reportOrId;
+    if (!base) return;
+    const reportId = typeof reportOrId === 'string' ? reportOrId : (base.id && isUuid(base.id) ? base.id : uuidv4());
     const now = new Date().toISOString();
     const updated: V2WeeklyReport = {
-      ...report,
+      ...base,
+      id: reportId,
+      project: base.project || 'HINOV GROUP',
       status: 'Soumis',
-      submittedAt: now,
+      submittedAt: base.submittedAt || now,
+      isLocked: true,
       updatedAt: now
     };
-    const newReports = v2WeeklyReports.map(r => r.id === id ? updated : r);
+    const existing = v2WeeklyReports.some(r => r.id === reportId);
+    const newReports = existing
+      ? v2WeeklyReports.map(r => r.id === reportId ? updated : r)
+      : [...v2WeeklyReports, updated];
     setV2WeeklyReports(newReports);
     await db.v2WeeklyReports.setItem('data', newReports);
-    await queueSyncAction('UPDATE_V2_WEEKLY_REPORT', updated);
+    await queueSyncAction(existing ? 'UPDATE_V2_WEEKLY_REPORT' : 'INSERT_V2_WEEKLY_REPORT', updated);
 
     // Lock all daily reports of this week for the author
-    const startDate = new Date(report.weekStart + 'T00:00:00');
+    const startDate = new Date(updated.weekStart + 'T00:00:00');
     const authorDailyReports = v2DailyReports.filter(d => {
-      if (d.authorId !== report.authorId) return false;
+      if (d.authorId !== updated.authorId) return false;
       const dDate = new Date(d.date + 'T00:00:00');
       const diffDays = Math.round((dDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
       return diffDays >= 0 && diffDays <= 6;
@@ -2914,16 +2961,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (authorDailyReports.length > 0) {
       const lockedDaily = v2DailyReports.map(d => {
         if (authorDailyReports.some(ad => ad.id === d.id)) {
-          return { ...d, status: 'Soumis' as const, updatedAt: now };
+          return { ...d, status: 'Soumis' as const, isLocked: true, updatedAt: now };
         }
         return d;
       });
       setV2DailyReports(lockedDaily);
       await db.v2DailyReports.setItem('data', lockedDaily);
+      for (const daily of lockedDaily.filter(d => authorDailyReports.some(ad => ad.id === d.id))) {
+        await queueSyncAction('UPDATE_V2_DAILY_REPORT', daily);
+      }
     }
 
     // Seule la Direction reçoit les rapports soumis
-    const author = users.find(u => u.id === report.authorId);
+    const author = users.find(u => u.id === updated.authorId);
     const authorName = author?.name || 'Un collaborateur';
     const authorService = services.find(s => s.id === author?.serviceId)?.name || '';
     const serviceSuffix = authorService ? ` (${authorService})` : '';
@@ -2935,10 +2985,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         id: uuidv4(),
         user_id: d.id,
         title: 'Nouveau rapport d\'activité reçu',
-        message: `${authorName}${serviceSuffix} a soumis son rapport d'activité pour la semaine du ${new Date(report.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')}.`,
+        message: `${authorName}${serviceSuffix} a soumis son rapport d'activité pour la semaine du ${new Date(updated.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')}.`,
         type: 'info',
         is_read: false,
-        link: `/crm/rapports-equipe?week=${report.weekStart}`,
+        link: `/crm/rapports-equipe?week=${updated.weekStart}`,
         created_at: now
       }));
       const updatedNotifs = [...notifications, ...newNotifs];
@@ -3001,7 +3051,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.v2WeeklyReports.setItem('data', newReports);
     await queueSyncAction('UPDATE_V2_WEEKLY_REPORT', updated);
 
-    // Notify the author
+    // Notify the author (lien valide vers le module existant + synchro cloud)
     if (report.authorId && report.authorId !== currentUser?.id) {
       const authorNotif: AppNotification = {
         id: uuidv4(),
@@ -3010,12 +3060,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         message: `Votre rapport pour la semaine du ${new Date(report.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')} a été ${status === 'Validé' ? 'validé par la Direction' : 'relu'}.`,
         type: 'success',
         is_read: false,
-        link: '/mon-rapport-hebdo',
+        link: `/crm/rapports?week=${report.weekStart}&tab=history`,
         created_at: now
       };
       const updatedNotifs = [...notifications, authorNotif];
       setNotifications(updatedNotifs);
       await db.notifications.setItem('data', updatedNotifs);
+      await queueSyncAction('INSERT_NOTIFICATION', authorNotif);
     }
   };
 
@@ -3024,6 +3075,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setV2WeeklyReports(newReports);
     await db.v2WeeklyReports.setItem('data', newReports);
     await queueSyncAction('DELETE_V2_WEEKLY_REPORT', { id });
+  };
+
+  const deleteV2DailyReport = async (id: string) => {
+    const newReports = v2DailyReports.filter(r => r.id !== id);
+    setV2DailyReports(newReports);
+    await db.v2DailyReports.setItem('data', newReports);
+    await queueSyncAction('DELETE_V2_DAILY_REPORT', { id });
   };
 
   const addCategory = async (category: Category) => {
@@ -3111,13 +3169,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     await queueSyncAction('UPDATE_POS_CATEGORY', { id, ...data });
   };
-  const deletePosCategory = async (id: string) => {
+  const deletePosCategory = async (id: string): Promise<boolean> => {
+    // Intégrité : catégorie utilisée par des produits = suppression interdite
+    if (posProducts.some(p => p.categoryId === id)) return false;
     setPosCategories(prev => {
       const next = prev.filter(c => c.id !== id);
       void db.posCategories.setItem('data', next);
       return next;
     });
     await queueSyncAction('DELETE_POS_CATEGORY', { id });
+    return true;
   };
 
   const addPosBrand = async (brand: PosBrand) => {
@@ -3137,13 +3198,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     await queueSyncAction('UPDATE_POS_BRAND', { id, ...data });
   };
-  const deletePosBrand = async (id: string) => {
+  const deletePosBrand = async (id: string): Promise<boolean> => {
+    if (posProducts.some(p => p.brandId === id)) return false;
     setPosBrands(prev => {
       const next = prev.filter(b => b.id !== id);
       void db.posBrands.setItem('data', next);
       return next;
     });
     await queueSyncAction('DELETE_POS_BRAND', { id });
+    return true;
   };
 
   const addPosSupplier = async (supplier: PosSupplier) => {
@@ -3163,13 +3226,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     await queueSyncAction('UPDATE_POS_SUPPLIER', { id, ...data });
   };
-  const deletePosSupplier = async (id: string) => {
+  const deletePosSupplier = async (id: string): Promise<boolean> => {
+    if (posProducts.some(p => p.supplierId === id) || posStockEntries.some(e => e.supplierId === id)) return false;
     setPosSuppliers(prev => {
       const next = prev.filter(s => s.id !== id);
       void db.posSuppliers.setItem('data', next);
       return next;
     });
     await queueSyncAction('DELETE_POS_SUPPLIER', { id });
+    return true;
   };
 
   const addPosProduct = async (product: PosProduct) => {
@@ -3211,28 +3276,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const mergedProd = oldProduct ? { ...oldProduct, ...data, id } : { id, ...data };
     await queueSyncAction('UPDATE_POS_PRODUCT', mergedProd);
   };
-  const deletePosProduct = async (id: string) => {
+  const deletePosProduct = async (id: string): Promise<boolean> => {
+    // Intégrité (B6) : produit avec historique (ventes, mouvements, entrées, inventaires, retours)
+    // = suppression interdite (le serveur le refuserait par FK de toute façon)
+    const used =
+      posTransactions.some(t => (t.lines || []).some(l => l.productId === id)) ||
+      posStockMovements.some(m => m.productId === id) ||
+      posStockEntries.some(e => (e.lines || []).some(l => l.productId === id)) ||
+      posInventories.some(i => (i.lines || []).some(l => l.productId === id)) ||
+      posReturns.some(r => (r.lines || []).some(l => l.productId === id) || (r.exchangeLines || []).some(l => l.productId === id));
+    if (used) return false;
     setPosProducts(prev => {
       const next = prev.filter(p => p.id !== id);
       void db.posProducts.setItem('data', next);
       return next;
     });
     await queueSyncAction('DELETE_POS_PRODUCT', { id });
+    return true;
   };
 
   // === Catalogue central : mêmes produits que le POS ===
-  const findProductByBarcode = (barcode: string) =>
-    posProducts.find(p => !!p.barcode && p.barcode === barcode);
+  const normalizeCode = (s?: string | null) => (s || '').trim();
+  const findProductByBarcode = (barcode: string) => {
+    const needle = normalizeCode(barcode).toLowerCase();
+    if (!needle) return undefined;
+    return posProducts.find(p => !!p.barcode && normalizeCode(p.barcode).toLowerCase() === needle);
+  };
 
-  const findProductByReference = (reference: string) =>
-    posProducts.find(p => p.reference === reference);
+  const findProductByReference = (reference: string) => {
+    const needle = normalizeCode(reference).toLowerCase();
+    if (!needle) return undefined;
+    return posProducts.find(p => normalizeCode(p.reference).toLowerCase() === needle);
+  };
 
   const searchProducts = (query: string) => {
     const q = (query || '').toLowerCase();
     if (!q) return posProducts;
     return posProducts.filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      p.reference.toLowerCase().includes(q) ||
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.reference || '').toLowerCase().includes(q) ||
       (p.barcode || '').includes(q) ||
       (p.isbn || '').includes(q)
     );
@@ -3308,6 +3390,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
   const deletePosStockEntry = async (id: string) => {
+    const target = posStockEntries.find(e => e.id === id);
+    // Compensation (B6) : une entrée Validée avait gonflé le stock → contre-passer avant suppression
+    if (target && target.status === 'Validé') {
+      await adjustProductStock(target.lines.map(l => ({ productId: l.productId, quantity: -l.quantity })), true, { type: 'Approvisionnement', reference: target.reference, createdBy: currentUser?.name, notes: 'Suppression entrée' });
+    }
     setPosStockEntries(prev => {
       const next = prev.filter(e => e.id !== id);
       void db.posStockEntries.setItem('data', next);
@@ -3345,6 +3432,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
   const deletePosInventory = async (id: string) => {
+    const target = posInventories.find(i => i.id === id);
+    // Compensation (B6) : un inventaire Terminé avait ajusté le stock → contre-passer avant suppression
+    if (target && target.status === 'Terminé') {
+      await adjustProductStock(target.lines.map(l => ({ productId: l.productId, quantity: -l.difference })), true, { type: 'Inventaire', reference: target.reference, createdBy: currentUser?.name, notes: 'Suppression inventaire' });
+    }
     setPosInventories(prev => {
       const next = prev.filter(i => i.id !== id);
       void db.posInventories.setItem('data', next);
@@ -3354,9 +3446,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addPosCashSession = async (session: PosCashSession) => {
-    if (session.status === 'Ouverte' && posCashSessions.some(s => s.status === 'Ouverte')) {
-      alert('Une session de caisse est déjà ouverte. Fermez-la avant d\'en ouvrir une nouvelle.');
-      return;
+    // Unicité : une seule session ouverte par caissier et par jour (M1).
+    // Le test se fait sur l'état le plus frais (lecture locale synchrone) pour limiter les doubles ouvertures.
+    if (session.status === 'Ouverte') {
+      const day = toLocalDayKey(session.openedAt);
+      const clash = posCashSessions.some(s =>
+        s.status === 'Ouverte'
+        && toLocalDayKey(s.openedAt) === day
+        && (!s.cashierId || !session.cashierId || s.cashierId === session.cashierId)
+      );
+      if (clash) {
+        alert('Une session de caisse est déjà ouverte pour ce caissier aujourd\u2019hui. Fermez-la avant d\u2019en ouvrir une nouvelle.');
+        return;
+      }
     }
     const newSession = { ...session, id: session.id || uuidv4() };
     const nextSessions = [...posCashSessions, newSession];
@@ -3365,6 +3467,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('INSERT_POS_CASH_SESSION', newSession);
   };
   const updatePosCashSession = async (id: string, data: Partial<PosCashSession>) => {
+    const current = posCashSessions.find(s => s.id === id);
+    if (!current) return;
+    // Immuabilité : une session clôturée ne peut pas être réécrite (anti-rejeu de clôture, M1)
+    if (current.status === 'Fermée') return;
     const nextSessions = posCashSessions.map(s => s.id === id ? { ...s, ...data } : s);
     setPosCashSessions(nextSessions);
     await safeSet(db.posCashSessions, nextSessions);
@@ -3504,9 +3610,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Annulation d'une vente validée (void) : passe en 'Annulée', restaure le stock local + serveur.
   // Ne restaure que la quantité non déjà retournée (évite la double restauration après un retour partiel).
-  const voidPosTransaction = async (id: string) => {
+  // Session clôturée = refusé (écart figé, M6) — le retour affirme false.
+  const voidPosTransaction = async (id: string): Promise<boolean> => {
     const tx = posTransactions.find(t => t.id === id);
-    if (!tx || tx.status !== 'Validée') return;
+    if (!tx || tx.status !== 'Validée') return false;
+    if (tx.sessionId) {
+      const sess = posCashSessions.find(s => s.id === tx.sessionId);
+      if (sess && sess.status !== 'Ouverte') return false;
+    }
     const returnedQty = new Map<string, number>();
     for (const r of posReturns) {
       if (r.transactionId === id && r.status !== 'Annulé') {
@@ -3520,6 +3631,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .map(l => ({ productId: l.productId, quantity: Math.max(0, l.quantity - (l.productId ? (returnedQty.get(l.productId) || 0) : 0)) }))
       .filter(d => d.productId && d.quantity > 0);
     await adjustProductStock(deltas, true, { type: 'Retour', reference: tx.transactionNumber, createdBy: currentUser?.name, notes: 'Annulation' });
+    return true;
   };
 
   const clearPosSalesHistory = async () => {
@@ -3646,6 +3758,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!ret || ret.status === 'Annulé') return;
     
     await updatePosReturn(id, { status: 'Annulé' });
+    // Annuler aussi la transaction de complément éventuelle (encaissement lié)
+    if (ret.complementTransactionId) {
+      await voidPosTransaction(ret.complementTransactionId);
+    }
     const tx = ret.transactionId ? posTransactions.find(t => t.id === ret.transactionId) : undefined;
     
     // Inverser les stocks si la transaction n'est pas complètement annulée par ailleurs
@@ -3753,6 +3869,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { alert('Session expirée. Veuillez vous reconnecter.'); return; }
 
+    const isDirRole = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(user.role);
+    const crmDefaultNew = !['Caissier', 'Gerant'].includes(user.role);
+
     const response = await fetch(
       `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
       {
@@ -3770,14 +3889,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
           serviceId: user.serviceId || null,
           posReturnsEnabled: user.posReturnsEnabled,
           posCatalogueEnabled: user.posCatalogueEnabled,
-          crmPrestationsEnabled: user.crmPrestationsEnabled ?? true,
-          crmCaisseEnabled: user.crmCaisseEnabled ?? true,
-          crmMaintenanceEnabled: user.crmMaintenanceEnabled ?? true,
-          crmStocksEnabled: user.crmStocksEnabled ?? true,
-          crmTiersEnabled: user.crmTiersEnabled ?? true,
-          crmCommerciauxEnabled: user.crmCommerciauxEnabled ?? true,
-          crmCommissionsEnabled: user.crmCommissionsEnabled ?? true,
-          crmFacturationEnabled: user.crmFacturationEnabled ?? true
+          posSupplyEnabled: user.posSupplyEnabled,
+          posInventoryEnabled: user.posInventoryEnabled,
+          posStockEnabled: user.posStockEnabled,
+          crmPrestationsEnabled: user.crmPrestationsEnabled ?? crmDefaultNew,
+          crmCaisseEnabled: user.crmCaisseEnabled ?? crmDefaultNew,
+          crmMaintenanceEnabled: user.crmMaintenanceEnabled ?? crmDefaultNew,
+          crmStocksEnabled: user.crmStocksEnabled ?? crmDefaultNew,
+          crmTiersEnabled: user.crmTiersEnabled ?? crmDefaultNew,
+          crmCommerciauxEnabled: user.crmCommerciauxEnabled ?? crmDefaultNew,
+          crmCommissionsEnabled: user.crmCommissionsEnabled ?? crmDefaultNew,
+          crmFacturationEnabled: user.crmFacturationEnabled ?? crmDefaultNew,
+          crmReportsEnabled: user.crmReportsEnabled ?? !isDirRole,
+          crmTeamReportsEnabled: user.crmTeamReportsEnabled ?? isDirRole
         }),
       }
     );
@@ -3801,17 +3925,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       active: true,
       posReturnsEnabled: user.posReturnsEnabled,
       posCatalogueEnabled: user.posCatalogueEnabled,
+      posSupplyEnabled: user.posSupplyEnabled,
+      posInventoryEnabled: user.posInventoryEnabled,
+      posStockEnabled: user.posStockEnabled,
       posRole: user.posRole || null,
-      crmPrestationsEnabled: user.crmPrestationsEnabled ?? true,
-      crmCaisseEnabled: user.crmCaisseEnabled ?? true,
-      crmMaintenanceEnabled: user.crmMaintenanceEnabled ?? true,
-      crmStocksEnabled: user.crmStocksEnabled ?? true,
-      crmTiersEnabled: user.crmTiersEnabled ?? true,
-      crmCommerciauxEnabled: user.crmCommerciauxEnabled ?? true,
-      crmCommissionsEnabled: user.crmCommissionsEnabled ?? true,
-      crmFacturationEnabled: user.crmFacturationEnabled ?? true,
-      crmReportsEnabled: user.crmReportsEnabled ?? !['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(user.role),
-      crmTeamReportsEnabled: user.crmTeamReportsEnabled ?? (['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(user.role) ? true : false)
+      crmPrestationsEnabled: user.crmPrestationsEnabled ?? crmDefaultNew,
+      crmCaisseEnabled: user.crmCaisseEnabled ?? crmDefaultNew,
+      crmMaintenanceEnabled: user.crmMaintenanceEnabled ?? crmDefaultNew,
+      crmStocksEnabled: user.crmStocksEnabled ?? crmDefaultNew,
+      crmTiersEnabled: user.crmTiersEnabled ?? crmDefaultNew,
+      crmCommerciauxEnabled: user.crmCommerciauxEnabled ?? crmDefaultNew,
+      crmCommissionsEnabled: user.crmCommissionsEnabled ?? crmDefaultNew,
+      crmFacturationEnabled: user.crmFacturationEnabled ?? crmDefaultNew,
+      crmReportsEnabled: user.crmReportsEnabled ?? !isDirRole,
+      crmTeamReportsEnabled: user.crmTeamReportsEnabled ?? isDirRole
     };
     const newUsers = [...users, newUser];
     setUsers(newUsers);
@@ -4133,11 +4260,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('UPDATE_CRM_TIER', { ...tier, id });
   };
 
-  const deleteCrmTier = async (id: string) => {
+  const deleteCrmTier = async (id: string): Promise<boolean> => {
+    // Intégrité (B2) : tiers référencé = suppression interdite (pas de FK en DB)
+    const usedPrest = crmPrestations.some(p => p.client_id === id || p.apporteur_id === id);
+    const usedMaint = crmMaintenance.some(m => m.client_id === id);
+    const usedStock = crmArticles.some(a => a.fournisseur_id === id);
+    if (usedPrest || usedMaint || usedStock) return false;
     const next = crmTiers.filter(t => t.id !== id);
     setCrmTiers(next);
     await db.crmTiers.setItem('data', next);
     await queueSyncAction('DELETE_CRM_TIER', { id });
+    return true;
   };
 
   // Module 6: Agents Commerciaux
@@ -4166,11 +4299,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('UPDATE_CRM_COMMERCIAL', { ...comm, id });
   };
 
-  const deleteCrmCommercial = async (id: string) => {
+  const deleteCrmCommercial = async (id: string): Promise<boolean> => {
+    // Intégrité : commercial rattaché à des commandes ou avec historique = suppression interdite
+    const target = crmCommerciaux.find(c => c.id === id);
+    const used = crmPrestations.some(p => p.commercial_id === id);
+    const hasHistory = (target?.total_ventes || 0) > 0 || (target?.contrats_clos_count || 0) > 0;
+    if (used || hasHistory) return false;
     const next = crmCommerciaux.filter(c => c.id !== id);
     setCrmCommerciaux(next);
     await db.crmCommerciaux.setItem('data', next);
     await queueSyncAction('DELETE_CRM_COMMERCIAL', { id });
+    return true;
   };
 
   // Helper pour synchroniser les fiches de commissions pour une prestation
@@ -4178,6 +4317,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const newCommissionsToSave: CommissionPrestation[] = [];
 
     // Commission Apporteur (si montant > 0)
+    // Geliko : une commission PAYEE n'est jamais réécrite (argent déjà décaissé)
     if ((prest.commission_apporteur || 0) > 0 && (prest.apporteur_id || prest.apporteur_nom)) {
       const existing = crmCommissions.find(c => c.prestation_id === prest.id && c.type_beneficiaire === 'APPORTEUR');
       const comm: CommissionPrestation = {
@@ -4186,10 +4326,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         type_beneficiaire: 'APPORTEUR',
         beneficiaire_id: prest.apporteur_id || undefined,
         beneficiaire_nom: prest.apporteur_nom || 'Apporteur',
-        montant: prest.commission_apporteur || 0,
+        montant: existing?.statut === 'PAYEE' ? (existing.montant || 0) : (prest.commission_apporteur || 0),
         statut: existing?.statut || 'EN_ATTENTE',
         date_reglement: existing?.date_reglement,
         mode_reglement: existing?.mode_reglement,
+        mouvement_caisse_id: existing?.mouvement_caisse_id,
         cree_par: prest.cree_par,
         created_at: existing?.created_at || new Date().toISOString()
       };
@@ -4205,10 +4346,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         type_beneficiaire: 'AGENT_COMMERCIAL',
         beneficiaire_id: prest.commercial_id || undefined,
         beneficiaire_nom: prest.commercial_nom || 'Commercial',
-        montant: prest.commission_agent || 0,
+        montant: existing?.statut === 'PAYEE' ? (existing.montant || 0) : (prest.commission_agent || 0),
         statut: existing?.statut || 'EN_ATTENTE',
         date_reglement: existing?.date_reglement,
         mode_reglement: existing?.mode_reglement,
+        mouvement_caisse_id: existing?.mouvement_caisse_id,
         cree_par: prest.cree_par,
         created_at: existing?.created_at || new Date().toISOString()
       };
@@ -4224,24 +4366,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
         type_beneficiaire: 'RESPONSABLE',
         beneficiaire_id: prest.resp_service_id || undefined,
         beneficiaire_nom: prest.resp_service_nom || 'Responsable de Service',
-        montant: prest.commission_resp_service || 0,
+        montant: existing?.statut === 'PAYEE' ? (existing.montant || 0) : (prest.commission_resp_service || 0),
         statut: existing?.statut || 'EN_ATTENTE',
         date_reglement: existing?.date_reglement,
         mode_reglement: existing?.mode_reglement,
+        mouvement_caisse_id: existing?.mouvement_caisse_id,
         cree_par: prest.cree_par,
         created_at: existing?.created_at || new Date().toISOString()
       };
       newCommissionsToSave.push(comm);
     }
 
-    if (newCommissionsToSave.length > 0) {
-      const remaining = crmCommissions.filter(c => c.prestation_id !== prest.id);
-      const updatedComms = [...newCommissionsToSave, ...remaining];
-      setCrmCommissions(updatedComms);
-      await db.crmCommissions.setItem('data', updatedComms);
-      for (const comm of newCommissionsToSave) {
-        await queueSyncAction('UPSERT_CRM_COMMISSION', comm);
-      }
+    // Réconciliation : supprimer les fiches devenues à 0 (jamais les PAYEE : argent déjà mouvementé)
+    const desiredIds = new Set(newCommissionsToSave.map(c => c.id));
+    const orphans = crmCommissions.filter(c => c.prestation_id === prest.id && !desiredIds.has(c.id) && c.statut !== 'PAYEE');
+    const keptOthers = crmCommissions.filter(c => c.prestation_id !== prest.id);
+    const keptPayees = crmCommissions.filter(c => c.prestation_id === prest.id && c.statut === 'PAYEE' && !desiredIds.has(c.id));
+    const updatedComms = [...newCommissionsToSave, ...keptOthers, ...keptPayees];
+    setCrmCommissions(updatedComms);
+    await db.crmCommissions.setItem('data', updatedComms);
+    for (const comm of newCommissionsToSave) {
+      await queueSyncAction('UPSERT_CRM_COMMISSION', comm);
+    }
+    for (const orphan of orphans) {
+      await queueSyncAction('DELETE_CRM_COMMISSION', { id: orphan.id });
     }
   };
 
@@ -4251,19 +4399,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const now = new Date();
     const year = now.getFullYear();
     const seq = (crmPrestations.length + 1).toString().padStart(4, '0');
-    const reference = prest.reference || `CMD-${year}-${seq}`;
+    // Référence unique : suffixe aléatoire en cas de collision (suppressions, concurrence, offline)
+    let reference = prest.reference || `CMD-${year}-${seq}`;
+    while (crmPrestations.some(p => p.reference === reference)) {
+      reference = `${reference.split('-bis')[0]}-bis${Math.floor(1000 + Math.random() * 9000)}`;
+    }
 
-    // 11-column financial formulas
-    const quantite = Number(prest.quantite) || 1;
-    const cout_unitaire_achat = Number(prest.cout_unitaire_achat) || 0;
+    // 11-column financial formulas (quantités/montants bornés : pas de négatif)
+    const quantite = Math.max(1, Math.round(Number(prest.quantite) || 1));
+    const cout_unitaire_achat = Math.max(0, Number(prest.cout_unitaire_achat) || 0);
     const cout_final_achat = quantite * cout_unitaire_achat;
-    const prix_vente_unitaire = Number(prest.prix_vente_unitaire) || 0;
+    const prix_vente_unitaire = Math.max(0, Number(prest.prix_vente_unitaire) || 0);
     const prix_client_final = quantite * prix_vente_unitaire;
     const marge_interne = prix_client_final - cout_final_achat;
-    const taux_commission_app = Number(prest.taux_commission_app) || 0;
-    const commission_apporteur = prest.commission_apporteur !== undefined ? Number(prest.commission_apporteur) : (taux_commission_app > 0 ? (prix_client_final * taux_commission_app) / 100 : 0);
-    const commission_resp_service = Number(prest.commission_resp_service) || 0;
-    const commission_agent = Number(prest.commission_agent) || 0;
+    const taux_commission_app = Math.max(0, Number(prest.taux_commission_app) || 0);
+    const commission_apporteur = prest.commission_apporteur !== undefined ? Math.max(0, Number(prest.commission_apporteur)) : (taux_commission_app > 0 ? (prix_client_final * taux_commission_app) / 100 : 0);
+    const commission_resp_service = Math.max(0, Number(prest.commission_resp_service) || 0);
+    const commission_agent = Math.max(0, Number(prest.commission_agent) || 0);
     const benefice_net = marge_interne - (commission_apporteur + commission_resp_service + commission_agent);
 
     const item: PrestationCommande = {
@@ -4309,16 +4461,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateCrmPrestation = async (id: string, prest: Partial<PrestationCommande>) => {
     const current = crmPrestations.find(p => p.id === id);
     if (!current) return;
-    const quantite = prest.quantite !== undefined ? Number(prest.quantite) : current.quantite;
-    const cout_unitaire_achat = prest.cout_unitaire_achat !== undefined ? Number(prest.cout_unitaire_achat) : current.cout_unitaire_achat;
+    const quantite = Math.max(1, Math.round(prest.quantite !== undefined ? Number(prest.quantite) : current.quantite) || 1);
+    const cout_unitaire_achat = Math.max(0, prest.cout_unitaire_achat !== undefined ? Number(prest.cout_unitaire_achat) : current.cout_unitaire_achat);
     const cout_final_achat = quantite * cout_unitaire_achat;
-    const prix_vente_unitaire = prest.prix_vente_unitaire !== undefined ? Number(prest.prix_vente_unitaire) : current.prix_vente_unitaire;
+    const prix_vente_unitaire = Math.max(0, prest.prix_vente_unitaire !== undefined ? Number(prest.prix_vente_unitaire) : current.prix_vente_unitaire);
     const prix_client_final = quantite * prix_vente_unitaire;
     const marge_interne = prix_client_final - cout_final_achat;
-    const taux_commission_app = prest.taux_commission_app !== undefined ? Number(prest.taux_commission_app) : (current.taux_commission_app || 0);
-    const commission_apporteur = prest.commission_apporteur !== undefined ? Number(prest.commission_apporteur) : (current.commission_apporteur || 0);
-    const commission_resp_service = prest.commission_resp_service !== undefined ? Number(prest.commission_resp_service) : (current.commission_resp_service || 0);
-    const commission_agent = prest.commission_agent !== undefined ? Number(prest.commission_agent) : (current.commission_agent || 0);
+    const taux_commission_app = Math.max(0, prest.taux_commission_app !== undefined ? Number(prest.taux_commission_app) : (current.taux_commission_app || 0));
+    const commission_apporteur = Math.max(0, prest.commission_apporteur !== undefined ? Number(prest.commission_apporteur) : (current.commission_apporteur || 0));
+    const commission_resp_service = Math.max(0, prest.commission_resp_service !== undefined ? Number(prest.commission_resp_service) : (current.commission_resp_service || 0));
+    const commission_agent = Math.max(0, prest.commission_agent !== undefined ? Number(prest.commission_agent) : (current.commission_agent || 0));
     const benefice_net = marge_interne - (commission_apporteur + commission_resp_service + commission_agent);
 
     const updated: PrestationCommande = {
@@ -4342,19 +4494,77 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.crmPrestations.setItem('data', next);
     await queueSyncAction('UPDATE_CRM_PRESTATION', updated);
 
+    // Réajuster les compteurs commerciaux si réassignation ou montant modifié (M6).
+    // Application en une passe unique (les setState successifs verraient le même state périmé).
+    const oldCommId = current.commercial_id;
+    const newCommId = updated.commercial_id;
+    const commercialChanged = oldCommId !== newCommId;
+    const amountChanged = (current.prix_client_final || 0) !== (updated.prix_client_final || 0);
+    if (commercialChanged || amountChanged) {
+      const deltas = new Map<string, { dv: number; dc: number }>();
+      const addDelta = (cid: string | undefined, dv: number, dc: number) => {
+        if (!cid) return;
+        const prev = deltas.get(cid) || { dv: 0, dc: 0 };
+        deltas.set(cid, { dv: prev.dv + dv, dc: prev.dc + dc });
+      };
+      // Déduire l'ancien rattachement (montant + 1 contrat)
+      addDelta(oldCommId, -(current.prix_client_final || 0), -1);
+      // Ajouter le nouveau rattachement (montant + 1 contrat ; même commercial + montant modifié → net = différence, contrat inchangé)
+      addDelta(newCommId, (updated.prix_client_final || 0), 1);
+      if (deltas.size > 0) {
+        const nextComms = crmCommerciaux.map(c => {
+          const d = deltas.get(c.id);
+          if (!d) return c;
+          return {
+            ...c,
+            total_ventes: Math.max(0, (c.total_ventes || 0) + d.dv),
+            contrats_clos_count: Math.max(0, (c.contrats_clos_count || 0) + d.dc)
+          };
+        });
+        setCrmCommerciaux(nextComms);
+        await db.crmCommerciaux.setItem('data', nextComms);
+        for (const [cid, d] of deltas) {
+          const c = nextComms.find(x => x.id === cid);
+          if (c) await queueSyncAction('UPDATE_CRM_COMMERCIAL', { id: cid, total_ventes: c.total_ventes, contrats_clos_count: c.contrats_clos_count });
+        }
+      }
+    }
+
     await syncCommissionsForPrestation(updated);
   };
 
   const deleteCrmPrestation = async (id: string) => {
+    const target = crmPrestations.find(p => p.id === id);
     const next = crmPrestations.filter(p => p.id !== id);
     setCrmPrestations(next);
     await db.crmPrestations.setItem('data', next);
     await queueSyncAction('DELETE_CRM_PRESTATION', { id });
+    // Décrémenter le commercial + supprimer les fiches de commission non payées (PAYEE conservées : trace)
+    if (target?.commercial_id) {
+      const comm = crmCommerciaux.find(c => c.id === target.commercial_id);
+      if (comm) {
+        await updateCrmCommercial(comm.id, {
+          total_ventes: Math.max(0, (comm.total_ventes || 0) - (target.prix_client_final || 0)),
+          contrats_clos_count: Math.max(0, (comm.contrats_clos_count || 0) - 1)
+        });
+      }
+    }
+    const linked = crmCommissions.filter(c => c.prestation_id === id && c.statut !== 'PAYEE');
+    if (linked.length > 0) {
+      const remainingComms = crmCommissions.filter(c => !(c.prestation_id === id && c.statut !== 'PAYEE'));
+      setCrmCommissions(remainingComms);
+      await db.crmCommissions.setItem('data', remainingComms);
+      for (const c of linked) {
+        await queueSyncAction('DELETE_CRM_COMMISSION', { id: c.id });
+      }
+    }
   };
 
-  const encaisserCrmPrestation = async (id: string, modeReglement: string = 'ESPECES') => {
+  const encaisserCrmPrestation = async (id: string, modeReglement: string = 'ESPECES'): Promise<boolean> => {
     const prest = crmPrestations.find(p => p.id === id);
-    if (!prest) return;
+    if (!prest) return false;
+    // Idempotence (B4) : un encaissement existant ne peut pas être rejoué
+    if (prest.statut === 'PAYEE') return false;
     const now = new Date().toISOString();
     const today = now.split('T')[0];
 
@@ -4380,6 +4590,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       created_at: now
     };
     await addCrmMouvementCaisse(mvtCaisse);
+    return true;
   };
 
   // Module 2: Dépenses & Journal de Caisse
@@ -4408,23 +4619,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Module 7: Commissions
   const updateCrmCommissionStatus = async (id: string, status: CommissionPrestation['statut']) => {
+    const current = crmCommissions.find(c => c.id === id);
+    if (!current) return;
+    // Garde anti-régression (M9) : une commission PAYEE ou ANNULEE est définitive
+    if ((current.statut === 'PAYEE' || current.statut === 'ANNULEE') && current.statut !== status) return;
     const next = crmCommissions.map(c => c.id === id ? { ...c, statut: status } : c);
     setCrmCommissions(next);
     await db.crmCommissions.setItem('data', next);
     await queueSyncAction('UPDATE_CRM_COMMISSION', { id, updates: { statut: status } });
   };
 
-  const payerCrmCommission = async (id: string, modeReglement: string = 'ESPECES') => {
+  const payerCrmCommission = async (id: string, modeReglement: string = 'ESPECES'): Promise<boolean> => {
     const comm = crmCommissions.find(c => c.id === id);
-    if (!comm) return;
+    if (!comm) return false;
+    // Idempotence (B5) : un règlement existant ne peut pas être rejoué
+    if (comm.statut === 'PAYEE') return false;
     const now = new Date().toISOString();
     const today = now.split('T')[0];
 
+    // Créer d'abord la SORTIE caisse pour lier les deux écritures (M13)
+    const mvtId = uuidv4();
     const updatedComm: CommissionPrestation = {
       ...comm,
       statut: 'PAYEE',
       date_reglement: today,
-      mode_reglement: modeReglement
+      mode_reglement: modeReglement,
+      mouvement_caisse_id: mvtId
     };
     const nextComms = crmCommissions.map(c => c.id === id ? updatedComm : c);
     setCrmCommissions(nextComms);
@@ -4434,7 +4654,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updates: {
         statut: 'PAYEE',
         date_reglement: today,
-        mode_reglement: modeReglement
+        mode_reglement: modeReglement,
+        mouvement_caisse_id: mvtId
       }
     });
 
@@ -4442,7 +4663,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const prest = crmPrestations.find(p => p.id === comm.prestation_id);
     const ref = prest ? prest.reference : 'COMM';
     const mvtCaisse: MouvementCaisse = {
-      id: uuidv4(),
+      id: mvtId,
       type: 'SORTIE',
       categorie: 'COMMISSION',
       montant: comm.montant,
@@ -4456,18 +4677,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
       created_at: now
     };
     await addCrmMouvementCaisse(mvtCaisse);
+    return true;
   };
 
   // Module 4: Stocks & Consommables
   const addCrmArticle = async (art: CatalogueArticle) => {
     const id = art.id || uuidv4();
+    // Référence unique : suffixe en cas de collision (M9)
+    let code_article = art.code_article;
+    if (code_article) {
+      while (crmArticles.some(a => a.code_article === code_article && a.id !== id)) {
+        code_article = `${code_article.split('-bis')[0]}-bis${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+    }
     const item: CatalogueArticle = {
       ...art,
       id,
-      quantite_stock: Number(art.quantite_stock) || 0,
-      seuil_alerte: Number(art.seuil_alerte) || 5,
-      cout_unitaire_achat: Number(art.cout_unitaire_achat) || 0,
-      prix_unitaire_vente: Number(art.prix_unitaire_vente) || 0,
+      code_article: code_article || art.code_article,
+      quantite_stock: Math.max(0, Number(art.quantite_stock) || 0),
+      seuil_alerte: Math.max(0, Number(art.seuil_alerte) || 5),
+      cout_unitaire_achat: Math.max(0, Number(art.cout_unitaire_achat) || 0),
+      prix_unitaire_vente: Math.max(0, Number(art.prix_unitaire_vente) || 0),
       cree_par: art.cree_par || currentUser?.id,
       cree_par_nom: art.cree_par_nom || currentUser?.name,
       created_at: art.created_at || new Date().toISOString(),
@@ -4481,10 +4711,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateCrmArticle = async (id: string, art: Partial<CatalogueArticle>) => {
     const now = new Date().toISOString();
-    const next = crmArticles.map(a => a.id === id ? { ...a, ...art, updated_at: now } : a);
+    // Clamp anti-négatif (M6/M7) : l'édition ne peut pas créer de stock ou prix négatif
+    const clean: Partial<CatalogueArticle> = { ...art };
+    if (clean.quantite_stock !== undefined) clean.quantite_stock = Math.max(0, Number(clean.quantite_stock) || 0);
+    if (clean.seuil_alerte !== undefined) clean.seuil_alerte = Math.max(0, Number(clean.seuil_alerte) || 0);
+    if (clean.cout_unitaire_achat !== undefined) clean.cout_unitaire_achat = Math.max(0, Number(clean.cout_unitaire_achat) || 0);
+    if (clean.prix_unitaire_vente !== undefined) clean.prix_unitaire_vente = Math.max(0, Number(clean.prix_unitaire_vente) || 0);
+    const next = crmArticles.map(a => a.id === id ? { ...a, ...clean, updated_at: now } : a);
     setCrmArticles(next);
     await db.crmArticles.setItem('data', next);
-    await queueSyncAction('UPDATE_CRM_ARTICLE', { ...art, updated_at: now, id });
+    await queueSyncAction('UPDATE_CRM_ARTICLE', { ...clean, updated_at: now, id });
   };
 
   const deleteCrmArticle = async (id: string) => {
@@ -4500,9 +4736,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const now = new Date();
     const year = now.getFullYear();
     const seq = (crmMaintenance.length + 1).toString().padStart(4, '0');
-    const reference = interv.reference || `MNT-${year}-${seq}`;
-    const quantite = Number(interv.quantite) || 1;
-    const prix_unitaire = Number(interv.prix_unitaire) || 0;
+    // Référence unique : suffixe en cas de collision (M9)
+    let reference = interv.reference || `MNT-${year}-${seq}`;
+    while (crmMaintenance.some(m => m.reference === reference)) {
+      reference = `${reference.split('-bis')[0]}-bis${Math.floor(1000 + Math.random() * 9000)}`;
+    }
+    const quantite = Math.max(1, Math.round(Number(interv.quantite) || 1));
+    const prix_unitaire = Math.max(0, Number(interv.prix_unitaire) || 0);
     const prix_total = quantite * prix_unitaire;
 
     const item: InterventionMaintenance = {
@@ -4528,8 +4768,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateCrmIntervention = async (id: string, interv: Partial<InterventionMaintenance>) => {
     const now = new Date().toISOString();
     const current = crmMaintenance.find(m => m.id === id);
-    const quantite = interv.quantite !== undefined ? Number(interv.quantite) : (current?.quantite || 1);
-    const prix_unitaire = interv.prix_unitaire !== undefined ? Number(interv.prix_unitaire) : (current?.prix_unitaire || 0);
+    const quantite = Math.max(1, Math.round(interv.quantite !== undefined ? Number(interv.quantite) : (current?.quantite || 1)) || 1);
+    const prix_unitaire = Math.max(0, interv.prix_unitaire !== undefined ? Number(interv.prix_unitaire) : (current?.prix_unitaire || 0));
     const prix_total = quantite * prix_unitaire;
 
     const next = crmMaintenance.map(m => m.id === id ? { ...m, ...interv, quantite, prix_unitaire, prix_total, updated_at: now } : m);
@@ -4564,10 +4804,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateCrmTechnicien = async (id: string, tech: Partial<TechnicienMaintenance>) => {
     const now = new Date().toISOString();
+    const current = crmTechniciens.find(t => t.id === id);
     const next = crmTechniciens.map(t => t.id === id ? { ...t, ...tech, updated_at: now } : t);
     setCrmTechniciens(next);
     await db.crmTechniciens.setItem('data', next);
     await queueSyncAction('UPDATE_CRM_TECHNICIEN', { ...tech, updated_at: now, id });
+    // Propagation du renommage vers les tickets (assignation par nom, M2)
+    if (tech.nom && current && tech.nom.trim() !== '' && current.nom !== tech.nom) {
+      const oldNom = current.nom;
+      const newNom = tech.nom;
+      const nextTickets = crmMaintenance.map(m => m.technicien_assigne === oldNom ? { ...m, technicien_assigne: newNom } : m);
+      const changed = nextTickets.filter((m, i) => m !== crmMaintenance[i]);
+      if (changed.length > 0) {
+        setCrmMaintenance(nextTickets);
+        await db.crmMaintenance.setItem('data', nextTickets);
+        for (const m of changed) {
+          await queueSyncAction('UPDATE_CRM_INTERVENTION', { id: m.id, technicien_assigne: newNom, updated_at: now });
+        }
+      }
+    }
   };
 
   const deleteCrmTechnicien = async (id: string) => {
@@ -4943,7 +5198,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, sendWeeklyReportReminder, reviewV2WeeklyReport, deleteV2WeeklyReport, updateMyProfile, addCrmDocument, updateCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData, reconcilePosData: reconcileLocalPosDataWithCloud,
+      users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, sendWeeklyReportReminder, reviewV2WeeklyReport, deleteV2WeeklyReport, deleteV2DailyReport, updateMyProfile, addCrmDocument, updateCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData, reconcilePosData: reconcileLocalPosDataWithCloud,
       // CRM Modules Responsables
       crmTiers, crmCommerciaux, crmPrestations, crmCaisse, crmCommissions, crmArticles, crmMaintenance, crmTechniciens,
       addCrmTier, updateCrmTier, deleteCrmTier,

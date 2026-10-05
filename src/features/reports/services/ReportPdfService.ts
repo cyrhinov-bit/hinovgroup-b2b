@@ -395,8 +395,8 @@ export function buildV2WeeklyReportPdf(
     "Ce rapport hebdomadaire recapitule l'ensemble des activites, echanges commerciaux et livrables realises par le collaborateur."
   );
 
-  // Section 3 : Journal détaillé des tâches (Lundi -> Samedi)
-  const standardDays = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+  // Section 3 : Journal détaillé des tâches (Lundi -> Dimanche)
+  const standardDays = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
   let rawTasksByDay: Record<string, V2Task[]> = {};
 
   if (typeof report.tasksByDay === 'string') {
@@ -451,7 +451,7 @@ export function buildV2WeeklyReportPdf(
   // Construction de la liste ordonnée des jours avec tâches
   const displayDays: { dayLabel: string; tasks: V2Task[] }[] = [];
 
-  // 1. Jours standards Lundi -> Samedi
+  // 1. Jours standards Lundi -> Dimanche
   standardDays.forEach(day => {
     const matchedKey = Object.keys(rawTasksByDay).find(k => k.toLowerCase() === day.toLowerCase());
     const tasks = matchedKey ? rawTasksByDay[matchedKey] : (rawTasksByDay[day] || []);

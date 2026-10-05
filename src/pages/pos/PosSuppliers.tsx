@@ -60,7 +60,7 @@ export default function PosSuppliers() {
                 <td style={{ padding: '12px 16px' }}>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={() => { setEditing(s); setForm({ name: s.name, contact: s.contact || '', phone: s.phone || '', email: s.email || '', address: s.address || '' }); setShowForm(true); }} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}><Edit2 size={16} /></button>
-                    <button onClick={() => deletePosSupplier(s.id)} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)' }}><Trash2 size={16} /></button>
+                    <button onClick={async () => { if (window.confirm('Supprimer ce fournisseur ?')) { const ok = await deletePosSupplier(s.id); if (!ok) alert('Suppression impossible : des produits ou entrées utilisent ce fournisseur.'); } }} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)' }}><Trash2 size={16} /></button>
                   </div>
                 </td>
               </tr>

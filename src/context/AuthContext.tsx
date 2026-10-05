@@ -126,6 +126,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {}
 
         const isDir = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(data.role);
+        // Défaut modules CRM : jamais pour Caissier/Gerant (rôles POS), sinon activé sauf désactivation explicite
+        const crmDefault = !['Caissier', 'Gerant'].includes(data.role);
         const resolveBool = (dbVal: any, localVal: any, defaultVal: boolean) => {
           if (dbVal === true) return true;
           if (dbVal === false) return false;
@@ -151,14 +153,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           posInventoryEnabled: resolveBool(data.pos_inventory_enabled, cachedUser?.posInventoryEnabled, false),
           posStockEnabled: resolveBool(data.pos_stock_enabled, cachedUser?.posStockEnabled, false),
           posRole: data.pos_role || cachedUser?.posRole || null,
-          crmPrestationsEnabled: resolveBool(data.crm_prestations_enabled, cachedUser?.crmPrestationsEnabled, true),
-          crmCaisseEnabled: resolveBool(data.crm_caisse_enabled, cachedUser?.crmCaisseEnabled, true),
-          crmMaintenanceEnabled: resolveBool(data.crm_maintenance_enabled, cachedUser?.crmMaintenanceEnabled, true),
-          crmStocksEnabled: resolveBool(data.crm_stocks_enabled, cachedUser?.crmStocksEnabled, true),
-          crmTiersEnabled: resolveBool(data.crm_tiers_enabled, cachedUser?.crmTiersEnabled, true),
-          crmCommerciauxEnabled: resolveBool(data.crm_commerciaux_enabled, cachedUser?.crmCommerciauxEnabled, true),
-          crmCommissionsEnabled: resolveBool(data.crm_commissions_enabled, cachedUser?.crmCommissionsEnabled, true),
-          crmFacturationEnabled: resolveBool(data.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, true),
+          crmPrestationsEnabled: resolveBool(data.crm_prestations_enabled, cachedUser?.crmPrestationsEnabled, crmDefault),
+          crmCaisseEnabled: resolveBool(data.crm_caisse_enabled, cachedUser?.crmCaisseEnabled, crmDefault),
+          crmMaintenanceEnabled: resolveBool(data.crm_maintenance_enabled, cachedUser?.crmMaintenanceEnabled, crmDefault),
+          crmStocksEnabled: resolveBool(data.crm_stocks_enabled, cachedUser?.crmStocksEnabled, crmDefault),
+          crmTiersEnabled: resolveBool(data.crm_tiers_enabled, cachedUser?.crmTiersEnabled, crmDefault),
+          crmCommerciauxEnabled: resolveBool(data.crm_commerciaux_enabled, cachedUser?.crmCommerciauxEnabled, crmDefault),
+          crmCommissionsEnabled: resolveBool(data.crm_commissions_enabled, cachedUser?.crmCommissionsEnabled, crmDefault),
+          crmFacturationEnabled: resolveBool(data.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, crmDefault),
           crmReportsEnabled: resolveBool(data.crm_reports_enabled, cachedUser?.crmReportsEnabled, !isDir),
           crmTeamReportsEnabled: resolveBool(data.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
         };
@@ -282,6 +284,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {}
 
         const isDir = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(profile.role);
+        const crmDefault = !['Caissier', 'Gerant'].includes(profile.role);
         const resolveBool = (dbVal: any, localVal: any, defaultVal: boolean) => {
           if (dbVal === true) return true;
           if (dbVal === false) return false;
@@ -307,14 +310,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           posInventoryEnabled: resolveBool(profile.pos_inventory_enabled, cachedUser?.posInventoryEnabled, false),
           posStockEnabled: resolveBool(profile.pos_stock_enabled, cachedUser?.posStockEnabled, false),
           posRole: profile.pos_role || cachedUser?.posRole || null,
-          crmPrestationsEnabled: resolveBool(profile.crm_prestations_enabled, cachedUser?.crmPrestationsEnabled, true),
-          crmCaisseEnabled: resolveBool(profile.crm_caisse_enabled, cachedUser?.crmCaisseEnabled, true),
-          crmMaintenanceEnabled: resolveBool(profile.crm_maintenance_enabled, cachedUser?.crmMaintenanceEnabled, true),
-          crmStocksEnabled: resolveBool(profile.crm_stocks_enabled, cachedUser?.crmStocksEnabled, true),
-          crmTiersEnabled: resolveBool(profile.crm_tiers_enabled, cachedUser?.crmTiersEnabled, true),
-          crmCommerciauxEnabled: resolveBool(profile.crm_commerciaux_enabled, cachedUser?.crmCommerciauxEnabled, true),
-          crmCommissionsEnabled: resolveBool(profile.crm_commissions_enabled, cachedUser?.crmCommissionsEnabled, true),
-          crmFacturationEnabled: resolveBool(profile.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, true),
+          crmPrestationsEnabled: resolveBool(profile.crm_prestations_enabled, cachedUser?.crmPrestationsEnabled, crmDefault),
+          crmCaisseEnabled: resolveBool(profile.crm_caisse_enabled, cachedUser?.crmCaisseEnabled, crmDefault),
+          crmMaintenanceEnabled: resolveBool(profile.crm_maintenance_enabled, cachedUser?.crmMaintenanceEnabled, crmDefault),
+          crmStocksEnabled: resolveBool(profile.crm_stocks_enabled, cachedUser?.crmStocksEnabled, crmDefault),
+          crmTiersEnabled: resolveBool(profile.crm_tiers_enabled, cachedUser?.crmTiersEnabled, crmDefault),
+          crmCommerciauxEnabled: resolveBool(profile.crm_commerciaux_enabled, cachedUser?.crmCommerciauxEnabled, crmDefault),
+          crmCommissionsEnabled: resolveBool(profile.crm_commissions_enabled, cachedUser?.crmCommissionsEnabled, crmDefault),
+          crmFacturationEnabled: resolveBool(profile.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, crmDefault),
           crmReportsEnabled: resolveBool(profile.crm_reports_enabled, cachedUser?.crmReportsEnabled, !isDir),
           crmTeamReportsEnabled: resolveBool(profile.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
         };
@@ -333,6 +336,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginAsTestUser = (role: User['role']) => {
     const isDir = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(role);
+    const isCashierRole = role === 'Caissier' || role === 'Gerant';
+    const crmDefault = !isCashierRole;
     const testUser: User = {
       id: 'test-' + role.toLowerCase(),
       name: role === 'Caissier' ? 'Caissier Test' : role === 'Gerant' ? 'Gérant Test' : role + ' Test',
@@ -343,6 +348,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       active: true,
       posReturnsEnabled: true,
       posCatalogueEnabled: true,
+      crmPrestationsEnabled: crmDefault,
+      crmCaisseEnabled: crmDefault,
+      crmMaintenanceEnabled: crmDefault,
+      crmStocksEnabled: crmDefault,
+      crmTiersEnabled: crmDefault,
+      crmCommerciauxEnabled: crmDefault,
+      crmCommissionsEnabled: crmDefault,
+      crmFacturationEnabled: crmDefault,
       crmReportsEnabled: !isDir,
       crmTeamReportsEnabled: isDir,
     };

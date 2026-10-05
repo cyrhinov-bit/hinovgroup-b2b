@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { Plus, Edit2, Trash2 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { Plus, Edit2, Trash2, ShieldAlert } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 export default function PosUsers() {
   const { users, addUser, updateUser, toggleUserStatus, deleteUser } = useAppContext();
+  const { currentUser } = useAuth();
+  const canManage = !!currentUser && ['Directeur', 'SuperAdmin', 'Directeur adjoint', 'Gerant'].includes(currentUser.role);
   const posUsers = users.filter(u => u.role === 'Gerant' || u.role === 'Caissier');
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
@@ -14,7 +17,8 @@ export default function PosUsers() {
     if (editingUser) {
       await updateUser(editingUser.id, { name: form.name, role: form.role, serviceId: undefined, posReturnsEnabled: !!editingUser.posReturnsEnabled, posCatalogueEnabled: !!editingUser.posCatalogueEnabled });
     } else {
-      await addUser({ id: uuidv4(), name: form.name, email: form.email, pin: form.pin, role: form.role, lastLogin: 'Jamais', active: true, posReturnsEnabled: false, posCatalogueEnabled: false });
+      // Matrice complète des flags POS (M17) : tout est désactivé à la création, à activer via Modules Caissier
+      await addUser({ id: uuidv4(), name: form.name, email: form.email, pin: form.pin, role: form.role, lastLogin: 'Jamais', active: true, posReturnsEnabled: false, posCatalogueEnabled: false, posSupplyEnabled: false, posInventoryEnabled: false, posStockEnabled: false });
     }
     setShowForm(false);
     setEditingUser(null);
@@ -22,6 +26,16 @@ export default function PosUsers() {
   };
 
   const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '14px', outline: 'none' };
+
+  if (!canManage) {
+    return (
+      <div className="pos-page" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <ShieldAlert size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
+        <h2 style={{ fontSize: '20px', fontWeight: 700 }}>Accès réservé</h2>
+        <p style={{ color: 'var(--color-text-muted)' }}>Seuls la Direction et les Gérants peuvent gérer les utilisateurs POS.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="pos-page">
@@ -61,7 +75,7 @@ export default function PosUsers() {
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={() => { setEditingUser(u); setForm({ name: u.name, email: u.email, pin: '', role: u.role as any }); setShowForm(true); }} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}><Edit2 size={16} /></button>
                     <button onClick={() => toggleUserStatus(u.id)} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: u.active ? 'var(--color-warning)' : 'var(--color-success)' }}>{u.active ? 'Désactiver' : 'Activer'}</button>
-                    <button onClick={() => deleteUser(u.id)} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)' }}><Trash2 size={16} /></button>
+                    <button onClick={() => { if (window.confirm(`Supprimer définitivement l'utilisateur ${u.name} ? Cette action est irréversible.`) ) deleteUser(u.id); }} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)' }}><Trash2 size={16} /></button>
                   </div>
                 </td>
               </tr>

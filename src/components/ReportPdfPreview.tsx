@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Download, Printer, FileText, ExternalLink } from 'lucide-react';
 import { Modal } from './ui/Modal';
 import { downloadDataUrl } from '../lib/pdfUtils';
@@ -18,15 +18,31 @@ interface ReportPdfPreviewProps {
 
 export function ReportPdfPreview({ preview, onClose }: ReportPdfPreviewProps) {
   const [activeUrl, setActiveUrl] = useState<string>('');
+  const blobUrlRef = useRef<string>('');
+
+  const revokeTrackedBlob = () => {
+    if (blobUrlRef.current && blobUrlRef.current.startsWith('blob:')) {
+      try { URL.revokeObjectURL(blobUrlRef.current); } catch { /* ignore */ }
+    }
+    blobUrlRef.current = '';
+  };
 
   useEffect(() => {
+    // Révoque l'ancienne URL blob avant d'en afficher une nouvelle (anti-fuite mémoire)
+    revokeTrackedBlob();
     if (preview) {
       const url = preview.blobUrl || preview.dataUrl || '';
+      if (url.startsWith('blob:')) blobUrlRef.current = url;
       setActiveUrl(url);
     } else {
       setActiveUrl('');
     }
   }, [preview]);
+
+  useEffect(() => {
+    // Sécurité : révoque à la destruction du composant
+    return () => { revokeTrackedBlob(); };
+  }, []);
 
   const handleDownload = () => {
     if (!preview) return;

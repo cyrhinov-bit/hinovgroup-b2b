@@ -11,7 +11,7 @@ import ReceiptTicket from '../../components/pos/ReceiptTicket';
 import type { ReceiptData } from '../../components/pos/ReceiptTicket';
 import type { PosTransaction } from '../../context/AppContext';
 import { matchesSearchQuery } from '../../lib/searchUtils';
-import { getWeekKey, formatWeekLabel, isCurrentWeek } from '../../lib/dates';
+import { getWeekKey, formatWeekLabel, isCurrentWeek, todayLocalKey, toLocalDayKey } from '../../lib/dates';
 import { platform } from '../../platform';
 import { toast } from 'react-hot-toast';
 
@@ -44,7 +44,7 @@ export default function PosTransactions() {
 
   const currentWeekKey = getWeekKey(new Date());
 
-  const openSession = posCashSessions.find(s => s.status === 'Ouverte');
+  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === todayLocalKey() && (s.cashierId === currentUser?.id || !s.cashierId));
 
   const filtered = useMemo(() => {
     return posTransactions.filter(t => {
@@ -167,7 +167,12 @@ export default function PosTransactions() {
 
   const canVoid = (t: PosTransaction) => {
     if (t.status !== 'Validée') return false;
-    if (role === 'Directeur' || role === 'Gerant') return true;
+    // Session clôturée = annulation interdite (écart déjà figé ; M6)
+    const sess = posCashSessions.find(s => s.id === t.sessionId);
+    if (sess && sess.status !== 'Ouverte') {
+      if (!(role === 'Directeur' || role === 'Directeur adjoint' || role === 'SuperAdmin')) return false;
+    }
+    if (role === 'Directeur' || role === 'Directeur adjoint' || role === 'SuperAdmin' || role === 'Gerant') return true;
     if (role === 'Caissier') {
       return !!openSession && t.cashierId === currentUser?.id && t.sessionId === openSession.id;
     }
@@ -185,7 +190,11 @@ export default function PosTransactions() {
       variant: 'warning',
       confirmLabel: 'Annuler la vente',
       onConfirm: async () => {
-        await voidPosTransaction(t.id);
+        const ok = await voidPosTransaction(t.id);
+        if (!ok) {
+          toast.error("Annulation impossible : vente déjà traitée ou session de caisse clôturée.");
+          await refreshData();
+        }
       },
     });
   };
@@ -240,7 +249,7 @@ export default function PosTransactions() {
   const handleClearHistory = () => {
     confirm({
       title: "Supprimer l'historique des ventes",
-      message: "Êtes-vous sûr de vouloir supprimer définitivement toutes les transactions de vente, les lignes associées, les paiements et l'historique des retours ?",
+      message: "ATTENTION — IRRÉVERSIBLE : supprime définitivement toutes les transactions, lignes, paiements et retours EN LOCAL ET SUR LE SERVEUR. Exportez vos données avant toute purge.",
       variant: 'danger',
       confirmLabel: "Supprimer tout l'historique",
       onConfirm: async () => {
@@ -272,7 +281,7 @@ export default function PosTransactions() {
           >
             {isRefreshing ? 'Actualisation...' : 'Actualiser'}
           </Button>
-          {(role === 'Directeur' || role === 'Gerant') && posTransactions.length > 0 && (
+          {(role === 'Directeur' || role === 'Directeur adjoint' || role === 'SuperAdmin' || role === 'Gerant' || currentUser?.posRole === 'Gerant') && posTransactions.length > 0 && (
             <Button variant="danger" icon={<Trash2 size={16} />} onClick={handleClearHistory}>
               Vider l'historique des ventes
             </Button>

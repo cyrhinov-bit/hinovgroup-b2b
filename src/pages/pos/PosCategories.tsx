@@ -71,7 +71,7 @@ export default function PosCategories() {
                 <td style={{ padding: '12px 16px' }}>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={() => { setEditing(c); setForm({ name: c.name, family: c.family }); setShowForm(true); }} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}><Edit2 size={16} /></button>
-                    <button onClick={() => deletePosCategory(c.id)} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)' }}><Trash2 size={16} /></button>
+                    <button onClick={async () => { if (window.confirm('Supprimer cette catégorie ?')) { const ok = await deletePosCategory(c.id); if (!ok) alert('Suppression impossible : des produits utilisent cette catégorie.'); } }} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)' }}><Trash2 size={16} /></button>
                   </div>
                 </td>
               </tr>

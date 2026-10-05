@@ -14,7 +14,7 @@ import { ReportPdfPreview, type ReportPdfPreviewData } from '../../components/Re
 import toast from 'react-hot-toast';
 import './CrmWeeklyReports.css';
 
-const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 const TASK_CATEGORIES = ['Opérationnel', 'Commercial', 'Support & Client', 'Technique', 'Administratif', 'Réunion & Stratégie'];
 const QUICK_SUGGESTIONS = [
   { label: '🎯 RDV Client', prefix: 'Rendez-vous client ' },
@@ -30,7 +30,8 @@ export function CrmWeeklyReports() {
   const { 
     v2WeeklyReports, v2DailyReports, users, services, settings, notifications,
     saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, 
-    sendWeeklyReportReminder, reviewV2WeeklyReport, markNotificationAsRead 
+    sendWeeklyReportReminder, reviewV2WeeklyReport, markNotificationAsRead,
+    deleteV2WeeklyReport, deleteV2DailyReport
   } = useAppContext();
   const { confirm } = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -92,6 +93,11 @@ export function CrmWeeklyReports() {
   const [searchQuery, setSearchQuery] = useState('');
   const [serviceFilter, setServiceFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  // Pagination du flux des rapports soumis (évite les rendus lourds à grand effectif)
+  const SUBMITTED_PAGE_SIZE = 10;
+  const [submittedPage, setSubmittedPage] = useState(1);
+  // Archive par semaine : 'ALL' = toutes les semaines, sinon weekStart normalisé (YYYY-MM-DD)
+  const [weekFilter, setWeekFilter] = useState('ALL');
 
   // Synchroniser paramètres URL et routes
   useEffect(() => {
@@ -149,7 +155,7 @@ export function CrmWeeklyReports() {
   }, [v2WeeklyReports, currentUser?.id, currentWeekStart]);
 
   const isWeekLocked = useMemo(() => {
-    return currentWeeklyReport?.status === 'Soumis' || currentWeeklyReport?.status === 'Validé';
+    return currentWeeklyReport?.isLocked === true || currentWeeklyReport?.status === 'Soumis' || currentWeeklyReport?.status === 'Validé' || currentWeeklyReport?.status === 'Relu';
   }, [currentWeeklyReport]);
 
   // Initialiser les champs du formulaire hebdomadaire lors du changement de semaine / rapport
@@ -213,7 +219,7 @@ export function CrmWeeklyReports() {
       id: currentDailyReport?.id || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()),
       authorId: currentUser?.id || '',
       date: currentDayDate,
-      project: 'HINOV',
+      project: 'HINOV GROUP',
       objectives: currentDailyReport?.objectives || '',
       tasks: updatedTasks,
       results: currentDailyReport?.results || '',
@@ -268,6 +274,49 @@ export function CrmWeeklyReports() {
     }
   };
 
+  // 3b. Vider le jour sélectionné (supprime le daily report)
+  const handleClearDay = () => {
+    if (isWeekLocked || !currentDailyReport) return;
+    confirm({
+      title: `Vider les activités du ${selectedDay}`,
+      message: `Supprimer les ${dailyTasks.length} activité(s) du ${selectedDay} ${new Date(currentDayDate + 'T00:00:00').toLocaleDateString('fr-FR')} ? Cette action est irréversible.`,
+      confirmLabel: 'Vider le jour',
+      onConfirm: async () => {
+        try {
+          await deleteV2DailyReport(currentDailyReport.id);
+          toast.success(`Activités du ${selectedDay} supprimées.`);
+        } catch (e) {
+          console.error('[RapportHebdo] Suppression jour échouée :', e);
+          toast.error('Échec de la suppression du jour.');
+        }
+      }
+    });
+  };
+
+  // 3c. Supprimer le brouillon hebdomadaire (uniquement si non soumis)
+  const handleDeleteDraft = () => {
+    if (isWeekLocked || !currentWeeklyReport) return;
+    confirm({
+      title: 'Supprimer le brouillon',
+      message: `Supprimer définitivement le brouillon de la semaine du ${new Date(currentWeekStart + 'T00:00:00').toLocaleDateString('fr-FR')} ? Les activités journalières sont conservées.`,
+      confirmLabel: 'Supprimer le brouillon',
+      onConfirm: async () => {
+        try {
+          await deleteV2WeeklyReport(currentWeeklyReport.id);
+          setSummary('');
+          setAchievements('');
+          setDifficulties('');
+          setNextWeekObjectives('');
+          setWeeklyObjectives('');
+          toast.success('Brouillon supprimé.');
+        } catch (e) {
+          console.error('[RapportHebdo] Suppression brouillon échouée :', e);
+          toast.error('Échec de la suppression du brouillon.');
+        }
+      }
+    });
+  };
+
   // 4. Consolider et importer les tâches de la semaine dans le brouillon
   const handleConsolidateWeek = () => {
     const tasksByDayMap: Record<string, V2Task[]> = {};
@@ -304,7 +353,10 @@ export function CrmWeeklyReports() {
 
   // 5. Sauvegarder le brouillon de rapport
   const handleSaveDraft = async () => {
-    const tasksByDayMap: Record<string, V2Task[]> = {};
+    if (isWeekLocked) {
+      toast.error('Semaine verrouillée : le rapport déjà soumis ne peut plus être modifié.');
+      return;
+    }    const tasksByDayMap: Record<string, V2Task[]> = {};
     DAYS.forEach(day => {
       const dStr = weekDates[day];
       const rep = v2DailyReports.find(d => d.authorId === currentUser?.id && (d.date === dStr || d.date?.startsWith(dStr)));
@@ -315,7 +367,7 @@ export function CrmWeeklyReports() {
       id: currentWeeklyReport?.id || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()),
       authorId: currentUser?.id || '',
       weekStart: currentWeekStart,
-      weekEnd: weekDates['Samedi'],
+      weekEnd: weekDates['Dimanche'],
       project: 'HINOV GROUP',
       weeklyObjectives,
       tasksByDay: tasksByDayMap,
@@ -330,41 +382,60 @@ export function CrmWeeklyReports() {
     toast.success('Brouillon de rapport sauvegardé.');
   };
 
-  // 6. Soumettre le rapport hebdomadaire à la Direction
+  // 6. Soumettre le rapport hebdomadaire à la Direction (appel atomique unique)
   const handleSubmitReport = () => {
     if (isWeekLocked) return;
+    // Validation minimale : empêche les rapports vides
+    const tasksCount = DAYS.reduce((sum, day) => {
+      const dStr = weekDates[day];
+      const rep = v2DailyReports.find(d => d.authorId === currentUser?.id && (d.date === dStr || d.date?.startsWith(dStr)));
+      return sum + (rep?.tasks?.length || 0);
+    }, 0);
+    if (tasksCount === 0) {
+      toast.error('Ajoutez au moins une activité journalière avant de soumettre.');
+      return;
+    }
+    if (!achievements.trim() && !summary.trim()) {
+      toast.error('Renseignez la synthèse / réalisations avant de soumettre.');
+      return;
+    }
 
     confirm({
       title: 'Soumettre mon rapport à la Direction',
       message: 'Attention : La soumission verrouillera définitivement toutes les activités de cette semaine pour garantir l\'intégrité des comptes-rendus. Confirmez-vous l\'envoi officiel ?',
       confirmLabel: 'Confirmer et soumettre',
       onConfirm: async () => {
-        const tasksByDayMap: Record<string, V2Task[]> = {};
-        DAYS.forEach(day => {
-          const dStr = weekDates[day];
-          const rep = v2DailyReports.find(d => d.authorId === currentUser?.id && (d.date === dStr || d.date?.startsWith(dStr)));
-          tasksByDayMap[day] = rep?.tasks || [];
-        });
+        try {
+          const tasksByDayMap: Record<string, V2Task[]> = {};
+          DAYS.forEach(day => {
+            const dStr = weekDates[day];
+            const rep = v2DailyReports.find(d => d.authorId === currentUser?.id && (d.date === dStr || d.date?.startsWith(dStr)));
+            tasksByDayMap[day] = rep?.tasks || [];
+          });
 
-        const reportId = currentWeeklyReport?.id || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString());
-        const reportObj: V2WeeklyReport = {
-          id: reportId,
-          authorId: currentUser?.id || '',
-          weekStart: currentWeekStart,
-          weekEnd: weekDates['Samedi'],
-          project: 'HINOV GROUP',
-          weeklyObjectives,
-          tasksByDay: tasksByDayMap,
-          summary,
-          achievements,
-          difficulties,
-          nextWeekObjectives,
-          status: 'Soumis'
-        };
+          const reportId = currentWeeklyReport?.id || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString());
+          const reportObj: V2WeeklyReport = {
+            id: reportId,
+            authorId: currentUser?.id || '',
+            weekStart: currentWeekStart,
+            weekEnd: weekDates['Dimanche'],
+            project: 'HINOV GROUP',
+            weeklyObjectives,
+            tasksByDay: tasksByDayMap,
+            summary,
+            achievements,
+            difficulties,
+            nextWeekObjectives,
+            status: 'Soumis'
+          };
 
-        await saveV2WeeklyReport(reportObj);
-        await submitV2WeeklyReport(reportId);
-        toast.success('Rapport hebdomadaire soumis avec succès à la Direction !');
+          // Appel atomique : submit persiste le rapport + verrouille les dailies + notifie la Direction
+          await submitV2WeeklyReport(reportObj);
+          toast.success('Rapport hebdomadaire soumis avec succès à la Direction !');
+        } catch (e) {
+          console.error('[RapportHebdo] Soumission échouée :', e);
+          toast.error('Échec de la soumission. Vérifiez votre connexion, le brouillon est conservé.');
+        }
       }
     });
   };
@@ -374,7 +445,7 @@ export function CrmWeeklyReports() {
     const targetWeekStart = reportToPreview?.weekStart || currentWeekStart;
     const authorId = reportToPreview ? reportToPreview.authorId : (currentUser?.id || '');
     
-    // Calculer les dates exactes de la semaine cible (du Lundi au Samedi)
+    // Calculer les dates exactes de la semaine cible (du Lundi au Dimanche)
     const targetStartDate = new Date(targetWeekStart + 'T00:00:00');
     const targetWeekDates: Record<string, string> = {};
     DAYS.forEach((day, idx) => {
@@ -407,7 +478,7 @@ export function CrmWeeklyReports() {
           id: currentWeeklyReport?.id || 'temp-id',
           authorId: currentUser?.id || '',
           weekStart: currentWeekStart,
-          weekEnd: weekDates['Samedi'],
+          weekEnd: weekDates['Dimanche'],
           weeklyObjectives,
           tasksByDay: tasksByDayRecord,
           summary,
@@ -444,19 +515,25 @@ export function CrmWeeklyReports() {
   }, [users, v2WeeklyReports]);
 
   // Tous les rapports soumis (indépendamment de la semaine sélectionnée)
+  // Tri archive : semaine décroissante puis date de soumission décroissante
   const allSubmittedReports = useMemo(() => {
     return v2WeeklyReports
       .filter(r => r.status === 'Soumis' || r.status === 'Validé' || r.status === 'Relu')
       .sort((a, b) => {
-        const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : new Date(a.weekStart).getTime();
-        const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : new Date(b.weekStart).getTime();
+        const weekCmp = (b.weekStart || '').localeCompare(a.weekStart || '');
+        if (weekCmp !== 0) return weekCmp;
+        const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+        const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
         return dateB - dateA;
       });
   }, [v2WeeklyReports]);
 
   // Rapports pour la semaine active sélectionnée
+  // Normalisation défensive : la base peut renvoyer week_start en DATE (YYYY-MM-DD)
+  // ou en ISO datetime — on compare toujours sur les 10 premiers caractères.
+  const normWeek = (s?: string) => (s || '').slice(0, 10);
   const weeklyReportsForSelectedWeek = useMemo(() => {
-    return v2WeeklyReports.filter(r => r.weekStart === currentWeekStart);
+    return v2WeeklyReports.filter(r => normWeek(r.weekStart) === normWeek(currentWeekStart));
   }, [v2WeeklyReports, currentWeekStart]);
 
   const submittedStaffIds = useMemo(() => {
@@ -472,6 +549,9 @@ export function CrmWeeklyReports() {
     : 0;
 
   // Filtrage des rapports soumis
+  // Note : le filtre "ATTENTE" concerne le tableau de complétion ci-dessous,
+  // pas cette liste (qui ne contient que des rapports déjà soumis) → on l'ignore ici.
+  // "SOUMIS" = reçus à valider (statut Soumis), "Validé"/"Relu" restent visibles en ALL.
   const filteredSubmittedReports = useMemo(() => {
     return allSubmittedReports.filter(r => {
       const author = users.find(u => u.id === r.authorId);
@@ -482,23 +562,54 @@ export function CrmWeeklyReports() {
         (r.summary || '').toLowerCase().includes(searchQuery.toLowerCase())
       ) : true;
       const matchService = serviceFilter === 'ALL' ? true : author?.serviceId === serviceFilter;
-      const matchStatus = statusFilter === 'ALL' ? true : (
+      const matchStatus = statusFilter === 'ALL' || statusFilter === 'ATTENTE' ? true : (
         statusFilter === 'SOUMIS' ? (r.status === 'Soumis') : (r.status === statusFilter)
       );
-      return matchSearch && matchService && matchStatus;
+      const matchWeek = weekFilter === 'ALL' ? true : normWeek(r.weekStart) === weekFilter;
+      return matchSearch && matchService && matchStatus && matchWeek;
     });
-  }, [allSubmittedReports, searchQuery, serviceFilter, statusFilter, users]);
+  }, [allSubmittedReports, searchQuery, serviceFilter, statusFilter, weekFilter, users]);
+
+  // Semaines d'archive disponibles (semaine normalisée + nombre de rapports), tri décroissant
+  const availableWeeks = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of allSubmittedReports) {
+      const w = normWeek(r.weekStart);
+      if (!w) continue;
+      counts.set(w, (counts.get(w) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([week, count]) => ({
+        week,
+        count,
+        label: `Semaine du ${new Date(week + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })} (${count})`
+      }));
+  }, [allSubmittedReports]);
 
   // Filtrage du cockpit de supervision (équipe)
+  // Note : "Validé"/"Relu" concernent la liste d'archive ci-dessus → ignorés ici (équivalent ALL).
   const filteredStaffList = useMemo(() => {
     return activeStaff.filter(u => {
       const matchSearch = searchQuery ? u.name.toLowerCase().includes(searchQuery.toLowerCase()) || u.email.toLowerCase().includes(searchQuery.toLowerCase()) : true;
       const matchService = serviceFilter === 'ALL' ? true : u.serviceId === serviceFilter;
       const isSubmitted = submittedStaffIds.includes(u.id);
-      const matchStatus = statusFilter === 'ALL' ? true : (statusFilter === 'SOUMIS' ? isSubmitted : !isSubmitted);
+      const matchStatus = (statusFilter === 'ALL' || statusFilter === 'Validé' || statusFilter === 'Relu') ? true : (statusFilter === 'SOUMIS' ? isSubmitted : !isSubmitted);
       return matchSearch && matchService && matchStatus;
     });
   }, [activeStaff, searchQuery, serviceFilter, statusFilter, submittedStaffIds]);
+
+  // Pagination du flux soumis + reset auto quand les filtres changent
+  useEffect(() => {
+    setSubmittedPage(1);
+  }, [searchQuery, serviceFilter, statusFilter, weekFilter, currentWeekStart]);
+
+  const submittedTotalPages = Math.max(1, Math.ceil(filteredSubmittedReports.length / SUBMITTED_PAGE_SIZE));
+  const safeSubmittedPage = Math.min(submittedPage, submittedTotalPages);
+  const paginatedSubmittedReports = useMemo(() => {
+    const start = (safeSubmittedPage - 1) * SUBMITTED_PAGE_SIZE;
+    return filteredSubmittedReports.slice(start, start + SUBMITTED_PAGE_SIZE);
+  }, [filteredSubmittedReports, safeSubmittedPage]);
 
   // Relancer tous les retardataires
   const handleRemindAllPending = () => {
@@ -615,7 +726,7 @@ export function CrmWeeklyReports() {
               fontWeight: activeTab === 'daily' ? 700 : 500, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px'
             }}
           >
-            <Clock size={16} /> 1. Saisie Journalière (Lun - Sam)
+            <Clock size={16} /> 1. Saisie Journalière (Lun - Dim)
           </button>
 
           <button 
@@ -926,10 +1037,20 @@ export function CrmWeeklyReports() {
 
             {/* LISTE DES ACTIVITÉS DU JOUR */}
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
                 <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>
                   Liste des activités enregistrées ({dailyTasks.length})
                 </h4>
+                {dailyTasks.length > 0 && !isWeekLocked && currentDailyReport && (
+                  <button
+                    className="btn btn-secondary"
+                    style={{ fontSize: '0.8rem', padding: '4px 10px', color: '#DC2626' }}
+                    onClick={handleClearDay}
+                    title={`Supprimer toutes les activités du ${selectedDay}`}
+                  >
+                    <Trash2 size={14} style={{ marginRight: '4px' }} /> Vider le jour
+                  </button>
+                )}
               </div>
 
               {dailyTasks.length === 0 ? (
@@ -1049,6 +1170,11 @@ export function CrmWeeklyReports() {
                   <button className="btn btn-primary" onClick={handleSubmitReport} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#059669' }}>
                     <Send size={16} /> SOUMETTRE À LA DIRECTION
                   </button>
+                  {currentWeeklyReport && (
+                    <button className="btn btn-secondary" onClick={handleDeleteDraft} style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#DC2626' }} title="Supprimer définitivement ce brouillon">
+                      <Trash2 size={16} /> Supprimer brouillon
+                    </button>
+                  )}
                 </>
               ) : (
                 <button className="btn btn-primary" onClick={() => handlePreviewPdf()} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1193,6 +1319,26 @@ export function CrmWeeklyReports() {
                           >
                             <Eye size={14} style={{ marginRight: '4px' }} /> PDF
                           </button>
+                          {rep.status === 'Brouillon' && (
+                            <button
+                              className="btn btn-secondary"
+                              style={{ fontSize: '0.8rem', padding: '4px 8px', color: '#DC2626' }}
+                              onClick={() => {
+                                confirm({
+                                  title: 'Supprimer ce brouillon',
+                                  message: `Supprimer définitivement le brouillon de la semaine du ${new Date(rep.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')} ?`,
+                                  confirmLabel: 'Supprimer',
+                                  onConfirm: async () => {
+                                    await deleteV2WeeklyReport(rep.id);
+                                    toast.success('Brouillon supprimé.');
+                                  }
+                                });
+                              }}
+                              title="Supprimer ce brouillon"
+                            >
+                              <Trash2 size={14} style={{ marginRight: '4px' }} /> Supprimer
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1204,10 +1350,23 @@ export function CrmWeeklyReports() {
                     </td>
                   </tr>
                 )}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
+            {submittedTotalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: '14px', flexWrap: 'wrap' }}>
+                <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '4px 10px' }} disabled={safeSubmittedPage <= 1} onClick={() => setSubmittedPage(p => Math.max(1, p - 1))}>
+                  ← Précédent
+                </button>
+                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                  Page {safeSubmittedPage} / {submittedTotalPages} — {filteredSubmittedReports.length} rapport(s)
+                </span>
+                <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '4px 10px' }} disabled={safeSubmittedPage >= submittedTotalPages} onClick={() => setSubmittedPage(p => Math.min(submittedTotalPages, p + 1))}>
+                  Suivant →
+                </button>
+              </div>
+            )}
           </div>
-        </div>
       )}
 
       {/* ================= COCKPIT SUPERVISION DIRECTION : RAPPORTS ÉQUIPE ================= */}
@@ -1267,9 +1426,16 @@ export function CrmWeeklyReports() {
                 {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
 
+              <select className="table-input" value={weekFilter} onChange={e => setWeekFilter(e.target.value)} title="Filtrer les archives par semaine">
+                <option value="ALL">📅 Toutes les semaines ({allSubmittedReports.length})</option>
+                {availableWeeks.map(w => <option key={w.week} value={w.week}>{w.label}</option>)}
+              </select>
+
               <select className="table-input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
                 <option value="ALL">Tous les statuts</option>
-                <option value="SOUMIS">✅ Rapports Reçus ({submittedStaffIds.length})</option>
+                <option value="SOUMIS">📩 Reçus à valider ({allSubmittedReports.filter(r => r.status === 'Soumis').length})</option>
+                <option value="Validé">✅ Validés ({allSubmittedReports.filter(r => r.status === 'Validé').length})</option>
+                <option value="Relu">👁️ Relus ({allSubmittedReports.filter(r => r.status === 'Relu').length})</option>
                 <option value="ATTENTE">⏳ En Attente ({pendingStaff.length})</option>
               </select>
             </div>
@@ -1285,20 +1451,37 @@ export function CrmWeeklyReports() {
             )}
           </div>
 
-          {/* 1. SECTION PRINCIPALE : FLUX DE TOUS LES RAPPORTS SOUMIS PAR L'ÉQUIPE */}
+          {/* 1. SECTION PRINCIPALE : ARCHIVES DES RAPPORTS SOUMIS PAR L'ÉQUIPE */}
           <div className="card" style={{ padding: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <ClipboardCheck size={20} color="#7C3AED" /> Rapports Soumis par l'Équipe ({filteredSubmittedReports.length})
+                  <ClipboardCheck size={20} color="#7C3AED" /> Archives — Rapports Soumis par l'Équipe ({filteredSubmittedReports.length})
                 </h3>
                 <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
-                  Liste complète des comptes-rendus hebdomadaires officiellement transmis à la Direction
+                  {weekFilter === 'ALL'
+                    ? "Historique complet des comptes-rendus transmis à la Direction, toutes semaines confondues"
+                    : `Consultation de l'archive : semaine du ${new Date(weekFilter + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}`}
                 </p>
               </div>
-              <span className="badge-status bg-primary" style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
-                {allSubmittedReports.filter(r => r.status === 'Soumis').length} en attente de validation
-              </span>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {weekFilter !== 'ALL' && (
+                  <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '4px 10px' }} onClick={() => setWeekFilter('ALL')}>
+                    ✕ Toutes les semaines
+                  </button>
+                )}
+                <button
+                  className="btn btn-secondary"
+                  style={{ fontSize: '0.8rem', padding: '4px 10px' }}
+                  onClick={() => setWeekFilter(normWeek(currentWeekStart))}
+                  title="Filtrer les archives sur la semaine sélectionnée ci-dessus"
+                >
+                  📅 Semaine affichée ci-dessus
+                </button>
+                <span className="badge-status bg-primary" style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
+                  {allSubmittedReports.filter(r => r.status === 'Soumis' || r.status === 'Relu').length} en attente de validation
+                </span>
+              </div>
             </div>
 
             <div className="table-responsive">
@@ -1314,10 +1497,11 @@ export function CrmWeeklyReports() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSubmittedReports.map(report => {
+                  {paginatedSubmittedReports.map(report => {
                     const author = users.find(u => u.id === report.authorId);
                     const serviceName = services.find(s => s.id === author?.serviceId)?.name || 'Général';
                     const isValide = report.status === 'Validé';
+                    const isRelu = report.status === 'Relu';
 
                     return (
                       <tr key={report.id}>
@@ -1344,8 +1528,8 @@ export function CrmWeeklyReports() {
                           {report.submittedAt ? new Date(report.submittedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
                         </td>
                         <td data-label="Statut">
-                          <span className={`badge-status ${isValide ? 'bg-success' : 'bg-info'}`}>
-                            {isValide ? '✅ Validé' : '📩 Reçu (À valider)'}
+                          <span className={`badge-status ${isValide ? 'bg-success' : isRelu ? 'bg-warning' : 'bg-info'}`}>
+                            {isValide ? '✅ Validé' : isRelu ? '👁️ Relu (À valider)' : '📩 Reçu (À valider)'}
                           </span>
                         </td>
                         <td data-label="Actions">
@@ -1375,7 +1559,16 @@ export function CrmWeeklyReports() {
                     <tr>
                       <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--color-text-muted)' }}>
                         <FileText size={36} color="var(--color-text-muted)" style={{ margin: '0 auto 8px', opacity: 0.6 }} />
-                        <div>Aucun rapport soumis trouvé pour ces critères de recherche.</div>
+                        <div>Aucun rapport soumis trouvé pour ces critères{weekFilter !== 'ALL' ? ' pour cette semaine d\'archive' : ''}.</div>
+                        {(searchQuery || serviceFilter !== 'ALL' || statusFilter !== 'ALL' || weekFilter !== 'ALL') && (
+                          <button
+                            className="btn btn-secondary"
+                            style={{ fontSize: '0.8rem', padding: '4px 12px', marginTop: '10px' }}
+                            onClick={() => { setSearchQuery(''); setServiceFilter('ALL'); setStatusFilter('ALL'); setWeekFilter('ALL'); }}
+                          >
+                            Réinitialiser les filtres
+                          </button>
+                        )}
                       </td>
                     </tr>
                   )}

@@ -20,7 +20,7 @@ interface ReturnLine {
 }
 
 export default function PosReturns() {
-  const { posReturns, posTransactions, addPosReturn, cancelPosReturn, posProducts, posCashSessions } = useAppContext();
+  const { posReturns, posTransactions, addPosReturn, cancelPosReturn, posProducts, posCashSessions, addPosTransaction, voidPosTransaction, updatePosReturn } = useAppContext();
   const { currentUser } = useAuth();
   const today = todayLocalKey();
   const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today && (s.cashierId === currentUser?.id || !s.cashierId));
@@ -39,6 +39,9 @@ export default function PosReturns() {
   const [returnLines, setReturnLines] = useState<ReturnLine[]>([]);
   const [exchangeLines, setExchangeLines] = useState<ExchangeLine[]>([]);
   const [notes, setNotes] = useState('');
+  const [refundMethod, setRefundMethod] = useState<'Espèces' | 'Mobile Money'>('Espèces');
+  const [complementMethod, setComplementMethod] = useState<'Espèces' | 'Mobile Money'>('Espèces');
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
   
   // Nouveaux états pour la recherche de ticket
   const [ticketSearch, setTicketSearch] = useState('');
@@ -52,7 +55,10 @@ export default function PosReturns() {
   const [productSearch, setProductSearch] = useState('');
 
   const role = currentUser?.role;
-  const canHandleReturns = role === 'Directeur' || role === 'Gerant' || role === 'Responsable' || (role === 'Caissier' && currentUser?.posReturnsEnabled);
+  const posRole = (currentUser as any)?.posRole;
+  const isReturnManager = role === 'Directeur' || role === 'Directeur adjoint' || role === 'SuperAdmin' || role === 'Gerant' || posRole === 'Gerant';
+  // Aligné sur la route (Directeur, Gerant, Caissier) : Caissier (rôle ou posRole) uniquement avec module Retours
+  const canHandleReturns = isReturnManager || ((role === 'Caissier' || posRole === 'Caissier') && !!currentUser?.posReturnsEnabled);
 
   const filteredReturns = useMemo(() => {
     return posReturns.filter(r => {
@@ -184,6 +190,15 @@ export default function PosReturns() {
   };
 
   const addExchangeLine = (product: typeof posProducts[0]) => {
+    // Contrôle stock (M10) : pas d'échange au-delà du disponible (les services ne sont pas stockés)
+    const isService = product.family === 'Service' || product.reference?.startsWith('SRV-');
+    if (!isService) {
+      const already = exchangeLines.find(l => l.productId === product.id)?.quantity || 0;
+      if (already + 1 > (product.quantity ?? 0)) {
+        alert(`Stock insuffisant pour ${product.name} : ${product.quantity ?? 0} disponible(s).`);
+        return;
+      }
+    }
     setExchangeLines(prev => {
       const existing = prev.find(l => l.productId === product.id);
       if (existing) {
@@ -207,6 +222,13 @@ export default function PosReturns() {
       setExchangeLines(prev => prev.filter((_, i) => i !== idx));
       return;
     }
+    const line = exchangeLines[idx];
+    const product = line?.productId ? posProducts.find(p => p.id === line.productId) : undefined;
+    const isService = !product || product.family === 'Service' || product.reference?.startsWith('SRV-');
+    if (!isService && product && qty > (product.quantity ?? 0)) {
+      alert(`Stock insuffisant pour ${product.name} : ${product.quantity ?? 0} disponible(s).`);
+      return;
+    }
     setExchangeLines(prev => prev.map((l, i) => {
       if (i !== idx) return l;
       return { ...l, quantity: qty, total: Math.round(qty * l.unitPrice) };
@@ -227,6 +249,8 @@ export default function PosReturns() {
     setReturnLines([]);
     setExchangeLines([]);
     setNotes('');
+    setRefundMethod('Espèces');
+    setComplementMethod('Espèces');
     setTicketSearch('');
     setTicketSearchResults([]);
     setTicketSearched(false);
@@ -234,7 +258,8 @@ export default function PosReturns() {
   };
 
   const handleSubmit = async () => {
-    if (!canHandleReturns) { alert('Seuls le Directeur ou le Gérant peuvent traiter un retour.'); return; }
+    if (isSubmittingReturn) return;
+    if (!canHandleReturns) { alert('Traitement des retours réservé à la Direction, aux Gérants et aux Caissiers habilités.'); return; }
     if (!selectedTxId) { alert('Sélectionnez la transaction d\'origine du retour.'); return; }
     
     // RÈGLE 13: Sécuriser la validation
@@ -273,38 +298,83 @@ export default function PosReturns() {
     const returnNumber = `RET-${Date.now().toString(36).toUpperCase()}`;
     const returnId = uuidv4();
     const totalRefund = difference < 0 ? Math.abs(difference) : 0;
+    const amountToPay = difference > 0 ? difference : 0;
 
     if (totalRefund > 0 && !openSession) {
       if (!window.confirm("Attention: Aucune session de caisse n'est ouverte pour votre compte pour imputer ce remboursement d'espèces. Voulez-vous continuer ?")) {
         return;
       }
     }
-    
-    await addPosReturn({
-      id: returnId,
-      returnNumber,
-      transactionId: selectedTxId,
-      sessionId: openSession?.id,
-      date: new Date().toISOString(),
-      type: returnType,
-      totalRefund,
-      totalExchange: returnType === 'Retour avec échange' ? totalExchangeAmount : 0,
-      amountToPay: difference > 0 ? difference : 0,
-      status: 'Traité',
-      // RÈGLE 14: Les lignes sauvegardées utilisent le prix historique stocké dans returnLines
-      lines: validLines.map(l => ({ id: uuidv4(), ...l })),
-      exchangeLines: returnType === 'Retour avec échange' ? exchangeLines.map(l => ({ ...l, id: uuidv4() })) : undefined,
-      notes,
-      createdBy: currentUser?.id || currentUser?.name
-    });
 
-    handleCloseForm();
+    // Complément d'échange (B7) : de l'argent est ENCAISSÉ → session obligatoire + transaction dédiée
+    if (amountToPay > 0 && !openSession) {
+      alert("Un complément est dû par le client : ouvrez d'abord votre session de caisse pour l'encaisser.");
+      return;
+    }
+
+    setIsSubmittingReturn(true);
+    try {
+      let complementTransactionId: string | undefined;
+      if (amountToPay > 0 && openSession) {
+        const complementId = uuidv4();
+        await addPosTransaction({
+          id: complementId,
+          transactionNumber: `CMP-${Date.now().toString(36).toUpperCase()}`,
+          cashierId: currentUser?.id,
+          sessionId: openSession.id,
+          date: new Date().toISOString(),
+          subtotal: amountToPay,
+          vat: 0,
+          discountAmount: 0,
+          total: amountToPay,
+          receivedAmount: amountToPay,
+          changeAmount: 0,
+          status: 'Validée',
+          // Ligne descriptive sans produit : le stock a déjà été mouvementé via les lignes d'échange
+          lines: [{
+            id: uuidv4(),
+            description: `Complément d'échange ${returnNumber}`,
+            quantity: 1,
+            unitPrice: amountToPay,
+            discountPercent: 0,
+            discountAmount: 0,
+            total: amountToPay
+          }],
+          payments: [{ id: uuidv4(), method: complementMethod, amount: amountToPay }]
+        });
+        complementTransactionId = complementId;
+      }
+
+      await addPosReturn({
+        id: returnId,
+        returnNumber,
+        transactionId: selectedTxId,
+        sessionId: openSession?.id,
+        date: new Date().toISOString(),
+        type: returnType,
+        totalRefund,
+        totalExchange: returnType === 'Retour avec échange' ? totalExchangeAmount : 0,
+        amountToPay,
+        refundMethod: totalRefund > 0 ? refundMethod : undefined,
+        complementTransactionId,
+        status: 'Traité',
+        // RÈGLE 14: Les lignes sauvegardées utilisent le prix historique stocké dans returnLines
+        lines: validLines.map(l => ({ id: uuidv4(), ...l })),
+        exchangeLines: returnType === 'Retour avec échange' ? exchangeLines.map(l => ({ ...l, id: uuidv4() })) : undefined,
+        notes,
+        createdBy: currentUser?.id || currentUser?.name
+      });
+
+      handleCloseForm();
+    } finally {
+      setIsSubmittingReturn(false);
+    }
   };
 
   const detailObj = detailReturn ? posReturns.find(r => r.id === detailReturn) : null;
 
   const handleCancelReturn = (r: typeof posReturns[number]) => {
-    if (!canHandleReturns) { alert('Seuls le Directeur ou le Gérant peuvent annuler un retour.'); return; }
+    if (!canHandleReturns) { alert('Annulation des retours réservée à la Direction, aux Gérants et aux Caissiers habilités.'); return; }
     confirm({
       title: 'Annuler le retour',
       message: `Voulez-vous annuler le retour ${r.returnNumber} ? Les stocks seront ré-inversés et les impacts financiers annulés.`,
@@ -699,11 +769,29 @@ export default function PosReturns() {
                 </div>
               )}
 
-              {/* NOTES */}
+              {/* NOTES + MODES DE RÈGLEMENT */}
               {selectedTx && (
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text)' }}>Notes internes (optionnel)</label>
-                  <textarea placeholder="Ajouter une remarque concernant cette opération..." value={notes} onChange={e => setNotes(e.target.value)} rows={2} style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '14px', resize: 'vertical', outline: 'none' }} />
+                <div style={{ marginBottom: '16px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  <div style={{ flex: '2 1 260px' }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text)' }}>Notes internes (optionnel)</label>
+                    <textarea placeholder="Ajouter une remarque concernant cette opération..." value={notes} onChange={e => setNotes(e.target.value)} rows={2} style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '14px', resize: 'vertical', outline: 'none' }} />
+                  </div>
+                  <div style={{ flex: '1 1 180px' }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text)' }}>Mode de remboursement</label>
+                    <select value={refundMethod} onChange={e => setRefundMethod(e.target.value as any)} style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '14px', outline: 'none' }}>
+                      <option value="Espèces">Espèces (tiroir)</option>
+                      <option value="Mobile Money">Mobile Money</option>
+                    </select>
+                    {difference > 0 && (
+                      <div style={{ marginTop: '12px' }}>
+                        <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text)' }}>Encaissement du complément</label>
+                        <select value={complementMethod} onChange={e => setComplementMethod(e.target.value as any)} style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '14px', outline: 'none' }}>
+                          <option value="Espèces">Espèces (tiroir)</option>
+                          <option value="Mobile Money">Mobile Money</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -731,9 +819,9 @@ export default function PosReturns() {
                   <button onClick={handleCloseForm} style={{ padding: '10px 20px', background: 'white', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 }}>
                     Annuler
                   </button>
-                  <button onClick={handleSubmit} disabled={!returnLines.length || returnLines.every(l => l.quantity === 0)} style={{ padding: '10px 20px', background: 'var(--color-primary)', color: 'white', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer', fontWeight: 500, opacity: (!returnLines.length || returnLines.every(l => l.quantity === 0)) ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button onClick={handleSubmit} disabled={isSubmittingReturn || !returnLines.length || returnLines.every(l => l.quantity === 0)} style={{ padding: '10px 20px', background: 'var(--color-primary)', color: 'white', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer', fontWeight: 500, opacity: (isSubmittingReturn || !returnLines.length || returnLines.every(l => l.quantity === 0)) ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <RotateCcw size={16} />
-                    {returnType === 'Retour simple' ? 'Valider le retour' : 'Valider l\'échange'}
+                    {isSubmittingReturn ? 'Traitement...' : (returnType === 'Retour simple' ? 'Valider le retour' : 'Valider l\'échange')}
                   </button>
                 </div>
               </div>

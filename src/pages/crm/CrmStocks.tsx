@@ -110,10 +110,10 @@ export function CrmStocks() {
       code_article: formData.code_article.trim().toUpperCase(),
       designation: formData.designation.trim(),
       categorie: formData.categorie?.trim() || 'Général',
-      quantite_stock: toNumber(formData.quantite_stock, 0),
-      seuil_alerte: toNumber(formData.seuil_alerte, 5),
-      cout_unitaire_achat: toNumber(formData.cout_unitaire_achat, 0),
-      prix_unitaire_vente: toNumber(formData.prix_unitaire_vente, 0),
+      quantite_stock: Math.max(0, toNumber(formData.quantite_stock, 0)),
+      seuil_alerte: Math.max(0, toNumber(formData.seuil_alerte, 5)),
+      cout_unitaire_achat: Math.max(0, toNumber(formData.cout_unitaire_achat, 0)),
+      prix_unitaire_vente: Math.max(0, toNumber(formData.prix_unitaire_vente, 0)),
       cree_par: editingArticle ? editingArticle.cree_par : currentUser?.id,
       cree_par_nom: editingArticle ? editingArticle.cree_par_nom : currentUser?.name
     };
@@ -152,7 +152,7 @@ export function CrmStocks() {
     setAdjustingArticle(null);
   };
 
-  if (!isDirecteur && !currentUser?.crmStocksEnabled) {
+  if (!isDirecteur && currentUser?.crmStocksEnabled === false) {
     return (
       <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
         <Package size={48} color="var(--color-error)" style={{ margin: '0 auto 16px' }} />
@@ -271,8 +271,10 @@ export function CrmStocks() {
             </thead>
             <tbody>
               {filteredArticles.map(art => {
-                const isAlert = (art.quantite_stock || 0) <= (art.seuil_alerte || 5);
-                const isRupture = (art.quantite_stock || 0) === 0;
+                const qty = art.quantite_stock || 0;
+                const isAlert = qty <= (art.seuil_alerte || 5);
+                // Rupture : stock épuisé ou incohérent (<= 0) — un négatif hérité reste signalé rupture
+                const isRupture = qty <= 0;
                 const totalValAchat = (art.quantite_stock || 0) * (art.cout_unitaire_achat || 0);
                 const coutAchat = art.cout_unitaire_achat || 0;
                 const prixVente = art.prix_unitaire_vente || 0;

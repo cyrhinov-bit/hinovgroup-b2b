@@ -306,9 +306,10 @@ export function DashboardDirecteur() {
       const uAcceptedQuotesVal = uAcceptedQuotes.reduce((sum, q) => sum + q.total, 0);
       const uQuotesRate = uQuotes.length > 0 ? Math.round((uAcceptedQuotes.length / uQuotes.length) * 100) : 0;
 
-      // Prestations
-      const uPrestations = filteredPrestations.filter(p => 
-        p.cree_par === u.id || p.commercial_id === u.id || p.resp_service_id === u.id || p.responsable_service_id === u.id
+      // Prestations (brouillons et annulées exclus du CA piloté — même règle que la page Prestations)
+      const uPrestations = filteredPrestations.filter(p =>
+        (p.cree_par === u.id || p.commercial_id === u.id || p.resp_service_id === u.id || p.responsable_service_id === u.id)
+        && p.statut !== 'ANNULEE' && p.statut !== 'BROUILLON'
       );
       const uVente = uPrestations.reduce((sum, p) => sum + (p.prix_client_final || p.montant_total_vente || 0), 0);
       const uMarge = uPrestations.reduce((sum, p) => sum + (p.marge_interne || 0), 0);
@@ -341,9 +342,10 @@ export function DashboardDirecteur() {
       const uCommPayee = uComms.filter(c => c.statut === 'PAYEE').reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
       const uCommAttente = uComms.filter(c => c.statut !== 'PAYEE' && c.statut !== 'ANNULEE').reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
 
+      // Cohérence opt-out globale (Sidebar, gardes) : seul `false` explicite désactive
       const activeMods = [
         u.crmPrestationsEnabled !== false,
-        !!u.crmCaisseEnabled,
+        u.crmCaisseEnabled !== false,
         u.crmMaintenanceEnabled !== false,
         u.crmStocksEnabled !== false,
         u.crmTiersEnabled !== false,
@@ -362,7 +364,7 @@ export function DashboardDirecteur() {
           activeModulesCount: activeMods,
           enabled: {
             prestations: u.crmPrestationsEnabled !== false,
-            caisse: !!u.crmCaisseEnabled,
+            caisse: u.crmCaisseEnabled !== false,
             maintenance: u.crmMaintenanceEnabled !== false,
             stocks: u.crmStocksEnabled !== false,
             tiers: u.crmTiersEnabled !== false,

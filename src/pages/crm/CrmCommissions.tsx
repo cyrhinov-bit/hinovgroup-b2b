@@ -19,6 +19,7 @@ export function CrmCommissions() {
   // Payment Modal
   const [payingCommission, setPayingCommission] = useState<CommissionPrestation | null>(null);
   const [paymentMode, setPaymentMode] = useState<string>('ESPECES');
+  const [isPaying, setIsPaying] = useState(false);
 
   const filteredCommissions = crmCommissions.filter(c => {
     const prest = crmPrestations.find(p => p.id === c.prestation_id);
@@ -32,8 +33,9 @@ export function CrmCommissions() {
     return matchesSearch && matchesStatus && matchesType;
   });
 
-  // KPIs
-  const totalEnAttente = crmCommissions.filter(c => c.statut === 'EN_ATTENTE').reduce((sum, c) => sum + (c.montant || 0), 0);
+  // KPIs (les statuts legacy A_VALIDER/A_PAYER comptent comme en attente)
+  const isPendingStatus = (s: string) => s === 'EN_ATTENTE' || s === 'A_VALIDER' || s === 'A_PAYER';
+  const totalEnAttente = crmCommissions.filter(c => isPendingStatus(c.statut)).reduce((sum, c) => sum + (c.montant || 0), 0);
   const totalValidees = crmCommissions.filter(c => c.statut === 'VALIDEE').reduce((sum, c) => sum + (c.montant || 0), 0);
   const totalPayees = crmCommissions.filter(c => c.statut === 'PAYEE').reduce((sum, c) => sum + (c.montant || 0), 0);
   const totalGeneral = crmCommissions.filter(c => c.statut !== 'ANNULEE').reduce((sum, c) => sum + (c.montant || 0), 0);
@@ -48,9 +50,17 @@ export function CrmCommissions() {
   };
 
   const handleConfirmPay = async () => {
-    if (!payingCommission) return;
-    await payerCrmCommission(payingCommission.id, paymentMode);
-    setPayingCommission(null);
+    if (!payingCommission || isPaying) return;
+    setIsPaying(true);
+    try {
+      const ok = await payerCrmCommission(payingCommission.id, paymentMode);
+      if (!ok) {
+        alert('Cette commission est déjà payée. Aucun nouveau décaissement effectué.');
+      }
+      setPayingCommission(null);
+    } finally {
+      setIsPaying(false);
+    }
   };
 
   const getTypeBadge = (type: TypeBeneficiaire) => {
@@ -67,6 +77,8 @@ export function CrmCommissions() {
   const getStatusBadge = (statut: StatutCommission) => {
     switch (statut) {
       case 'EN_ATTENTE':
+      case 'A_VALIDER':
+      case 'A_PAYER':
         return <span className="badge-status" style={{ background: 'rgba(234, 179, 8, 0.15)', color: '#CA8A04' }}>En attente</span>;
       case 'VALIDEE':
         return <span className="badge-status" style={{ background: 'rgba(37, 99, 235, 0.15)', color: '#2563EB', fontWeight: 600 }}>Validée (À payer)</span>;
@@ -74,10 +86,12 @@ export function CrmCommissions() {
         return <span className="badge-status" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10B981', fontWeight: 600 }}>Payée / Liquidée</span>;
       case 'ANNULEE':
         return <span className="badge-status bg-error">Annulée</span>;
+      default:
+        return <span className="badge-status" style={{ background: 'rgba(100, 116, 139, 0.12)', color: '#64748B' }}>{statut}</span>;
     }
   };
 
-  if (!isDirecteur && !currentUser?.crmCommissionsEnabled) {
+  if (!isDirecteur && currentUser?.crmCommissionsEnabled === false) {
     return (
       <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
         <Award size={48} color="var(--color-error)" style={{ margin: '0 auto 16px' }} />
@@ -172,6 +186,8 @@ export function CrmCommissions() {
           >
             <option value="ALL">Tous les statuts</option>
             <option value="EN_ATTENTE">En attente</option>
+            <option value="A_VALIDER">À valider (legacy)</option>
+            <option value="A_PAYER">À payer (legacy)</option>
             <option value="VALIDEE">Validée</option>
             <option value="PAYEE">Payée</option>
             <option value="ANNULEE">Annulée</option>
@@ -239,7 +255,7 @@ export function CrmCommissions() {
                             <CheckCircle size={12} style={{ marginRight: '3px' }} /> Valider
                           </button>
                         )}
-                        {(comm.statut === 'EN_ATTENTE' || comm.statut === 'VALIDEE') && (
+                        {(comm.statut === 'VALIDEE') && (
                           <button
                             className="btn btn-primary"
                             style={{ padding: '3px 8px', fontSize: '11px', background: '#10B981', borderColor: '#10B981' }}
@@ -300,9 +316,9 @@ export function CrmCommissions() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button className="btn btn-secondary" onClick={() => setPayingCommission(null)}>Annuler</button>
-              <button className="btn btn-primary" onClick={handleConfirmPay} style={{ background: '#10B981', borderColor: '#10B981' }}>
-                Confirmer le Paiement
+              <button className="btn btn-secondary" onClick={() => setPayingCommission(null)} disabled={isPaying}>Annuler</button>
+              <button className="btn btn-primary" onClick={handleConfirmPay} disabled={isPaying} style={{ background: '#10B981', borderColor: '#10B981' }}>
+                {isPaying ? 'Paiement en cours...' : 'Confirmer le Paiement'}
               </button>
             </div>
           </div>

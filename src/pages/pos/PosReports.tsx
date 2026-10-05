@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { toast } from 'react-hot-toast';
 
 export default function PosReports() {
-  const { posTransactions, posProducts, refreshData } = useAppContext();
+  const { posTransactions, posProducts, posReturns, refreshData } = useAppContext();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
@@ -25,7 +25,12 @@ export default function PosReports() {
   };
 
   const validTransactions = posTransactions.filter(t => t.status === 'Validée');
-  const totalRevenue = validTransactions.reduce((sum, t) => sum + t.total, 0);
+  const grossRevenue = validTransactions.reduce((sum, t) => sum + t.total, 0);
+  // CA net : retours Traités déduits (M8)
+  const totalRefunds = posReturns
+    .filter(r => r.status === 'Traité')
+    .reduce((sum, r) => sum + (r.totalRefund || 0), 0);
+  const totalRevenue = Math.max(0, grossRevenue - totalRefunds);
   const totalTransactions = validTransactions.length;
   const avgBasket = totalTransactions > 0 ? Math.round(totalRevenue / totalTransactions) : 0;
 
@@ -108,7 +113,7 @@ export default function PosReports() {
         <div style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ background: 'var(--color-success-tint)', borderRadius: 'var(--radius-md)', padding: '10px' }}><TrendingUp size={24} color="var(--color-success)" /></div>
-            <div><div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Chiffre d'affaires Global</div><div style={{ fontSize: '24px', fontWeight: 700 }}>{totalRevenue.toLocaleString()} FCFA</div></div>
+            <div><div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Chiffre d'affaires Global (net retours)</div><div style={{ fontSize: '24px', fontWeight: 700 }}>{totalRevenue.toLocaleString()} FCFA</div>{totalRefunds > 0 && <div style={{ fontSize: '12px', color: 'var(--color-error)' }}>↩️ Remboursements : -{totalRefunds.toLocaleString()} FCFA</div>}</div>
           </div>
         </div>
         <div style={cardStyle}>

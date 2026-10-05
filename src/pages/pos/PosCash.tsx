@@ -16,9 +16,13 @@ export default function PosCash() {
   const [initialFund, setInitialFund] = useState('');
   const [showClose, setShowClose] = useState(false);
   const [finalAmount, setFinalAmount] = useState('');
+  const [isBusy, setIsBusy] = useState(false);
+  // Session ciblée par la clôture (session du jour par défaut, ou session antérieure à régulariser)
+  const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
 
   const today = todayLocalKey();
-  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today);
+  // Même règle que le terminal : session du jour, du caissier ou non assignée (M1)
+  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today && (s.cashierId === currentUser?.id || !s.cashierId));
   const staleOpenSessions = posCashSessions.filter(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) < today);
   const closedSessions = posCashSessions
     .filter(s => s.status === 'Fermée')
@@ -41,60 +45,77 @@ export default function PosCash() {
       .reduce((a, p) => a + p.amount, 0);
   };
 
+  // Seuls les remboursements en espèces sortent du tiroir physique (B8) — legacy = espèces
+  const cashRefundOf = (r: typeof posReturns[number]) => r.refundMethod === 'Mobile Money' ? 0 : (r.totalRefund || 0);
   const sessionReturns = openSession ? posReturns
     .filter(r => r.status === 'Traité' && r.sessionId === openSession.id)
-    .reduce((s, r) => s + r.totalRefund, 0) : 0;
+    .reduce((s, r) => s + cashRefundOf(r), 0) : 0;
   const sessionCashSales = openSession ? validTx.filter(t => t.sessionId === openSession.id).reduce((s, t) => s + cashOfTransaction(t), 0) : 0;
   const sessionMobileSales = openSession ? validTx.filter(t => t.sessionId === openSession.id).reduce((s, t) => s + mobileOfTransaction(t), 0) : 0;
   const sessionGrandTotal = sessionCashSales + sessionMobileSales;
   const expectedAmount = openSession ? openSession.initialFund + sessionCashSales - sessionReturns : 0;
-  const diffPreview = Number(finalAmount || 0) - expectedAmount;
+
+  const closingSession = closingSessionId
+    ? posCashSessions.find(s => s.id === closingSessionId && s.status === 'Ouverte') || null
+    : openSession || null;
 
   const handleCloseStale = async (staleSession: typeof posCashSessions[number]) => {
-    const expected = sessionExpected(staleSession);
-    await updatePosCashSession(staleSession.id, {
-      closedAt: new Date().toISOString(),
-      finalAmount: expected,
-      expectedAmount: expected,
-      difference: 0,
-      status: 'Fermée',
-    });
+    // Régularisation honnête (M2) : la clôture d'une session antérieure exige le comptage réel,
+    // via le même modal que la session du jour — plus aucun écart forcé à 0.
+    setClosingSessionId(staleSession.id);
+    setFinalAmount('');
+    setShowClose(true);
   };
 
   const handleOpen = async () => {
+    if (isBusy) return;
     const fund = Number(initialFund);
     if (isNaN(fund) || fund < 0 || initialFund === '') {
       alert('Le fonds de caisse doit être supérieur ou égal à 0.');
       return;
     }
-    await addPosCashSession({
-      id: uuidv4(),
-      cashierId: currentUser?.id,
-      openedAt: new Date().toISOString(),
-      initialFund: fund,
-      status: 'Ouverte',
-    });
-    setShowOpen(false);
-    setInitialFund('');
+    setIsBusy(true);
+    try {
+      await addPosCashSession({
+        id: uuidv4(),
+        cashierId: currentUser?.id,
+        openedAt: new Date().toISOString(),
+        initialFund: fund,
+        status: 'Ouverte',
+      });
+      setShowOpen(false);
+      setInitialFund('');
+    } finally {
+      setIsBusy(false);
+    }
   };
 
   const handleClose = async () => {
-    if (!openSession) return;
+    if (isBusy) return;
+    const target = closingSession;
+    if (!target) return;
     const final = Number(finalAmount);
     if (finalAmount === '' || Number.isNaN(final)) {
       alert('Veuillez saisir le montant réel en caisse.');
       return;
     }
-    const difference = final - expectedAmount;
-    await updatePosCashSession(openSession.id, {
-      closedAt: new Date().toISOString(),
-      finalAmount: final,
-      expectedAmount,
-      difference,
-      status: 'Fermée',
-    });
-    setShowClose(false);
-    setFinalAmount('');
+    setIsBusy(true);
+    try {
+      const expected = sessionExpected(target);
+      const difference = final - expected;
+      await updatePosCashSession(target.id, {
+        closedAt: new Date().toISOString(),
+        finalAmount: final,
+        expectedAmount: expected,
+        difference,
+        status: 'Fermée',
+      });
+      setShowClose(false);
+      setFinalAmount('');
+      setClosingSessionId(null);
+    } finally {
+      setIsBusy(false);
+    }
   };
 
   const inputStyle: React.CSSProperties = {
@@ -113,10 +134,14 @@ export default function PosCash() {
     const tx = validTx.filter(t => t.sessionId === s.id).reduce((sum, t) => sum + cashOfTransaction(t), 0);
     const rt = posReturns
       .filter(r => r.status === 'Traité' && r.sessionId === s.id)
-      .reduce((sum, r) => sum + r.totalRefund, 0);
+      .reduce((sum, r) => sum + cashRefundOf(r), 0);
     return s.expectedAmount ?? s.initialFund + tx - rt;
   };
   const sessionDiff = (s: typeof posCashSessions[number]) => s.difference ?? (s.finalAmount || 0) - sessionExpected(s);
+
+  // Session effectivement clôturée par le modal (jour ou antérieure) + montants associés
+  const closingExpected = closingSession ? sessionExpected(closingSession) : expectedAmount;
+  const closingDiffPreview = Number(finalAmount || 0) - closingExpected;
 
   const sessionSales = (s: typeof posCashSessions[number]) => {
     const tx = validTx.filter(t => t.sessionId === s.id);
@@ -217,7 +242,7 @@ export default function PosCash() {
             <div style={{ display: 'flex', gap: '8px' }}>
               {staleOpenSessions.map(s => (
                 <Button key={s.id} variant="warning" onClick={() => handleCloseStale(s)} style={{ fontSize: '13px' }}>
-                  Clôturer session du {new Date(s.openedAt).toLocaleDateString('fr-FR')}
+                  Compter et clôturer ({new Date(s.openedAt).toLocaleDateString('fr-FR')})
                 </Button>
               ))}
             </div>
@@ -275,7 +300,7 @@ export default function PosCash() {
               </div>
             </div>
 
-            <Button variant="warning" onClick={() => { setFinalAmount(String(expectedAmount)); setShowClose(true); }}>
+            <Button variant="warning" onClick={() => { setClosingSessionId(null); setFinalAmount(String(expectedAmount)); setShowClose(true); }}>
               Fermer la caisse
             </Button>
           </div>
@@ -478,8 +503,8 @@ export default function PosCash() {
         title="Ouvrir la caisse"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setShowOpen(false)}>Annuler</Button>
-            <Button variant="primary" onClick={handleOpen}>Ouvrir</Button>
+            <Button variant="ghost" onClick={() => setShowOpen(false)} disabled={isBusy}>Annuler</Button>
+            <Button variant="primary" onClick={handleOpen} disabled={isBusy}>{isBusy ? 'Ouverture...' : 'Ouvrir'}</Button>
           </>
         }
       >
@@ -501,24 +526,24 @@ export default function PosCash() {
       {/* Modal fermeture */}
       <Modal
         open={showClose}
-        onClose={() => setShowClose(false)}
-        title="Fermer la caisse"
+        onClose={() => { if (!isBusy) { setShowClose(false); setClosingSessionId(null); } }}
+        title={closingSession && closingSession.id !== openSession?.id ? `Régulariser la session du ${new Date(closingSession.openedAt).toLocaleDateString('fr-FR')}` : 'Fermer la caisse'}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setShowClose(false)}>Annuler</Button>
-            <Button variant="warning" onClick={handleClose}>Fermer la caisse</Button>
+            <Button variant="ghost" onClick={() => { setShowClose(false); setClosingSessionId(null); }} disabled={isBusy}>Annuler</Button>
+            <Button variant="warning" onClick={handleClose} disabled={isBusy}>{isBusy ? 'Clôture...' : 'Fermer la caisse'}</Button>
           </>
         }
       >
         <div style={{ background: 'var(--color-surface-alt)', borderRadius: 'var(--radius-md)', padding: '12px', marginBottom: '16px', fontSize: '14px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
             <span style={{ color: 'var(--color-text-muted)' }}>Montant attendu</span>
-            <span style={{ fontWeight: 600 }}>{formatMoney(expectedAmount)}</span>
+            <span style={{ fontWeight: 600 }}>{formatMoney(closingExpected)}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--color-text-muted)' }}>Écart prévisionnel</span>
-            <span style={{ fontWeight: 600, color: diffPreview === 0 ? 'var(--color-success)' : 'var(--color-error)' }}>
-              {diffPreview === 0 ? 'Équilibré' : `${diffPreview > 0 ? '+' : ''}${formatMoney(diffPreview)}`}
+            <span style={{ fontWeight: 600, color: closingDiffPreview === 0 ? 'var(--color-success)' : 'var(--color-error)' }}>
+              {closingDiffPreview === 0 ? 'Équilibré' : `${closingDiffPreview > 0 ? '+' : ''}${formatMoney(closingDiffPreview)}`}
             </span>
           </div>
         </div>

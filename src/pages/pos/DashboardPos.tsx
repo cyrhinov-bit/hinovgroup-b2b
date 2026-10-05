@@ -87,7 +87,10 @@ export default function DashboardPos() {
     const calculateMarginForTx = (tx: typeof posTransactions[0]) => {
       let margin = 0;
       tx.lines.forEach(l => {
-        const purchasePrice = l.productId ? (productPurchasePriceMap.get(l.productId) || 0) : 0;
+        // Coût figé à la vente si disponible, sinon prix actuel (lignes legacy)
+        const purchasePrice = (l.costPrice !== undefined && l.costPrice !== null)
+          ? l.costPrice
+          : (l.productId ? (productPurchasePriceMap.get(l.productId) || 0) : 0);
         const lineCost = purchasePrice * l.quantity;
         margin += (l.total - lineCost);
       });

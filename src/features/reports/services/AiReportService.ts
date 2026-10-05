@@ -24,7 +24,7 @@ export async function generateAiWeeklySynthesis(params: {
 
   // Format tasks into structured prompt description
   let tasksFormatted = '';
-  const days = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+  const days = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
   
   for (const day of days) {
     const tasks = tasksByDay[day] || [];

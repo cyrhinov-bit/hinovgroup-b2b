@@ -86,13 +86,16 @@ export function CrmCommerciaux() {
   };
 
   const deleteAgent = async (id: string) => {
-    await deleteCrmCommercial(id);
+    const ok = await deleteCrmCommercial(id);
+    if (!ok) {
+      alert("Suppression impossible : ce commercial est rattaché à des commandes ou possède un historique de ventes.");
+    }
   };
 
   const totalVentesGlobal = crmCommerciaux.reduce((sum, a) => sum + (a.total_ventes || 0), 0);
   const totalContratsGlobal = crmCommerciaux.reduce((sum, a) => sum + (a.contrats_clos_count || 0), 0);
 
-  if (!isDirecteur && !currentUser?.crmCommerciauxEnabled) {
+  if (!isDirecteur && currentUser?.crmCommerciauxEnabled === false) {
     return (
       <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
         <Award size={48} color="var(--color-error)" style={{ margin: '0 auto 16px' }} />

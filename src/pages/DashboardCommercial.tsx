@@ -28,7 +28,8 @@ export function DashboardCommercial() {
   const totalValue = myQuotes.filter(q => q.status !== 'Refusé').reduce((sum, q) => sum + q.total, 0);
   const conversionRate = totalQuotes > 0 ? Math.round((acceptedCount / totalQuotes) * 100) : 0;
 
-  const totalVentePrestations = myPrestations.reduce((sum, p) => sum + (p.prix_client_final || p.montant_total_vente || 0), 0);
+  const countedPrestations = myPrestations.filter(p => p.statut !== 'ANNULEE' && p.statut !== 'BROUILLON');
+  const totalVentePrestations = countedPrestations.reduce((sum, p) => sum + (p.prix_client_final || p.montant_total_vente || 0), 0);
   const totalCommissionsVal = myCommissions.reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
   const totalFactureVal = myInvoices.reduce((sum, i) => sum + (i.totalAmount || 0), 0);
 

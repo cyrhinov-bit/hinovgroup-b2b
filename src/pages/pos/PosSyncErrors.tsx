@@ -12,6 +12,7 @@ interface SyncError {
 
 export default function PosSyncErrors() {
   const [errors, setErrors] = useState<SyncError[]>([]);
+  const [pendingQueue, setPendingQueue] = useState<SyncAction[]>([]);
   const [loading, setLoading] = useState(true);
   const [isReconciling, setIsReconciling] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -28,6 +29,9 @@ export default function PosSyncErrors() {
         }
       }
       setErrors(validErrors);
+      // File d'attente en cours (actions non encore envoyées : hors-ligne ou en attente de rejeu)
+      const queue = (await db.syncQueue.getItem<SyncAction[]>('queue')) || [];
+      setPendingQueue(queue.filter(a => !isRetiredServicePayload(a.type, (a as any).payload)));
     } catch (e) {
       console.error('Erreur de lecture des syncErrors', e);
     }
@@ -105,6 +109,11 @@ export default function PosSyncErrors() {
 
   if (loading) return <div style={{ padding: 24 }}>Chargement...</div>;
 
+  const pendingByType = pendingQueue.reduce<Record<string, number>>((acc, a) => {
+    acc[a.type] = (acc[a.type] || 0) + 1;
+    return acc;
+  }, {});
+
   return (
     <div className="pos-page" style={{ maxWidth: '1200px', margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
@@ -163,6 +172,24 @@ export default function PosSyncErrors() {
           </div>
         </div>
       )}
+
+      {/* File d'attente en cours (M16) : actions saisies hors-ligne ou en attente d'envoi */}
+      <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', padding: '16px 20px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <CloudUpload size={20} color="var(--color-primary)" />
+        <div style={{ flex: 1, minWidth: '200px' }}>
+          <div style={{ fontWeight: 700, fontSize: '14px' }}>
+            File d'attente : {pendingQueue.length} action(s) en attente d'envoi
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+            {pendingQueue.length === 0
+              ? "Rien en attente — tout a été envoyé au serveur."
+              : Object.entries(pendingByType).map(([t, n]) => `${t} ×${n}`).join(' • ')}
+          </div>
+        </div>
+        <Button variant="secondary" icon={<RefreshCw size={16} />} onClick={loadErrors}>
+          Actualiser
+        </Button>
+      </div>
 
       {errors.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px', background: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>

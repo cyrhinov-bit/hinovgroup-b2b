@@ -233,7 +233,8 @@ export default function PosFinance() {
     }
   };
 
-  const isAuthorized = !currentUser?.role || currentUser.role === 'Directeur' || currentUser.role === 'Gerant';
+  const purgeRoles = ['Directeur', 'Directeur adjoint', 'SuperAdmin', 'Gerant'];
+  const isAuthorized = !!currentUser && (purgeRoles.includes(currentUser.role) || (!!currentUser.posRole && purgeRoles.includes(currentUser.posRole)));
 
   return (
     <div className="pos-page">
@@ -495,7 +496,9 @@ export default function PosFinance() {
                   
                   const totalSales = sessionTx.reduce((sum, t) => sum + t.total, 0);
                   const totalRefunds = sessionReturns.reduce((sum, r) => sum + r.totalRefund, 0);
-                  const expectedCashDrawer = s.expectedAmount ?? (s.initialFund + cashSales - totalRefunds);
+                  const cashRefunds = sessionReturns.reduce((sum, r) => sum + (r.refundMethod === 'Mobile Money' ? 0 : (r.totalRefund || 0)), 0);
+                  const netSales = totalSales - totalRefunds;
+                  const expectedCashDrawer = s.expectedAmount ?? (s.initialFund + cashSales - cashRefunds);
                   const diff = s.difference ?? ((s.finalAmount || 0) - expectedCashDrawer);
                   const cashier = users?.find(u => u.id === s.cashierId);
 
@@ -513,9 +516,10 @@ export default function PosFinance() {
                         {s.initialFund.toLocaleString()} FCFA
                       </td>
                       <td style={{ padding: '10px 12px', fontSize: '13px', textAlign: 'right' }}>
-                        <div style={{ fontWeight: 700, color: 'var(--color-primary)' }}>+{totalSales.toLocaleString()} FCFA</div>
+                        <div style={{ fontWeight: 700, color: 'var(--color-primary)' }}>+{netSales.toLocaleString()} FCFA</div>
                         <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
                           💵 {cashSales.toLocaleString()} • 📱 {mobileSales.toLocaleString()}
+                          {totalRefunds > 0 && <span> • ↩️ -{totalRefunds.toLocaleString()}</span>}
                         </div>
                       </td>
                       <td style={{ padding: '10px 12px', fontSize: '13px', textAlign: 'right', fontWeight: 600, color: '#b45309' }}>

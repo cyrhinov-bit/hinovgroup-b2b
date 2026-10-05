@@ -52,9 +52,19 @@ serve(async (req: Request) => {
       posSupplyEnabled?: boolean;
       posInventoryEnabled?: boolean;
       posStockEnabled?: boolean;
+      crmPrestationsEnabled?: boolean;
+      crmCaisseEnabled?: boolean;
+      crmMaintenanceEnabled?: boolean;
+      crmStocksEnabled?: boolean;
+      crmTiersEnabled?: boolean;
+      crmCommerciauxEnabled?: boolean;
+      crmCommissionsEnabled?: boolean;
+      crmFacturationEnabled?: boolean;
+      crmReportsEnabled?: boolean;
+      crmTeamReportsEnabled?: boolean;
     }
 
-    const { email, pin, name, role, posRole, serviceId, posReturnsEnabled, posCatalogueEnabled, posSupplyEnabled, posInventoryEnabled, posStockEnabled } = await req.json() as CreateUserPayload
+    const { email, pin, name, role, posRole, serviceId, posReturnsEnabled, posCatalogueEnabled, posSupplyEnabled, posInventoryEnabled, posStockEnabled, crmPrestationsEnabled, crmCaisseEnabled, crmMaintenanceEnabled, crmStocksEnabled, crmTiersEnabled, crmCommerciauxEnabled, crmCommissionsEnabled, crmFacturationEnabled, crmReportsEnabled, crmTeamReportsEnabled } = await req.json() as CreateUserPayload
 
     // Autorisations
     if (role === 'SuperAdmin') throw new Error('Impossible de créer un SuperAdmin')
@@ -95,7 +105,17 @@ serve(async (req: Request) => {
         pos_catalogue_enabled: posCatalogueEnabled === true,
         pos_supply_enabled: posSupplyEnabled === true,
         pos_inventory_enabled: posInventoryEnabled === true,
-        pos_stock_enabled: posStockEnabled === true
+        pos_stock_enabled: posStockEnabled === true,
+        crm_prestations_enabled: crmPrestationsEnabled !== false,
+        crm_caisse_enabled: crmCaisseEnabled !== false,
+        crm_maintenance_enabled: crmMaintenanceEnabled !== false,
+        crm_stocks_enabled: crmStocksEnabled !== false,
+        crm_tiers_enabled: crmTiersEnabled !== false,
+        crm_commerciaux_enabled: crmCommerciauxEnabled !== false,
+        crm_commissions_enabled: crmCommissionsEnabled !== false,
+        crm_facturation_enabled: crmFacturationEnabled !== false,
+        crm_reports_enabled: crmReportsEnabled !== false,
+        crm_team_reports_enabled: crmTeamReportsEnabled === true
       }])
 
     if (profileError) {
@@ -105,7 +125,7 @@ serve(async (req: Request) => {
     }
 
     return new Response(
-      JSON.stringify({ id: newUserId, name, email, role, posRole, serviceId, posReturnsEnabled, posCatalogueEnabled, posSupplyEnabled, posInventoryEnabled, posStockEnabled }),
+      JSON.stringify({ id: newUserId, name, email, role, posRole, serviceId, posReturnsEnabled, posCatalogueEnabled, posSupplyEnabled, posInventoryEnabled, posStockEnabled, crmPrestationsEnabled, crmCaisseEnabled, crmMaintenanceEnabled, crmStocksEnabled, crmTiersEnabled, crmCommerciauxEnabled, crmCommissionsEnabled, crmFacturationEnabled, crmReportsEnabled, crmTeamReportsEnabled }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error: any) {

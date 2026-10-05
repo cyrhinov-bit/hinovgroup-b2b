@@ -174,6 +174,26 @@
   color: #FFFFFF;
 }
 
+/* DIMANCHE : Rose Carmin */
+.crm-day-card.day-dimanche {
+  background: linear-gradient(145deg, #FFF1F2 0%, #FFE4E6 100%);
+  border-color: #FECDD3;
+}
+.crm-day-card.day-dimanche::before {
+  background: #BE123C;
+}
+.crm-day-card.day-dimanche.selected {
+  border-color: #BE123C;
+  box-shadow: 0 10px 25px -4px rgba(190, 18, 60, 0.28);
+}
+.crm-day-card.day-dimanche .day-name {
+  color: #881337;
+}
+.crm-day-card.day-dimanche .day-badge {
+  background: #BE123C;
+  color: #FFFFFF;
+}
+
 /* Typographie & éléments internes aux cartes */
 .crm-day-card .day-header {
   display: flex;
@@ -270,6 +290,7 @@
 .crm-day-banner-header.day-jeudi { background: linear-gradient(135deg, #B45309 0%, #D97706 100%); }
 .crm-day-banner-header.day-vendredi { background: linear-gradient(135deg, #BE123C 0%, #E11D48 100%); }
 .crm-day-banner-header.day-samedi { background: linear-gradient(135deg, #334155 0%, #475569 100%); }
+.crm-day-banner-header.day-dimanche { background: linear-gradient(135deg, #881337 0%, #BE123C 100%); }
 
 /* ================= NOUVEAU FORMULAIRE D'ACTIVITÉ ENRICHI ================= */
 

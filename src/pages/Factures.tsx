@@ -815,7 +815,7 @@ export function Factures() {
   const selectedMonthName = MONTH_NAMES.find(m => m.num === selectedMonth)?.name || 'Septembre';
 
   // Permission Check
-  if (!isDirector && !currentUser?.crmFacturationEnabled) {
+  if (!isDirector && currentUser?.crmFacturationEnabled === false) {
     return (
       <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
         <Receipt size={48} color="var(--color-error)" style={{ margin: '0 auto 16px' }} />

@@ -45,7 +45,7 @@ export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT'
                              'INSERT_PROSPECT_FOLLOW_UP' | 'UPDATE_PROSPECT_FOLLOW_UP' | 'DELETE_PROSPECT_FOLLOW_UP' |
                              'INSERT_ACTIVITY_REPORT' | 'UPDATE_ACTIVITY_REPORT' | 'DELETE_ACTIVITY_REPORT' |
                              'INSERT_WEEKLY_REPORT' | 'UPDATE_WEEKLY_REPORT' |
-                             'INSERT_V2_DAILY_REPORT' | 'UPDATE_V2_DAILY_REPORT' |
+                             'INSERT_V2_DAILY_REPORT' | 'UPDATE_V2_DAILY_REPORT' | 'DELETE_V2_DAILY_REPORT' |
                              'INSERT_V2_WEEKLY_REPORT' | 'UPDATE_V2_WEEKLY_REPORT' | 'DELETE_V2_WEEKLY_REPORT' |
                              'INSERT_CATEGORY' | 'DELETE_CATEGORY' |
                              'UPDATE_SETTINGS' | 'UPDATE_PROFILE' | 'DELETE_PROFILE' |
@@ -74,7 +74,7 @@ export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT'
                                'INSERT_CRM_COMMERCIAL' | 'UPDATE_CRM_COMMERCIAL' | 'DELETE_CRM_COMMERCIAL' |
                                'INSERT_CRM_PRESTATION' | 'UPDATE_CRM_PRESTATION' | 'DELETE_CRM_PRESTATION' |
                                'INSERT_CRM_MOUVEMENT' | 'DELETE_CRM_MOUVEMENT' |
-                               'UPSERT_CRM_COMMISSION' | 'UPDATE_CRM_COMMISSION' |
+                               'UPSERT_CRM_COMMISSION' | 'UPDATE_CRM_COMMISSION' | 'DELETE_CRM_COMMISSION' |
                                'INSERT_CRM_ARTICLE' | 'UPDATE_CRM_ARTICLE' | 'DELETE_CRM_ARTICLE' |
                                'INSERT_CRM_INTERVENTION' | 'UPDATE_CRM_INTERVENTION' | 'DELETE_CRM_INTERVENTION' |
                                'INSERT_CRM_TECHNICIEN' | 'UPDATE_CRM_TECHNICIEN' | 'DELETE_CRM_TECHNICIEN';
@@ -250,6 +250,7 @@ const ACTION_PRIORITY: Record<string, number> = {
   'INSERT_CRM_MOUVEMENT': 5,
   'UPSERT_CRM_COMMISSION': 5,
   'UPDATE_CRM_COMMISSION': 5,
+  'DELETE_CRM_COMMISSION': 6,
   // 6. Suppressions et purges finales
   'DELETE_CRM_TIER': 6,
   'DELETE_CRM_COMMERCIAL': 6,
@@ -1167,12 +1168,13 @@ export const processSyncQueue = async () => {
             id: payload.id, 
             author_id: payload.authorId, 
             date: payload.date, 
-            project: payload.project || 'Général',
+            project: payload.project || 'HINOV GROUP',
             objectives: payload.objectives || '', 
             tasks: payload.tasks || [], 
             results: payload.results || '',
             difficulties: payload.difficulties || '', 
             observations: payload.observations || '',
+            status: payload.status || 'Brouillon',
             is_locked: !!payload.isLocked,
             category: payload.category || 'Opérationnel'
           }], { onConflict: 'id' });
@@ -1206,16 +1208,19 @@ export const processSyncQueue = async () => {
             results: payload.results,
             difficulties: payload.difficulties, 
             observations: payload.observations,
+            status: payload.status || undefined,
             updated_at: payload.updatedAt || new Date().toISOString()
           };
           if (payload.isLocked !== undefined) mapped.is_locked = !!payload.isLocked;
           if (payload.category !== undefined) mapped.category = payload.category;
+          if (mapped.status === undefined) delete mapped.status;
 
           let { error } = await supabase.from('v2_daily_reports').update(mapped).eq('id', payload.id);
 
           if (error && (error.code === '42703' || error.message?.includes('column'))) {
             delete mapped.is_locked;
             delete mapped.category;
+            delete mapped.status;
             const fallbackRes = await supabase.from('v2_daily_reports').update(mapped).eq('id', payload.id);
             error = fallbackRes.error;
           }
@@ -1361,6 +1366,11 @@ export const processSyncQueue = async () => {
           success = checkResult(error);
           break;
         }
+        case 'DELETE_V2_DAILY_REPORT': {
+          const { error } = await supabase.from('v2_daily_reports').delete().eq('id', action.payload.id);
+          success = checkResult(error);
+          break;
+        }
         case 'INSERT_CRM_FOLDER': {
           const folder = action.payload;
           let { error } = await supabase.from('crm_folders').upsert([{
@@ -1479,6 +1489,10 @@ export const processSyncQueue = async () => {
         case 'UPDATE_CRM_COMMISSION': {
           const { id, updates } = action.payload;
           success = await syncCrmUpdate('commissions_prestations', id, updates || {}, ['prestation_id', 'beneficiaire_id', 'mouvement_caisse_id'], 'UPDATE_CRM_COMMISSION');
+          break;
+        }
+        case 'DELETE_CRM_COMMISSION': {
+          success = await syncCrmDelete('commissions_prestations', action.payload.id, 'DELETE_CRM_COMMISSION');
           break;
         }
         // ─── Modules CRM : Stocks / Catalogue articles ───
@@ -1983,35 +1997,92 @@ export const processSyncQueue = async () => {
             notes: entryData.notes || null,
             created_by: isUuid(entryData.createdBy) ? entryData.createdBy : null
           }], { onConflict: 'id' });
+          let entryOk = !error;
           if (!error && lines && lines.length > 0) {
             const linesData = lines.map((l: any) => ({
               id: l.id || uuidv4(), entry_id: entryData.id, product_id: isUuid(l.productId) ? l.productId : null,
               quantity: l.quantity, purchase_price: l.purchasePrice, total: l.total
             }));
             const { error: linesErr } = await supabase.from('pos_stock_entry_lines').upsert(linesData, { onConflict: 'id' });
-            if (linesErr && isNetworkOrTransientError(linesErr)) throw new Error(`[NetworkError] ${linesErr.message}`);
+            if (linesErr) {
+              if (isNetworkOrTransientError(linesErr)) throw new Error(`[NetworkError] ${linesErr.message}`);
+              console.error('[Sync] Erreur insertion pos_stock_entry_lines :', linesErr.message);
+              entryOk = false;
+            }
           }
-          success = checkResult(error);
+          // Remontée stock serveur (M11) : une entrée Validée augmente le stock
+          if (!error && entryData.status === 'Validé') {
+            for (const l of (lines || [])) {
+              if (!isUuid(l.productId) || !(Number(l.quantity) > 0)) continue;
+              const { error: stErr } = await supabase.rpc('increment_pos_stock', { p_product_id: l.productId, p_delta: Number(l.quantity) });
+              if (stErr) { console.error('[Sync] Stock entrée non remonté :', stErr.message); entryOk = false; }
+            }
+          }
+          success = !error && entryOk ? checkResult(error) : false;
+          if (!success && error) console.error('[Sync] INSERT_POS_STOCK_ENTRY échoué :', error.message);
           break;
         }
         case 'UPDATE_POS_STOCK_ENTRY': {
           const { id, lines, ...data } = action.payload;
           const mapped: any = {};
+          if (data.reference !== undefined) mapped.reference = data.reference;
+          if (data.supplierId !== undefined) mapped.supplier_id = isUuid(data.supplierId) ? data.supplierId : null;
+          if (data.date !== undefined) mapped.date = data.date;
           if (data.status !== undefined) mapped.status = data.status;
           if (data.totalAmount !== undefined) mapped.total_amount = data.totalAmount;
+          if (data.notes !== undefined) mapped.notes = data.notes;
+          // Transition de statut pour la remontée stock (local déjà ajusté en miroir)
+          let prevStatus: string | null = null;
+          let prevLines: any[] = [];
+          if (data.status !== undefined) {
+            try {
+              const { data: prev } = await supabase.from('pos_stock_entries').select('status').eq('id', id).maybeSingle();
+              prevStatus = (prev as any)?.status || null;
+              if (prevStatus && prevStatus !== data.status) {
+                const { data: pl } = await supabase.from('pos_stock_entry_lines').select('product_id,quantity').eq('entry_id', id);
+                prevLines = (pl as any[]) || [];
+              }
+            } catch {}
+          }
           const { error } = await supabase.from('pos_stock_entries').update(mapped).eq('id', id);
+          let updOk = !error;
           if (!error) {
-            await supabase.from('pos_stock_entry_lines').delete().eq('entry_id', id);
-            if (lines && lines.length > 0) {
+            const { error: delErr } = await supabase.from('pos_stock_entry_lines').delete().eq('entry_id', id);
+            if (delErr) {
+              if (isNetworkOrTransientError(delErr)) throw new Error(`[NetworkError] ${delErr.message}`);
+              console.error('[Sync] Suppression lignes entrée échouée :', delErr.message);
+              updOk = false;
+            } else if (lines && lines.length > 0) {
               const linesData = lines.map((l: any) => ({
                 id: l.id || uuidv4(), entry_id: id, product_id: isUuid(l.productId) ? l.productId : null,
                 quantity: l.quantity, purchase_price: l.purchasePrice, total: l.total
               }));
               const { error: insLinesErr } = await supabase.from('pos_stock_entry_lines').upsert(linesData, { onConflict: 'id' });
-              if (insLinesErr && isNetworkOrTransientError(insLinesErr)) throw new Error(`[NetworkError] ${insLinesErr.message}`);
+              if (insLinesErr) {
+                if (isNetworkOrTransientError(insLinesErr)) throw new Error(`[NetworkError] ${insLinesErr.message}`);
+                console.error('[Sync] Réinsertion lignes entrée échouée :', insLinesErr.message);
+                updOk = false;
+              }
+            }
+            // Miroir des transitions locales : →Validé incrémente, Validé→Annulé décrémente
+            if (prevStatus && prevStatus !== data.status) {
+              if (data.status === 'Validé') {
+                for (const l of (lines || [])) {
+                  if (!isUuid(l.productId) || !(Number(l.quantity) > 0)) continue;
+                  const { error: stErr } = await supabase.rpc('increment_pos_stock', { p_product_id: l.productId, p_delta: Number(l.quantity) });
+                  if (stErr) { console.error('[Sync] Stock entrée non remonté :', stErr.message); updOk = false; }
+                }
+              } else if (data.status === 'Annulé' && prevStatus === 'Validé') {
+                for (const l of prevLines) {
+                  if (!isUuid(l.product_id) || !(Number(l.quantity) > 0)) continue;
+                  const { error: stErr } = await supabase.rpc('increment_pos_stock', { p_product_id: l.product_id, p_delta: -Number(l.quantity) });
+                  if (stErr) { console.error('[Sync] Stock annulation non remonté :', stErr.message); updOk = false; }
+                }
+              }
             }
           }
-          success = checkResult(error);
+          success = !error && updOk ? checkResult(error) : false;
+          if (!success && error) console.error('[Sync] UPDATE_POS_STOCK_ENTRY échoué :', error.message);
           break;
         }
         case 'DELETE_POS_STOCK_ENTRY': {
@@ -2095,7 +2166,8 @@ export const processSyncQueue = async () => {
             unit_price: Number(l.unitPrice ?? l.unit_price ?? 0),
             discount_percent: Number(l.discountPercent ?? l.discount_percent ?? 0),
             discount_amount: Number(l.discountAmount ?? l.discount_amount ?? 0),
-            total: Number(l.total ?? (Number(l.quantity || 1) * Number(l.unitPrice ?? l.unit_price ?? 0)))
+            total: Number(l.total ?? (Number(l.quantity || 1) * Number(l.unitPrice ?? l.unit_price ?? 0))),
+            cost_price: Number(l.costPrice ?? l.cost_price ?? 0)
           }));
 
           const p_payments = (payments || []).map((p: any) => ({
@@ -2118,13 +2190,21 @@ export const processSyncQueue = async () => {
               throw new Error(`[NetworkError] ${error.message}`);
             }
             console.warn('[Sync] RPC process_pos_transaction échoué, repli sur insertion directe :', error.message);
+            // Idempotence du stock : si la transaction existe déjà (rejeu), ne pas re-décrémenter
+            let txPreExists = false;
+            try {
+              const { data: preTx } = await supabase.from('pos_transactions').select('id').eq('id', p_transaction.id).maybeSingle();
+              txPreExists = !!preTx;
+            } catch {}
             const { error: txErr } = await supabase.from('pos_transactions').upsert([p_transaction], { onConflict: 'id' });
             if (!txErr) {
+              let childrenOk = true;
               if (p_lines.length > 0) {
                 const { error: linesErr } = await supabase.from('pos_transaction_lines').upsert(p_lines, { onConflict: 'id' });
                 if (linesErr) {
                   if (isNetworkOrTransientError(linesErr)) throw new Error(`[NetworkError] ${linesErr.message}`);
                   console.error('[Sync] Erreur insertion pos_transaction_lines :', linesErr.message);
+                  childrenOk = false;
                 }
               }
               if (p_payments.length > 0) {
@@ -2132,9 +2212,21 @@ export const processSyncQueue = async () => {
                 if (payErr) {
                   if (isNetworkOrTransientError(payErr)) throw new Error(`[NetworkError] ${payErr.message}`);
                   console.error('[Sync] Erreur insertion pos_payments :', payErr.message);
+                  childrenOk = false;
                 }
               }
-              success = true;
+              // Décrément stock serveur (le RPC le fait dans le chemin nominal ; le repli doit aussi le faire)
+              // Sauf rejeu (transaction déjà présente) pour ne pas décrémenter deux fois
+              if (txData.status !== 'Annulée' && !txPreExists) {
+                for (const l of p_lines) {
+                  if (!l.product_id || !(Number(l.quantity) > 0)) continue;
+                  const { error: stErr } = await supabase.rpc('increment_pos_stock', { p_product_id: l.product_id, p_delta: -Number(l.quantity) });
+                  if (stErr) { console.error('[Sync] Stock vente non remonté :', stErr.message); childrenOk = false; }
+                }
+              }
+              // Succès réel : header + lignes + paiements + stock (sinon file d'erreur visible et rejeu)
+              success = childrenOk;
+              if (!childrenOk) console.error('[Sync] Insertion directe pos_transactions incomplète (lignes/paiements/stock).');
             } else {
               if (isNetworkOrTransientError(txErr)) {
                 throw new Error(`[NetworkError] ${txErr.message}`);
@@ -2266,6 +2358,9 @@ export const processSyncQueue = async () => {
             currency: action.payload.currency || 'FCFA',
             ticket_message: action.payload.ticketMessage || null,
             printer_type: action.payload.printerType || 'Thermique 80mm',
+            whatsapp_order_phone: action.payload.whatsappOrderPhone || null,
+            catalog_banner_text: action.payload.catalogBannerText || null,
+            theme_color: action.payload.themeColor || null,
             updated_at: new Date().toISOString()
           }], { onConflict: 'id' });
           success = checkResult(error);
@@ -2276,12 +2371,18 @@ export const processSyncQueue = async () => {
           const { error } = await supabase.from('pos_returns').upsert([{
             id: returnData.id, return_number: returnData.returnNumber,
             transaction_id: isUuid(returnData.transactionId) ? returnData.transactionId : null,
+            session_id: isUuid(returnData.sessionId) ? returnData.sessionId : null,
             date: returnData.date,
             type: returnData.type, total_refund: returnData.totalRefund ?? 0,
-            total_exchange: returnData.totalExchange ?? 0, status: returnData.status,
+            total_exchange: returnData.totalExchange ?? 0,
+            amount_to_pay: returnData.amountToPay ?? 0,
+            refund_method: returnData.refundMethod || 'Espèces',
+            complement_transaction_id: isUuid(returnData.complementTransactionId) ? returnData.complementTransactionId : null,
+            status: returnData.status,
             notes: returnData.notes || null,
             created_by: isUuid(returnData.createdBy) ? returnData.createdBy : null
           }], { onConflict: 'id' });
+          let linesOk = !error;
           if (!error) {
             const allLinesData: any[] = [];
             if (lines && lines.length > 0) {
@@ -2313,16 +2414,42 @@ export const processSyncQueue = async () => {
               });
             }
             if (allLinesData.length > 0) {
-              await supabase.from('pos_return_lines').upsert(allLinesData, { onConflict: 'id' });
+              const { error: linesErr } = await supabase.from('pos_return_lines').upsert(allLinesData, { onConflict: 'id' });
+              if (linesErr) {
+                if (isNetworkOrTransientError(linesErr)) throw new Error(`[NetworkError] ${linesErr.message}`);
+                console.error('[Sync] Erreur insertion pos_return_lines :', linesErr.message);
+                linesOk = false;
+              }
+            }
+            // Remontée stock serveur (M11) : retours réintègrent, échanges décrémentent (plancher 0)
+            if (returnData.status === 'Traité') {
+              for (const l of (lines || [])) {
+                if (!isUuid(l.productId) || !(Number(l.quantity) > 0)) continue;
+                const { error: stErr } = await supabase.rpc('increment_pos_stock', { p_product_id: l.productId, p_delta: Number(l.quantity) });
+                if (stErr) { console.error('[Sync] Stock retour non remonté :', stErr.message); linesOk = false; }
+              }
+              for (const l of (exchangeLines || [])) {
+                if (!isUuid(l.productId) || !(Number(l.quantity) > 0)) continue;
+                const { error: stErr } = await supabase.rpc('increment_pos_stock', { p_product_id: l.productId, p_delta: -Number(l.quantity) });
+                if (stErr) { console.error('[Sync] Stock échange non remonté :', stErr.message); linesOk = false; }
+              }
             }
           }
-          success = checkResult(error);
+          success = !error && linesOk ? checkResult(error) : false;
+          if (!success && error) console.error('[Sync] INSERT_POS_RETURN échoué :', error.message);
           break;
         }
         case 'UPDATE_POS_RETURN': {
-          const { id, ...data } = action.payload;
+          const { id, lines, exchangeLines, ...data } = action.payload;
           const mapped: any = {};
           if (data.status !== undefined) mapped.status = data.status;
+          if (data.totalRefund !== undefined) mapped.total_refund = data.totalRefund;
+          if (data.totalExchange !== undefined) mapped.total_exchange = data.totalExchange;
+          if (data.amountToPay !== undefined) mapped.amount_to_pay = data.amountToPay;
+          if (data.refundMethod !== undefined) mapped.refund_method = data.refundMethod;
+          if (data.complementTransactionId !== undefined) mapped.complement_transaction_id = isUuid(data.complementTransactionId) ? data.complementTransactionId : null;
+          if (data.sessionId !== undefined) mapped.session_id = isUuid(data.sessionId) ? data.sessionId : null;
+          if (data.notes !== undefined) mapped.notes = data.notes;
           const { error } = await supabase.from('pos_returns').update(mapped).eq('id', id);
           success = checkResult(error);
           break;
@@ -2459,6 +2586,15 @@ export const processSyncQueue = async () => {
             const retryRes = await supabase.from('profiles').update(fallbackMapped).eq('id', id);
             if (!retryRes.error) {
               error = null;
+              // B7 : ne jamais perdre silencieusement des flags — tracer une erreur visible
+              try {
+                const errors = await db.syncErrors.getItem<any[]>('errors') || [];
+                errors.push({ action: { id: `warn-${Date.now()}`, type: 'UPDATE_PROFILE', payload: { id, droppedFlags: ['crm_team_reports_enabled', 'crm_reports_enabled'] }, timestamp: Date.now() }, failedAt: new Date().toISOString(), warning: 'Permissions rapports non persistées (colonnes absentes côté serveur)' });
+                await db.syncErrors.setItem('errors', errors);
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: errors.length } }));
+                }
+              } catch {}
             } else {
               // Ultime fallback: uniquement les colonnes de base standard de profiles
               console.warn('[Sync] Retrying UPDATE_PROFILE with base profile columns only:', retryRes.error.message);

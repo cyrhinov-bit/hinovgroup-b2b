@@ -68,7 +68,7 @@ function SearchableSelect({ options, value, onChange, placeholder, style }: { op
 }
 
 export default function PosSupply() {
-  const { posSuppliers, posProducts, posStockEntries, addPosStockEntry, updatePosProduct } = useAppContext();
+  const { posSuppliers, posProducts, posStockEntries, addPosStockEntry, updatePosProduct, updatePosStockEntry, deletePosStockEntry } = useAppContext();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ supplierId: '', notes: '', lines: [{ id: uuidv4(), productId: '', quantity: 1, purchasePrice: 0, total: 0 }] });
 
@@ -91,11 +91,15 @@ export default function PosSupply() {
   const totalAmount = form.lines.filter(l => l.productId).reduce((sum, l) => sum + l.total, 0);
 
   const handleValidate = async () => {
+    const validLines = form.lines.filter(l => l.productId);
+    if (validLines.length === 0) { alert('Ajoutez au moins un produit.'); return; }
+    if (validLines.some(l => !(Number(l.quantity) > 0))) { alert('Chaque ligne doit avoir une quantité supérieure à 0.'); return; }
+    if (validLines.some(l => Number(l.purchasePrice) < 0)) { alert('Les prix d\u2019achat ne peuvent pas être négatifs.'); return; }
     const ref = `APV-${Date.now().toString(36).toUpperCase()}`;
     const entry = {
       id: uuidv4(), reference: ref, supplierId: form.supplierId || undefined,
       date: todayLocalKey(), totalAmount, status: 'Validé' as const,
-      notes: form.notes, createdBy: undefined, lines: form.lines.filter(l => l.productId)
+      notes: form.notes, createdBy: undefined, lines: validLines
     };
     await addPosStockEntry(entry);
     for (const line of entry.lines) {
@@ -106,6 +110,16 @@ export default function PosSupply() {
     }
     setShowForm(false);
     setForm({ supplierId: '', notes: '', lines: [{ id: uuidv4(), productId: '', quantity: 1, purchasePrice: 0, total: 0 }] });
+  };
+
+  const handleAnnulEntry = async (id: string) => {
+    if (!window.confirm("Annuler cette entrée validée ? Le stock sera décrémenté en conséquence.")) return;
+    await updatePosStockEntry(id, { status: 'Annulé' });
+  };
+
+  const handleDeleteEntry = async (id: string) => {
+    if (!window.confirm("Supprimer définitivement cette entrée ?")) return;
+    await deletePosStockEntry(id);
   };
 
   const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontSize: '13px', outline: 'none' };
@@ -171,7 +185,7 @@ export default function PosSupply() {
       <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <div className="table-responsive">
 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}><th style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Référence</th><th style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Date</th><th style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Statut</th><th style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Montant</th></tr></thead>
+          <thead><tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}><th style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Référence</th><th style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Date</th><th style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Statut</th><th style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'right' }}>Montant</th><th style={{ padding: '12px 16px', width: '90px' }}></th></tr></thead>
           <tbody>
             {posStockEntries.sort((a, b) => b.date.localeCompare(a.date)).map(e => (
               <tr key={e.id} style={{ borderBottom: '1px solid var(--color-surface-alt)' }}>
@@ -179,9 +193,16 @@ export default function PosSupply() {
                 <td style={{ padding: '12px 16px', fontSize: '14px' }}>{e.date}</td>
                 <td style={{ padding: '12px 16px' }}><span style={{ padding: '4px 10px', borderRadius: 'var(--radius-lg)', fontSize: '12px', fontWeight: 500, background: e.status === 'Validé' ? 'var(--color-success-tint)' : 'var(--color-error-tint)', color: e.status === 'Validé' ? 'var(--color-success)' : 'var(--color-error)' }}>{e.status}</span></td>
                 <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right', fontWeight: 500 }}>{e.totalAmount.toLocaleString()} FCFA</td>
+                <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                  {e.status === 'Validé' ? (
+                    <button onClick={() => handleAnnulEntry(e.id)} title="Annuler l'entrée (décrémente le stock)" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-warning)', fontSize: '12px', fontWeight: 600 }}>Annuler</button>
+                  ) : (
+                    <button onClick={() => handleDeleteEntry(e.id)} title="Supprimer l'entrée" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)' }}><Trash2 size={14} /></button>
+                  )}
+                </td>
               </tr>
             ))}
-            {posStockEntries.length === 0 && <tr><td colSpan={4} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Aucun approvisionnement</td></tr>}
+            {posStockEntries.length === 0 && <tr><td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Aucun approvisionnement</td></tr>}
           </tbody>
         </table>
 </div>

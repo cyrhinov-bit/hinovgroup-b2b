@@ -20,7 +20,7 @@ interface CartItem { id: string; productId: string; name: string; reference: str
 
 export default function PosTerminal() {
   const navigate = useNavigate();
-  const { posProducts, posSettings, posCashSessions, posTransactions, posReturns, addPosTransaction, addPosCashSession, suspendedCarts, addSuspendedCart, removeSuspendedCart, settings: crmSettings, refreshData } = useAppContext();
+  const { posProducts, posSettings, posCashSessions, posTransactions, posReturns, addPosTransaction, addPosCashSession, suspendedCarts, addSuspendedCart, removeSuspendedCart, settings: crmSettings, refreshData, posDiscounts } = useAppContext();
   const { currentUser } = useAuth();
   const [search, setSearch] = useState('');
 
@@ -51,6 +51,8 @@ export default function PosTerminal() {
   const [cashAmount, setCashAmount] = useState<number | ''>('');
   const [mobileAmount, setMobileAmount] = useState<number | ''>('');
   const [showPayment, setShowPayment] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
+  const paymentInProgressRef = useRef(false);
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [initialFund, setInitialFund] = useState('');
@@ -91,10 +93,11 @@ export default function PosTerminal() {
 
   const sessionGrandTotal = sessionCashSales + sessionMobileSales;
 
+  // Seuls les remboursements en espèces sortent du tiroir (B8) — legacy sans méthode = espèces
   const sessionReturns = useMemo(() => {
     if (!openSession) return 0;
     return posReturns
-      .filter(r => r.sessionId === openSession.id && r.status === 'Traité')
+      .filter(r => r.sessionId === openSession.id && r.status === 'Traité' && r.refundMethod !== 'Mobile Money')
       .reduce((sum, r) => sum + r.totalRefund, 0);
   }, [posReturns, openSession]);
 
@@ -224,8 +227,8 @@ export default function PosTerminal() {
     setCart(prev => prev.map(c => {
       if (c.id !== id) return c;
       if (type === 'none') return { ...c, discountType: type, discountPercent: 0, discountAmount: 0, total: c.quantity * c.unitPrice };
-      if (type === 'percent') return { ...c, discountType: type, discountPercent: Math.min(c.discountPercent || 0, 100), discountAmount: 0, total: c.quantity * c.unitPrice * (1 - Math.min(c.discountPercent || 0, 100) / 100) };
-      return { ...c, discountType: type, discountPercent: 0, discountAmount: Math.min(c.discountAmount || 0, c.quantity * c.unitPrice), total: c.quantity * c.unitPrice - Math.min(c.discountAmount || 0, c.quantity * c.unitPrice) };
+      if (type === 'percent') return { ...c, discountType: type, discountPercent: Math.min(c.discountPercent || 0, percentDiscountCap), discountAmount: 0, total: c.quantity * c.unitPrice * (1 - Math.min(c.discountPercent || 0, percentDiscountCap) / 100) };
+      return { ...c, discountType: type, discountPercent: 0, discountAmount: Math.min(c.discountAmount || 0, c.quantity * c.unitPrice, amountDiscountCap), total: c.quantity * c.unitPrice - Math.min(c.discountAmount || 0, c.quantity * c.unitPrice, amountDiscountCap) };
     }));
   };
 
@@ -233,10 +236,10 @@ export default function PosTerminal() {
     setCart(prev => prev.map(c => {
       if (c.id !== id) return c;
       if (type === 'percent') {
-        const disc = Math.min(value, 100);
+        const disc = Math.min(Math.max(0, value), percentDiscountCap);
         return { ...c, discountType: 'percent', discountPercent: disc, discountAmount: 0, total: c.quantity * c.unitPrice * (1 - disc / 100) };
       }
-      const cap = Math.min(value, c.quantity * c.unitPrice);
+      const cap = Math.min(Math.max(0, value), c.quantity * c.unitPrice, amountDiscountCap);
       return { ...c, discountType: 'amount', discountPercent: 0, discountAmount: cap, total: c.quantity * c.unitPrice - cap };
     }));
   };
@@ -246,14 +249,29 @@ export default function PosTerminal() {
   const subtotal = cart.reduce((sum, c) => sum + c.unitPrice * c.quantity, 0);
   const cartDiscount = cart.reduce((sum, c) => sum + c.discountAmount + (c.unitPrice * c.quantity * c.discountPercent / 100), 0);
   const afterCartDiscount = subtotal - cartDiscount;
+  // Plafonds issus des règles configurées (PosDiscounts, actives) : sans règle, 100 % / sous-total
+  const activeRules = (posDiscounts || []).filter(d => d.active !== false);
+  const percentRules = activeRules.filter(d => d.type === 'Pourcentage');
+  const amountRules = activeRules.filter(d => d.type === 'Montant');
+  const percentDiscountCap = percentRules.length > 0 ? Math.min(...percentRules.map(d => Math.max(0, d.maxPercent ?? 100))) : 100;
+  const amountDiscountCap = amountRules.length > 0 ? Math.min(...amountRules.map(d => Math.max(0, d.maxAmount ?? Number.MAX_SAFE_INTEGER))) : Number.MAX_SAFE_INTEGER;
   let globalDiscount = 0;
-  if (discountType === 'percent') globalDiscount = afterCartDiscount * discountValue / 100;
-  else if (discountType === 'amount') globalDiscount = discountValue;
+  if (discountType === 'percent') globalDiscount = afterCartDiscount * Math.min(Math.max(0, discountValue), percentDiscountCap) / 100;
+  else if (discountType === 'amount') globalDiscount = Math.min(Math.max(0, discountValue), afterCartDiscount, amountDiscountCap);
   const total = Math.max(0, afterCartDiscount - globalDiscount);
+  // Valeur globale effectivement appliquée (pour l'affichage marge et la persistance cohérente)
+  const effectiveDiscountValue = discountType === 'percent'
+    ? Math.min(Math.max(0, discountValue), percentDiscountCap)
+    : (discountType === 'amount' ? Math.min(Math.max(0, discountValue), afterCartDiscount, amountDiscountCap) : 0);
 
-  const marginInfo = calculateCartMargin(cart, posProducts, discountType, discountValue);
+  const marginInfo = calculateCartMargin(cart, posProducts, discountType, effectiveDiscountValue);
 
   const handlePayment = async () => {
+    // Idempotence (B1) : garde synchrone anti double-clic / double Enter
+    if (paymentInProgressRef.current) return;
+    paymentInProgressRef.current = true;
+    setIsPaying(true);
+    try {
     if (!openSession) { alert('Aucune session caisse ouverte.'); return; }
     if (cart.length === 0) { alert('Panier vide.'); return; }
 
@@ -291,7 +309,7 @@ export default function PosTerminal() {
       }).join('\n'));
       return;
     }
-    const txNumber = `hnv${Date.now()}`;
+    const txNumber = `hnv${Date.now()}${Math.floor(100 + Math.random() * 900)}`;
 
     const changeAmount = paymentMethod === 'Espèces' || paymentMethod === 'Mixte' ? Math.max(0, receivedTotal - total) : 0;
 
@@ -316,7 +334,7 @@ export default function PosTerminal() {
       vat: 0,
       discountAmount: cartDiscount + globalDiscount,
       total,
-      receivedAmount: receivedCash > 0 ? receivedCash : (paymentMethod === 'Espèces' ? total : 0),
+      receivedAmount: receivedTotal,
       changeAmount,
       status: 'Validée' as const,
       lines: cart.map(c => ({
@@ -327,7 +345,9 @@ export default function PosTerminal() {
         unitPrice: Number(c.unitPrice) || 0,
         discountPercent: Number(c.discountPercent) || 0,
         discountAmount: Number(c.discountAmount) || 0,
-        total: Number(c.total) || ((Number(c.quantity) || 1) * (Number(c.unitPrice) || 0))
+        total: Number(c.total) || ((Number(c.quantity) || 1) * (Number(c.unitPrice) || 0)),
+        // Coût d'achat figé à la vente (marges historiques stables même si le prix d'achat évolue)
+        costPrice: (() => { const p = posProducts.find(pp => pp.id === c.productId); return p ? (p.purchasePrice || 0) : 0; })()
       })),
       payments
     };
@@ -365,6 +385,10 @@ export default function PosTerminal() {
 
     toast.success('Paiement validé avec succès !');
     setShowPreviewModal(true);
+    } finally {
+      paymentInProgressRef.current = false;
+      setIsPaying(false);
+    }
   };
 
   const handleSuspendCart = () => {
@@ -807,10 +831,9 @@ export default function PosTerminal() {
         width={400}
         footer={
           <>
-            <Button variant="success" onClick={handlePayment}>Valider</Button>
-            <Button variant="ghost" onClick={() => setShowPayment(false)}>Annuler</Button>
-          </>
-        }
+            <Button variant="success" onClick={handlePayment} disabled={isPaying}>{isPaying ? 'Encaissement...' : 'Valider'}</Button>
+            <Button variant="ghost" onClick={() => setShowPayment(false)} disabled={isPaying}>Annuler</Button>
+          </>        }
       >
         <div style={{ fontSize: '32px', fontWeight: 700, textAlign: 'center', marginBottom: '24px', color: 'var(--color-primary)' }}>{total.toLocaleString()} FCFA</div>
         <div style={{ marginBottom: '16px' }}>
@@ -853,7 +876,10 @@ export default function PosTerminal() {
         )}
 
         {(() => {
-          const change = Math.max(0, ((Number(cashAmount) || 0) + (paymentMethod === 'Mixte' || paymentMethod === 'Mobile Money' ? (Number(mobileAmount) || 0) : 0)) - total);
+          // Monnaie uniquement en espèces (M15) : jamais sur Mobile Money pur
+          const change = (paymentMethod === 'Espèces' || paymentMethod === 'Mixte')
+            ? Math.max(0, ((Number(cashAmount) || 0) + (paymentMethod === 'Mixte' ? (Number(mobileAmount) || 0) : 0)) - total)
+            : 0;
           return (
             <div style={{ 
               marginTop: '24px', 

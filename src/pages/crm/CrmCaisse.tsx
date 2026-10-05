@@ -69,10 +69,13 @@ export function CrmCaisse() {
     }).sort((a, b) => new Date(b.date_mouvement || b.created_at || '').getTime() - new Date(a.date_mouvement || a.created_at || '').getTime());
   }, [crmCaisse, searchTerm, typeFilter, categoryFilter]);
 
-  // Financial Metrics
-  const totalEntrees = crmCaisse.filter(m => m.type === 'ENTREE').reduce((sum, m) => sum + (m.montant || 0), 0);
-  const totalSorties = crmCaisse.filter(m => m.type === 'SORTIE').reduce((sum, m) => sum + (m.montant || 0), 0);
+  // Financial Metrics — calculées sur les mouvements filtrés pour rester cohérentes avec le tableau
+  const totalEntrees = filteredMouvements.filter(m => m.type === 'ENTREE').reduce((sum, m) => sum + (m.montant || 0), 0);
+  const totalSorties = filteredMouvements.filter(m => m.type === 'SORTIE').reduce((sum, m) => sum + (m.montant || 0), 0);
   const soldeDisponible = totalEntrees - totalSorties;
+  // Solde global réel (tous mouvements) utilisé pour le contrôle de provision
+  const soldeGlobal = crmCaisse.filter(m => m.type === 'ENTREE').reduce((sum, m) => sum + (m.montant || 0), 0)
+    - crmCaisse.filter(m => m.type === 'SORTIE').reduce((sum, m) => sum + (m.montant || 0), 0);
 
   const handleOpenAdd = (defaultType: TypeMouvementCaisse = 'SORTIE') => {
     setFormData({
@@ -93,6 +96,16 @@ export function CrmCaisse() {
       alert('Veuillez saisir un motif et un montant supérieur à 0.');
       return;
     }
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (formData.date_mouvement > todayStr) {
+      alert('La date du mouvement ne peut pas être dans le futur.');
+      return;
+    }
+    // Provision : une sortie manuelle ne peut pas rendre la caisse négative
+    if (formData.type === 'SORTIE' && Number(formData.montant) > soldeGlobal) {
+      alert(`Provision insuffisante : solde disponible ${soldeGlobal.toLocaleString('fr-FR')} FCFA.`);
+      return;
+    }
 
     await addCrmMouvementCaisse({
       id: '',
@@ -111,6 +124,12 @@ export function CrmCaisse() {
   };
 
   const handleDelete = (m: MouvementCaisse) => {
+    // Écritures système (encaissements / règlements auto) : suppression interdite,
+    // elles sont la contrepartie d'une prestation ou commission — les modifier casserait la cohérence.
+    if (m.module_code && m.module_code !== 'CAISSE_DEPENSES') {
+      alert(`Écriture générée automatiquement (${m.module_code} — pièce ${m.reference_piece || '-'}) : suppression interdite pour préserver la cohérence avec la commande / commission liée.`);
+      return;
+    }
     confirm({
       title: 'Supprimer l\'écriture de caisse',
       message: `Êtes-vous sûr de vouloir supprimer ce mouvement de ${m.type === 'ENTREE' ? 'recette' : 'dépense'} (${m.montant.toLocaleString('fr-FR')} FCFA - ${m.motif}) ?`,
@@ -128,7 +147,7 @@ export function CrmCaisse() {
     return list.find(c => c.value === cat)?.label || cat;
   };
 
-  if (!isDirecteur && !currentUser?.crmCaisseEnabled) {
+  if (!isDirecteur && currentUser?.crmCaisseEnabled === false) {
     return (
       <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
         <Wallet size={48} color="var(--color-error)" style={{ margin: '0 auto 16px' }} />

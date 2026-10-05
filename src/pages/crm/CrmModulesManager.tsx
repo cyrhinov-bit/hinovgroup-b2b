@@ -147,9 +147,10 @@ export default function CrmModulesManager() {
     );
   }
 
-  // Filtrer les utilisateurs (ignorer les caissiers purs qui ne sont pas dans le CRM)
+  // Filtrer les utilisateurs (les Caissiers/Gérants purs relèvent du POS, pas du CRM)
   const eligibleUsers = users.filter(u => {
     if (u.active === false) return false;
+    if (u.role === 'Caissier' || u.role === 'Gerant') return false;
     const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
     const matchRole = roleFilter === 'ALL' || u.role === roleFilter;
     const matchService = serviceFilter === 'ALL' || u.serviceId === serviceFilter;
@@ -212,7 +213,7 @@ export default function CrmModulesManager() {
             <div>
               <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>Activation des Modules CRM</h2>
               <p style={{ margin: '4px 0 0', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-                Activez ou désactivez les 7 modules de gestion par collaborateur (Responsables de service, Commerciaux, etc.)
+                Activez ou désactivez les {CRM_MODULES.length} modules de gestion par collaborateur (Responsables de service, Commerciaux, etc.)
               </p>
             </div>
           </div>
@@ -279,6 +280,9 @@ export default function CrmModulesManager() {
         {eligibleUsers.map(user => {
           const isUserAdmin = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(user.role);
           const activeCount = CRM_MODULES.filter(m => !!user[m.key]).length;
+          // Pour la Direction, "Rapports Hebdo" (saisie) est volontairement désactivé : le plein attendu est donc total - 1
+          const expectedTotal = isUserAdmin ? CRM_MODULES.length - 1 : CRM_MODULES.length;
+          const isFull = activeCount >= expectedTotal;
 
           return (
             <div 
@@ -286,7 +290,7 @@ export default function CrmModulesManager() {
               className="card" 
               style={{ 
                 padding: '20px 24px', 
-                borderLeft: `4px solid ${activeCount === CRM_MODULES.length ? '#10B981' : activeCount > 0 ? '#3B82F6' : '#94A3B8'}`,
+                borderLeft: `4px solid ${isFull ? '#10B981' : activeCount > 0 ? '#3B82F6' : '#94A3B8'}`,
                 transition: 'all 0.2s ease'
               }}
             >
@@ -335,7 +339,7 @@ export default function CrmModulesManager() {
                 {/* Actions globales pour l'utilisateur */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginRight: '8px' }}>
-                    <strong>{activeCount}</strong> / {CRM_MODULES.length} modules actifs
+                    <strong>{activeCount}</strong> / {expectedTotal} modules actifs
                   </span>
                   <button 
                     type="button" 

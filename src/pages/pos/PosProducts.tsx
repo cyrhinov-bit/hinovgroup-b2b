@@ -226,8 +226,9 @@ export default function PosProducts() {
                             onConfirm: async () => {
                               try {
                                 if (deletePosProduct) {
-                                  await deletePosProduct(product.id);
-                                  toast.success('Produit supprimé avec succès');
+                                  const ok = await deletePosProduct(product.id);
+                                  if (ok) toast.success('Produit supprimé avec succès');
+                                  else toast.error('Suppression impossible : ce produit a un historique (ventes, stocks, retours). Désactivez-le plutôt.');
                                 }
                               } catch (error) {
                                 console.error(error);

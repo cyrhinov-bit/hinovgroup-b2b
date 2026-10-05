@@ -116,7 +116,24 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
     e.preventDefault();
 
     const reference = formData.reference.trim() || generateReferenceFromName(formData.name || formData.reference);
-    
+    const normRef = reference.trim().toLowerCase();
+    const normBarcode = (formData.barcode || '').trim().toLowerCase();
+    const normIsbn = (formData.isbn || '').trim().toLowerCase();
+
+    // Unicité (B4) : référence / code-barres / ISBN déjà utilisés par un AUTRE produit = blocage
+    const duplicate = posProducts.find(p => {
+      if (initialProduct && p.id === initialProduct.id) return false;
+      if (normRef && (p.reference || '').trim().toLowerCase() === normRef) return true;
+      if (normBarcode && (p.barcode || '').trim().toLowerCase() === normBarcode) return true;
+      if (normIsbn && (p.isbn || '').trim().toLowerCase() === normIsbn) return true;
+      return false;
+    });
+    if (duplicate) {
+      setScanResult(duplicate);
+      toast.error(`Doublon refusé : déjà utilisé par « ${duplicate.name} » (${duplicate.reference}).`);
+      return;
+    }
+
     if (initialProduct) {
       // Edit mode
       const isService = formData.family === 'Service';

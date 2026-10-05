@@ -51,7 +51,7 @@ export default function PosBrands() {
                 <td style={{ padding: '12px 16px' }}>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={() => { setEditing(b); setForm({ name: b.name }); setShowForm(true); }} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}><Edit2 size={16} /></button>
-                    <button onClick={() => deletePosBrand(b.id)} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)' }}><Trash2 size={16} /></button>
+                    <button onClick={async () => { if (window.confirm('Supprimer cette marque ?')) { const ok = await deletePosBrand(b.id); if (!ok) alert('Suppression impossible : des produits utilisent cette marque.'); } }} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)' }}><Trash2 size={16} /></button>
                   </div>
                 </td>
               </tr>
