@@ -5,6 +5,16 @@ import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
 import type { CatalogueArticle } from '../../types/crmModules';
 
+interface ArticleFormData {
+  code_article: string;
+  designation: string;
+  categorie: string;
+  quantite_stock: number | '';
+  seuil_alerte: number | '';
+  cout_unitaire_achat: number | '';
+  prix_unitaire_vente: number | '';
+}
+
 export function CrmStocks() {
   const { crmArticles, users, addCrmArticle, updateCrmArticle, deleteCrmArticle } = useAppContext();
   const { currentUser: authUser } = useAuth();
@@ -20,16 +30,16 @@ export function CrmStocks() {
 
   // Quick adjust modal
   const [adjustingArticle, setAdjustingArticle] = useState<CatalogueArticle | null>(null);
-  const [adjustQty, setAdjustQty] = useState<number>(0);
+  const [adjustQty, setAdjustQty] = useState<number | ''>(0);
 
-  const [formData, setFormData] = useState<Partial<CatalogueArticle>>({
+  const [formData, setFormData] = useState<ArticleFormData>({
     code_article: '',
     designation: '',
     categorie: 'Consommable',
-    quantite_stock: 0,
+    quantite_stock: '',
     seuil_alerte: 5,
-    cout_unitaire_achat: 0,
-    prix_unitaire_vente: 0
+    cout_unitaire_achat: '',
+    prix_unitaire_vente: ''
   });
 
   const categories = Array.from(new Set(crmArticles.map(a => a.categorie || 'Général')));
@@ -57,10 +67,10 @@ export function CrmStocks() {
       code_article: `ART-${seq}`,
       designation: '',
       categorie: 'Consommable',
-      quantite_stock: 0,
+      quantite_stock: '',
       seuil_alerte: 5,
-      cout_unitaire_achat: 0,
-      prix_unitaire_vente: 0
+      cout_unitaire_achat: '',
+      prix_unitaire_vente: ''
     });
     setShowModal(true);
   };
@@ -71,10 +81,10 @@ export function CrmStocks() {
       code_article: art.code_article,
       designation: art.designation,
       categorie: art.categorie || 'Consommable',
-      quantite_stock: art.quantite_stock || 0,
-      seuil_alerte: art.seuil_alerte || 5,
-      cout_unitaire_achat: art.cout_unitaire_achat || 0,
-      prix_unitaire_vente: art.prix_unitaire_vente || 0
+      quantite_stock: art.quantite_stock ?? 0,
+      seuil_alerte: art.seuil_alerte ?? 5,
+      cout_unitaire_achat: art.cout_unitaire_achat ?? 0,
+      prix_unitaire_vente: art.prix_unitaire_vente ?? 0
     });
     setShowModal(true);
   };
@@ -91,10 +101,10 @@ export function CrmStocks() {
       code_article: formData.code_article.trim().toUpperCase(),
       designation: formData.designation.trim(),
       categorie: formData.categorie?.trim() || 'Général',
-      quantite_stock: Number(formData.quantite_stock) || 0,
-      seuil_alerte: Number(formData.seuil_alerte) || 5,
-      cout_unitaire_achat: Number(formData.cout_unitaire_achat) || 0,
-      prix_unitaire_vente: Number(formData.prix_unitaire_vente) || 0,
+      quantite_stock: formData.quantite_stock !== '' && formData.quantite_stock !== undefined ? Number(formData.quantite_stock) : 0,
+      seuil_alerte: formData.seuil_alerte !== '' && formData.seuil_alerte !== undefined ? Number(formData.seuil_alerte) : 5,
+      cout_unitaire_achat: formData.cout_unitaire_achat !== '' && formData.cout_unitaire_achat !== undefined ? Number(formData.cout_unitaire_achat) : 0,
+      prix_unitaire_vente: formData.prix_unitaire_vente !== '' && formData.prix_unitaire_vente !== undefined ? Number(formData.prix_unitaire_vente) : 0,
       cree_par: editingArticle ? editingArticle.cree_par : currentUser?.id,
       cree_par_nom: editingArticle ? editingArticle.cree_par_nom : currentUser?.name
     };
@@ -122,12 +132,13 @@ export function CrmStocks() {
 
   const handleOpenAdjust = (art: CatalogueArticle) => {
     setAdjustingArticle(art);
-    setAdjustQty(art.quantite_stock || 0);
+    setAdjustQty(art.quantite_stock ?? 0);
   };
 
   const handleSaveAdjust = async () => {
     if (!adjustingArticle) return;
-    await updateCrmArticle(adjustingArticle.id, { quantite_stock: Math.max(0, adjustQty) });
+    const finalQty = adjustQty !== '' ? Math.max(0, Number(adjustQty)) : 0;
+    await updateCrmArticle(adjustingArticle.id, { quantite_stock: finalQty });
     setAdjustingArticle(null);
   };
 
@@ -379,8 +390,10 @@ export function CrmStocks() {
                   type="number"
                   min="0"
                   className="table-input"
-                  value={formData.quantite_stock ?? 0}
-                  onChange={e => setFormData({ ...formData, quantite_stock: Number(e.target.value) })}
+                  placeholder="0"
+                  value={formData.quantite_stock ?? ''}
+                  onChange={e => setFormData({ ...formData, quantite_stock: e.target.value === '' ? '' : Number(e.target.value) })}
+                  onFocus={e => e.target.select()}
                 />
               </div>
 
@@ -388,10 +401,12 @@ export function CrmStocks() {
                 <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>Seuil d'alerte stock</label>
                 <input
                   type="number"
-                  min="1"
+                  min="0"
                   className="table-input"
-                  value={formData.seuil_alerte ?? 5}
-                  onChange={e => setFormData({ ...formData, seuil_alerte: Number(e.target.value) })}
+                  placeholder="5"
+                  value={formData.seuil_alerte ?? ''}
+                  onChange={e => setFormData({ ...formData, seuil_alerte: e.target.value === '' ? '' : Number(e.target.value) })}
+                  onFocus={e => e.target.select()}
                 />
               </div>
 
@@ -401,8 +416,10 @@ export function CrmStocks() {
                   type="number"
                   min="0"
                   className="table-input"
-                  value={formData.cout_unitaire_achat ?? 0}
-                  onChange={e => setFormData({ ...formData, cout_unitaire_achat: Number(e.target.value) })}
+                  placeholder="0"
+                  value={formData.cout_unitaire_achat ?? ''}
+                  onChange={e => setFormData({ ...formData, cout_unitaire_achat: e.target.value === '' ? '' : Number(e.target.value) })}
+                  onFocus={e => e.target.select()}
                 />
               </div>
 
@@ -412,8 +429,10 @@ export function CrmStocks() {
                   type="number"
                   min="0"
                   className="table-input"
-                  value={formData.prix_unitaire_vente ?? 0}
-                  onChange={e => setFormData({ ...formData, prix_unitaire_vente: Number(e.target.value) })}
+                  placeholder="0"
+                  value={formData.prix_unitaire_vente ?? ''}
+                  onChange={e => setFormData({ ...formData, prix_unitaire_vente: e.target.value === '' ? '' : Number(e.target.value) })}
+                  onFocus={e => e.target.select()}
                 />
               </div>
 
@@ -445,8 +464,10 @@ export function CrmStocks() {
                 type="number"
                 min="0"
                 className="table-input"
-                value={adjustQty}
-                onChange={e => setAdjustQty(Number(e.target.value))}
+                placeholder="0"
+                value={adjustQty ?? ''}
+                onChange={e => setAdjustQty(e.target.value === '' ? '' : Number(e.target.value))}
+                onFocus={e => e.target.select()}
                 autoFocus
               />
             </div>
