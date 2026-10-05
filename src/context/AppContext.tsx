@@ -4123,39 +4123,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = [item, ...crmTiers.filter(t => t.id !== id)];
     setCrmTiers(next);
     await db.crmTiers.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('clients_fournisseurs').upsert(item);
-      }
-    } catch (e) {
-      console.warn('Erreur synchro tier CRM:', e);
-    }
+    await queueSyncAction('INSERT_CRM_TIER', item);
   };
 
   const updateCrmTier = async (id: string, tier: Partial<ClientFournisseur>) => {
     const next = crmTiers.map(t => t.id === id ? { ...t, ...tier } : t);
     setCrmTiers(next);
     await db.crmTiers.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('clients_fournisseurs').update(tier).eq('id', id);
-      }
-    } catch (e) {
-      console.warn('Erreur synchro tier CRM:', e);
-    }
+    await queueSyncAction('UPDATE_CRM_TIER', { ...tier, id });
   };
 
   const deleteCrmTier = async (id: string) => {
     const next = crmTiers.filter(t => t.id !== id);
     setCrmTiers(next);
     await db.crmTiers.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('clients_fournisseurs').delete().eq('id', id);
-      }
-    } catch (e) {
-      console.warn('Erreur suppression tier CRM:', e);
-    }
+    await queueSyncAction('DELETE_CRM_TIER', { id });
   };
 
   // Module 6: Agents Commerciaux
@@ -4174,39 +4156,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = [item, ...crmCommerciaux.filter(c => c.id !== id)];
     setCrmCommerciaux(next);
     await db.crmCommerciaux.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('agents_commerciaux').upsert(item);
-      }
-    } catch (e) {
-      console.warn('Erreur synchro commercial CRM:', e);
-    }
+    await queueSyncAction('INSERT_CRM_COMMERCIAL', item);
   };
 
   const updateCrmCommercial = async (id: string, comm: Partial<AgentCommercial>) => {
     const next = crmCommerciaux.map(c => c.id === id ? { ...c, ...comm } : c);
     setCrmCommerciaux(next);
     await db.crmCommerciaux.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('agents_commerciaux').update(comm).eq('id', id);
-      }
-    } catch (e) {
-      console.warn('Erreur synchro commercial CRM:', e);
-    }
+    await queueSyncAction('UPDATE_CRM_COMMERCIAL', { ...comm, id });
   };
 
   const deleteCrmCommercial = async (id: string) => {
     const next = crmCommerciaux.filter(c => c.id !== id);
     setCrmCommerciaux(next);
     await db.crmCommerciaux.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('agents_commerciaux').delete().eq('id', id);
-      }
-    } catch (e) {
-      console.warn('Erreur suppression commercial CRM:', e);
-    }
+    await queueSyncAction('DELETE_CRM_COMMERCIAL', { id });
   };
 
   // Helper pour synchroniser les fiches de commissions pour une prestation
@@ -4275,14 +4239,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const updatedComms = [...newCommissionsToSave, ...remaining];
       setCrmCommissions(updatedComms);
       await db.crmCommissions.setItem('data', updatedComms);
-      try {
-        if (navigator.onLine) {
-          for (const comm of newCommissionsToSave) {
-            await supabase.from('commissions_prestations').upsert(comm);
-          }
-        }
-      } catch (e) {
-        console.warn('Erreur synchro commissions auto:', e);
+      for (const comm of newCommissionsToSave) {
+        await queueSyncAction('UPSERT_CRM_COMMISSION', comm);
       }
     }
   };
@@ -4332,13 +4290,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = [item, ...crmPrestations.filter(p => p.id !== id)];
     setCrmPrestations(next);
     await db.crmPrestations.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('prestations_commandes').upsert(item);
-      }
-    } catch (e) {
-      console.warn('Erreur synchro prestation CRM:', e);
-    }
+    await queueSyncAction('INSERT_CRM_PRESTATION', item);
 
     // Auto-generate commissions if > 0
     await syncCommissionsForPrestation(item);
@@ -4388,13 +4340,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = crmPrestations.map(p => p.id === id ? updated : p);
     setCrmPrestations(next);
     await db.crmPrestations.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('prestations_commandes').update(updated).eq('id', id);
-      }
-    } catch (e) {
-      console.warn('Erreur synchro prestation CRM:', e);
-    }
+    await queueSyncAction('UPDATE_CRM_PRESTATION', updated);
 
     await syncCommissionsForPrestation(updated);
   };
@@ -4403,13 +4349,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = crmPrestations.filter(p => p.id !== id);
     setCrmPrestations(next);
     await db.crmPrestations.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('prestations_commandes').delete().eq('id', id);
-      }
-    } catch (e) {
-      console.warn('Erreur suppression prestation CRM:', e);
-    }
+    await queueSyncAction('DELETE_CRM_PRESTATION', { id });
   };
 
   const encaisserCrmPrestation = async (id: string, modeReglement: string = 'ESPECES') => {
@@ -4456,26 +4396,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = [item, ...crmCaisse.filter(c => c.id !== id)];
     setCrmCaisse(next);
     await db.crmCaisse.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('mouvements_caisse').upsert(item);
-      }
-    } catch (e) {
-      console.warn('Erreur synchro caisse CRM:', e);
-    }
+    await queueSyncAction('INSERT_CRM_MOUVEMENT', item);
   };
 
   const deleteCrmMouvementCaisse = async (id: string) => {
     const next = crmCaisse.filter(c => c.id !== id);
     setCrmCaisse(next);
     await db.crmCaisse.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('mouvements_caisse').delete().eq('id', id);
-      }
-    } catch (e) {
-      console.warn('Erreur suppression caisse CRM:', e);
-    }
+    await queueSyncAction('DELETE_CRM_MOUVEMENT', { id });
   };
 
   // Module 7: Commissions
@@ -4483,13 +4411,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = crmCommissions.map(c => c.id === id ? { ...c, statut: status } : c);
     setCrmCommissions(next);
     await db.crmCommissions.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('commissions_prestations').update({ statut: status }).eq('id', id);
-      }
-    } catch (e) {
-      console.warn('Erreur synchro statut commission:', e);
-    }
+    await queueSyncAction('UPDATE_CRM_COMMISSION', { id, updates: { statut: status } });
   };
 
   const payerCrmCommission = async (id: string, modeReglement: string = 'ESPECES') => {
@@ -4507,17 +4429,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const nextComms = crmCommissions.map(c => c.id === id ? updatedComm : c);
     setCrmCommissions(nextComms);
     await db.crmCommissions.setItem('data', nextComms);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('commissions_prestations').update({
-          statut: 'PAYEE',
-          date_reglement: today,
-          mode_reglement: modeReglement
-        }).eq('id', id);
+    await queueSyncAction('UPDATE_CRM_COMMISSION', {
+      id,
+      updates: {
+        statut: 'PAYEE',
+        date_reglement: today,
+        mode_reglement: modeReglement
       }
-    } catch (e) {
-      console.warn('Erreur synchro paiement commission:', e);
-    }
+    });
 
     // Auto-create cash expense (SORTIE)
     const prest = crmPrestations.find(p => p.id === comm.prestation_id);
@@ -4557,13 +4476,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = [item, ...crmArticles.filter(a => a.id !== id)];
     setCrmArticles(next);
     await db.crmArticles.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('catalogue_articles').upsert(item);
-      }
-    } catch (e) {
-      console.warn('Erreur synchro article CRM:', e);
-    }
+    await queueSyncAction('INSERT_CRM_ARTICLE', item);
   };
 
   const updateCrmArticle = async (id: string, art: Partial<CatalogueArticle>) => {
@@ -4571,26 +4484,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = crmArticles.map(a => a.id === id ? { ...a, ...art, updated_at: now } : a);
     setCrmArticles(next);
     await db.crmArticles.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('catalogue_articles').update({ ...art, updated_at: now }).eq('id', id);
-      }
-    } catch (e) {
-      console.warn('Erreur synchro article CRM:', e);
-    }
+    await queueSyncAction('UPDATE_CRM_ARTICLE', { ...art, updated_at: now, id });
   };
 
   const deleteCrmArticle = async (id: string) => {
     const next = crmArticles.filter(a => a.id !== id);
     setCrmArticles(next);
     await db.crmArticles.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('catalogue_articles').delete().eq('id', id);
-      }
-    } catch (e) {
-      console.warn('Erreur suppression article CRM:', e);
-    }
+    await queueSyncAction('DELETE_CRM_ARTICLE', { id });
   };
 
   // Module 3: Maintenance & Interventions
@@ -4621,13 +4522,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = [item, ...crmMaintenance.filter(m => m.id !== id)];
     setCrmMaintenance(next);
     await db.crmMaintenance.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('interventions_maintenance').upsert(item);
-      }
-    } catch (e) {
-      console.warn('Erreur synchro intervention CRM:', e);
-    }
+    await queueSyncAction('INSERT_CRM_INTERVENTION', item);
   };
 
   const updateCrmIntervention = async (id: string, interv: Partial<InterventionMaintenance>) => {
@@ -4640,26 +4535,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = crmMaintenance.map(m => m.id === id ? { ...m, ...interv, quantite, prix_unitaire, prix_total, updated_at: now } : m);
     setCrmMaintenance(next);
     await db.crmMaintenance.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('interventions_maintenance').update({ ...interv, quantite, prix_unitaire, prix_total, updated_at: now }).eq('id', id);
-      }
-    } catch (e) {
-      console.warn('Erreur synchro intervention CRM:', e);
-    }
+    await queueSyncAction('UPDATE_CRM_INTERVENTION', { ...interv, quantite, prix_unitaire, prix_total, updated_at: now, id });
   };
 
   const deleteCrmIntervention = async (id: string) => {
     const next = crmMaintenance.filter(m => m.id !== id);
     setCrmMaintenance(next);
     await db.crmMaintenance.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('interventions_maintenance').delete().eq('id', id);
-      }
-    } catch (e) {
-      console.warn('Erreur suppression intervention CRM:', e);
-    }
+    await queueSyncAction('DELETE_CRM_INTERVENTION', { id });
   };
 
   const addCrmTechnicien = async (tech: TechnicienMaintenance) => {
@@ -4676,13 +4559,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = [item, ...crmTechniciens.filter(t => t.id !== id)];
     setCrmTechniciens(next);
     await db.crmTechniciens.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('techniciens_maintenance').upsert(item);
-      }
-    } catch (e) {
-      console.warn('Erreur synchro technicien CRM:', e);
-    }
+    await queueSyncAction('INSERT_CRM_TECHNICIEN', item);
   };
 
   const updateCrmTechnicien = async (id: string, tech: Partial<TechnicienMaintenance>) => {
@@ -4690,26 +4567,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = crmTechniciens.map(t => t.id === id ? { ...t, ...tech, updated_at: now } : t);
     setCrmTechniciens(next);
     await db.crmTechniciens.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('techniciens_maintenance').update({ ...tech, updated_at: now }).eq('id', id);
-      }
-    } catch (e) {
-      console.warn('Erreur synchro technicien CRM:', e);
-    }
+    await queueSyncAction('UPDATE_CRM_TECHNICIEN', { ...tech, updated_at: now, id });
   };
 
   const deleteCrmTechnicien = async (id: string) => {
     const next = crmTechniciens.filter(t => t.id !== id);
     setCrmTechniciens(next);
     await db.crmTechniciens.setItem('data', next);
-    try {
-      if (navigator.onLine) {
-        await supabase.from('techniciens_maintenance').delete().eq('id', id);
-      }
-    } catch (e) {
-      console.warn('Erreur suppression technicien CRM:', e);
-    }
+    await queueSyncAction('DELETE_CRM_TECHNICIEN', { id });
   };
 
   // Helper statut facture

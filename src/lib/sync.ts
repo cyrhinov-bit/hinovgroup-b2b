@@ -67,9 +67,17 @@ export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT'
                               'INSERT_PRODUCT_COMPLETION' | 'UPDATE_PRODUCT_COMPLETION' | 'DELETE_PRODUCT_COMPLETION' |
                               'INSERT_IMPORT_SESSION' | 'UPDATE_IMPORT_SESSION' | 'DELETE_IMPORT_SESSION' |
                               'INSERT_IMPORT_ERROR' |
-                              'INSERT_DOCUMENT' | 'UPDATE_DOCUMENT' | 'DELETE_DOCUMENT' |
-                              'INSERT_CRM_FOLDER' | 'UPDATE_CRM_FOLDER' | 'DELETE_CRM_FOLDER' |
-                              'INSERT_NOTIFICATION' | 'MARK_NOTIFICATION_READ' | 'MARK_ALL_NOTIFICATIONS_READ';
+                               'INSERT_DOCUMENT' | 'UPDATE_DOCUMENT' | 'DELETE_DOCUMENT' |
+                               'INSERT_CRM_FOLDER' | 'UPDATE_CRM_FOLDER' | 'DELETE_CRM_FOLDER' |
+                               'INSERT_NOTIFICATION' | 'MARK_NOTIFICATION_READ' | 'MARK_ALL_NOTIFICATIONS_READ' |
+                               'INSERT_CRM_TIER' | 'UPDATE_CRM_TIER' | 'DELETE_CRM_TIER' |
+                               'INSERT_CRM_COMMERCIAL' | 'UPDATE_CRM_COMMERCIAL' | 'DELETE_CRM_COMMERCIAL' |
+                               'INSERT_CRM_PRESTATION' | 'UPDATE_CRM_PRESTATION' | 'DELETE_CRM_PRESTATION' |
+                               'INSERT_CRM_MOUVEMENT' | 'DELETE_CRM_MOUVEMENT' |
+                               'UPSERT_CRM_COMMISSION' | 'UPDATE_CRM_COMMISSION' |
+                               'INSERT_CRM_ARTICLE' | 'UPDATE_CRM_ARTICLE' | 'DELETE_CRM_ARTICLE' |
+                               'INSERT_CRM_INTERVENTION' | 'UPDATE_CRM_INTERVENTION' | 'DELETE_CRM_INTERVENTION' |
+                               'INSERT_CRM_TECHNICIEN' | 'UPDATE_CRM_TECHNICIEN' | 'DELETE_CRM_TECHNICIEN';
 
 export interface SyncAction {
   id: string;
@@ -125,6 +133,60 @@ const checkResult = (error: any): boolean => {
   return false;
 };
 
+// ─── Helpers génériques modules CRM (tiers, commerciaux, prestations, caisse,
+// commissions, stocks, maintenance) ──────────────────────────────────────────
+// Les colonnes FK sont en UUID côté Supabase : toute valeur non-UUID (id local,
+// chaîne vide) est neutralisée à null pour éviter les 23503. En cas de violation
+// FK résiduelle (parent pas encore synchronisé), on rejoue sans les relations.
+const sanitizeCrmUuids = (row: any, uuidFields: string[]): any => {
+  const clean: any = { ...(row || {}) };
+  for (const f of uuidFields) {
+    if (clean[f] !== undefined && clean[f] !== null && clean[f] !== '') {
+      if (!isUuid(clean[f])) clean[f] = null;
+    } else if (clean[f] === '') {
+      clean[f] = null;
+    }
+  }
+  return clean;
+};
+
+const syncCrmUpsert = async (table: string, row: any, uuidFields: string[], tag: string): Promise<boolean> => {
+  let clean = sanitizeCrmUuids(row, uuidFields);
+  let { error } = await supabase.from(table).upsert(clean, { onConflict: 'id' });
+  if (error && isForeignKeyError(error)) {
+    console.warn(`[Sync] ${tag} violation FK, rejeu sans relations`);
+    const fallback: any = { ...clean };
+    for (const f of uuidFields) {
+      if (f !== 'id') fallback[f] = null;
+    }
+    const r2 = await supabase.from(table).upsert(fallback, { onConflict: 'id' });
+    error = r2.error;
+  }
+  if (error) console.error(`[Sync] ${tag} échoué :`, error.message);
+  return checkResult(error);
+};
+
+const syncCrmUpdate = async (table: string, id: string, updates: any, uuidFields: string[], tag: string): Promise<boolean> => {
+  const clean = sanitizeCrmUuids(updates, uuidFields);
+  delete clean.id;
+  let { error } = await supabase.from(table).update(clean).eq('id', id);
+  if (error && isForeignKeyError(error)) {
+    console.warn(`[Sync] ${tag} violation FK, rejeu sans relations`);
+    const fallback: any = { ...clean };
+    for (const f of uuidFields) fallback[f] = null;
+    const r2 = await supabase.from(table).update(fallback).eq('id', id);
+    error = r2.error;
+  }
+  if (error) console.error(`[Sync] ${tag} échoué :`, error.message);
+  return checkResult(error);
+};
+
+const syncCrmDelete = async (table: string, id: string, tag: string): Promise<boolean> => {
+  const { error } = await supabase.from(table).delete().eq('id', id);
+  if (error) console.error(`[Sync] ${tag} échoué :`, error.message);
+  return checkResult(error);
+};
+
 // Ordre de priorité topologique pour respecter les dépendances de clés étrangères
 const ACTION_PRIORITY: Record<string, number> = {
   // 1. Paramètres, Catégories, Marques, Fournisseurs, Dossiers CRM, Remises
@@ -149,6 +211,14 @@ const ACTION_PRIORITY: Record<string, number> = {
   'UPDATE_POS_PRODUCT': 2,
   'INSERT_PRESTATION': 2,
   'UPDATE_PRESTATION': 2,
+  'INSERT_CRM_TIER': 2,
+  'UPDATE_CRM_TIER': 2,
+  'INSERT_CRM_COMMERCIAL': 2,
+  'UPDATE_CRM_COMMERCIAL': 2,
+  'INSERT_CRM_ARTICLE': 2,
+  'UPDATE_CRM_ARTICLE': 2,
+  'INSERT_CRM_TECHNICIEN': 2,
+  'UPDATE_CRM_TECHNICIEN': 2,
   // 3. Sessions de caisse (indispensable avant les transactions POS)
   'INSERT_POS_CASH_SESSION': 3,
   'UPDATE_POS_CASH_SESSION': 3,
@@ -163,6 +233,10 @@ const ACTION_PRIORITY: Record<string, number> = {
   'UPDATE_POS_TRANSACTION': 4,
   'INSERT_DOCUMENT': 4,
   'UPDATE_DOCUMENT': 4,
+  'INSERT_CRM_PRESTATION': 4,
+  'UPDATE_CRM_PRESTATION': 4,
+  'INSERT_CRM_INTERVENTION': 4,
+  'UPDATE_CRM_INTERVENTION': 4,
   // 5. Paiements, Retours, Mouvements de stock, Entrées stock, Inventaires
   'INSERT_POS_PAYMENT': 5,
   'INSERT_FACTURE_PAIEMENT': 5,
@@ -173,6 +247,17 @@ const ACTION_PRIORITY: Record<string, number> = {
   'UPDATE_POS_INVENTORY': 5,
   'INSERT_POS_RETURN': 5,
   'UPDATE_POS_RETURN': 5,
+  'INSERT_CRM_MOUVEMENT': 5,
+  'UPSERT_CRM_COMMISSION': 5,
+  'UPDATE_CRM_COMMISSION': 5,
+  // 6. Suppressions et purges finales
+  'DELETE_CRM_TIER': 6,
+  'DELETE_CRM_COMMERCIAL': 6,
+  'DELETE_CRM_PRESTATION': 6,
+  'DELETE_CRM_MOUVEMENT': 6,
+  'DELETE_CRM_ARTICLE': 6,
+  'DELETE_CRM_INTERVENTION': 6,
+  'DELETE_CRM_TECHNICIEN': 6,
   // 6. Suppressions et purges finales
   'DELETE_POS_DISCOUNT': 6,
   'DELETE_POS_CATEGORY': 6,
@@ -1332,6 +1417,109 @@ export const processSyncQueue = async () => {
           const { error } = await supabase.from('crm_folders').delete().eq('id', action.payload.id);
           if (error) console.error('[Sync] DELETE_CRM_FOLDER échoué :', error.message);
           success = checkResult(error);
+          break;
+        }
+        // ─── Modules CRM Responsables : Tiers ───
+        case 'INSERT_CRM_TIER': {
+          success = await syncCrmUpsert('clients_fournisseurs', action.payload, ['cree_par'], 'INSERT_CRM_TIER');
+          break;
+        }
+        case 'UPDATE_CRM_TIER': {
+          const { id, ...updates } = action.payload;
+          success = await syncCrmUpdate('clients_fournisseurs', id, updates, ['cree_par'], 'UPDATE_CRM_TIER');
+          break;
+        }
+        case 'DELETE_CRM_TIER': {
+          success = await syncCrmDelete('clients_fournisseurs', action.payload.id, 'DELETE_CRM_TIER');
+          break;
+        }
+        // ─── Modules CRM : Commerciaux ───
+        case 'INSERT_CRM_COMMERCIAL': {
+          success = await syncCrmUpsert('agents_commerciaux', action.payload, ['cree_par'], 'INSERT_CRM_COMMERCIAL');
+          break;
+        }
+        case 'UPDATE_CRM_COMMERCIAL': {
+          const { id, ...updates } = action.payload;
+          success = await syncCrmUpdate('agents_commerciaux', id, updates, ['cree_par'], 'UPDATE_CRM_COMMERCIAL');
+          break;
+        }
+        case 'DELETE_CRM_COMMERCIAL': {
+          success = await syncCrmDelete('agents_commerciaux', action.payload.id, 'DELETE_CRM_COMMERCIAL');
+          break;
+        }
+        // ─── Modules CRM : Prestations & Commandes ───
+        case 'INSERT_CRM_PRESTATION': {
+          success = await syncCrmUpsert('prestations_commandes', action.payload, ['client_id', 'apporteur_id', 'commercial_id', 'cree_par', 'responsable_service_id'], 'INSERT_CRM_PRESTATION');
+          break;
+        }
+        case 'UPDATE_CRM_PRESTATION': {
+          const { id, ...updates } = action.payload;
+          success = await syncCrmUpdate('prestations_commandes', id, updates, ['client_id', 'apporteur_id', 'commercial_id', 'cree_par', 'responsable_service_id'], 'UPDATE_CRM_PRESTATION');
+          break;
+        }
+        case 'DELETE_CRM_PRESTATION': {
+          // Les commissions liées sont conservées (traçabilité) mais détachées si la FK l'exige
+          success = await syncCrmDelete('prestations_commandes', action.payload.id, 'DELETE_CRM_PRESTATION');
+          break;
+        }
+        // ─── Modules CRM : Caisse ───
+        case 'INSERT_CRM_MOUVEMENT': {
+          success = await syncCrmUpsert('mouvements_caisse', action.payload, ['tier_id', 'cree_par'], 'INSERT_CRM_MOUVEMENT');
+          break;
+        }
+        case 'DELETE_CRM_MOUVEMENT': {
+          success = await syncCrmDelete('mouvements_caisse', action.payload.id, 'DELETE_CRM_MOUVEMENT');
+          break;
+        }
+        // ─── Modules CRM : Commissions (générées auto par prestation) ───
+        case 'UPSERT_CRM_COMMISSION': {
+          success = await syncCrmUpsert('commissions_prestations', action.payload, ['prestation_id', 'beneficiaire_id', 'mouvement_caisse_id'], 'UPSERT_CRM_COMMISSION');
+          break;
+        }
+        case 'UPDATE_CRM_COMMISSION': {
+          const { id, updates } = action.payload;
+          success = await syncCrmUpdate('commissions_prestations', id, updates || {}, ['prestation_id', 'beneficiaire_id', 'mouvement_caisse_id'], 'UPDATE_CRM_COMMISSION');
+          break;
+        }
+        // ─── Modules CRM : Stocks / Catalogue articles ───
+        case 'INSERT_CRM_ARTICLE': {
+          success = await syncCrmUpsert('catalogue_articles', action.payload, ['fournisseur_id', 'cree_par'], 'INSERT_CRM_ARTICLE');
+          break;
+        }
+        case 'UPDATE_CRM_ARTICLE': {
+          const { id, ...updates } = action.payload;
+          success = await syncCrmUpdate('catalogue_articles', id, updates, ['fournisseur_id', 'cree_par'], 'UPDATE_CRM_ARTICLE');
+          break;
+        }
+        case 'DELETE_CRM_ARTICLE': {
+          success = await syncCrmDelete('catalogue_articles', action.payload.id, 'DELETE_CRM_ARTICLE');
+          break;
+        }
+        // ─── Modules CRM : Maintenance ───
+        case 'INSERT_CRM_INTERVENTION': {
+          success = await syncCrmUpsert('interventions_maintenance', action.payload, ['client_id', 'cree_par'], 'INSERT_CRM_INTERVENTION');
+          break;
+        }
+        case 'UPDATE_CRM_INTERVENTION': {
+          const { id, ...updates } = action.payload;
+          success = await syncCrmUpdate('interventions_maintenance', id, updates, ['client_id', 'cree_par'], 'UPDATE_CRM_INTERVENTION');
+          break;
+        }
+        case 'DELETE_CRM_INTERVENTION': {
+          success = await syncCrmDelete('interventions_maintenance', action.payload.id, 'DELETE_CRM_INTERVENTION');
+          break;
+        }
+        case 'INSERT_CRM_TECHNICIEN': {
+          success = await syncCrmUpsert('techniciens_maintenance', action.payload, [], 'INSERT_CRM_TECHNICIEN');
+          break;
+        }
+        case 'UPDATE_CRM_TECHNICIEN': {
+          const { id, ...updates } = action.payload;
+          success = await syncCrmUpdate('techniciens_maintenance', id, updates, [], 'UPDATE_CRM_TECHNICIEN');
+          break;
+        }
+        case 'DELETE_CRM_TECHNICIEN': {
+          success = await syncCrmDelete('techniciens_maintenance', action.payload.id, 'DELETE_CRM_TECHNICIEN');
           break;
         }
         case 'INSERT_DOCUMENT': {
