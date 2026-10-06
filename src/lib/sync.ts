@@ -2705,6 +2705,17 @@ export const processSyncQueue = async () => {
               const coreRes = await supabase.from('profiles').update(coreMapped).eq('id', id);
               if (!coreRes.error) {
                 error = null;
+                // Ne jamais perdre silencieusement des flags (cf. B7 ci-dessus) :
+                // tracer les flags ecartes par le fallback ultime.
+                try {
+                  const dropped = Object.keys(mapped).filter(k => !(k in coreMapped));
+                  const errors = await db.syncErrors.getItem<any[]>('errors') || [];
+                  errors.push({ action: { id: `warn-${Date.now()}`, type: 'UPDATE_PROFILE', payload: { id, droppedFlags: dropped }, timestamp: Date.now() }, failedAt: new Date().toISOString(), warning: 'Permissions non persistées (fallback colonnes de base) : ' + dropped.join(', ') });
+                  await db.syncErrors.setItem('errors', errors);
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: errors.length } }));
+                  }
+                } catch {}
               } else {
                 error = coreRes.error;
               }

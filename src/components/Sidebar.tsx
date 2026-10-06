@@ -230,11 +230,13 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     }
 
     if (isPos && effectiveRole === 'Caissier') {
-      if (item.label === 'Catalogue' && !currentUser.posCatalogueEnabled) return false;
-      if (item.label === 'Retours' && !currentUser.posReturnsEnabled) return false;
-      if (item.label === 'Approvisionnement' && !currentUser.posSupplyEnabled) return false;
-      if (item.label === 'Inventaire' && !currentUser.posInventoryEnabled) return false;
-      if ((item.label === 'Stock' || item.label === 'Mouvements Stock') && !currentUser.posStockEnabled) return false;
+      // Miroir exact des gardes RequirePosModule (App.tsx) : seul `false` explicite bloque.
+      // `undefined`/`null` = opt-out actif, comme partout ailleurs (CRM, guards in-page).
+      if (item.label === 'Catalogue' && currentUser.posCatalogueEnabled === false) return false;
+      if (item.label === 'Retours' && currentUser.posReturnsEnabled === false) return false;
+      if (item.label === 'Approvisionnement' && currentUser.posSupplyEnabled === false) return false;
+      if (item.label === 'Inventaire' && currentUser.posInventoryEnabled === false) return false;
+      if ((item.label === 'Stock' || item.label === 'Mouvements Stock') && currentUser.posStockEnabled === false) return false;
     }
     return true;
   });

@@ -150,7 +150,7 @@ function RequirePosModule({ roles, moduleKey = null, children }: { roles: Role[]
 }
 // Garde de module CRM : Caissier/Gerant jamais admis, autres rôles selon le flag
 // (miroir des gardes in-page ; défaut cohérent Sidebar opt-out : seul `false` explicite bloque)
-type CrmModuleKey = 'crmPrestationsEnabled' | 'crmCaisseEnabled' | 'crmMaintenanceEnabled' | 'crmStocksEnabled' | 'crmTiersEnabled' | 'crmCommerciauxEnabled' | 'crmCommissionsEnabled' | 'crmReportsEnabled' | 'crmTeamReportsEnabled';
+type CrmModuleKey = 'crmPrestationsEnabled' | 'crmCaisseEnabled' | 'crmMaintenanceEnabled' | 'crmStocksEnabled' | 'crmTiersEnabled' | 'crmCommerciauxEnabled' | 'crmCommissionsEnabled' | 'crmFacturationEnabled' | 'crmReportsEnabled' | 'crmTeamReportsEnabled';
 function RequireCrmModule({ moduleKey, children }: { moduleKey: CrmModuleKey; children: ReactNode }) {
   const { currentUser } = useAuth();
   if (!currentUser) return <Navigate to="/login" replace />;
@@ -196,9 +196,9 @@ function App() {
                     <Route path="clients" element={<Clients />} />
                     <Route path="services" element={<Services />} />
                     <Route path="prestations" element={<Prestations />} />
-                    <Route path="devis" element={<Devis />} />
-                    <Route path="devis/nouveau" element={<QuoteCreation />} />
-                    <Route path="factures" element={<Factures />} />
+                    <Route path="devis" element={<RequireRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><Devis /></RequireRole>} />
+                    <Route path="devis/nouveau" element={<RequireRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><QuoteCreation /></RequireRole>} />
+                    <Route path="factures" element={<RequireCrmModule moduleKey="crmFacturationEnabled"><Factures /></RequireCrmModule>} />
                     <Route path="documents" element={<Documents />} />
                     <Route path="export" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'Responsable', 'Gerant', 'SuperAdmin']}><DataExport /></RequireRole></Suspense>} />
                     <Route path="utilisateurs" element={<Utilisateurs />} />
@@ -216,7 +216,7 @@ function App() {
                     <Route path="crm/rapports-equipe" element={<RequireCrmModule moduleKey="crmTeamReportsEnabled"><CrmWeeklyReports /></RequireCrmModule>} />
                     <Route path="rapports-equipe" element={<Navigate to="/crm/rapports-equipe" replace />} />
                     <Route path="rapports-hebdo" element={<Navigate to="/crm/rapports" replace />} />
-                    <Route path="crm/modules" element={<CrmModulesManager />} />
+                    <Route path="crm/modules" element={<RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><CrmModulesManager /></RequireRole>} />
 
                     {/* Commercial routes */}
                     <Route path="commercial" element={<DashboardCommercial />} />
@@ -234,7 +234,7 @@ function App() {
                     <Route path="pos/discounts" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur']}><PosDiscounts /></RequirePosModule></Suspense>} />
                     <Route path="pos/reports" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur']}><PosReports /></RequirePosModule></Suspense>} />
                     <Route path="pos/finance" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant']}><PosFinance /></RequirePosModule></Suspense>} />
-                    <Route path="pos/returns" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant', 'Caissier']}><PosReturns /></RequireRole></Suspense>} />
+                    <Route path="pos/returns" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']} moduleKey="posReturnsEnabled"><PosReturns /></RequirePosModule></Suspense>} />
                     <Route path="pos/products" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']} moduleKey="posCatalogueEnabled"><PosProducts /></RequirePosModule></Suspense>} />
                     <Route path="pos/stock-movements" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']} moduleKey="posStockEnabled"><PosStockMovements /></RequirePosModule></Suspense>} />
                     <Route path="pos/categories" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant']}><PosCategories /></RequirePosModule></Suspense>} />

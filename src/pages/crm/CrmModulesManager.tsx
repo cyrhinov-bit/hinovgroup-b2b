@@ -160,12 +160,15 @@ export default function CrmModulesManager() {
   const toggleModule = async (user: User, moduleKey: ModuleDef['key']) => {
     setSavingUserId(user.id);
     const currentValue = !!user[moduleKey];
+    // Coherent avec setAllModules : 'Rapports Equipe' reserve a la Direction.
+    const isDir = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(user.role);
+    const nextValue = (moduleKey === 'crmTeamReportsEnabled' && !isDir) ? false : !currentValue;
     try {
       await updateUser(user.id, {
         name: user.name,
         role: user.role,
         serviceId: user.serviceId,
-        [moduleKey]: !currentValue
+        [moduleKey]: nextValue
       });
     } finally {
       setSavingUserId(null);
@@ -243,7 +246,6 @@ export default function CrmModulesManager() {
               <option value="Commercial">Commerciaux</option>
               <option value="Directeur">Directeurs</option>
               <option value="Directeur adjoint">Directeurs adjoints</option>
-              <option value="Gerant">Gérants</option>
             </select>
           </div>
 
@@ -280,8 +282,9 @@ export default function CrmModulesManager() {
         {eligibleUsers.map(user => {
           const isUserAdmin = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(user.role);
           const activeCount = CRM_MODULES.filter(m => !!user[m.key]).length;
-          // Pour la Direction, "Rapports Hebdo" (saisie) est volontairement désactivé : le plein attendu est donc total - 1
-          const expectedTotal = isUserAdmin ? CRM_MODULES.length - 1 : CRM_MODULES.length;
+          // Rapports Hebdo (saisie) reserve aux collaborateurs, Rapports Equipe a la Direction :
+          // le plein attendu est donc total - 1 dans les deux cas.
+          const expectedTotal = CRM_MODULES.length - 1;
           const isFull = activeCount >= expectedTotal;
 
           return (
@@ -364,7 +367,7 @@ export default function CrmModulesManager() {
 
               {/* Grille des 7 modules pour cet utilisateur */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
-                {CRM_MODULES.map(mod => {
+                {CRM_MODULES.filter(mod => isUserAdmin || mod.key !== 'crmTeamReportsEnabled').map(mod => {
                   const isEnabled = !!user[mod.key];
                   return (
                     <div 

@@ -15,7 +15,7 @@ DECLARE
     'clients_fournisseurs', 'agents_commerciaux', 'prestations_commandes',
     'mouvements_caisse', 'catalogue_articles', 'interventions_maintenance'
   ];
-  own TEXT := '(cree_par IS NULL OR cree_par = auth.uid() '
+  own TEXT := '(cree_par IS NULL OR cree_par::text = '''' OR cree_par::text = (auth.uid())::text '
     'OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN (''Directeur'', ''Directeur adjoint'', ''SuperAdmin'')))';
 BEGIN
   FOREACH t IN ARRAY tables_uuid LOOP
