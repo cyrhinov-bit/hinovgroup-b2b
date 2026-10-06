@@ -4315,18 +4315,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Helper pour synchroniser les fiches de commissions pour une prestation
   const syncCommissionsForPrestation = async (prest: PrestationCommande) => {
     const newCommissionsToSave: CommissionPrestation[] = [];
+    // Champs NOT NULL cote serveur (contraintes) : toujours renseignes
+    const montantPrestation = Number(prest.prix_client_final ?? prest.montant_total_vente) || 0;
 
     // Commission Apporteur (si montant > 0)
     // Geliko : une commission PAYEE n'est jamais réécrite (argent déjà décaissé)
     if ((prest.commission_apporteur || 0) > 0 && (prest.apporteur_id || prest.apporteur_nom)) {
       const existing = crmCommissions.find(c => c.prestation_id === prest.id && c.type_beneficiaire === 'APPORTEUR');
+      const montant = existing?.statut === 'PAYEE' ? (existing.montant || 0) : (prest.commission_apporteur || 0);
       const comm: CommissionPrestation = {
         id: existing?.id || uuidv4(),
         prestation_id: prest.id,
+        prestation_ref: prest.reference,
         type_beneficiaire: 'APPORTEUR',
         beneficiaire_id: prest.apporteur_id || undefined,
         beneficiaire_nom: prest.apporteur_nom || 'Apporteur',
-        montant: existing?.statut === 'PAYEE' ? (existing.montant || 0) : (prest.commission_apporteur || 0),
+        montant,
+        montant_prestation: montantPrestation,
+        montant_commission: montant,
         statut: existing?.statut || 'EN_ATTENTE',
         date_reglement: existing?.date_reglement,
         mode_reglement: existing?.mode_reglement,
@@ -4340,13 +4346,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Commission Agent Commercial (si montant > 0)
     if ((prest.commission_agent || 0) > 0 && (prest.commercial_id || prest.commercial_nom)) {
       const existing = crmCommissions.find(c => c.prestation_id === prest.id && c.type_beneficiaire === 'AGENT_COMMERCIAL');
+      const montant = existing?.statut === 'PAYEE' ? (existing.montant || 0) : (prest.commission_agent || 0);
       const comm: CommissionPrestation = {
         id: existing?.id || uuidv4(),
         prestation_id: prest.id,
+        prestation_ref: prest.reference,
         type_beneficiaire: 'AGENT_COMMERCIAL',
         beneficiaire_id: prest.commercial_id || undefined,
         beneficiaire_nom: prest.commercial_nom || 'Commercial',
-        montant: existing?.statut === 'PAYEE' ? (existing.montant || 0) : (prest.commission_agent || 0),
+        montant,
+        montant_prestation: montantPrestation,
+        montant_commission: montant,
         statut: existing?.statut || 'EN_ATTENTE',
         date_reglement: existing?.date_reglement,
         mode_reglement: existing?.mode_reglement,
@@ -4360,13 +4370,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Commission Responsable de Service (si montant > 0)
     if ((prest.commission_resp_service || 0) > 0 && (prest.resp_service_id || prest.resp_service_nom)) {
       const existing = crmCommissions.find(c => c.prestation_id === prest.id && c.type_beneficiaire === 'RESPONSABLE');
+      const montant = existing?.statut === 'PAYEE' ? (existing.montant || 0) : (prest.commission_resp_service || 0);
       const comm: CommissionPrestation = {
         id: existing?.id || uuidv4(),
         prestation_id: prest.id,
+        prestation_ref: prest.reference,
         type_beneficiaire: 'RESPONSABLE',
         beneficiaire_id: prest.resp_service_id || undefined,
         beneficiaire_nom: prest.resp_service_nom || 'Responsable de Service',
-        montant: existing?.statut === 'PAYEE' ? (existing.montant || 0) : (prest.commission_resp_service || 0),
+        montant,
+        montant_prestation: montantPrestation,
+        montant_commission: montant,
         statut: existing?.statut || 'EN_ATTENTE',
         date_reglement: existing?.date_reglement,
         mode_reglement: existing?.mode_reglement,
@@ -4752,6 +4766,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       quantite,
       prix_unitaire,
       prix_total,
+      // Colonne legacy NOT NULL cote serveur : miroir du total facture
+      prix: prix_total,
       priorite: interv.priorite || 'MOYENNE',
       statut: interv.statut || 'NOUVEAU',
       cree_par: interv.cree_par || currentUser?.id || '',
@@ -4772,10 +4788,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const prix_unitaire = Math.max(0, interv.prix_unitaire !== undefined ? Number(interv.prix_unitaire) : (current?.prix_unitaire || 0));
     const prix_total = quantite * prix_unitaire;
 
-    const next = crmMaintenance.map(m => m.id === id ? { ...m, ...interv, quantite, prix_unitaire, prix_total, updated_at: now } : m);
+    const next = crmMaintenance.map(m => m.id === id ? { ...m, ...interv, quantite, prix_unitaire, prix_total, prix: prix_total, updated_at: now } : m);
     setCrmMaintenance(next);
     await db.crmMaintenance.setItem('data', next);
-    await queueSyncAction('UPDATE_CRM_INTERVENTION', { ...interv, quantite, prix_unitaire, prix_total, updated_at: now, id });
+    await queueSyncAction('UPDATE_CRM_INTERVENTION', { ...interv, quantite, prix_unitaire, prix_total, prix: prix_total, updated_at: now, id });
   };
 
   const deleteCrmIntervention = async (id: string) => {

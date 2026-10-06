@@ -141,7 +141,7 @@ export const isUniqueViolationError = (err: any): boolean => {
 interface UniqueFieldRepair {
   table: string;
   field: string;
-  storeKey: 'crmPrestations' | 'crmArticles' | 'crmMaintenance';
+  storeKey: 'crmPrestations' | 'crmArticles' | 'crmMaintenance' | 'crmCommissions';
 }
 const withUniqueRepairSuffix = (base: string): string => {
   const root = String(base || '').split('-bis')[0] || 'REF';
@@ -1554,8 +1554,24 @@ export const processSyncQueue = async () => {
           break;
         }
         // ─── Modules CRM : Commissions (générées auto par prestation) ───
+        // Les colonnes prestation_ref / montant_prestation / montant_commission
+        // sont NOT NULL sans défaut : les payloads créés avant le correctif
+        // ne les contiennent pas → on les reconstitue ici pour soigner la file.
         case 'UPSERT_CRM_COMMISSION': {
-          success = await syncCrmUpsert('commissions_prestations', action.payload, ['prestation_id', 'beneficiaire_id', 'mouvement_caisse_id'], 'UPSERT_CRM_COMMISSION');
+          const healed = { ...(action.payload || {}) };
+          if (!healed.prestation_ref || healed.montant_prestation == null || healed.montant_commission == null) {
+            try {
+              const locals: any[] = (await db.crmPrestations.getItem('data')) || [];
+              const prest = locals.find(p => p.id === healed.prestation_id);
+              if (!healed.prestation_ref) healed.prestation_ref = prest?.reference || healed.prestation_id || 'N/A';
+              if (healed.montant_prestation == null) healed.montant_prestation = Number(prest?.prix_client_final ?? prest?.montant_total_vente ?? healed.montant) || 0;
+              if (healed.montant_commission == null) healed.montant_commission = Number(healed.montant) || 0;
+            } catch {}
+            if (!healed.prestation_ref) healed.prestation_ref = healed.prestation_id || 'N/A';
+            if (healed.montant_prestation == null) healed.montant_prestation = Number(healed.montant) || 0;
+            if (healed.montant_commission == null) healed.montant_commission = Number(healed.montant) || 0;
+          }
+          success = await syncCrmUpsert('commissions_prestations', healed, ['prestation_id', 'beneficiaire_id', 'mouvement_caisse_id'], 'UPSERT_CRM_COMMISSION');
           break;
         }
         case 'UPDATE_CRM_COMMISSION': {
@@ -1582,13 +1598,24 @@ export const processSyncQueue = async () => {
           break;
         }
         // ─── Modules CRM : Maintenance ───
+        // La colonne legacy `prix` est NOT NULL sans défaut : les payloads
+        // créés avant le correctif ne la contiennent pas → miroir du total.
         case 'INSERT_CRM_INTERVENTION': {
-          success = await syncCrmUpsert('interventions_maintenance', action.payload, ['client_id', 'cree_par'], 'INSERT_CRM_INTERVENTION', { table: 'interventions_maintenance', field: 'reference', storeKey: 'crmMaintenance' });
+          const healed = { ...(action.payload || {}) };
+          if (healed.prix == null) {
+            healed.prix = Number(healed.prix_total ?? healed.prix_unitaire) || 0;
+            if (healed.id) await backfillLocalUniqueField('crmMaintenance', healed.id, 'prix', healed.prix);
+          }
+          success = await syncCrmUpsert('interventions_maintenance', healed, ['client_id', 'cree_par'], 'INSERT_CRM_INTERVENTION', { table: 'interventions_maintenance', field: 'reference', storeKey: 'crmMaintenance' });
           break;
         }
         case 'UPDATE_CRM_INTERVENTION': {
           const { id, ...updates } = action.payload;
-          success = await syncCrmUpdate('interventions_maintenance', id, updates, ['client_id', 'cree_par'], 'UPDATE_CRM_INTERVENTION', { table: 'interventions_maintenance', field: 'reference', storeKey: 'crmMaintenance' });
+          const healed = { ...updates };
+          if (healed.prix == null && (healed.prix_total != null || healed.prix_unitaire != null)) {
+            healed.prix = Number(healed.prix_total ?? healed.prix_unitaire) || 0;
+          }
+          success = await syncCrmUpdate('interventions_maintenance', id, healed, ['client_id', 'cree_par'], 'UPDATE_CRM_INTERVENTION', { table: 'interventions_maintenance', field: 'reference', storeKey: 'crmMaintenance' });
           break;
         }
         case 'DELETE_CRM_INTERVENTION': {
