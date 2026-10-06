@@ -58,6 +58,7 @@ const PosInventory = lazy(() => import('./pages/pos/PosInventory'));
 const PosTerminal = lazy(() => import('./pages/pos/PosTerminal'));
 const PosTransactions = lazy(() => import('./pages/pos/PosTransactions'));
 const PosCash = lazy(() => import('./pages/pos/PosCash'));
+const DataExport = lazy(() => import('./pages/DataExport'));
 
 // Diagnostic pages (lazy loaded)
 const DiagnosticPage = lazy(() => import('./components/DiagnosticPage'));
@@ -199,6 +200,7 @@ function App() {
                     <Route path="devis/nouveau" element={<QuoteCreation />} />
                     <Route path="factures" element={<Factures />} />
                     <Route path="documents" element={<Documents />} />
+                    <Route path="export" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'Responsable', 'Gerant', 'SuperAdmin']}><DataExport /></RequireRole></Suspense>} />
                     <Route path="utilisateurs" element={<Utilisateurs />} />
                     <Route path="parametres" element={<Parametres />} />
 
