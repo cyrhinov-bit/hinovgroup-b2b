@@ -87,6 +87,8 @@ export function CrmMaintenance() {
   // TICKETS LOGIC
   // ----------------------------------------------------
   const filteredInterventions = crmMaintenance.filter(m => {
+    // Scopage : direction = tout, autres = uniquement ses propres tickets
+    if (!isDirecteur && m.cree_par !== currentUser?.id) return false;
     const matchesSearch =
       (m.reference || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (m.equipement || '').toLowerCase().includes(searchTerm.toLowerCase()) ||

@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { Download, FileSpreadsheet, CheckSquare, Square } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAppContext } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
+import { canViewAll, visibleTo } from '../lib/scope';
 import {
   ALL_EXPORT_KEYS, EXPORT_LABELS,
   exportPosCrmExcel,
@@ -11,8 +13,30 @@ import { Button } from '../components/ui/Button';
 
 export default function DataExport() {
   const ctx = useAppContext();
+  const { currentUser: authUser } = useAuth();
+  const currentUser = ctx.users.find(u => u.id === authUser?.id) || authUser;
   const [selected, setSelected] = useState<ExportKey[]>([...ALL_EXPORT_KEYS]);
   const [isExporting, setIsExporting] = useState(false);
+
+  // Scopage export : direction = tout, autres = uniquement ses propres lignes
+  const scoped = useMemo(() => {
+    const id = currentUser?.id;
+    const role = currentUser?.role;
+    const own = <T,>(items: T[], f: (t: T) => Array<string | undefined | null>): T[] =>
+      canViewAll(role) ? items : visibleTo(items, role, id, f);
+    return {
+      crmTiers: own(ctx.crmTiers, t => [t.cree_par]),
+      crmPrestations: own(ctx.crmPrestations, p => [p.cree_par, p.commercial_id, p.apporteur_id]),
+      crmCaisse: own(ctx.crmCaisse, m => [m.cree_par]),
+      crmCommissions: own(ctx.crmCommissions, c => [(c as any).beneficiaire_id, (c as any).cree_par]),
+      crmMaintenance: own(ctx.crmMaintenance, m => [m.cree_par]),
+      invoices: own(ctx.invoices, i => [i.commercialId, (i as any).commercial_id]),
+      clients: own(ctx.clients, c => [c.commercialId]),
+      affaires: own(ctx.affaires, a => [a.commercialId]),
+      quotes: own(ctx.quotes, q => [q.commercialId]),
+      sales: own(ctx.sales, s => [s.commercialId]),
+    };
+  }, [ctx, currentUser]);
 
   const counts: Record<ExportKey, number> = useMemo(() => ({
     pos_produits: ctx.posProducts.length,
@@ -23,20 +47,20 @@ export default function DataExport() {
     pos_mouvements_stock: ctx.posStockMovements.length,
     pos_sessions_caisse: ctx.posCashSessions.length,
     pos_fournisseurs: ctx.posSuppliers.length,
-    crm_tiers: ctx.crmTiers.length,
+    crm_tiers: scoped.crmTiers.length,
     crm_commerciaux: ctx.crmCommerciaux.length,
-    crm_prestations: ctx.crmPrestations.length,
-    crm_caisse: ctx.crmCaisse.length,
-    crm_commissions: ctx.crmCommissions.length,
+    crm_prestations: scoped.crmPrestations.length,
+    crm_caisse: scoped.crmCaisse.length,
+    crm_commissions: scoped.crmCommissions.length,
     crm_catalogue: ctx.crmArticles.length,
-    crm_maintenance: ctx.crmMaintenance.length,
+    crm_maintenance: scoped.crmMaintenance.length,
     crm_techniciens: ctx.crmTechniciens.length,
-    crm_factures: ctx.invoices.length,
-    crm_clients: ctx.clients.length,
-    crm_affaires: ctx.affaires.length,
-    crm_devis: ctx.quotes.length,
-    crm_ventes: ctx.sales.length,
-  }), [ctx]);
+    crm_factures: scoped.invoices.length,
+    crm_clients: scoped.clients.length,
+    crm_affaires: scoped.affaires.length,
+    crm_devis: scoped.quotes.length,
+    crm_ventes: scoped.sales.length,
+  }), [ctx, scoped]);
 
   const toggle = (key: ExportKey) =>
     setSelected(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
@@ -61,19 +85,19 @@ export default function DataExport() {
         posStockMovements: ctx.posStockMovements,
         posCashSessions: ctx.posCashSessions,
         posSuppliers: ctx.posSuppliers,
-        crmTiers: ctx.crmTiers,
+        crmTiers: scoped.crmTiers,
         crmCommerciaux: ctx.crmCommerciaux,
-        crmPrestations: ctx.crmPrestations,
-        crmCaisse: ctx.crmCaisse,
-        crmCommissions: ctx.crmCommissions,
+        crmPrestations: scoped.crmPrestations,
+        crmCaisse: scoped.crmCaisse,
+        crmCommissions: scoped.crmCommissions,
         crmArticles: ctx.crmArticles,
-        crmMaintenance: ctx.crmMaintenance,
+        crmMaintenance: scoped.crmMaintenance,
         crmTechniciens: ctx.crmTechniciens,
-        invoices: ctx.invoices,
-        clients: ctx.clients,
-        affaires: ctx.affaires,
-        quotes: ctx.quotes,
-        sales: ctx.sales,
+        invoices: scoped.invoices,
+        clients: scoped.clients,
+        affaires: scoped.affaires,
+        quotes: scoped.quotes,
+        sales: scoped.sales,
       }, keys);
       toast.success(`Export généré : ${fileName}`);
     } catch (e) {
@@ -132,6 +156,7 @@ export default function DataExport() {
           </h1>
           <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
             Un seul fichier Excel multi-onglets (une feuille par module). Les données exportées sont celles chargées localement (pensez à synchroniser avant).
+            {!canViewAll(currentUser?.role) && ' Périmètre restreint à vos propres données.'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>

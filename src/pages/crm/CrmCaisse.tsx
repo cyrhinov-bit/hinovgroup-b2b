@@ -57,8 +57,11 @@ export function CrmCaisse() {
     reference_piece: ''
   });
 
+  // Scopage : direction = tout, autres = uniquement ses propres mouvements
+  const ownCaisse = isDirecteur ? crmCaisse : crmCaisse.filter(m => (m as any).cree_par === currentUser?.id);
+
   const filteredMouvements = useMemo(() => {
-    return crmCaisse.filter(m => {
+    return ownCaisse.filter(m => {
       const matchesSearch =
         (m.motif || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (m.reference_piece || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -67,15 +70,15 @@ export function CrmCaisse() {
       const matchesCategory = categoryFilter === 'ALL' || m.categorie === categoryFilter;
       return matchesSearch && matchesType && matchesCategory;
     }).sort((a, b) => new Date(b.date_mouvement || b.created_at || '').getTime() - new Date(a.date_mouvement || a.created_at || '').getTime());
-  }, [crmCaisse, searchTerm, typeFilter, categoryFilter]);
+  }, [ownCaisse, searchTerm, typeFilter, categoryFilter]);
 
   // Financial Metrics — calculées sur les mouvements filtrés pour rester cohérentes avec le tableau
   const totalEntrees = filteredMouvements.filter(m => m.type === 'ENTREE').reduce((sum, m) => sum + (m.montant || 0), 0);
   const totalSorties = filteredMouvements.filter(m => m.type === 'SORTIE').reduce((sum, m) => sum + (m.montant || 0), 0);
   const soldeDisponible = totalEntrees - totalSorties;
-  // Solde global réel (tous mouvements) utilisé pour le contrôle de provision
-  const soldeGlobal = crmCaisse.filter(m => m.type === 'ENTREE').reduce((sum, m) => sum + (m.montant || 0), 0)
-    - crmCaisse.filter(m => m.type === 'SORTIE').reduce((sum, m) => sum + (m.montant || 0), 0);
+  // Solde global réel (périmètre visible) utilisé pour le contrôle de provision
+  const soldeGlobal = ownCaisse.filter(m => m.type === 'ENTREE').reduce((sum, m) => sum + (m.montant || 0), 0)
+    - ownCaisse.filter(m => m.type === 'SORTIE').reduce((sum, m) => sum + (m.montant || 0), 0);
 
   const handleOpenAdd = (defaultType: TypeMouvementCaisse = 'SORTIE') => {
     setFormData({

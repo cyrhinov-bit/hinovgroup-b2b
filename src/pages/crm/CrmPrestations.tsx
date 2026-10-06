@@ -75,6 +75,8 @@ export function CrmPrestations() {
   const benefice_net = marge_interne - (c_app + c_resp + c_com);
 
   const filteredPrestations = crmPrestations.filter(p => {
+    // Scopage : direction = tout, autres = uniquement ses propres commandes
+    if (!isDirecteur && p.cree_par !== currentUser?.id && p.commercial_id !== currentUser?.id && p.apporteur_id !== currentUser?.id) return false;
     const matchesSearch =
       (p.reference || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (p.designation || '').toLowerCase().includes(searchTerm.toLowerCase()) ||

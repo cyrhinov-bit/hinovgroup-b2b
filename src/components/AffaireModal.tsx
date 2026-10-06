@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Briefcase, User, Building, Calendar, DollarSign, Target, FileText, CheckCircle2 } from 'lucide-react';
 import { useAppContext, type Affaire, type AffaireStatus } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
+import { canViewAll } from '../lib/scope';
 import './AffaireModal.css';
 
 interface AffaireModalProps {
@@ -36,6 +37,9 @@ const SOURCES = [
 export function AffaireModal({ isOpen, onClose, affaireToEdit, preselectedClientId }: AffaireModalProps) {
   const { clients, services, users, addAffaire, updateAffaire } = useAppContext();
   const { currentUser } = useAuth();
+  // Hors direction, une affaire est toujours attribuée à soi-même (scopage propriétaire)
+  const profileRole = users.find(u => u.id === currentUser?.id)?.role || (currentUser as any)?.role;
+  const isDirector = canViewAll(profileRole);
 
   const [title, setTitle] = useState('');
   const [clientId, setClientId] = useState(preselectedClientId || '');
@@ -120,13 +124,21 @@ export function AffaireModal({ isOpen, onClose, affaireToEdit, preselectedClient
     setLoading(true);
     setError('');
 
+    // Hors direction : attribution forcée à soi-même
+    const effectiveCommercialId = isDirector ? commercialId : (currentUser?.id || commercialId);
+    if (!effectiveCommercialId) {
+      setError('Le commercial en charge est obligatoire.');
+      setLoading(false);
+      return;
+    }
+
     try {
       if (affaireToEdit) {
         await updateAffaire(affaireToEdit.id, {
           title: title.trim(),
           clientId,
           serviceId,
-          commercialId,
+          commercialId: effectiveCommercialId,
           status,
           estimatedAmountHt: Number(estimatedAmountHt) || 0,
           probability: Number(probability) || 0,
@@ -141,7 +153,7 @@ export function AffaireModal({ isOpen, onClose, affaireToEdit, preselectedClient
           title: title.trim(),
           clientId,
           serviceId,
-          commercialId,
+          commercialId: effectiveCommercialId,
           status,
           estimatedAmountHt: Number(estimatedAmountHt) || 0,
           probability: Number(probability) || 0,
@@ -238,7 +250,8 @@ export function AffaireModal({ isOpen, onClose, affaireToEdit, preselectedClient
               </select>
             </div>
 
-            {/* Ligne 3 : Commercial */}
+            {/* Ligne 3 : Commercial (direction uniquement, sinon attribution automatique à soi-même) */}
+            {isDirector ? (
             <div className="form-group">
               <label htmlFor="affaire-commercial">
                 <User size={16} className="inline mr-1" />
@@ -259,6 +272,7 @@ export function AffaireModal({ isOpen, onClose, affaireToEdit, preselectedClient
                 ))}
               </select>
             </div>
+            ) : null}
 
             {/* Ligne 3 : Statut */}
             <div className="form-group">

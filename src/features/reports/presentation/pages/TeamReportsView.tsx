@@ -22,15 +22,11 @@ export function TeamReportsView() {
 
   const isDirection = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
 
-  // Scope filter
+  // Scope : direction = tout, autres rôles (Responsable inclus) = propres rapports uniquement
   const allowedReports = useMemo(() => {
     if (isDirection) return v2WeeklyReports;
-    if (currentUser?.role === 'Responsable') {
-      const myTeamUserIds = users.filter(u => u.serviceId === currentUser?.serviceId).map(u => u.id);
-      return v2WeeklyReports.filter(r => myTeamUserIds.includes(r.authorId));
-    }
     return v2WeeklyReports.filter(r => r.authorId === currentUser?.id);
-  }, [v2WeeklyReports, currentUser, isDirection, users]);
+  }, [v2WeeklyReports, currentUser, isDirection]);
 
   const filteredReports = useMemo(() => {
     return allowedReports.filter(r => {

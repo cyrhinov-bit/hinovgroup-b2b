@@ -27,6 +27,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { useAppContext } from '../context/AppContext';
 import type { Quote } from '../context/AppContext';
+import { visibleTo } from '../lib/scope';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
 import type { Invoice, InvoiceStatus } from '../types/crmModules';
@@ -152,7 +153,6 @@ export function Factures() {
   };
 
   const isDirector = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
-  const isResponsable = currentUser?.role === 'Responsable';
 
   // Helper functions
   const getClient = (id?: string) => clients.find(c => c.id === id);
@@ -719,13 +719,10 @@ export function Factures() {
   };
 
   // Filtering
+  // Scopage : direction = tout, autres rôles (Responsable inclus) = propres factures uniquement
   const allowedInvoices = useMemo(() => {
-    if (isDirector) return invoices;
-    if (isResponsable) {
-      return invoices.filter(i => i.serviceId === currentUser?.serviceId || i.commercialId === currentUser?.id);
-    }
-    return invoices.filter(i => i.commercialId === currentUser?.id);
-  }, [invoices, isDirector, isResponsable, currentUser]);
+    return visibleTo(invoices, currentUser?.role, currentUser?.id, i => [i.commercialId, (i as any).commercial_id]);
+  }, [invoices, currentUser]);
 
   const monthInvoices = useMemo(() => {
     return allowedInvoices.filter(inv => {

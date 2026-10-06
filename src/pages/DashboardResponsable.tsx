@@ -97,12 +97,14 @@ export function DashboardResponsable() {
     }
   };
 
-  const serviceCommercials = users.filter(u => u.serviceId === currentUser?.serviceId && (u.role === 'Commercial' || u.role === 'Responsable'));
+  // Scopage strict : chacun ne voit que ses propres données (Responsable inclus).
+  const selfId = currentUser?.id;
+  const serviceCommercials = users.filter(u => u.id === selfId && (u.role === 'Commercial' || u.role === 'Responsable'));
 
-  // 1. Devis du Service
+  // 1. Mes devis
   const filteredServiceQuotes = useMemo(() => {
     return quotes.filter(q => {
-      if (q.serviceId !== currentUser?.serviceId) return false;
+      if (q.commercialId !== selfId) return false;
       if (!isDateInPeriod(q.date)) return false;
       if (selectedCommercialFilter !== 'ALL' && q.commercialId !== selectedCommercialFilter) return false;
       if (searchQuery.trim()) {
@@ -115,14 +117,13 @@ export function DashboardResponsable() {
       }
       return true;
     });
-  }, [quotes, currentUser?.serviceId, selectedPeriod, selectedCommercialFilter, searchQuery, clients, users]);
+  }, [quotes, selfId, selectedPeriod, selectedCommercialFilter, searchQuery, clients, users]);
 
-  // 2. Commandes Prestations du Service
+  // 2. Mes commandes / prestations (créées, commerciales ou apportées par moi)
   const filteredServicePrestations = useMemo(() => {
     return crmPrestations.filter(p => {
-      const user = users.find(u => u.id === p.cree_par || u.id === p.resp_service_id || u.id === p.responsable_service_id);
-      const isMyService = user?.serviceId === currentUser?.serviceId || p.resp_service_id === currentUser?.id || p.responsable_service_id === currentUser?.id;
-      if (!isMyService) return false;
+      const isMine = p.cree_par === selfId || p.commercial_id === selfId || p.apporteur_id === selfId;
+      if (!isMine) return false;
       if (!isDateInPeriod(p.date_commande || p.date_creation || p.created_at)) return false;
       if (selectedCommercialFilter !== 'ALL' && p.cree_par !== selectedCommercialFilter && p.commercial_id !== selectedCommercialFilter) return false;
       if (searchQuery.trim()) {
@@ -134,31 +135,29 @@ export function DashboardResponsable() {
       }
       return true;
     });
-  }, [crmPrestations, users, currentUser, selectedPeriod, selectedCommercialFilter, searchQuery]);
+  }, [crmPrestations, selfId, selectedPeriod, selectedCommercialFilter, searchQuery]);
 
-  // 3. Maintenance du Service
+  // 3. Mes tickets de maintenance
   const filteredServiceMaintenance = useMemo(() => {
     return crmMaintenance.filter(ticket => {
-      const user = users.find(u => u.id === ticket.cree_par);
-      const isMyService = user?.serviceId === currentUser?.serviceId || ticket.cree_par === currentUser?.id;
-      if (!isMyService) return false;
+      if (ticket.cree_par !== selfId) return false;
       if (!isDateInPeriod(ticket.date_intervention || ticket.created_at)) return false;
       if (selectedCommercialFilter !== 'ALL' && ticket.cree_par !== selectedCommercialFilter) return false;
       return true;
     });
-  }, [crmMaintenance, users, currentUser, selectedPeriod, selectedCommercialFilter]);
+  }, [crmMaintenance, selfId, selectedPeriod, selectedCommercialFilter]);
 
-  // Filtrage Factures du Service
+  // Mes factures
   const filteredServiceInvoices = useMemo(() => {
     return invoices.filter(inv => {
       const invDate = inv.issueDate || inv.issue_date || inv.createdAt || inv.created_at || '';
       if (!isDateInPeriod(invDate)) return false;
-      const isMyService = inv.serviceId === currentUser?.serviceId || inv.service_id === currentUser?.serviceId || inv.createdBy === currentUser?.id;
-      if (!isMyService) return false;
+      const isMine = inv.commercialId === selfId || (inv as any).commercial_id === selfId || (inv as any).createdBy === selfId;
+      if (!isMine) return false;
       if (selectedCommercialFilter !== 'ALL' && inv.commercialId !== selectedCommercialFilter && inv.commercial_id !== selectedCommercialFilter && inv.createdBy !== selectedCommercialFilter) return false;
       return true;
     });
-  }, [invoices, currentUser, selectedPeriod, selectedCommercialFilter]);
+  }, [invoices, selfId, selectedPeriod, selectedCommercialFilter]);
 
   const serviceInvoicesTotal = filteredServiceInvoices.filter(i => (i.status as string) !== 'ANNULEE' && (i.status as string) !== 'Annulée').reduce((sum, i) => sum + (i.totalAmount || 0), 0);
   const serviceInvoicesPaid = filteredServiceInvoices.reduce((sum, i) => sum + (i.payments || []).reduce((ps, p) => ps + (p.amount || 0), 0), 0);
@@ -286,17 +285,13 @@ export function DashboardResponsable() {
       <div className="responsable-hero-banner">
         <div className="hero-badge">
           <Building2 size={15} />
-          <span>SUPERVISION DU PÔLE DE SERVICE</span>
+          <span>MON ACTIVITÉ PERSONNELLE</span>
         </div>
         <h1 className="hero-title">{serviceName}</h1>
         <p className="hero-subtitle">
-          {currentService?.description || 'Pilotage consolidé des commandes, devis, interventions et collaborateurs de votre pôle.'}
+          {currentService?.description || 'Pilotage de vos commandes, devis et interventions.'}
         </p>
         <div className="hero-meta-tags">
-          <span className="hero-tag">
-            <Users size={14} color="var(--color-primary)" />
-            <strong>{serviceCommercials.length}</strong> Collaborateur(s)
-          </span>
           {currentUser?.crmPrestationsEnabled && (
             <span className="hero-tag">
               <ShoppingBag size={14} color="#10B981" />
@@ -369,20 +364,6 @@ export function DashboardResponsable() {
               <option value="THIS_YEAR">Cette année</option>
             </select>
           </div>
-
-          <div>
-            <select
-              className="table-input"
-              style={{ width: '100%', fontSize: '0.85rem' }}
-              value={selectedCommercialFilter}
-              onChange={e => setSelectedCommercialFilter(e.target.value)}
-            >
-              <option value="ALL">👤 Tous les collaborateurs du pôle</option>
-              {serviceCommercials.map(u => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </div>
         </div>
       </div>
 
@@ -441,7 +422,7 @@ export function DashboardResponsable() {
               <Award size={24} />
             </div>
             <div className="widget-content">
-              <div className="widget-label">BÉNÉFICE NET PÔLE</div>
+              <div className="widget-label">MON BÉNÉFICE NET</div>
               <div className="widget-value">{totalBeneficeNet.toLocaleString('fr-FR')} F</div>
               <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
                 Rendement financier net
@@ -493,7 +474,7 @@ export function DashboardResponsable() {
           style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', padding: '8px 16px' }}
         >
           <BarChart3 size={16} />
-          <span>Vue Synthèse Pôle</span>
+          <span>Vue Synthèse</span>
         </button>
 
         <button
@@ -502,7 +483,7 @@ export function DashboardResponsable() {
           style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', padding: '8px 16px' }}
         >
           <Users size={16} />
-          <span>Équipe du Pôle ({serviceMemberSummaries.length})</span>
+          <span>Mon activité ({serviceMemberSummaries.length})</span>
         </button>
 
         {currentUser?.crmPrestationsEnabled && (
@@ -523,7 +504,7 @@ export function DashboardResponsable() {
           <div className="card" style={{ padding: '20px' }}>
             <DonutChart
               data={donutData}
-              title="Distribution des Activités du Pôle"
+              title="Distribution de mes activités"
               subTitle="Commandes, devis et interventions"
               centerLabel="Opérations"
               centerValue={donutData.reduce((s, d) => s + d.value, 0)}
@@ -580,7 +561,7 @@ export function DashboardResponsable() {
 
           {serviceMemberSummaries.length === 0 && (
             <div className="card" style={{ gridColumn: '1 / -1', padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-              Aucun collaborateur assigné à ce service pour le moment.
+              Aucune donnée pour le moment.
             </div>
           )}
         </div>
@@ -633,7 +614,7 @@ export function DashboardResponsable() {
                 {filteredServicePrestations.length === 0 && (
                   <tr>
                     <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-muted)' }}>
-                      Aucune commande enregistrée pour ce pôle.
+                      Aucune commande enregistrée.
                     </td>
                   </tr>
                 )}

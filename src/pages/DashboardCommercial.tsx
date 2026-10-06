@@ -10,7 +10,7 @@ export function DashboardCommercial() {
   const currentUser = users.find(u => u.id === authUser?.id) || authUser;
   const navigate = useNavigate();
 
-  const myQuotes = quotes.filter(q => q.commercialId === currentUser?.id || q.serviceId === currentUser?.serviceId);
+  const myQuotes = quotes.filter(q => q.commercialId === currentUser?.id);
   const myClients = clients.filter(c => c.commercialId === currentUser?.id);
   const myPrestations = crmPrestations.filter(p => p.cree_par === currentUser?.id || p.commercial_id === currentUser?.id || p.apporteur_id === currentUser?.id);
   const myCommissions = crmCommissions.filter(c => c.beneficiaire_id === currentUser?.id || c.cree_par === currentUser?.id || (c.beneficiaire_nom && c.beneficiaire_nom.toLowerCase().includes((currentUser?.name || '').toLowerCase())));

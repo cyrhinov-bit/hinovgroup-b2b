@@ -22,6 +22,7 @@ import { useConfirm } from '../components/ConfirmModal';
 import { generateQuotePdf, downloadBlob } from '../lib/pdfUtils';
 import { ReportPdfPreview, type ReportPdfPreviewData } from '../components/ReportPdfPreview';
 import type { Quote } from '../context/AppContext';
+import { canViewAll, visibleTo, canManageOwned } from '../lib/scope';
 
 type PeriodFilter = 'ALL' | 'TODAY' | '7_DAYS' | 'THIS_MONTH' | 'THIS_QUARTER' | 'THIS_YEAR';
 type QuoteStatus = Quote['status'];
@@ -66,8 +67,7 @@ export function Devis() {
     }
   }, [searchParams]);
 
-  const isDirector = currentUser?.role === 'Directeur' || currentUser?.role === 'SuperAdmin' || currentUser?.role === 'Directeur adjoint';
-  const isResponsable = currentUser?.role === 'Responsable';
+  const isDirector = canViewAll(currentUser?.role);
 
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Inconnu';
   const getServiceName = (id?: string) => services.find(s => s.id === id)?.name || '-';
@@ -105,13 +105,10 @@ export function Devis() {
     }
   };
 
+  // Scopage : direction = tout, autres rôles (Responsable inclus) = propres devis uniquement
   const allowedQuotes = useMemo(() => {
-    if (isDirector) return quotes;
-    if (isResponsable) {
-      return quotes.filter(q => q.serviceId === currentUser?.serviceId || q.commercialId === currentUser?.id);
-    }
-    return quotes.filter(q => q.commercialId === currentUser?.id);
-  }, [quotes, isDirector, isResponsable, currentUser]);
+    return visibleTo(quotes, currentUser?.role, currentUser?.id, q => [q.commercialId]);
+  }, [quotes, currentUser]);
 
   const filteredQuotes = useMemo(() => {
     return allowedQuotes.filter(q => {
@@ -172,11 +169,11 @@ export function Devis() {
     for (const q of quotes) m.set(q.commercialId, (m.get(q.commercialId) || 0) + 1);
     return m;
   }, [quotes]);
+  // Filtre par auteur : direction uniquement (les autres ne voient que leurs devis)
   const filterableUsers = useMemo(() => {
     if (isDirector) return users;
-    if (isResponsable) return users.filter(u => u.serviceId === currentUser?.serviceId);
     return [];
-  }, [users, isDirector, isResponsable, currentUser]);
+  }, [users, isDirector]);
 
   const hasActiveFilters = filter !== '' || statusFilter !== '' || serviceFilter !== '' || authorFilter !== '' || periodFilter !== 'ALL';
 
@@ -213,12 +210,9 @@ export function Devis() {
     });
   };
 
-  // Qui peut changer le statut ? Propriétaire commercial, responsable du service, direction.
+  // Qui peut gérer le devis ? Direction ou propriétaire (Responsable inclus).
   const canManageQuote = (q: Quote): boolean => {
-    if (isDirector) return true;
-    if (q.commercialId === currentUser?.id) return true;
-    if (isResponsable && q.serviceId && q.serviceId === currentUser?.serviceId) return true;
-    return false;
+    return canManageOwned(q, currentUser?.role, currentUser?.id, x => [x.commercialId]);
   };
 
   const canTransition = (q: Quote, next: QuoteStatus): boolean => {
@@ -317,7 +311,7 @@ export function Devis() {
           </div>
 
           {/* Filtre par Utilisateur / Auteur (Pour Admin et Responsables) */}
-          {(isDirector || isResponsable) && (
+          {isDirector && (
             <div>
               <select 
                 className="table-input" 
@@ -439,7 +433,7 @@ export function Devis() {
               <tr>
                 <th>N° Devis</th>
                 <th>Client</th>
-                {(isDirector || isResponsable) && <th>Auteur / Utilisateur</th>}
+                {isDirector && <th>Auteur / Utilisateur</th>}
                 <th>Service</th>
                 <th>Sujet</th>
                 <th style={{ textAlign: 'right' }}>Montant Total</th>
@@ -460,7 +454,7 @@ export function Devis() {
                   <td data-label="Client">
                     <strong>{getClientName(q.clientId)}</strong>
                   </td>
-                  {(isDirector || isResponsable) && (
+                  {isDirector && (
                     <td data-label="Auteur">
                       <div 
                         style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
@@ -586,7 +580,7 @@ export function Devis() {
               })}
               {filteredQuotes.length === 0 && (
                 <tr>
-                  <td colSpan={(isDirector || isResponsable) ? 9 : 8} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
+                  <td colSpan={isDirector ? 9 : 8} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
                     Aucun devis trouvé pour les critères de filtre sélectionnés.
                   </td>
                 </tr>

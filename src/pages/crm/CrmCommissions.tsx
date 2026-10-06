@@ -21,7 +21,12 @@ export function CrmCommissions() {
   const [paymentMode, setPaymentMode] = useState<string>('ESPECES');
   const [isPaying, setIsPaying] = useState(false);
 
-  const filteredCommissions = crmCommissions.filter(c => {
+  // Scopage : direction = tout, autres = uniquement ses propres commissions
+  const allowedCommissions = isDirecteur
+    ? crmCommissions
+    : crmCommissions.filter(c => (c as any).beneficiaire_id === currentUser?.id || (c as any).cree_par === currentUser?.id);
+
+  const filteredCommissions = allowedCommissions.filter(c => {
     const prest = crmPrestations.find(p => p.id === c.prestation_id);
     const ref = prest?.reference || '';
     const matchesSearch =
@@ -35,10 +40,10 @@ export function CrmCommissions() {
 
   // KPIs (les statuts legacy A_VALIDER/A_PAYER comptent comme en attente)
   const isPendingStatus = (s: string) => s === 'EN_ATTENTE' || s === 'A_VALIDER' || s === 'A_PAYER';
-  const totalEnAttente = crmCommissions.filter(c => isPendingStatus(c.statut)).reduce((sum, c) => sum + (c.montant || 0), 0);
-  const totalValidees = crmCommissions.filter(c => c.statut === 'VALIDEE').reduce((sum, c) => sum + (c.montant || 0), 0);
-  const totalPayees = crmCommissions.filter(c => c.statut === 'PAYEE').reduce((sum, c) => sum + (c.montant || 0), 0);
-  const totalGeneral = crmCommissions.filter(c => c.statut !== 'ANNULEE').reduce((sum, c) => sum + (c.montant || 0), 0);
+  const totalEnAttente = allowedCommissions.filter(c => isPendingStatus(c.statut)).reduce((sum, c) => sum + (c.montant || 0), 0);
+  const totalValidees = allowedCommissions.filter(c => c.statut === 'VALIDEE').reduce((sum, c) => sum + (c.montant || 0), 0);
+  const totalPayees = allowedCommissions.filter(c => c.statut === 'PAYEE').reduce((sum, c) => sum + (c.montant || 0), 0);
+  const totalGeneral = allowedCommissions.filter(c => c.statut !== 'ANNULEE').reduce((sum, c) => sum + (c.montant || 0), 0);
 
   const handleValidate = async (comm: CommissionPrestation) => {
     await updateCrmCommissionStatus(comm.id, 'VALIDEE');
