@@ -2,11 +2,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // @ts-ignore
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
+// @ts-ignore
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+const MAX_CHAT_CHARS = 20000;
 
 // @ts-ignore
 serve(async (req: Request) => {
@@ -16,10 +20,25 @@ serve(async (req: Request) => {
   }
 
   try {
+    // Auth obligatoire : seul un utilisateur connecte peut consommer le quota IA.
+    // (verify_jwt seul ne suffit pas : l'anon key est un JWT valide.)
+    const authHeader = req.headers.get('Authorization') ?? '';
+    // @ts-ignore
+    const supabaseAuth = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_ANON_KEY') ?? '', {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: userErr } = await supabaseAuth.auth.getUser();
+    if (userErr || !user) {
+      return new Response(JSON.stringify({ error: 'Non authentifié.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 });
+    }
+
     const { chatHistory, userName, period, userApiKey } = await req.json();
 
     if (!chatHistory) {
       throw new Error("Historique de conversation manquant.");
+    }
+    if (String(chatHistory).length > MAX_CHAT_CHARS) {
+      throw new Error("Historique trop volumineux (max 20000 caractères).");
     }
 
     // @ts-ignore

@@ -174,35 +174,36 @@ function App() {
                 <Route path="/catalogue" element={<PublicCatalog />} />
                 <Route path="/catalog" element={<Navigate to="/catalogue" replace />} />
                 <Route path="/boutique" element={<Navigate to="/catalogue" replace />} />
-                <Route path="/test" element={<TestDashboard />} />
-
-                <Route path="/diagnostics" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><DiagnosticPage /></Suspense>} />
-                <Route path="/diagnostics/printer" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PrinterDiagnosticPage /></Suspense>} />
-                <Route path="/diagnostics/scanner" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><ScannerDiagnosticPage /></Suspense>} />
-                <Route path="/diagnostics/pos" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PosDiagnosticPage /></Suspense>} />
-                <Route path="/diagnostics/performance" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><PerformanceDiagnosticPage /></Suspense>} />
-                <Route path="/diagnostics/backup" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><BackupDiagnosticPage /></Suspense>} />
-                <Route path="/diagnostics/files" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><FileDiagnosticPage /></Suspense>} />
-                <Route path="/diagnostics/sync" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><SyncDiagnosticPage /></Suspense>} />
-                <Route path="/diagnostics/support" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><SupportDiagnosticPage /></Suspense>} />
-                <Route path="/diagnostics/security" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><SecurityDiagnosticPage /></Suspense>} />
-                <Route path="/diagnostics/updater" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><UpdaterDiagnosticPage /></Suspense>} />
-                <Route path="/diagnostics/hardware" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><HardwareDiagnosticPage /></Suspense>} />
 
                 <Route element={<ProtectedRoute />}>
                   <Route path="/" element={<Layout />}>
                     <Route index element={<RoleBasedDashboard />} />
-                    
-                    <Route path="clients" element={<Clients />} />
-                    <Route path="services" element={<Services />} />
-                    <Route path="prestations" element={<Prestations />} />
+
+                    {/* Diagnostics : authentification + Direction requises (ex-publiques) */}
+                    <Route path="/test" element={<RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><TestDashboard /></RequireRole>} />
+                    <Route path="/diagnostics" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><DiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/printer" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><PrinterDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/scanner" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><ScannerDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/pos" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><PosDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/performance" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><PerformanceDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/backup" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><BackupDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/files" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><FileDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/sync" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><SyncDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/support" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><SupportDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/security" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><SecurityDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/updater" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><UpdaterDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/hardware" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><HardwareDiagnosticPage /></RequireRole></Suspense>} />
+
+                    <Route path="clients" element={<RequireRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><Clients /></RequireRole>} />
+                    <Route path="services" element={<RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><Services /></RequireRole>} />
+                    <Route path="prestations" element={<RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><Prestations /></RequireRole>} />
                     <Route path="devis" element={<RequireRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><Devis /></RequireRole>} />
                     <Route path="devis/nouveau" element={<RequireRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><QuoteCreation /></RequireRole>} />
                     <Route path="factures" element={<RequireCrmModule moduleKey="crmFacturationEnabled"><Factures /></RequireCrmModule>} />
-                    <Route path="documents" element={<Documents />} />
+                    <Route path="documents" element={<RequireRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><Documents /></RequireRole>} />
                     <Route path="export" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'Responsable', 'Gerant', 'SuperAdmin']}><DataExport /></RequireRole></Suspense>} />
-                    <Route path="utilisateurs" element={<Utilisateurs />} />
-                    <Route path="parametres" element={<Parametres />} />
+                    <Route path="utilisateurs" element={<RequireRole roles={['Directeur', 'SuperAdmin']}><Utilisateurs /></RequireRole>} />
+                    <Route path="parametres" element={<RequireRole roles={['Directeur']}><Parametres /></RequireRole>} />
 
                     {/* CRM Modules Responsables de Service */}
                     <Route path="crm/prestations" element={<RequireCrmModule moduleKey="crmPrestationsEnabled"><CrmPrestations /></RequireCrmModule>} />
@@ -219,12 +220,12 @@ function App() {
                     <Route path="crm/modules" element={<RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><CrmModulesManager /></RequireRole>} />
 
                     {/* Commercial routes */}
-                    <Route path="commercial" element={<DashboardCommercial />} />
-                    <Route path="commercial/clients" element={<CommercialClients />} />
-                    <Route path="commercial/documents" element={<Documents />} />
+                    <Route path="commercial" element={<RequireRole roles={['Commercial', 'SuperAdmin']}><DashboardCommercial /></RequireRole>} />
+                    <Route path="commercial/clients" element={<RequireRole roles={['Commercial', 'SuperAdmin']}><CommercialClients /></RequireRole>} />
+                    <Route path="commercial/documents" element={<RequireRole roles={['Commercial', 'SuperAdmin']}><Documents /></RequireRole>} />
 
                     {/* POS routes */}
-                    <Route path="pos" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><DashboardPos /></Suspense>} />
+                    <Route path="pos" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant']}><DashboardPos /></RequireRole></Suspense>} />
                     <Route path="pos/copilot-ia" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant']}><DirectorCopilotPage /></RequireRole></Suspense>} />
                     <Route path="pos/audit-ia" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant']}><DirectorAuditPage /></RequireRole></Suspense>} />
                     <Route path="pos/settings" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur']}><PosSettings /></RequirePosModule></Suspense>} />
@@ -246,7 +247,7 @@ function App() {
                     <Route path="pos/terminal" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']}><PosTerminal /></RequirePosModule></Suspense>} />
                     <Route path="pos/transactions" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']}><PosTransactions /></RequirePosModule></Suspense>} />
                     <Route path="pos/cash" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']}><PosCash /></RequirePosModule></Suspense>} />
-                    <Route path="pos/parametres-ia" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><GeminiSettings /></Suspense>} />
+                    <Route path="pos/parametres-ia" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant', 'Caissier']}><GeminiSettings /></RequireRole></Suspense>} />
                     
                     <Route path="*" element={<div style={{ padding: '20px' }}><h1>Page introuvable</h1></div>} />
                   </Route>

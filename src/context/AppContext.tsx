@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { db } from '../lib/db';
-import { queueSyncAction, processSyncQueue, reconcileLocalPosDataWithCloud, reconcileAllOfflineDataWithCloud, resolveProductUuid, isRetiredServicePayload, isUniqueViolationError } from '../lib/sync';
+import { queueSyncAction, processSyncQueue, reconcileLocalPosDataWithCloud, reconcileAllOfflineDataWithCloud, resolveProductUuid, isRetiredServicePayload } from '../lib/sync';
 import { v4 as uuidv4 } from 'uuid';
 import toast from 'react-hot-toast';
 import { isProductComplete } from '../features/products/services/ProductService';
@@ -913,58 +913,89 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         };
 
+        // Variante paginée (PostgREST tronque à max_rows=1000) : boucle .range()
+        // ordonnée par created_at jusqu'à page incomplète. Repli une page si la
+        // table n'a pas de colonne created_at.
+        const safeFetchAll = async (table: string, select = '*'): Promise<any> => {
+          try {
+            const PAGE = 1000;
+            const out: any[] = [];
+            let from = 0;
+            for (let guard = 0; guard < 50; guard++) {
+              let q: any = supabase.from(table).select(select).range(from, from + PAGE - 1);
+              if (from === 0) q = q.order('created_at', { ascending: true });
+              const res = await withTimeout<any>(q, 15000);
+              if (res && res.error) {
+                if (from === 0) {
+                  const r2 = await withTimeout<any>(supabase.from(table).select(select).range(0, PAGE - 1), 15000);
+                  if (r2 && !r2.error && Array.isArray(r2.data)) return r2.data;
+                }
+                return null;
+              }
+              const rows = res ? res.data : null;
+              if (!Array.isArray(rows) || rows.length === 0) break;
+              out.push(...rows);
+              if (rows.length < PAGE) break;
+              from += PAGE;
+            }
+            return out;
+          } catch {
+            return null;
+          }
+        };
+
         const fetchTasks = [
-          () => safeFetch(() => supabase.from('profiles').select('*')),
-          () => currentUser ? safeFetch(() => supabase.from('clients').select('*')) : Promise.resolve(null),
-          () => safeFetch(() => supabase.from('services').select('*')),
-          () => safeFetch(() => supabase.from('prestations').select('*')),
+          () => safeFetchAll('profiles'),
+          () => currentUser ? safeFetchAll('clients') : Promise.resolve(null),
+          () => safeFetchAll('services'),
+          () => safeFetchAll('prestations'),
           () => safeFetch(() => supabase.from('settings').select('*').single()),
-          () => currentUser ? safeFetch(() => supabase.from('quotes').select('*, quote_lines(*)')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('ventes').select('*, vente_lines(*)')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('commissions').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('vente_echeances').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('affaires').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('facture_paiements').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('couts').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('scoring_rules').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('objectifs').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('classements').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('primes').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('prime_audit_logs').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('prospects').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('prospect_activities').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('prospect_follow_ups').select('*')) : Promise.resolve(null),
-          () => safeFetch(() => supabase.from('categories').select('*')),
-          () => currentUser ? safeFetch(() => supabase.from('activity_reports').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('weekly_reports').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('v2_daily_reports').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('v2_weekly_reports').select('*')) : Promise.resolve(null),
-          () => safeFetch(() => supabase.from('pos_categories').select('*')),
-          () => safeFetch(() => supabase.from('pos_brands').select('*')),
-          () => safeFetch(() => supabase.from('pos_suppliers').select('*')),
-          () => safeFetch(() => supabase.from('pos_products').select('*')),
-          () => safeFetch(() => supabase.from('pos_stock_entries').select('*, pos_stock_entry_lines(*)')),
-          () => safeFetch(() => supabase.from('pos_stock_movements').select('*')),
-          () => safeFetch(() => supabase.from('pos_inventories').select('*, pos_inventory_lines(*)')),
-          () => safeFetch(() => supabase.from('pos_cash_sessions').select('*')),
-          () => safeFetch(() => supabase.from('pos_transactions').select('*, pos_transaction_lines(*), pos_payments(*)')),
-          () => safeFetch(() => supabase.from('pos_payments').select('*')),
-          () => safeFetch(() => supabase.from('pos_discounts').select('*')),
+          () => currentUser ? safeFetchAll('quotes', '*, quote_lines(*)') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('ventes', '*, vente_lines(*)') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('commissions') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('vente_echeances') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('affaires') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('facture_paiements') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('couts') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('scoring_rules') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('objectifs') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('classements') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('primes') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('prime_audit_logs') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('prospects') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('prospect_activities') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('prospect_follow_ups') : Promise.resolve(null),
+          () => safeFetchAll('categories'),
+          () => currentUser ? safeFetchAll('activity_reports') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('weekly_reports') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('v2_daily_reports') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('v2_weekly_reports') : Promise.resolve(null),
+          () => safeFetchAll('pos_categories'),
+          () => safeFetchAll('pos_brands'),
+          () => safeFetchAll('pos_suppliers'),
+          () => safeFetchAll('pos_products'),
+          () => safeFetchAll('pos_stock_entries', '*, pos_stock_entry_lines(*)'),
+          () => safeFetchAll('pos_stock_movements'),
+          () => safeFetchAll('pos_inventories', '*, pos_inventory_lines(*)'),
+          () => safeFetchAll('pos_cash_sessions'),
+          () => safeFetchAll('pos_transactions', '*, pos_transaction_lines(*), pos_payments(*)'),
+          () => safeFetchAll('pos_payments'),
+          () => safeFetchAll('pos_discounts'),
           () => safeFetch(() => supabase.from('pos_settings').select('*').single()),
-          () => currentUser ? safeFetch(() => supabase.from('crm_documents').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('crm_folders').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('notifications').select('*')) : Promise.resolve(null),
-          () => safeFetch(() => supabase.from('pos_returns').select('*, pos_return_lines(*)')),
-          () => currentUser ? safeFetch(() => supabase.from('clients_fournisseurs').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('agents_commerciaux').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('prestations_commandes').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('mouvements_caisse').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('commissions_prestations').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('catalogue_articles').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('interventions_maintenance').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('techniciens_maintenance').select('*')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('invoices').select('*, invoice_items(*)')) : Promise.resolve(null),
-          () => currentUser ? safeFetch(() => supabase.from('invoice_payments').select('*')) : Promise.resolve(null)
+          () => currentUser ? safeFetchAll('crm_documents') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('crm_folders') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('notifications') : Promise.resolve(null),
+          () => safeFetchAll('pos_returns', '*, pos_return_lines(*)'),
+          () => currentUser ? safeFetchAll('clients_fournisseurs') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('agents_commerciaux') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('prestations_commandes') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('mouvements_caisse') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('commissions_prestations') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('catalogue_articles') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('interventions_maintenance') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('techniciens_maintenance') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('invoices', '*, invoice_items(*)') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('invoice_payments') : Promise.resolve(null)
         ];
 
         const [
@@ -3977,7 +4008,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       if (navigator.onLine) {
         const { id: _, ...fieldsToUpdate } = payload;
-        await supabase.from('profiles').update(fieldsToUpdate).eq('id', id);
+        const { error: directErr } = await supabase.from('profiles').update(fieldsToUpdate).eq('id', id);
+        if (directErr) console.error('Erreur direct profile update (rejeu via file) :', directErr.message);
       }
     } catch (e) {
       console.warn('Erreur direct profile update:', e);
@@ -4861,6 +4893,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return 'ÉMISE';
   };
 
+  const buildDbInvoice = (inv: Invoice): any => ({
+    id: inv.id,
+    invoice_number: inv.invoiceNumber,
+    quote_id: inv.quoteId || null,
+    client_id: inv.clientId || null,
+    client_nom: inv.clientName || null,
+    commercial_id: inv.commercialId || null,
+    commercial_nom: inv.commercialName || null,
+    service_id: inv.serviceId || null,
+    service_nom: inv.serviceName || null,
+    category: inv.category || null,
+    period_year: inv.periodYear,
+    period_month: inv.periodMonth,
+    issue_date: inv.issueDate,
+    delivery_date: inv.deliveryDate || null,
+    payment_date: inv.paymentDate || null,
+    payment_terms: inv.paymentTerms || '30 jours',
+    due_date: inv.dueDate,
+    subtotal: inv.subtotal,
+    tax_amount: inv.taxAmount || 0,
+    discount_amount: inv.discountAmount || 0,
+    total_amount: inv.totalAmount,
+    cost_amount: inv.costAmount || 0,
+    commission_rate: inv.commissionRate || 10,
+    commission_amount: inv.commissionAmount || 0,
+    gross_margin: inv.grossMargin || 0,
+    hinov_margin: inv.hinovMargin || 0,
+    amount_paid: inv.amountPaid || 0,
+    remaining_amount: inv.remainingAmount,
+    status: inv.status,
+    notes: inv.notes || null,
+    created_by: inv.createdBy || null,
+    created_at: inv.createdAt,
+    updated_at: inv.updatedAt
+  });
+
   const addInvoice = async (invoiceData: Omit<Invoice, 'id' | 'createdAt' | 'updatedAt'> | Invoice): Promise<Invoice> => {
     const id = ('id' in invoiceData && invoiceData.id) ? invoiceData.id : uuidv4();
     const now = new Date().toISOString();
@@ -4910,85 +4978,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setInvoices(next);
     await db.invoices.setItem('data', next);
 
-    try {
-      if (navigator.onLine) {
-        const buildDbInvoice = (inv: Invoice): any => ({
-          id: inv.id,
-          invoice_number: inv.invoiceNumber,
-          quote_id: inv.quoteId || null,
-          client_id: inv.clientId || null,
-          client_nom: inv.clientName || null,
-          commercial_id: inv.commercialId || null,
-          commercial_nom: inv.commercialName || null,
-          service_id: inv.serviceId || null,
-          service_nom: inv.serviceName || null,
-          category: inv.category || null,
-          period_year: inv.periodYear,
-          period_month: inv.periodMonth,
-          issue_date: inv.issueDate,
-          delivery_date: inv.deliveryDate || null,
-          payment_date: inv.paymentDate || null,
-          payment_terms: inv.paymentTerms || '30 jours',
-          due_date: inv.dueDate,
-          subtotal: inv.subtotal,
-          tax_amount: inv.taxAmount || 0,
-          discount_amount: inv.discountAmount || 0,
-          total_amount: inv.totalAmount,
-          cost_amount: inv.costAmount || 0,
-          commission_rate: inv.commissionRate || 10,
-          commission_amount: inv.commissionAmount || 0,
-          gross_margin: inv.grossMargin || 0,
-          hinov_margin: inv.hinovMargin || 0,
-          amount_paid: inv.amountPaid || 0,
-          remaining_amount: inv.remainingAmount,
-          status: inv.status,
-          notes: inv.notes || null,
-          created_by: inv.createdBy || null,
-          created_at: inv.createdAt,
-          updated_at: inv.updatedAt
-        });
-        let { error: invError } = await supabase.from('invoices').upsert(buildDbInvoice(newInvoice));
-        if (invError) {
-          console.warn('Erreur synchro création facture:', invError.message);
-          if (isUniqueViolationError(invError)) {
-            // Collision de N° facture (multi-poste) : regenerer et rejouer une fois
-            const fixed: Invoice = {
-              ...newInvoice,
-              invoiceNumber: `FAC-${periodYear}-${String(periodMonth).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}-bis${Math.floor(100 + Math.random() * 900)}`
-            };
-            const retry = await supabase.from('invoices').upsert(buildDbInvoice(fixed));
-            if (!retry.error) {
-              const fixedNext = [fixed, ...invoices.filter(i => i.id !== id)];
-              setInvoices(fixedNext);
-              await db.invoices.setItem('data', fixedNext);
-              newInvoice.invoiceNumber = fixed.invoiceNumber;
-              invError = null;
-            } else {
-              console.warn('Echec rejeu facture après regeneration:', retry.error.message);
-            }
-          }
-        }
-
-        if (!invError && newInvoice.items && newInvoice.items.length > 0) {
-          const dbItems = newInvoice.items.map(it => ({
-            id: it.id,
-            invoice_id: id,
-            prestation_id: it.prestationId || null,
-            description: it.description,
-            quantity: it.quantity,
-            unit_price: it.unitPrice,
-            cost_price: it.costPrice || 0,
-            discount_percent: it.discountPercent || 0,
-            tax_rate: it.taxRate || 0,
-            total: it.total,
-            created_at: it.createdAt || now
-          }));
-          await supabase.from('invoice_items').upsert(dbItems);
-        }
-      }
-    } catch (e) {
-      console.warn('Erreur synchro création facture:', e);
-    }
+    // Persistance serveur via file de synchro (offline-first, idempotent, regen anti-collision).
+    const dbItems = (newInvoice.items || []).map(it => ({
+      id: it.id,
+      invoice_id: id,
+      prestation_id: it.prestationId || null,
+      description: it.description,
+      quantity: it.quantity,
+      unit_price: it.unitPrice,
+      cost_price: it.costPrice || 0,
+      discount_percent: it.discountPercent || 0,
+      tax_rate: it.taxRate || 0,
+      total: it.total,
+      created_at: it.createdAt || now
+    }));
+    await queueSyncAction('UPSERT_INVOICE', { invoice: buildDbInvoice(newInvoice), items: dbItems, replaceItems: true });
 
     return newInvoice;
   };
@@ -5026,80 +5030,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setInvoices(next);
     await db.invoices.setItem('data', next);
 
-    try {
-      if (navigator.onLine) {
-        const dbUpdate: any = {
-          updated_at: now
-        };
-        if (data.invoiceNumber !== undefined) dbUpdate.invoice_number = data.invoiceNumber;
-        if (data.quoteId !== undefined) dbUpdate.quote_id = data.quoteId || null;
-        if (data.clientId !== undefined) dbUpdate.client_id = data.clientId || null;
-        if (data.clientName !== undefined) dbUpdate.client_nom = data.clientName || null;
-        if (data.commercialId !== undefined) dbUpdate.commercial_id = data.commercialId || null;
-        if (data.commercialName !== undefined) dbUpdate.commercial_nom = data.commercialName || null;
-        if (data.serviceId !== undefined) dbUpdate.service_id = data.serviceId || null;
-        if (data.serviceName !== undefined) dbUpdate.service_nom = data.serviceName || null;
-        if (data.category !== undefined) dbUpdate.category = data.category || null;
-        if (data.periodYear !== undefined) dbUpdate.period_year = data.periodYear;
-        if (data.periodMonth !== undefined) dbUpdate.period_month = data.periodMonth;
-        if (data.issueDate !== undefined) dbUpdate.issue_date = data.issueDate;
-        if (data.deliveryDate !== undefined) dbUpdate.delivery_date = data.deliveryDate || null;
-        if (data.paymentDate !== undefined) dbUpdate.payment_date = data.paymentDate || null;
-        if (data.paymentTerms !== undefined) dbUpdate.payment_terms = data.paymentTerms;
-        if (data.dueDate !== undefined) dbUpdate.due_date = data.dueDate;
-        if (data.subtotal !== undefined) dbUpdate.subtotal = data.subtotal;
-        if (data.taxAmount !== undefined) dbUpdate.tax_amount = data.taxAmount;
-        if (data.discountAmount !== undefined) dbUpdate.discount_amount = data.discountAmount;
-        dbUpdate.total_amount = totalAmount;
-        dbUpdate.cost_amount = costAmount;
-        dbUpdate.gross_margin = grossMargin;
-        dbUpdate.commission_rate = commissionRate;
-        dbUpdate.commission_amount = commissionAmount;
-        dbUpdate.hinov_margin = hinovMargin;
-        dbUpdate.amount_paid = amountPaid;
-        dbUpdate.remaining_amount = remainingAmount;
-        if (data.status !== undefined) dbUpdate.status = data.status;
-        if (data.notes !== undefined) dbUpdate.notes = data.notes;
-
-        await supabase.from('invoices').update(dbUpdate).eq('id', id);
-
-        if (data.items) {
-          await supabase.from('invoice_items').delete().eq('invoice_id', id);
-          if (data.items.length > 0) {
-            const dbItems = data.items.map(it => ({
-              id: it.id || uuidv4(),
-              invoice_id: id,
-              prestation_id: it.prestationId || null,
-              description: it.description,
-              quantity: it.quantity,
-              unit_price: it.unitPrice,
-              cost_price: it.costPrice || 0,
-              discount_percent: it.discountPercent || 0,
-              tax_rate: it.taxRate || 0,
-              total: it.total,
-              created_at: it.createdAt || now
-            }));
-            await supabase.from('invoice_items').upsert(dbItems);
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Erreur synchro update facture:', e);
-    }
+    // Ligne complete pour l'upsert file (pas de partiel : upsert = ligne entiere).
+    const itemsPayload = data.items
+      ? data.items.map(it => ({
+          id: it.id || uuidv4(),
+          invoice_id: id,
+          prestation_id: it.prestationId || null,
+          description: it.description,
+          quantity: it.quantity,
+          unit_price: it.unitPrice,
+          cost_price: it.costPrice || 0,
+          discount_percent: it.discountPercent || 0,
+          tax_rate: it.taxRate || 0,
+          total: it.total,
+          created_at: it.createdAt || now
+        }))
+      : undefined;
+    await queueSyncAction('UPSERT_INVOICE', { invoice: buildDbInvoice(updated), items: itemsPayload, replaceItems: data.items !== undefined });
   };
 
   const updateInvoiceStatus = async (id: string, status: InvoiceStatus) => {
     const now = new Date().toISOString();
+    const target = invoices.find(i => i.id === id);
     const next = invoices.map(i => i.id === id ? { ...i, status, updatedAt: now } : i);
     setInvoices(next);
     await db.invoices.setItem('data', next);
 
-    try {
-      if (navigator.onLine) {
-        await supabase.from('invoices').update({ status, updated_at: now }).eq('id', id);
-      }
-    } catch (e) {
-      console.warn('Erreur mise à jour statut facture:', e);
+    if (target) {
+      await queueSyncAction('UPSERT_INVOICE', {
+        invoice: buildDbInvoice({ ...target, status, updatedAt: now })
+      });
     }
   };
 
@@ -5111,15 +5071,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.invoices.setItem('data', nextInvoices);
     await db.invoicePayments.setItem('data', nextPayments);
 
-    try {
-      if (navigator.onLine) {
-        await supabase.from('invoice_payments').delete().eq('invoice_id', id);
-        await supabase.from('invoice_items').delete().eq('invoice_id', id);
-        await supabase.from('invoices').delete().eq('id', id);
-      }
-    } catch (e) {
-      console.warn('Erreur suppression facture:', e);
-    }
+    await queueSyncAction('DELETE_INVOICE', { id });
   };
 
   const addInvoicePayment = async (paymentData: Omit<InvoicePayment, 'id' | 'createdAt'> | InvoicePayment): Promise<InvoicePayment> => {
@@ -5161,34 +5113,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setInvoices(nextInvoices);
       await db.invoices.setItem('data', nextInvoices);
 
-      try {
-        if (navigator.onLine) {
-          await supabase.from('invoices').update({ status: newStatus, updated_at: now }).eq('id', targetInvoice.id);
-        }
-      } catch (e) {
-        console.warn('Erreur mise à jour statut facture après paiement:', e);
-      }
+      await queueSyncAction('UPSERT_INVOICE', { invoice: buildDbInvoice(updatedInvoice) });
     }
 
-    try {
-      if (navigator.onLine) {
-        const dbPayment = {
-          id: newPayment.id,
-          invoice_id: newPayment.invoiceId,
-          payment_number: newPayment.paymentNumber,
-          payment_date: newPayment.paymentDate,
-          amount: newPayment.amount,
-          payment_method: newPayment.paymentMethod,
-          reference: newPayment.reference || null,
-          notes: newPayment.notes || null,
-          created_by: newPayment.createdBy || null,
-          created_at: newPayment.createdAt
-        };
-        await supabase.from('invoice_payments').upsert(dbPayment);
-      }
-    } catch (e) {
-      console.warn('Erreur synchro paiement facture:', e);
-    }
+    const dbPayment = {
+      id: newPayment.id,
+      invoice_id: newPayment.invoiceId,
+      payment_number: newPayment.paymentNumber,
+      payment_date: newPayment.paymentDate,
+      amount: newPayment.amount,
+      payment_method: newPayment.paymentMethod,
+      reference: newPayment.reference || null,
+      notes: newPayment.notes || null,
+      created_by: newPayment.createdBy || null,
+      created_at: newPayment.createdAt
+    };
+    await queueSyncAction('UPSERT_INVOICE_PAYMENT', { payment: dbPayment });
 
     return newPayment;
   };
@@ -5215,20 +5155,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setInvoices(nextInvoices);
         await db.invoices.setItem('data', nextInvoices);
 
-        try {
-          if (navigator.onLine) {
-            await supabase.from('invoices').update({ status: newStatus, updated_at: now }).eq('id', targetInvoice.id);
-          }
-        } catch {}
+        await queueSyncAction('UPSERT_INVOICE', { invoice: buildDbInvoice(updatedInvoice) });
       }
 
-      try {
-        if (navigator.onLine) {
-          await supabase.from('invoice_payments').delete().eq('id', paymentId);
-        }
-      } catch (e) {
-        console.warn('Erreur suppression paiement facture:', e);
-      }
+      await queueSyncAction('DELETE_INVOICE_PAYMENT', { id: paymentId });
     }
   };
 

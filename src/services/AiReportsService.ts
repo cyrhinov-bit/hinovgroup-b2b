@@ -52,9 +52,10 @@ export const AiReportsService = {
         { onConflict: 'user_id, date' }
       )
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
+    if (!data) throw new Error('Sauvegarde activité sans retour (vérifier RLS ai_daily_activities)');
     return data;
   },
 
@@ -87,7 +88,7 @@ export const AiReportsService = {
     // Relying on RLS to only allow directors to see 'SENT' reports
     const { data, error } = await supabase
       .from('ai_weekly_reports')
-      .select('*, profiles:user_id(id, full_name, email, role, avatar_url)')
+      .select('*, profiles:user_id(id, name, email, role, photo)')
       .eq('status', 'SENT')
       .order('created_at', { ascending: false });
 
@@ -119,9 +120,10 @@ export const AiReportsService = {
         { onConflict: 'user_id, week_id' }
       )
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
+    if (!data) throw new Error('Sauvegarde rapport sans retour (vérifier RLS ai_weekly_reports)');
     return data;
   },
 

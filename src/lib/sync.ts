@@ -60,10 +60,12 @@ export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT'
                              'INSERT_POS_INVENTORY' | 'UPDATE_POS_INVENTORY' | 'DELETE_POS_INVENTORY' |
                              'INSERT_POS_CASH_SESSION' | 'UPDATE_POS_CASH_SESSION' |
                              'INSERT_POS_TRANSACTION' | 'UPDATE_POS_TRANSACTION' | 'CLEAR_POS_SALES_HISTORY' | 'DELETE_POS_MOVEMENTS_BY_RANGE' |
-                             'INSERT_POS_PAYMENT' |
-                              'INSERT_POS_DISCOUNT' | 'UPDATE_POS_DISCOUNT' | 'DELETE_POS_DISCOUNT' |
-                              'UPDATE_POS_SETTINGS' |
-                              'INSERT_POS_RETURN' | 'UPDATE_POS_RETURN' |
+                              'INSERT_POS_PAYMENT' |
+                               'INSERT_POS_DISCOUNT' | 'UPDATE_POS_DISCOUNT' | 'DELETE_POS_DISCOUNT' |
+                               'UPDATE_POS_SETTINGS' |
+                               'UPSERT_INVOICE' | 'DELETE_INVOICE' |
+                               'UPSERT_INVOICE_PAYMENT' | 'DELETE_INVOICE_PAYMENT' |
+                               'INSERT_POS_RETURN' | 'UPDATE_POS_RETURN' |
                               'INSERT_PRODUCT_COMPLETION' | 'UPDATE_PRODUCT_COMPLETION' | 'DELETE_PRODUCT_COMPLETION' |
                               'INSERT_IMPORT_SESSION' | 'UPDATE_IMPORT_SESSION' | 'DELETE_IMPORT_SESSION' |
                               'INSERT_IMPORT_ERROR' |
@@ -203,16 +205,13 @@ const sanitizeCrmUuids = (row: any, uuidFields: string[]): any => {
 };
 
 const syncCrmUpsert = async (table: string, row: any, uuidFields: string[], tag: string, repair?: UniqueFieldRepair): Promise<boolean> => {
-  let clean = sanitizeCrmUuids(row, uuidFields);
+  const clean = sanitizeCrmUuids(row, uuidFields);
   let { error } = await supabase.from(table).upsert(clean, { onConflict: 'id' });
   if (error && isForeignKeyError(error)) {
-    console.warn(`[Sync] ${tag} violation FK, rejeu sans relations`);
-    const fallback: any = { ...clean };
-    for (const f of uuidFields) {
-      if (f !== 'id') fallback[f] = null;
-    }
-    const r2 = await supabase.from(table).upsert(fallback, { onConflict: 'id' });
-    error = r2.error;
+    // Parent pas encore synchronise (ordre de file) ou supprime : on NE nullifie plus
+    // les relations (orphelins silencieux). L'action reste en erreur visible et sera
+    // rejouee quand le parent arrivera.
+    console.warn(`[Sync] ${tag} violation FK, rejeu differe (relations conservees)`);
   }
   if (error && repair && isUniqueViolationError(error)) {
     console.warn(`[Sync] ${tag} reference en doublon, regeneration et rejeu`);
@@ -234,11 +233,8 @@ const syncCrmUpdate = async (table: string, id: string, updates: any, uuidFields
   delete clean.id;
   let { error } = await supabase.from(table).update(clean).eq('id', id);
   if (error && isForeignKeyError(error)) {
-    console.warn(`[Sync] ${tag} violation FK, rejeu sans relations`);
-    const fallback: any = { ...clean };
-    for (const f of uuidFields) fallback[f] = null;
-    const r2 = await supabase.from(table).update(fallback).eq('id', id);
-    error = r2.error;
+    // Idem upsert : pas de nullification silencieuse, echec visible + rejeu.
+    console.warn(`[Sync] ${tag} violation FK, rejeu differe (relations conservees)`);
   }
   if (error && repair && isUniqueViolationError(error) && clean[repair.field]) {
     console.warn(`[Sync] ${tag} reference en doublon, regeneration et rejeu`);
@@ -379,17 +375,22 @@ export const queueSyncAction = async (type: SyncActionType, payload: any) => {
     return;
   }
 
-  const action: SyncAction = {
-    id: uuidv4(),
-    type,
-    payload,
-    timestamp: Date.now()
-  };
-  
-  const currentQueue: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
-  currentQueue.push(action);
-  await db.syncQueue.setItem('queue', currentQueue);
-  
+  // Sérialise les read-modify-write sur la file (localforage sans transaction :
+  // 2 appels concurrents = 1 action perdue).
+  queueChain = queueChain.then(async () => {
+    const action: SyncAction = {
+      id: uuidv4(),
+      type,
+      payload,
+      timestamp: Date.now()
+    };
+
+    const currentQueue: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
+    currentQueue.push(action);
+    await db.syncQueue.setItem('queue', currentQueue);
+  }).catch(err => console.error('[Sync] queueSyncAction file corrompue :', err));
+  await queueChain;
+
   // Tenter de synchroniser immédiatement si on est en ligne
   if (navigator.onLine) {
     processSyncQueue();
@@ -449,6 +450,8 @@ export const ensureSupabaseAuth = async (): Promise<boolean> => {
 
 // Verrou anti-réentrance : empêche deux processSyncQueue simultanés
 let syncLock = false;
+// Chaîne de sérialisation des écritures file (read-modify-write atomique)
+let queueChain: Promise<void> = Promise.resolve();
 
 // Vider la file d'attente
 export const processSyncQueue = async () => {
@@ -495,7 +498,7 @@ export const processSyncQueue = async () => {
         const executeAction = async (): Promise<boolean> => {
         switch (action.type) {
         case 'INSERT_CLIENT': {
-          const { error } = await supabase.from('clients').insert([{
+          const { error } = await supabase.from('clients').upsert([{
             id: action.payload.id,
             name: action.payload.name,
             email: action.payload.email || null,
@@ -506,7 +509,7 @@ export const processSyncQueue = async () => {
             status: action.payload.status || 'Actif',
             commercial_id: action.payload.commercialId || null,
             created_at: action.payload.createdAt || new Date().toISOString()
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_CLIENT échoué :', error.message);
           success = checkResult(error);
           break;
@@ -534,7 +537,7 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_AFFAIRE': {
           const affaireData = action.payload;
-          const { error } = await supabase.from('affaires').insert([{
+          const { error } = await supabase.from('affaires').upsert([{
             id: affaireData.id,
             reference: affaireData.reference,
             title: affaireData.title,
@@ -552,7 +555,7 @@ export const processSyncQueue = async () => {
             notes: affaireData.notes || null,
             created_at: affaireData.createdAt || new Date().toISOString(),
             updated_at: affaireData.updatedAt || new Date().toISOString()
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_AFFAIRE échoué :', error.message);
           success = checkResult(error);
           break;
@@ -587,7 +590,7 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_FACTURE_PAIEMENT': {
           const payment = action.payload;
-          const { error } = await supabase.from('facture_paiements').insert([{
+          const { error } = await supabase.from('facture_paiements').upsert([{
             id: payment.id,
             payment_number: payment.paymentNumber,
             payment_type: payment.paymentType,
@@ -603,14 +606,14 @@ export const processSyncQueue = async () => {
             status: payment.status || 'VALIDE',
             recorded_by: isUuid(payment.recordedBy) ? payment.recordedBy : null,
             created_at: payment.createdAt || new Date().toISOString()
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_FACTURE_PAIEMENT échoué :', error.message);
           success = checkResult(error);
           break;
         }
         case 'INSERT_COUT': {
           const cout = action.payload;
-          const { error } = await supabase.from('couts').insert([{
+          const { error } = await supabase.from('couts').upsert([{
             id: cout.id,
             reference: cout.reference,
             cost_type: cout.costType,
@@ -630,7 +633,7 @@ export const processSyncQueue = async () => {
             created_by: isUuid(cout.createdBy) ? cout.createdBy : null,
             created_at: cout.createdAt || new Date().toISOString(),
             updated_at: cout.updatedAt || new Date().toISOString()
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_COUT échoué :', error.message);
           success = checkResult(error);
           break;
@@ -665,7 +668,7 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_OBJECTIF': {
           const obj = action.payload;
-          const { error } = await supabase.from('objectifs').insert([{
+          const { error } = await supabase.from('objectifs').upsert([{
             id: obj.id,
             profile_id: isUuid(obj.profileId) ? obj.profileId : null,
             service_id: isUuid(obj.serviceId) ? obj.serviceId : null,
@@ -679,7 +682,7 @@ export const processSyncQueue = async () => {
             status: obj.status || 'EN_COURS',
             created_by: isUuid(obj.createdBy) ? obj.createdBy : null,
             created_at: obj.createdAt || new Date().toISOString()
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_OBJECTIF échoué :', error.message);
           success = checkResult(error);
           break;
@@ -707,7 +710,7 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_PRIME': {
           const prime = action.payload;
-          const { error } = await supabase.from('primes').insert([{
+          const { error } = await supabase.from('primes').upsert([{
             id: prime.id,
             reference: prime.reference,
             profile_id: isUuid(prime.profileId) ? prime.profileId : null,
@@ -721,7 +724,7 @@ export const processSyncQueue = async () => {
             justification: prime.justification || null,
             created_at: prime.createdAt || new Date().toISOString(),
             updated_at: prime.updatedAt || new Date().toISOString()
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_PRIME échoué :', error.message);
           success = checkResult(error);
           break;
@@ -738,7 +741,7 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_PRIME_AUDIT_LOG': {
           const log = action.payload;
-          const { error } = await supabase.from('prime_audit_logs').insert([{
+          const { error } = await supabase.from('prime_audit_logs').upsert([{
             id: log.id,
             prime_id: isUuid(log.primeId) ? log.primeId : null,
             action: log.action,
@@ -748,7 +751,7 @@ export const processSyncQueue = async () => {
             new_state: log.newState || null,
             comment: log.comment || null,
             created_at: log.createdAt || new Date().toISOString()
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_PRIME_AUDIT_LOG échoué :', error.message);
           success = checkResult(error);
           break;
@@ -827,6 +830,11 @@ export const processSyncQueue = async () => {
             }));
             const { error: lineErr } = await supabase.from('quote_lines').upsert(linesData, { onConflict: 'id' });
             if (lineErr && isNetworkOrTransientError(lineErr)) throw new Error(`[NetworkError] ${lineErr.message}`);
+            if (lineErr) {
+              console.error('[Sync] INSERT_QUOTE lignes échouées :', lineErr.message);
+              success = checkResult(lineErr);
+              break;
+            }
           }
           if (error) console.error('[Sync] INSERT_QUOTE échoué :', error.message);
           success = checkResult(error);
@@ -872,8 +880,13 @@ export const processSyncQueue = async () => {
                 discount_percent: l.discountPercent || 0,
                 total: l.total
               }));
-              const { error: insLinesErr } = await supabase.from('quote_lines').insert(linesData);
+              const { error: insLinesErr } = await supabase.from('quote_lines').upsert(linesData, { onConflict: 'id' });
               if (insLinesErr && isNetworkOrTransientError(insLinesErr)) throw new Error(`[NetworkError] ${insLinesErr.message}`);
+              if (insLinesErr) {
+                console.error('[Sync] UPDATE_QUOTE lignes échouées :', insLinesErr.message);
+                success = checkResult(insLinesErr);
+                break;
+              }
             }
           }
           if (error) console.error('[Sync] UPDATE_QUOTE échoué :', error.message);
@@ -916,6 +929,11 @@ export const processSyncQueue = async () => {
             }));
             const { error: lineErr } = await supabase.from('vente_lines').upsert(linesData, { onConflict: 'id' });
             if (lineErr && isNetworkOrTransientError(lineErr)) throw new Error(`[NetworkError] ${lineErr.message}`);
+            if (lineErr) {
+              console.error('[Sync] INSERT_SALE lignes échouées :', lineErr.message);
+              success = checkResult(lineErr);
+              break;
+            }
           }
           if (error) console.error('[Sync] INSERT_SALE échoué :', error.message);
           success = checkResult(error);
@@ -951,8 +969,13 @@ export const processSyncQueue = async () => {
                 cost_price: l.costPrice || 0,
                 total: l.total
               }));
-              const { error: insLinesErr } = await supabase.from('vente_lines').insert(linesData);
+              const { error: insLinesErr } = await supabase.from('vente_lines').upsert(linesData, { onConflict: 'id' });
               if (insLinesErr && isNetworkOrTransientError(insLinesErr)) throw new Error(`[NetworkError] ${insLinesErr.message}`);
+              if (insLinesErr) {
+                console.error('[Sync] UPDATE_SALE lignes échouées :', insLinesErr.message);
+                success = checkResult(insLinesErr);
+                break;
+              }
             }
           }
           if (error) console.error('[Sync] UPDATE_SALE échoué :', error.message);
@@ -965,7 +988,7 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_COMMISSION': {
-          const { error } = await supabase.from('commissions').insert([{
+          const { error } = await supabase.from('commissions').upsert([{
             id: action.payload.id,
             vente_id: isUuid(action.payload.saleId) ? action.payload.saleId : null,
             affaire_id: isUuid(action.payload.affaireId) ? action.payload.affaireId : null,
@@ -980,7 +1003,7 @@ export const processSyncQueue = async () => {
             commission_amount: action.payload.commissionAmount,
             paid_amount: action.payload.paidAmount || 0,
             status: action.payload.status
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_COMMISSION échoué :', error.message);
           success = checkResult(error);
           break;
@@ -1008,7 +1031,7 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_INSTALLMENT': {
-          const { error } = await supabase.from('vente_echeances').insert([{
+          const { error } = await supabase.from('vente_echeances').upsert([{
             id: action.payload.id,
             vente_id: isUuid(action.payload.saleId) ? action.payload.saleId : null,
             amount: action.payload.amount,
@@ -1016,7 +1039,7 @@ export const processSyncQueue = async () => {
             paid_amount: action.payload.paidAmount || 0,
             status: action.payload.status,
             paid_at: action.payload.paidAt || null
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_INSTALLMENT échoué :', error.message);
           success = checkResult(error);
           break;
@@ -1039,7 +1062,7 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_PROSPECT': {
-          const { error } = await supabase.from('prospects').insert([{
+          const { error } = await supabase.from('prospects').upsert([{
             id: action.payload.id,
             prospect_number: action.payload.prospectNumber,
             commercial_id: isUuid(action.payload.commercialId) ? action.payload.commercialId : null,
@@ -1059,7 +1082,7 @@ export const processSyncQueue = async () => {
             comments: action.payload.comments || null,
             status: action.payload.status,
             responsible_id: isUuid(action.payload.responsibleId) ? action.payload.responsibleId : null
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_PROSPECT échoué :', error.message);
           success = checkResult(error);
           break;
@@ -1096,14 +1119,14 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_PROSPECT_ACTIVITY': {
-          const { error } = await supabase.from('prospect_activities').insert([{
+          const { error } = await supabase.from('prospect_activities').upsert([{
             id: action.payload.id,
             prospect_id: isUuid(action.payload.prospectId) ? action.payload.prospectId : null,
             type: action.payload.type,
             description: action.payload.description || null,
             date: action.payload.date,
             created_by: isUuid(action.payload.createdBy) ? action.payload.createdBy : null
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_PROSPECT_ACTIVITY échoué :', error.message);
           success = checkResult(error);
           break;
@@ -1114,7 +1137,7 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_PROSPECT_FOLLOW_UP': {
-          const { error } = await supabase.from('prospect_follow_ups').insert([{
+          const { error } = await supabase.from('prospect_follow_ups').upsert([{
             id: action.payload.id,
             prospect_id: isUuid(action.payload.prospectId) ? action.payload.prospectId : null,
             date: action.payload.date,
@@ -1122,7 +1145,7 @@ export const processSyncQueue = async () => {
             priority: action.payload.priority,
             observation: action.payload.observation || null,
             status: action.payload.status
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_PROSPECT_FOLLOW_UP échoué :', error.message);
           success = checkResult(error);
           break;
@@ -1140,11 +1163,11 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_CATEGORY': {
-          const { error } = await supabase.from('categories').insert([{
+          const { error } = await supabase.from('categories').upsert([{
             id: action.payload.id,
             service_id: isUuid(action.payload.serviceId) ? action.payload.serviceId : null,
             name: action.payload.name
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_CATEGORY échoué :', error.message);
           success = checkResult(error);
           break;
@@ -1175,7 +1198,7 @@ export const processSyncQueue = async () => {
         }
 
         case 'INSERT_ACTIVITY_REPORT': { // @deprecated V1
-          const { error } = await supabase.from('activity_reports').insert([{
+          const { error } = await supabase.from('activity_reports').upsert([{
             id: action.payload.id,
             author_id: action.payload.authorId,
             role: action.payload.role,
@@ -1184,7 +1207,7 @@ export const processSyncQueue = async () => {
             realisations: action.payload.realisations || null,
             difficultes: action.payload.difficultes || null,
             remarques: action.payload.remarques || null
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_ACTIVITY_REPORT échoué :', error.message);
           success = checkResult(error);
           break;
@@ -1209,7 +1232,7 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_WEEKLY_REPORT': { // @deprecated V1
-          const { error } = await supabase.from('weekly_reports').insert([{
+          const { error } = await supabase.from('weekly_reports').upsert([{
             id: action.payload.id,
             author_id: action.payload.authorId,
             role: action.payload.role,
@@ -1217,7 +1240,7 @@ export const processSyncQueue = async () => {
             sections: action.payload.sections || [],
             kpis: action.payload.kpis || {},
             status: action.payload.status || 'Brouillon'
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_WEEKLY_REPORT échoué :', error.message);
           success = checkResult(error);
           break;
@@ -1749,7 +1772,7 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_NOTIFICATION': {
-          const { error } = await supabase.from('notifications').insert([{
+          const { error } = await supabase.from('notifications').upsert([{
             id: action.payload.id,
             user_id: action.payload.user_id,
             title: action.payload.title,
@@ -1758,7 +1781,7 @@ export const processSyncQueue = async () => {
             is_read: !!action.payload.is_read,
             link: action.payload.link || null,
             created_at: action.payload.created_at || new Date().toISOString()
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_NOTIFICATION échoué :', error.message);
           success = checkResult(error);
           break;
@@ -1776,9 +1799,9 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_PRESTATION': {
-          const { error } = await supabase.from('prestations').insert([{
+          const { error } = await supabase.from('prestations').upsert([{
             id: action.payload.id, code: action.payload.code, name: action.payload.name, description: action.payload.description, price: action.payload.price, service_id: isUuid(action.payload.serviceId) ? action.payload.serviceId : null, unit: action.payload.unit, cost_price: action.payload.costPrice || 0
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_PRESTATION échoué :', error.message);
           success = checkResult(error);
           break;
@@ -1798,13 +1821,13 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_SERVICE': {
-          const { error } = await supabase.from('services').insert([{
+          const { error } = await supabase.from('services').upsert([{
             id: action.payload.id,
             name: action.payload.name,
             description: action.payload.description,
             members: action.payload.members,
             commission_rate: action.payload.commissionRate !== undefined ? action.payload.commissionRate : null
-          }]);
+          }], { onConflict: 'id' });
           if (error) console.error('[Sync] INSERT_SERVICE échoué :', error.message);
           success = checkResult(error);
           break;
@@ -2086,6 +2109,13 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_POS_STOCK_ENTRY': {
           const { lines, ...entryData } = action.payload;
+          // Anti-double-comptage au rejeu : si l'entrée est déjà Validée côté
+          // serveur AVANT notre upsert, l'incrément a déjà été appliqué.
+          let entryPreValidated = false;
+          try {
+            const { data: preEntry } = await supabase.from('pos_stock_entries').select('status').eq('id', entryData.id).maybeSingle();
+            entryPreValidated = (preEntry as any)?.status === 'Validé';
+          } catch {}
           const { error } = await supabase.from('pos_stock_entries').upsert([{
             id: entryData.id,
             reference: entryData.reference,
@@ -2109,13 +2139,16 @@ export const processSyncQueue = async () => {
               entryOk = false;
             }
           }
-          // Remontée stock serveur (M11) : une entrée Validée augmente le stock
-          if (!error && entryData.status === 'Validé') {
+          // Remontée stock serveur (M11) : une entrée Validée augmente le stock,
+          // sauf si déjà Validée avant notre upsert (rejeu : incrément déjà appliqué).
+          if (!error && entryData.status === 'Validé' && !entryPreValidated) {
             for (const l of (lines || [])) {
               if (!isUuid(l.productId) || !(Number(l.quantity) > 0)) continue;
               const { error: stErr } = await supabase.rpc('increment_pos_stock', { p_product_id: l.productId, p_delta: Number(l.quantity) });
               if (stErr) { console.error('[Sync] Stock entrée non remonté :', stErr.message); entryOk = false; }
             }
+          } else if (!error && entryData.status === 'Validé' && entryPreValidated) {
+            console.warn('[Sync] Entrée déjà Validée côté serveur, incrément ignoré (anti-doublon) :', entryData.id);
           }
           success = !error && entryOk ? checkResult(error) : false;
           if (!success && error) console.error('[Sync] INSERT_POS_STOCK_ENTRY échoué :', error.message);
@@ -2467,6 +2500,12 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_POS_RETURN': {
           const { lines, exchangeLines, ...returnData } = action.payload;
+          // Anti-double-comptage au rejeu (idem entrées stock).
+          let returnPreTreated = false;
+          try {
+            const { data: preRet } = await supabase.from('pos_returns').select('status').eq('id', returnData.id).maybeSingle();
+            returnPreTreated = (preRet as any)?.status === 'Traité';
+          } catch {}
           const { error } = await supabase.from('pos_returns').upsert([{
             id: returnData.id, return_number: returnData.returnNumber,
             transaction_id: isUuid(returnData.transactionId) ? returnData.transactionId : null,
@@ -2520,8 +2559,9 @@ export const processSyncQueue = async () => {
                 linesOk = false;
               }
             }
-            // Remontée stock serveur (M11) : retours réintègrent, échanges décrémentent (plancher 0)
-            if (returnData.status === 'Traité') {
+            // Remontée stock serveur (M11) : retours réintègrent, échanges décrémentent (plancher 0),
+            // sauf rejeu (déjà Traité avant notre upsert).
+            if (returnData.status === 'Traité' && !returnPreTreated) {
               for (const l of (lines || [])) {
                 if (!isUuid(l.productId) || !(Number(l.quantity) > 0)) continue;
                 const { error: stErr } = await supabase.rpc('increment_pos_stock', { p_product_id: l.productId, p_delta: Number(l.quantity) });
@@ -2620,7 +2660,7 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_IMPORT_ERROR': {
-          const { error } = await supabase.from('import_errors').insert([{
+          const { error } = await supabase.from('import_errors').upsert([{
             id: uuidv4(),
             row_number: action.payload.row,
             session_id: action.payload.sessionId || null,
@@ -2628,8 +2668,84 @@ export const processSyncQueue = async () => {
             field_value: action.payload.value,
             error_message: action.payload.error,
             severity: action.payload.severity
-          }]);
+          }], { onConflict: 'id' });
           success = checkResult(error);
+          break;
+        }
+        case 'UPSERT_INVOICE': {
+          const { invoice, items, replaceItems } = action.payload || {};
+          let { error } = await supabase.from('invoices').upsert(invoice, { onConflict: 'id' });
+          if (error && isUniqueViolationError(error) && invoice?.invoice_number) {
+            // Collision de N° facture multi-poste : regenere une fois + backfill local.
+            const candidate = { ...invoice, invoice_number: `${String(invoice.invoice_number).split('-bis')[0]}-bis${Math.floor(1000 + Math.random() * 9000)}` };
+            const retry = await supabase.from('invoices').upsert(candidate, { onConflict: 'id' });
+            error = retry.error;
+            if (!error) {
+              try {
+                const rows: any[] = (await db.invoices.getItem('data')) || [];
+                await db.invoices.setItem('data', rows.map(x => x.id === invoice.id ? { ...x, invoiceNumber: candidate.invoice_number } : x));
+              } catch {}
+            }
+          }
+          let itemsOk = !error;
+          if (!error && replaceItems) {
+            await supabase.from('invoice_items').delete().eq('invoice_id', invoice.id);
+            if (items && items.length > 0) {
+              const { error: itErr } = await supabase.from('invoice_items').upsert(items, { onConflict: 'id' });
+              if (itErr) {
+                if (isNetworkOrTransientError(itErr)) throw new Error(`[NetworkError] ${itErr.message}`);
+                console.error('[Sync] UPSERT_INVOICE lignes échouées :', itErr.message);
+                itemsOk = false;
+              }
+            }
+          }
+          if (error) console.error('[Sync] UPSERT_INVOICE échoué :', error.message);
+          success = !error && itemsOk ? checkResult(error) : false;
+          break;
+        }
+        case 'DELETE_INVOICE': {
+          const id = action.payload.id;
+          const e1 = (await supabase.from('invoice_payments').delete().eq('invoice_id', id)).error;
+          const e2 = (await supabase.from('invoice_items').delete().eq('invoice_id', id)).error;
+          const e3 = (await supabase.from('invoices').delete().eq('id', id)).error;
+          const err = e1 || e2 || e3;
+          if (err) {
+            if (isNetworkOrTransientError(err)) throw new Error(`[NetworkError] ${err.message}`);
+            console.error('[Sync] DELETE_INVOICE échoué :', err.message);
+          }
+          success = checkResult(err);
+          break;
+        }
+        case 'UPSERT_INVOICE_PAYMENT': {
+          const { payment, invoiceUpdate } = action.payload || {};
+          const { error } = await supabase.from('invoice_payments').upsert(payment, { onConflict: 'id' });
+          let invOk = !error;
+          if (!error && invoiceUpdate?.id) {
+            const { error: invErr } = await supabase.from('invoices').update(invoiceUpdate).eq('id', invoiceUpdate.id);
+            if (invErr) {
+              if (isNetworkOrTransientError(invErr)) throw new Error(`[NetworkError] ${invErr.message}`);
+              console.error('[Sync] UPSERT_INVOICE_PAYMENT statut échoué :', invErr.message);
+              invOk = false;
+            }
+          }
+          if (error) console.error('[Sync] UPSERT_INVOICE_PAYMENT échoué :', error.message);
+          success = !error && invOk ? checkResult(error) : false;
+          break;
+        }
+        case 'DELETE_INVOICE_PAYMENT': {
+          const { id, invoiceUpdate } = action.payload || {};
+          const { error } = await supabase.from('invoice_payments').delete().eq('id', id);
+          let invOk = !error;
+          if (!error && invoiceUpdate?.id) {
+            const { error: invErr } = await supabase.from('invoices').update(invoiceUpdate).eq('id', invoiceUpdate.id);
+            if (invErr) {
+              if (isNetworkOrTransientError(invErr)) throw new Error(`[NetworkError] ${invErr.message}`);
+              console.error('[Sync] DELETE_INVOICE_PAYMENT statut échoué :', invErr.message);
+              invOk = false;
+            }
+          }
+          if (error) console.error('[Sync] DELETE_INVOICE_PAYMENT échoué :', error.message);
+          success = !error && invOk ? checkResult(error) : false;
           break;
         }
         case 'UPDATE_PROFILE': {
@@ -2637,6 +2753,7 @@ export const processSyncQueue = async () => {
           const mapped: any = { updated_at: new Date().toISOString() };
           if (data.photo !== undefined) mapped.photo = data.photo || null;
           if (data.name !== undefined) mapped.name = data.name;
+          if (data.pin !== undefined) mapped.pin = data.pin;
           if (data.role !== undefined) mapped.role = data.role;
           if (data.active !== undefined) mapped.active = data.active;
           if (data.serviceId !== undefined) mapped.service_id = data.serviceId || null;
@@ -2985,9 +3102,17 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
         if (rpcErr) {
           const { error: insErr } = await supabase.from('pos_transactions').upsert([p_transaction], { onConflict: 'id' });
           if (!insErr) {
-            if (p_lines.length > 0) await supabase.from('pos_transaction_lines').upsert(p_lines, { onConflict: 'id' });
-            if (p_payments.length > 0) await supabase.from('pos_payments').upsert(p_payments, { onConflict: 'id' });
-            transactionsSynced++;
+            const { error: recLinesErr } = p_lines.length > 0
+              ? await supabase.from('pos_transaction_lines').upsert(p_lines, { onConflict: 'id' })
+              : { error: null };
+            const { error: recPayErr } = (!recLinesErr && p_payments.length > 0)
+              ? await supabase.from('pos_payments').upsert(p_payments, { onConflict: 'id' })
+              : { error: null };
+            if (!recLinesErr && !recPayErr) {
+              transactionsSynced++;
+            } else {
+              console.error('[Sync] Reconciliation transaction partielle :', tx.id, recLinesErr?.message, recPayErr?.message);
+            }
           }
         } else {
           transactionsSynced++;
@@ -3075,7 +3200,11 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
             });
           }
           if (allLinesData.length > 0) {
-            await supabase.from('pos_return_lines').upsert(allLinesData, { onConflict: 'id' });
+            const { error: recRetLinesErr } = await supabase.from('pos_return_lines').upsert(allLinesData, { onConflict: 'id' });
+            if (recRetLinesErr) {
+              console.error('[Sync] Reconciliation retour partielle :', ret.id, recRetLinesErr.message);
+              continue;
+            }
           }
           returnsSynced++;
         }
@@ -3110,7 +3239,8 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
             purchase_price: l.purchasePrice,
             total: l.total
           }));
-          await supabase.from('pos_stock_entry_lines').upsert(linesData, { onConflict: 'id' });
+          const { error: recEntLinesErr } = await supabase.from('pos_stock_entry_lines').upsert(linesData, { onConflict: 'id' });
+          if (recEntLinesErr) console.error('[Sync] Reconciliation entree partielle :', entry.id, recEntLinesErr.message);
         }
       }
     }
@@ -3141,7 +3271,8 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
             counted_qty: l.countedQty,
             difference: l.difference
           }));
-          await supabase.from('pos_inventory_lines').upsert(linesData, { onConflict: 'id' });
+          const { error: recInvLinesErr } = await supabase.from('pos_inventory_lines').upsert(linesData, { onConflict: 'id' });
+          if (recInvLinesErr) console.error('[Sync] Reconciliation inventaire partielle :', inv.id, recInvLinesErr.message);
         }
       }
     }

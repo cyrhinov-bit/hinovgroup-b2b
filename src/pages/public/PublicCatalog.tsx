@@ -37,7 +37,7 @@ export function PublicCatalog() {
       // 2. Récupérer depuis Supabase si connecté
       if (navigator.onLine) {
         const [prodsRes, catsRes] = await Promise.all([
-          supabase.from('pos_products').select('*'),
+          supabase.from('pos_products').select('id,reference,barcode,isbn,name,family,category_id,brand_id,selling_price,quantity,min_stock,image_url,description,status,is_active,unit,created_at,updated_at'),
           supabase.from('pos_categories').select('*')
         ]);
 

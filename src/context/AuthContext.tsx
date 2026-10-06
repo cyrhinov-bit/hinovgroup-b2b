@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { isValidPin, normalizeEmail } from '@/shared';
 import { supabase } from '../lib/supabase';
+import { queueSyncAction } from '../lib/sync';
 import type { User } from './AppContext';
 import { getUserThemeColor, applyTheme } from '../lib/theme';
 
@@ -391,14 +392,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await db.profiles.setItem('data', updated);
     } catch {}
 
-    // Synchronisation en ligne si disponible
+    // Synchronisation en ligne si disponible (les deux stores doivent rester coherents)
     if (navigator.onLine) {
       try {
-        await supabase.auth.updateUser({ password: newPin });
-        await supabase.from('profiles').update({ pin: newPin }).eq('id', currentUser.id);
+        const { error: authErr } = await supabase.auth.updateUser({ password: newPin });
+        if (authErr) throw authErr;
+        const { error: pinErr } = await supabase.from('profiles').update({ pin: newPin }).eq('id', currentUser.id);
+        if (pinErr) throw pinErr;
       } catch (err) {
         console.warn('[AuthContext] Synchro nouveau PIN serveur en attente :', err);
+        await queueSyncAction('UPDATE_PROFILE', { id: currentUser.id, pin: newPin }).catch(() => {});
+        return { success: false, error: 'PIN modifié localement, synchronisation serveur en attente. Reconnectez-vous pour finaliser.' };
       }
+    } else {
+      await queueSyncAction('UPDATE_PROFILE', { id: currentUser.id, pin: newPin }).catch(() => {});
     }
     return { success: true };
   };
