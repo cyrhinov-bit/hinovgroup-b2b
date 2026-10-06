@@ -124,6 +124,58 @@ export const isForeignKeyError = (err: any): boolean => {
   return code === '23503' || msg.includes('foreign key') || msg.includes('violates foreign key constraint') || msg.includes('clé étrangère');
 };
 
+export const isUniqueViolationError = (err: any): boolean => {
+  if (!err) return false;
+  const msg = (typeof err === 'string' ? err : err.message || err.details || JSON.stringify(err)).toLowerCase();
+  const code = err.code || err.status;
+  return code === '23505' || msg.includes('duplicate key') || msg.includes('already exists') || msg.includes('doublon');
+};
+
+// Tables CRM dont la reference/code est contraint UNIQUE cote serveur
+// (uq_prestations_reference, uq_articles_code, uq_interventions_reference).
+// Les references sont generees en local en `length+1` : apres suppression ou
+// depuis un autre poste, une collision 23505 est possible. En cas de conflit,
+// on regenere une reference suffixee (-bisXXXX, meme convention que
+// l'anti-collision locale d'AppContext) et on rejoue une fois, puis on
+// repercute la correction dans le store local pour garder l'UI coherente.
+interface UniqueFieldRepair {
+  table: string;
+  field: string;
+  storeKey: 'crmPrestations' | 'crmArticles' | 'crmMaintenance';
+}
+const withUniqueRepairSuffix = (base: string): string => {
+  const root = String(base || '').split('-bis')[0] || 'REF';
+  return `${root}-bis${Math.floor(1000 + Math.random() * 9000)}`;
+};
+
+const backfillLocalUniqueField = async (storeKey: UniqueFieldRepair['storeKey'], id: string, field: string, value: string) => {
+  try {
+    const store = (db as any)[storeKey];
+    if (!store || !id) return;
+    const rows: any[] = (await store.getItem('data')) || [];
+    const next = rows.map(r => (r.id === id ? { ...r, [field]: value } : r));
+    await store.setItem('data', next);
+  } catch (e) {
+    console.warn('[Sync] backfill local reference impossible :', e);
+  }
+};
+
+const repairUniqueAndRetry = async (
+  table: string,
+  row: any,
+  repair: UniqueFieldRepair,
+  doUpsert: (candidate: any) => Promise<{ error: any }>
+): Promise<{ error: any; repairedValue?: string }> => {
+  const current = row?.[repair.field];
+  if (!current) return { error: { message: 'valeur vide' } };
+  // Eviter de boucler sur une valeur deja suffixee qui echoue encore
+  // (vrai doublon metier) : un seul rejeu.
+  const candidate = { ...row, [repair.field]: withUniqueRepairSuffix(current) };
+  const { error } = await doUpsert(candidate);
+  if (!error) return { error: null, repairedValue: candidate[repair.field] };
+  return { error };
+};
+
 // Vérifie si le retour Supabase est une erreur réseau (lance exception) ou logique (renvoie false)
 const checkResult = (error: any): boolean => {
   if (!error) return true;
@@ -150,7 +202,7 @@ const sanitizeCrmUuids = (row: any, uuidFields: string[]): any => {
   return clean;
 };
 
-const syncCrmUpsert = async (table: string, row: any, uuidFields: string[], tag: string): Promise<boolean> => {
+const syncCrmUpsert = async (table: string, row: any, uuidFields: string[], tag: string, repair?: UniqueFieldRepair): Promise<boolean> => {
   let clean = sanitizeCrmUuids(row, uuidFields);
   let { error } = await supabase.from(table).upsert(clean, { onConflict: 'id' });
   if (error && isForeignKeyError(error)) {
@@ -162,11 +214,22 @@ const syncCrmUpsert = async (table: string, row: any, uuidFields: string[], tag:
     const r2 = await supabase.from(table).upsert(fallback, { onConflict: 'id' });
     error = r2.error;
   }
+  if (error && repair && isUniqueViolationError(error)) {
+    console.warn(`[Sync] ${tag} reference en doublon, regeneration et rejeu`);
+    const retry = await repairUniqueAndRetry(table, clean, repair, async (candidate) => {
+      const r = await supabase.from(table).upsert(candidate, { onConflict: 'id' });
+      return { error: r.error };
+    });
+    error = retry.error;
+    if (!error && retry.repairedValue && clean.id) {
+      await backfillLocalUniqueField(repair.storeKey, clean.id, repair.field, retry.repairedValue);
+    }
+  }
   if (error) console.error(`[Sync] ${tag} échoué :`, error.message);
   return checkResult(error);
 };
 
-const syncCrmUpdate = async (table: string, id: string, updates: any, uuidFields: string[], tag: string): Promise<boolean> => {
+const syncCrmUpdate = async (table: string, id: string, updates: any, uuidFields: string[], tag: string, repair?: UniqueFieldRepair): Promise<boolean> => {
   const clean = sanitizeCrmUuids(updates, uuidFields);
   delete clean.id;
   let { error } = await supabase.from(table).update(clean).eq('id', id);
@@ -176,6 +239,15 @@ const syncCrmUpdate = async (table: string, id: string, updates: any, uuidFields
     for (const f of uuidFields) fallback[f] = null;
     const r2 = await supabase.from(table).update(fallback).eq('id', id);
     error = r2.error;
+  }
+  if (error && repair && isUniqueViolationError(error) && clean[repair.field]) {
+    console.warn(`[Sync] ${tag} reference en doublon, regeneration et rejeu`);
+    const candidate = { ...clean, [repair.field]: withUniqueRepairSuffix(clean[repair.field]) };
+    const r2 = await supabase.from(table).update(candidate).eq('id', id);
+    error = r2.error;
+    if (!error) {
+      await backfillLocalUniqueField(repair.storeKey, id, repair.field, candidate[repair.field]);
+    }
   }
   if (error) console.error(`[Sync] ${tag} échoué :`, error.message);
   return checkResult(error);
@@ -1459,12 +1531,12 @@ export const processSyncQueue = async () => {
         }
         // ─── Modules CRM : Prestations & Commandes ───
         case 'INSERT_CRM_PRESTATION': {
-          success = await syncCrmUpsert('prestations_commandes', action.payload, ['client_id', 'apporteur_id', 'commercial_id', 'cree_par', 'responsable_service_id'], 'INSERT_CRM_PRESTATION');
+          success = await syncCrmUpsert('prestations_commandes', action.payload, ['client_id', 'apporteur_id', 'commercial_id', 'cree_par', 'responsable_service_id'], 'INSERT_CRM_PRESTATION', { table: 'prestations_commandes', field: 'reference', storeKey: 'crmPrestations' });
           break;
         }
         case 'UPDATE_CRM_PRESTATION': {
           const { id, ...updates } = action.payload;
-          success = await syncCrmUpdate('prestations_commandes', id, updates, ['client_id', 'apporteur_id', 'commercial_id', 'cree_par', 'responsable_service_id'], 'UPDATE_CRM_PRESTATION');
+          success = await syncCrmUpdate('prestations_commandes', id, updates, ['client_id', 'apporteur_id', 'commercial_id', 'cree_par', 'responsable_service_id'], 'UPDATE_CRM_PRESTATION', { table: 'prestations_commandes', field: 'reference', storeKey: 'crmPrestations' });
           break;
         }
         case 'DELETE_CRM_PRESTATION': {
@@ -1497,12 +1569,12 @@ export const processSyncQueue = async () => {
         }
         // ─── Modules CRM : Stocks / Catalogue articles ───
         case 'INSERT_CRM_ARTICLE': {
-          success = await syncCrmUpsert('catalogue_articles', action.payload, ['fournisseur_id', 'cree_par'], 'INSERT_CRM_ARTICLE');
+          success = await syncCrmUpsert('catalogue_articles', action.payload, ['fournisseur_id', 'cree_par'], 'INSERT_CRM_ARTICLE', { table: 'catalogue_articles', field: 'code_article', storeKey: 'crmArticles' });
           break;
         }
         case 'UPDATE_CRM_ARTICLE': {
           const { id, ...updates } = action.payload;
-          success = await syncCrmUpdate('catalogue_articles', id, updates, ['fournisseur_id', 'cree_par'], 'UPDATE_CRM_ARTICLE');
+          success = await syncCrmUpdate('catalogue_articles', id, updates, ['fournisseur_id', 'cree_par'], 'UPDATE_CRM_ARTICLE', { table: 'catalogue_articles', field: 'code_article', storeKey: 'crmArticles' });
           break;
         }
         case 'DELETE_CRM_ARTICLE': {
@@ -1511,12 +1583,12 @@ export const processSyncQueue = async () => {
         }
         // ─── Modules CRM : Maintenance ───
         case 'INSERT_CRM_INTERVENTION': {
-          success = await syncCrmUpsert('interventions_maintenance', action.payload, ['client_id', 'cree_par'], 'INSERT_CRM_INTERVENTION');
+          success = await syncCrmUpsert('interventions_maintenance', action.payload, ['client_id', 'cree_par'], 'INSERT_CRM_INTERVENTION', { table: 'interventions_maintenance', field: 'reference', storeKey: 'crmMaintenance' });
           break;
         }
         case 'UPDATE_CRM_INTERVENTION': {
           const { id, ...updates } = action.payload;
-          success = await syncCrmUpdate('interventions_maintenance', id, updates, ['client_id', 'cree_par'], 'UPDATE_CRM_INTERVENTION');
+          success = await syncCrmUpdate('interventions_maintenance', id, updates, ['client_id', 'cree_par'], 'UPDATE_CRM_INTERVENTION', { table: 'interventions_maintenance', field: 'reference', storeKey: 'crmMaintenance' });
           break;
         }
         case 'DELETE_CRM_INTERVENTION': {
@@ -2655,7 +2727,18 @@ export const processSyncQueue = async () => {
         let currentErrorsCount = 1;
         try {
           const errors = await db.syncErrors.getItem<any[]>('errors') || [];
-          errors.push({ action, failedAt: new Date().toISOString() });
+          // Dédupliquer par entité : un rejeu ("Tout ré-essayer", réconciliation)
+          // remplace l'entrée existante au lieu d'empiler un doublon identique.
+          const entityId = (action.payload && (action.payload.id ?? action.payload.reference)) ?? '';
+          const dedupKey = (e: any) => `${e?.action?.type}::${(e?.action?.payload && (e.action.payload.id ?? e.action.payload.reference)) ?? ''}`;
+          const incomingKey = `${action.type}::${entityId}`;
+          const existingIdx = entityId === '' ? -1 : errors.findIndex(e => dedupKey(e) === incomingKey);
+          const entry = { action, failedAt: new Date().toISOString() };
+          if (existingIdx >= 0) {
+            errors[existingIdx] = entry;
+          } else {
+            errors.push(entry);
+          }
           await db.syncErrors.setItem('errors', errors);
           currentErrorsCount = errors.length;
         } catch(err) {

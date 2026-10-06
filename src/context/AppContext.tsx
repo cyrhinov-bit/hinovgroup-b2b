@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { db } from '../lib/db';
-import { queueSyncAction, processSyncQueue, reconcileLocalPosDataWithCloud, reconcileAllOfflineDataWithCloud, resolveProductUuid, isRetiredServicePayload } from '../lib/sync';
+import { queueSyncAction, processSyncQueue, reconcileLocalPosDataWithCloud, reconcileAllOfflineDataWithCloud, resolveProductUuid, isRetiredServicePayload, isUniqueViolationError } from '../lib/sync';
 import { v4 as uuidv4 } from 'uuid';
 import toast from 'react-hot-toast';
 import { isProductComplete } from '../features/products/services/ProductService';
@@ -4896,44 +4896,64 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     try {
       if (navigator.onLine) {
-        const dbInvoice: any = {
-          id: newInvoice.id,
-          invoice_number: newInvoice.invoiceNumber,
-          quote_id: newInvoice.quoteId || null,
-          client_id: newInvoice.clientId || null,
-          client_nom: newInvoice.clientName || null,
-          commercial_id: newInvoice.commercialId || null,
-          commercial_nom: newInvoice.commercialName || null,
-          service_id: newInvoice.serviceId || null,
-          service_nom: newInvoice.serviceName || null,
-          category: newInvoice.category || null,
-          period_year: newInvoice.periodYear,
-          period_month: newInvoice.periodMonth,
-          issue_date: newInvoice.issueDate,
-          delivery_date: newInvoice.deliveryDate || null,
-          payment_date: newInvoice.paymentDate || null,
-          payment_terms: newInvoice.paymentTerms || '30 jours',
-          due_date: newInvoice.dueDate,
-          subtotal: newInvoice.subtotal,
-          tax_amount: newInvoice.taxAmount || 0,
-          discount_amount: newInvoice.discountAmount || 0,
-          total_amount: newInvoice.totalAmount,
-          cost_amount: newInvoice.costAmount || 0,
-          commission_rate: newInvoice.commissionRate || 10,
-          commission_amount: newInvoice.commissionAmount || 0,
-          gross_margin: newInvoice.grossMargin || 0,
-          hinov_margin: newInvoice.hinovMargin || 0,
-          amount_paid: newInvoice.amountPaid || 0,
-          remaining_amount: newInvoice.remainingAmount,
-          status: newInvoice.status,
-          notes: newInvoice.notes || null,
-          created_by: newInvoice.createdBy || null,
-          created_at: newInvoice.createdAt,
-          updated_at: newInvoice.updatedAt
-        };
-        await supabase.from('invoices').upsert(dbInvoice);
+        const buildDbInvoice = (inv: Invoice): any => ({
+          id: inv.id,
+          invoice_number: inv.invoiceNumber,
+          quote_id: inv.quoteId || null,
+          client_id: inv.clientId || null,
+          client_nom: inv.clientName || null,
+          commercial_id: inv.commercialId || null,
+          commercial_nom: inv.commercialName || null,
+          service_id: inv.serviceId || null,
+          service_nom: inv.serviceName || null,
+          category: inv.category || null,
+          period_year: inv.periodYear,
+          period_month: inv.periodMonth,
+          issue_date: inv.issueDate,
+          delivery_date: inv.deliveryDate || null,
+          payment_date: inv.paymentDate || null,
+          payment_terms: inv.paymentTerms || '30 jours',
+          due_date: inv.dueDate,
+          subtotal: inv.subtotal,
+          tax_amount: inv.taxAmount || 0,
+          discount_amount: inv.discountAmount || 0,
+          total_amount: inv.totalAmount,
+          cost_amount: inv.costAmount || 0,
+          commission_rate: inv.commissionRate || 10,
+          commission_amount: inv.commissionAmount || 0,
+          gross_margin: inv.grossMargin || 0,
+          hinov_margin: inv.hinovMargin || 0,
+          amount_paid: inv.amountPaid || 0,
+          remaining_amount: inv.remainingAmount,
+          status: inv.status,
+          notes: inv.notes || null,
+          created_by: inv.createdBy || null,
+          created_at: inv.createdAt,
+          updated_at: inv.updatedAt
+        });
+        let { error: invError } = await supabase.from('invoices').upsert(buildDbInvoice(newInvoice));
+        if (invError) {
+          console.warn('Erreur synchro création facture:', invError.message);
+          if (isUniqueViolationError(invError)) {
+            // Collision de N° facture (multi-poste) : regenerer et rejouer une fois
+            const fixed: Invoice = {
+              ...newInvoice,
+              invoiceNumber: `FAC-${periodYear}-${String(periodMonth).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}-bis${Math.floor(100 + Math.random() * 900)}`
+            };
+            const retry = await supabase.from('invoices').upsert(buildDbInvoice(fixed));
+            if (!retry.error) {
+              const fixedNext = [fixed, ...invoices.filter(i => i.id !== id)];
+              setInvoices(fixedNext);
+              await db.invoices.setItem('data', fixedNext);
+              newInvoice.invoiceNumber = fixed.invoiceNumber;
+              invError = null;
+            } else {
+              console.warn('Echec rejeu facture après regeneration:', retry.error.message);
+            }
+          }
+        }
 
-        if (newInvoice.items && newInvoice.items.length > 0) {
+        if (!invError && newInvoice.items && newInvoice.items.length > 0) {
           const dbItems = newInvoice.items.map(it => ({
             id: it.id,
             invoice_id: id,
