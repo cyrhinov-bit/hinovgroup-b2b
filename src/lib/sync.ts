@@ -143,7 +143,7 @@ export const isUniqueViolationError = (err: any): boolean => {
 interface UniqueFieldRepair {
   table: string;
   field: string;
-  storeKey: 'crmPrestations' | 'crmArticles' | 'crmMaintenance' | 'crmCommissions';
+  storeKey: 'crmPrestations' | 'crmArticles' | 'crmMaintenance' | 'crmCommissions' | 'quotes';
 }
 const withUniqueRepairSuffix = (base: string): string => {
   const root = String(base || '').split('-bis')[0] || 'REF';
@@ -177,6 +177,96 @@ const repairUniqueAndRetry = async (
   if (!error) return { error: null, repairedValue: candidate[repair.field] };
   return { error };
 };
+
+// Quotes : upsert atomique via RPC (quote + lignes en une transaction).
+// Si la fonction n'est pas encore déployée, repli sur le chemin historique.
+const isMissingRpcError = (err: any): boolean => {
+  if (!err) return false;
+  const msg = (typeof err === 'string' ? err : err.message || err.details || JSON.stringify(err)).toLowerCase();
+  const code = String(err.code || '');
+  return code === '42883' || code === 'PGRST202' || (msg.includes('function') && (msg.includes('does not exist') || msg.includes("n'existe pas") || msg.includes('could not find') || msg.includes('introuvable')));
+};
+
+const backfillLocalQuoteNumber = async (id: string, value: string) => {
+  try {
+    const rows: any[] = (await db.quotes.getItem('data')) || [];
+    await db.quotes.setItem('data', rows.map(r => (r.id === id ? { ...r, quoteNumber: value } : r)));
+  } catch (e) {
+    console.warn('[Sync] backfill quote_number impossible :', e);
+  }
+};
+
+const nextQuoteNumberCandidate = (base: string): string => {
+  const m = String(base || '').match(/^(DV-\d{4}-)(\d+)$/);
+  if (m) {
+    const n = parseInt(m[2], 10) + 1;
+    return `${m[1]}${String(isNaN(n) ? 1 : n).padStart(4, '0')}`;
+  }
+  return `${base || 'DV'}-bis${Math.floor(1000 + Math.random() * 9000)}`;
+};
+
+const buildQuoteRpcPayload = (quoteData: any, lines: any[]) => ({
+  p_quote: {
+    id: quoteData.id,
+    quote_number: quoteData.quoteNumber,
+    client_id: isUuid(quoteData.clientId) ? quoteData.clientId : null,
+    commercial_id: isUuid(quoteData.commercialId) ? quoteData.commercialId : null,
+    service_id: isUuid(quoteData.serviceId) ? quoteData.serviceId : null,
+    affaire_id: isUuid(quoteData.affaireId) ? quoteData.affaireId : null,
+    subject: quoteData.subject,
+    subtotal: quoteData.subtotal,
+    vat: quoteData.vat ?? 0,
+    total: quoteData.total,
+    status: quoteData.status,
+    date: quoteData.date,
+    valid_until: quoteData.validUntil || null,
+    payment_terms: quoteData.paymentTerms || null,
+    notes: quoteData.notes || null,
+    signatory_name: quoteData.signatoryName || null,
+    signatory_role: quoteData.signatoryRole || null,
+    style: quoteData.style,
+    accent_color: quoteData.accentColor,
+    discount_percent: quoteData.discountPercent || 0,
+    discount_amount: quoteData.discountAmount || 0,
+    client_comment: quoteData.clientComment || null,
+  },
+  p_lines: (lines || []).map((l: any) => ({
+    id: isUuid(l.id) ? l.id : uuidv4(),
+    prestation_id: isUuid(l.prestationId) ? l.prestationId : null,
+    description: l.description,
+    quantity: l.quantity,
+    unit: l.unit || null,
+    unit_price: l.unitPrice,
+    discount_percent: l.discountPercent || 0,
+    cost_price: l.costPrice || 0,
+    total: l.total,
+  })),
+});
+
+const tryRpcQuoteUpsert = async (quoteData: any, lines: any[], tag: string): Promise<'ok' | 'missing' | 'error'> => {
+  try {
+    const { error } = await supabase.rpc('upsert_quote_with_lines', buildQuoteRpcPayload(quoteData, lines));
+    if (!error) return 'ok';
+    if (isMissingRpcError(error)) return 'missing';
+    if (isUniqueViolationError(error)) {
+      // Doublon de quote_number multi-poste : régénère et rejoue une fois via RPC
+      const retryNumber = nextQuoteNumberCandidate(quoteData.quoteNumber);
+      console.warn(`[Sync] ${tag} numéro en doublon, régénération ${quoteData.quoteNumber} -> ${retryNumber}`);
+      const retry = await supabase.rpc('upsert_quote_with_lines', buildQuoteRpcPayload({ ...quoteData, quoteNumber: retryNumber }, lines));
+      if (!retry.error) {
+        await backfillLocalQuoteNumber(quoteData.id, retryNumber);
+        return 'ok';
+      }
+      if (isMissingRpcError(retry.error)) return 'missing';
+    }
+    console.error(`[Sync] ${tag} RPC échouée :`, error.message);
+    return 'error';
+  } catch (e: any) {
+    if (isNetworkOrTransientError(e)) throw e;
+    return 'error';
+  }
+};
+
 
 // Vérifie si le retour Supabase est une erreur réseau (lance exception) ou logique (renvoie false)
 const checkResult = (error: any): boolean => {
@@ -791,7 +881,12 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_QUOTE': {
           const { lines, ...quoteData } = action.payload;
-          const { error } = await supabase.from('quotes').upsert([{
+          // Chemin préféré : RPC atomique (évite devis sans lignes / doublons)
+          const rpcResult = await tryRpcQuoteUpsert(quoteData, lines || [], 'INSERT_QUOTE');
+          if (rpcResult === 'ok') { success = true; break; }
+          if (rpcResult === 'error') { success = false; break; }
+          // Repli historique (RPC non déployée)
+          let { error } = await supabase.from('quotes').upsert([{
             id: quoteData.id,
             quote_number: quoteData.quoteNumber,
             client_id: isUuid(quoteData.clientId) ? quoteData.clientId : null,
@@ -815,7 +910,38 @@ export const processSyncQueue = async () => {
             discount_amount: quoteData.discountAmount || 0,
             client_comment: quoteData.clientComment || null
           }], { onConflict: 'id' });
-          
+
+          if (error && isUniqueViolationError(error)) {
+            const retryNumber = nextQuoteNumberCandidate(quoteData.quoteNumber);
+            console.warn(`[Sync] INSERT_QUOTE numéro en doublon, régénération ${quoteData.quoteNumber} -> ${retryNumber}`);
+            const retry = await supabase.from('quotes').upsert([{
+              id: quoteData.id,
+              quote_number: retryNumber,
+              client_id: isUuid(quoteData.clientId) ? quoteData.clientId : null,
+              commercial_id: isUuid(quoteData.commercialId) ? quoteData.commercialId : null,
+              service_id: isUuid(quoteData.serviceId) ? quoteData.serviceId : null,
+              affaire_id: isUuid(quoteData.affaireId) ? quoteData.affaireId : null,
+              subject: quoteData.subject,
+              subtotal: quoteData.subtotal,
+              vat: quoteData.vat ?? 0,
+              total: quoteData.total,
+              status: quoteData.status,
+              date: quoteData.date,
+              valid_until: quoteData.validUntil || null,
+              payment_terms: quoteData.paymentTerms || null,
+              notes: quoteData.notes || null,
+              signatory_name: quoteData.signatoryName || null,
+              signatory_role: quoteData.signatoryRole || null,
+              style: quoteData.style,
+              accent_color: quoteData.accentColor,
+              discount_percent: quoteData.discountPercent || 0,
+              discount_amount: quoteData.discountAmount || 0,
+              client_comment: quoteData.clientComment || null
+            }], { onConflict: 'id' });
+            error = retry.error;
+            if (!error) await backfillLocalQuoteNumber(quoteData.id, retryNumber);
+          }
+
           if (!error && lines && lines.length > 0) {
             const linesData = lines.map((l: any) => ({
               id: isUuid(l.id) ? l.id : uuidv4(),
@@ -826,6 +952,7 @@ export const processSyncQueue = async () => {
               unit: l.unit || null,
               unit_price: l.unitPrice,
               discount_percent: l.discountPercent || 0,
+              cost_price: l.costPrice || 0,
               total: l.total
             }));
             const { error: lineErr } = await supabase.from('quote_lines').upsert(linesData, { onConflict: 'id' });
@@ -842,6 +969,11 @@ export const processSyncQueue = async () => {
         }
         case 'UPDATE_QUOTE': {
           const { lines, ...quoteData } = action.payload;
+          // Chemin préféré : RPC atomique (remplace le delete+insert non transactionnel)
+          const rpcResult = await tryRpcQuoteUpsert(quoteData, lines || [], 'UPDATE_QUOTE');
+          if (rpcResult === 'ok') { success = true; break; }
+          if (rpcResult === 'error') { success = false; break; }
+          // Repli historique
           const { error } = await supabase.from('quotes').update({
             quote_number: quoteData.quoteNumber,
             client_id: isUuid(quoteData.clientId) ? quoteData.clientId : null,
@@ -867,6 +999,8 @@ export const processSyncQueue = async () => {
           }).eq('id', quoteData.id);
 
           if (!error) {
+            // Repli historique : remplace les lignes. Le chemin RPC (atomique)
+            // est préféré quand la fonction est déployée (voir plus haut).
             await supabase.from('quote_lines').delete().eq('quote_id', quoteData.id);
             if (lines && lines.length > 0) {
               const linesData = lines.map((l: any) => ({
@@ -878,6 +1012,7 @@ export const processSyncQueue = async () => {
                 unit: l.unit || null,
                 unit_price: l.unitPrice,
                 discount_percent: l.discountPercent || 0,
+                cost_price: l.costPrice || 0,
                 total: l.total
               }));
               const { error: insLinesErr } = await supabase.from('quote_lines').upsert(linesData, { onConflict: 'id' });

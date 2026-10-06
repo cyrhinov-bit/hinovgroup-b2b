@@ -1,22 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
-import { 
-  Plus, 
-  Download, 
-  Send, 
-  MessageCircle, 
-  Edit2, 
-  Trash2, 
-  Check, 
-  X, 
-  Clock, 
-  Eye, 
-  User, 
-  Filter, 
-  RotateCcw, 
-  Search, 
-  FileText, 
+import {
+  Plus,
+  Download,
+  MessageCircle,
+  Edit2,
+  Trash2,
+  Check,
+  X,
+  Eye,
+  Filter,
+  RotateCcw,
+  Search,
   CheckCircle,
-  Building2,
   Calendar,
   Receipt
 } from 'lucide-react';
@@ -25,11 +20,27 @@ import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
 import { generateQuotePdf, downloadBlob } from '../lib/pdfUtils';
-import { SendModal } from '../components/SendModal';
 import { ReportPdfPreview, type ReportPdfPreviewData } from '../components/ReportPdfPreview';
 import type { Quote } from '../context/AppContext';
 
 type PeriodFilter = 'ALL' | 'TODAY' | '7_DAYS' | 'THIS_MONTH' | 'THIS_QUARTER' | 'THIS_YEAR';
+type QuoteStatus = Quote['status'];
+
+// Workflow autorisé : Brouillon -> Envoyé -> Accepté/Refusé/Révision ; Révision -> Envoyé/Accepté/Refusé
+const ALLOWED_TRANSITIONS: Record<QuoteStatus, QuoteStatus[]> = {
+  'Brouillon': ['Envoyé'],
+  'Envoyé': ['Accepté', 'Refusé', 'Révision'],
+  'Révision': ['Envoyé', 'Accepté', 'Refusé'],
+  'Accepté': [],
+  'Refusé': [],
+};
+
+function isQuoteExpired(q: Quote): boolean {
+  if (!q.validUntil) return false;
+  if (q.status === 'Accepté' || q.status === 'Refusé') return false;
+  const today = new Date().toISOString().split('T')[0];
+  return q.validUntil < today;
+}
 
 export function Devis() {
   const navigate = useNavigate();
@@ -44,8 +55,9 @@ export function Devis() {
   const [serviceFilter, setServiceFilter] = useState('');
   const [authorFilter, setAuthorFilter] = useState<string>(searchParams.get('authorId') || '');
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('ALL');
-  const [activeSendQuote, setActiveSendQuote] = useState<Quote | null>(null);
   const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   useEffect(() => {
     const authorParam = searchParams.get('authorId');
@@ -61,13 +73,13 @@ export function Devis() {
   const getServiceName = (id?: string) => services.find(s => s.id === id)?.name || '-';
   const getUserName = (id?: string) => users.find(u => u.id === id)?.name || 'Non assigné';
 
-  // Helper date filtering
+  // Helper date filtering — une date absente/invalide n'est incluse que pour "ALL"
   const isDateInPeriod = (dateStr?: string, period: PeriodFilter = periodFilter): boolean => {
     if (period === 'ALL') return true;
-    if (!dateStr) return true;
+    if (!dateStr) return false;
     
     const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return true;
+    if (isNaN(d.getTime())) return false;
     const now = new Date();
     
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -141,12 +153,25 @@ export function Devis() {
 
   // KPIs pour la sélection filtrée
   const totalFilteredCount = filteredQuotes.length;
-  const totalFilteredAmount = filteredQuotes.filter(q => q.status !== 'Refusé').reduce((sum, q) => sum + q.total, 0);
+  const totalFilteredAmount = filteredQuotes.filter(q => q.status !== 'Refusé').reduce((sum, q) => sum + (Number(q.total) || 0), 0);
   const acceptedFiltered = filteredQuotes.filter(q => q.status === 'Accepté');
-  const acceptedFilteredAmount = acceptedFiltered.reduce((sum, q) => sum + q.total, 0);
+  const acceptedFilteredAmount = acceptedFiltered.reduce((sum, q) => sum + (Number(q.total) || 0), 0);
   const conversionRate = totalFilteredCount > 0 ? Math.round((acceptedFiltered.length / totalFilteredCount) * 100) : 0;
 
-  // Liste des utilisateurs éligibles pour le filtre
+  // Pagination (20 / page) — évite le rendu de milliers de lignes
+  const totalPages = Math.max(1, Math.ceil(filteredQuotes.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedQuotes = filteredQuotes.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  // Reset page à chaque changement de filtre
+  useEffect(() => { setCurrentPage(1); }, [filter, statusFilter, serviceFilter, authorFilter, periodFilter]);
+
+  // Liste des utilisateurs éligibles pour le filtre + compteur pré-calculé (O(N))
+  const quoteCountByAuthor = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const q of quotes) m.set(q.commercialId, (m.get(q.commercialId) || 0) + 1);
+    return m;
+  }, [quotes]);
   const filterableUsers = useMemo(() => {
     if (isDirector) return users;
     if (isResponsable) return users.filter(u => u.serviceId === currentUser?.serviceId);
@@ -161,6 +186,7 @@ export function Devis() {
     setServiceFilter('');
     setAuthorFilter('');
     setPeriodFilter('ALL');
+    setCurrentPage(1);
     setSearchParams({});
   };
 
@@ -175,10 +201,6 @@ export function Devis() {
     }
   };
 
-  const handleSend = (q: Quote) => {
-    setActiveSendQuote(q);
-  };
-
   const handlePreview = (q: Quote) => {
     const client = clients.find(c => c.id === q.clientId);
     const blob = generateQuotePdf(q, client, settings);
@@ -191,8 +213,48 @@ export function Devis() {
     });
   };
 
+  // Qui peut changer le statut ? Propriétaire commercial, responsable du service, direction.
+  const canManageQuote = (q: Quote): boolean => {
+    if (isDirector) return true;
+    if (q.commercialId === currentUser?.id) return true;
+    if (isResponsable && q.serviceId && q.serviceId === currentUser?.serviceId) return true;
+    return false;
+  };
+
+  const canTransition = (q: Quote, next: QuoteStatus): boolean => {
+    if (!canManageQuote(q)) return false;
+    // La direction peut rouvrir un devis Accepté/Refusé vers Révision (correction)
+    if ((q.status === 'Accepté' || q.status === 'Refusé') && isDirector && next === 'Révision') return true;
+    return (ALLOWED_TRANSITIONS[q.status] || []).includes(next);
+  };
+
   const handleStatusChange = (q: Quote, newStatus: Quote['status']) => {
+    if (!canTransition(q, newStatus)) return;
     updateQuoteStatus(q.id, newStatus);
+  };
+
+  const handleDelete = (q: Quote) => {
+    const existingInvoice = invoices.find(inv => inv.quoteId === q.id);
+    if (existingInvoice) {
+      alert(`Suppression impossible : une facture (${existingInvoice.invoiceNumber}) est liée à ce devis.`);
+      return;
+    }
+    confirm({
+      title: 'Supprimer le devis',
+      message: `Voulez-vous vraiment supprimer le devis "${q.quoteNumber}" ? Cette action est irréversible.`,
+      confirmLabel: 'Supprimer',
+      variant: 'danger',
+      onConfirm: () => {
+        try {
+          const res: any = deleteQuote(q.id);
+          if (res && typeof res.catch === 'function') {
+            res.catch((e: any) => alert(e?.message || 'Suppression impossible.'));
+          }
+        } catch (e: any) {
+          alert(e?.message || 'Suppression impossible.');
+        }
+      }
+    });
   };
 
   return (
@@ -272,7 +334,7 @@ export function Devis() {
               >
                 <option value="">👤 Tous les utilisateurs / auteurs</option>
                 {filterableUsers.map(u => {
-                  const userQuoteCount = quotes.filter(q => q.commercialId === u.id).length;
+                  const userQuoteCount = quoteCountByAuthor.get(u.id) || 0;
                   return (
                     <option key={u.id} value={u.id}>
                       {u.name} ({u.role}) — {userQuoteCount} devis
@@ -387,7 +449,10 @@ export function Devis() {
               </tr>
             </thead>
             <tbody>
-              {filteredQuotes.map(q => (
+              {paginatedQuotes.map(q => {
+                const expired = isQuoteExpired(q);
+                const existingInvoice = invoices.find(inv => inv.quoteId === q.id);
+                return (
                 <tr key={q.id}>
                   <td data-label="N° Devis">
                     <div style={{ fontWeight: 700, color: 'var(--color-primary)' }}>{q.quoteNumber}</div>
@@ -421,76 +486,86 @@ export function Devis() {
                   </td>
                   <td data-label="Sujet">{q.subject}</td>
                   <td data-label="Montant Total" style={{ textAlign: 'right', fontWeight: 700 }}>
-                    {q.total.toLocaleString('fr-FR')} FCFA
+                    {(Number(q.total) || 0).toLocaleString('fr-FR')} FCFA
                   </td>
                   <td data-label="Statut">
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                         <span className={`badge-status ${getBadgeColor(q.status)}`}>{q.status}</span>
+                        {expired && (
+                          <span className="badge-status" style={{ background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: '11px' }} title={`Validité dépassée depuis le ${q.validUntil}`}>
+                            <Calendar size={11} style={{ verticalAlign: '-1px', marginRight: '3px' }} />Expiré
+                          </span>
+                        )}
                         {q.clientComment && (
                           <span title={`Commentaire client : ${q.clientComment}`}>
                             <MessageCircle size={14} style={{ color: 'var(--color-primary)' }} />
                           </span>
                         )}
                       </div>
-                      {(() => {
-                        const existingInvoice = invoices.find(inv => inv.quoteId === q.id);
-                        if (existingInvoice && (isDirector || !!currentUser?.crmFacturationEnabled)) {
-                          return (
-                            <span 
-                              style={{ cursor: 'pointer', background: '#E0F2FE', color: '#0284C7', padding: '2px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700, width: 'fit-content' }}
-                              onClick={() => navigate(`/factures?search=${existingInvoice.invoiceNumber}`)}
-                              title="Voir la facture associée"
-                            >
-                              📄 Facturé ({existingInvoice.invoiceNumber})
-                            </span>
-                          );
-                        }
-                        return null;
-                      })()}
+                      {existingInvoice && (isDirector || !!currentUser?.crmFacturationEnabled) && (
+                        <span
+                          style={{ cursor: 'pointer', background: '#E0F2FE', color: '#0284C7', padding: '2px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700, width: 'fit-content' }}
+                          onClick={() => navigate(`/factures?search=${existingInvoice.invoiceNumber}`)}
+                          title="Voir la facture associée"
+                        >
+                          📄 Facturé ({existingInvoice.invoiceNumber})
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td data-label="Date d'émission">{q.date}</td>
                   <td data-label="Actions">
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
-                      
                       {/* Action Créer une facture pour devis Accepté */}
                       {q.status === 'Accepté' && (isDirector || !!currentUser?.crmFacturationEnabled) && (
-                        <button 
-                          className="icon-button" 
-                          style={{ color: '#0284C7', background: '#E0F2FE', padding: '6px', borderRadius: '4px' }} 
-                          onClick={() => navigate(`/factures?createFromQuoteId=${q.id}`)} 
+                        <button
+                          className="icon-button"
+                          style={{ color: '#0284C7', background: '#E0F2FE', padding: '6px', borderRadius: '4px' }}
+                          onClick={() => navigate(`/factures?createFromQuoteId=${q.id}`)}
                           title="Créer une facture pour ce devis"
                         >
                           <Receipt size={16} />
                         </button>
                       )}
 
-                      {/* Changement rapide de statut */}
-                      {q.status !== 'Accepté' && (
-                        <button 
-                          className="icon-button" 
-                          style={{ color: '#16a34a', background: '#f0fdf4', padding: '6px', borderRadius: '4px' }} 
-                          onClick={() => handleStatusChange(q, 'Accepté')} 
+                      {/* Transitions de statut — uniquement les transitions autorisées */}
+                      {canTransition(q, 'Envoyé') && (
+                        <button
+                          className="icon-button"
+                          style={{ color: '#2563eb', background: '#EFF6FF', padding: '6px', borderRadius: '4px' }}
+                          onClick={() => handleStatusChange(q, 'Envoyé')}
+                          title="Marquer comme Envoyé"
+                        >
+                          <CheckCircle size={16} />
+                        </button>
+                      )}
+                      {canTransition(q, 'Accepté') && (
+                        <button
+                          className="icon-button"
+                          style={{ color: '#16a34a', background: '#f0fdf4', padding: '6px', borderRadius: '4px' }}
+                          onClick={() => handleStatusChange(q, 'Accepté')}
                           title="Marquer comme Accepté"
                         >
                           <Check size={16} />
                         </button>
                       )}
-                      {q.status !== 'Refusé' && q.status !== 'Accepté' && (
-                        <button 
-                          className="icon-button" 
-                          style={{ color: '#dc2626', background: '#fef2f2', padding: '6px', borderRadius: '4px' }} 
-                          onClick={() => handleStatusChange(q, 'Refusé')} 
+                      {canTransition(q, 'Refusé') && (
+                        <button
+                          className="icon-button"
+                          style={{ color: '#dc2626', background: '#fef2f2', padding: '6px', borderRadius: '4px' }}
+                          onClick={() => handleStatusChange(q, 'Refusé')}
                           title="Marquer comme Refusé"
                         >
                           <X size={16} />
                         </button>
                       )}
 
-                      <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => navigate(`/devis/nouveau?editId=${q.id}`)} title="Modifier le devis">
-                        <Edit2 size={16} />
-                      </button>
+                      {canManageQuote(q) && (
+                        <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => navigate(`/devis/nouveau?editId=${q.id}`)} title="Modifier le devis">
+                          <Edit2 size={16} />
+                        </button>
+                      )}
                       <button className="icon-button" style={{ color: '#0D9488' }} onClick={() => handlePreview(q)} title="Aperçu PDF direct">
                         <Eye size={16} />
                       </button>
@@ -501,25 +576,14 @@ export function Devis() {
                       }} title="Télécharger PDF">
                         <Download size={16} />
                       </button>
-                      <button className="icon-button" style={{ color: '#2563eb' }} onClick={() => handleSend(q)} title="Envoyer par Email / WhatsApp">
-                        <Send size={16} />
-                      </button>
-                      
-                      <button className="icon-button" style={{ color: 'var(--color-error)' }} onClick={() => {
-                        confirm({
-                          title: 'Supprimer le devis',
-                          message: `Voulez-vous vraiment supprimer le devis "${q.quoteNumber}" ? Cette action est irréversible.`,
-                          confirmLabel: 'Supprimer',
-                          variant: 'danger',
-                          onConfirm: () => deleteQuote(q.id)
-                        });
-                      }} title="Supprimer">
+                      <button className="icon-button" style={{ color: 'var(--color-error)' }} onClick={() => handleDelete(q)} title={existingInvoice ? 'Suppression bloquée : facture liée' : 'Supprimer'}>
                         <Trash2 size={16} />
                       </button>
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {filteredQuotes.length === 0 && (
                 <tr>
                   <td colSpan={(isDirector || isResponsable) ? 9 : 8} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
@@ -532,18 +596,19 @@ export function Devis() {
         </div>
       </div>
 
-      {activeSendQuote && (
-        <SendModal
-          quote={activeSendQuote}
-          client={clients.find(c => c.id === activeSendQuote.clientId)}
-          settings={settings}
-          isOpen={!!activeSendQuote}
-          onClose={() => setActiveSendQuote(null)}
-          onSent={() => {
-            updateQuoteStatus(activeSendQuote.id, 'Envoyé');
-            setActiveSendQuote(null);
-          }}
-        />
+      {/* Pagination */}
+      {filteredQuotes.length > PAGE_SIZE && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', marginTop: '16px' }}>
+          <button className="btn btn-secondary" disabled={safePage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>
+            ← Précédent
+          </button>
+          <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+            Page {safePage} / {totalPages} — {paginatedQuotes.length} / {filteredQuotes.length} devis
+          </span>
+          <button className="btn btn-secondary" disabled={safePage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>
+            Suivant →
+          </button>
+        </div>
       )}
 
       <ReportPdfPreview 

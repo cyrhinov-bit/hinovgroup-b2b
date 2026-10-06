@@ -54,10 +54,13 @@ export function QuoteCreation() {
     return clients.filter(c => c.commercialId === currentUser?.id || c.id === (sourceQuote?.clientId || clientIdParam));
   }, [clients, isDirector, currentUser, sourceQuote, clientIdParam]);
 
-  // Sequential quote number generator
+  // Numérotation séquentielle anti-collision locale.
+  // Le serveur impose UNIQUE(quote_number) ; en cas de conflit multi-poste,
+  // sync.ts régénère un numéro (-bisXXXX) et le répercute en local.
   const nextSequentialNumber = useMemo(() => {
     const currentYear = new Date().getFullYear();
     const prefix = `DV-${currentYear}-`;
+    const existing = new Set(quotes.map(q => q.quoteNumber));
     const yearQuotes = quotes.filter(q => q.quoteNumber && q.quoteNumber.startsWith(prefix));
     let maxSeq = 0;
     yearQuotes.forEach(q => {
@@ -67,11 +70,18 @@ export function QuoteCreation() {
         if (!isNaN(num) && num > maxSeq) maxSeq = num;
       }
     });
-    return `${prefix}${String(maxSeq + 1).padStart(4, '0')}`;
+    let candidate = `${prefix}${String(maxSeq + 1).padStart(4, '0')}`;
+    let guard = 0;
+    while (existing.has(candidate) && guard < 10000) {
+      maxSeq += 1;
+      candidate = `${prefix}${String(maxSeq).padStart(4, '0')}`;
+      guard += 1;
+    }
+    return candidate;
   }, [quotes]);
 
-  // Load draft from localStorage if present
-  const draftKey = 'quoteCreationDraft';
+  // Brouillon persistant par utilisateur (évite collisions multi-comptes / multi-onglets)
+  const draftKey = `quoteCreationDraft_${currentUser?.id || 'anon'}`;
   const loadDraft = () => {
     try {
       const data = localStorage.getItem(draftKey);
@@ -225,7 +235,7 @@ export function QuoteCreation() {
   const updateLine = (index: number, field: keyof QuoteLine, value: any) => {
     const newLines = [...lines];
     const line = { ...newLines[index] };
-    
+
     // @ts-ignore
     line[field] = value;
 
@@ -244,8 +254,11 @@ export function QuoteCreation() {
       }
     }
 
-    const q = Number(line.quantity) || 0;
-    const p = Number(line.unitPrice) || 0;
+    const q = Math.max(0, Number(line.quantity) || 0);
+    const p = Math.max(0, Number(line.unitPrice) || 0);
+    line.quantity = q;
+    line.unitPrice = p;
+    line.discountPercent = Math.min(100, Math.max(0, Number(line.discountPercent) || 0));
     const rawTotal = q * p;
     const lineDiscount = Math.round((rawTotal * (line.discountPercent || 0)) / 100);
     line.total = Math.max(0, rawTotal - lineDiscount);
@@ -253,7 +266,8 @@ export function QuoteCreation() {
     setLines(newLines);
   };
 
-  const availablePrestations = (currentUser?.role === 'Directeur' || currentUser?.role === 'SuperAdmin')
+  const canChooseService = currentUser?.role === 'Directeur' || currentUser?.role === 'SuperAdmin' || currentUser?.role === 'Directeur adjoint';
+  const availablePrestations = canChooseService
     ? (serviceId ? prestations.filter(p => p.serviceId === serviceId) : prestations)
     : (currentUser?.serviceId ? prestations.filter(p => p.serviceId === currentUser.serviceId) : prestations);
 
@@ -271,21 +285,34 @@ export function QuoteCreation() {
   const buildCurrentQuoteData = (statusOverride?: any) => {
     const newId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
     const quoteNumber = sourceQuote?.quoteNumber || nextSequentialNumber;
+    // En édition on conserve le commercial d'origine (pas de vol de propriété)
+    const resolvedServiceId =
+      currentUser?.role === 'Directeur' || currentUser?.role === 'SuperAdmin' || currentUser?.role === 'Directeur adjoint'
+        ? serviceId
+        : (currentUser?.serviceId || serviceId || '');
 
     return {
       id: sourceQuote?.id || newId,
       quoteNumber,
       clientId,
-      commercialId: currentUser?.id || '',
-      serviceId: currentUser?.role === 'Directeur' ? serviceId : (currentUser?.serviceId || ''),
+      commercialId: sourceQuote?.commercialId || currentUser?.id || '',
+      serviceId: resolvedServiceId,
       affaireId: affaireId || undefined,
-      subject,
-      lines: lines.map((l, idx) => ({ ...l, id: (l as any).id || (crypto.randomUUID ? crypto.randomUUID() : `ql-${Date.now()}-${idx}`) })),
+      subject: subject.trim(),
+      lines: lines.map((l, idx) => ({
+        ...l,
+        description: (l.description || '').trim(),
+        quantity: Math.max(0, Number(l.quantity) || 0),
+        unitPrice: Math.max(0, Number(l.unitPrice) || 0),
+        discountPercent: Math.min(100, Math.max(0, Number(l.discountPercent) || 0)),
+        costPrice: lineCosts[idx] || (l as any).costPrice || 0,
+        id: (l as any).id || (crypto.randomUUID ? crypto.randomUUID() : `ql-${Date.now()}-${idx}`),
+      })),
       subtotal: netSubtotal,
       discountPercent: discountPercent || 0,
       discountAmount,
       total,
-      status: statusOverride || (sourceQuote ? sourceQuote.status : 'Accepté'),
+      status: statusOverride || (sourceQuote ? sourceQuote.status : 'Brouillon'),
       date: quoteDate || todayStr,
       validUntil: validUntil || undefined,
       paymentTerms: paymentTerms || undefined,
@@ -302,7 +329,7 @@ export function QuoteCreation() {
       alert("Veuillez ajouter au moins une ligne d'article ou prestation pour prévisualiser le devis.");
       return;
     }
-    const quoteData = buildCurrentQuoteData('Accepté');
+    const quoteData = buildCurrentQuoteData(sourceQuote?.status || 'Brouillon');
     const client = clients.find(c => c.id === clientId);
     const pdfBlob = generateQuotePdf(quoteData, client, settings);
     const blobUrl = URL.createObjectURL(pdfBlob);
@@ -314,19 +341,37 @@ export function QuoteCreation() {
     });
   };
 
-  const handleSave = async (statusToSet: 'Accepté' | 'Brouillon' | 'Envoyé' = 'Accepté', openPreviewModal: boolean = false) => {
-    if (!clientId) {
-      alert("Veuillez sélectionner un client");
+  const validateQuoteForm = (): string | null => {
+    if (!clientId || !clients.some(c => c.id === clientId)) return 'Veuillez sélectionner un client valide.';
+    const effectiveServiceId =
+      currentUser?.role === 'Directeur' || currentUser?.role === 'SuperAdmin' || currentUser?.role === 'Directeur adjoint'
+        ? serviceId
+        : (currentUser?.serviceId || serviceId);
+    if (!effectiveServiceId) return 'Aucun service rattaché : sélectionnez un service (ou rattachez l’utilisateur à un service).';
+    if (!subject.trim()) return 'Veuillez renseigner l’objet / titre du devis.';
+    if (lines.length === 0) return 'Veuillez ajouter au moins une ligne de prestation au devis.';
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      if (!(l.description || '').trim()) return `Ligne ${i + 1} : description obligatoire.`;
+      if (!(Number(l.quantity) > 0)) return `Ligne ${i + 1} : quantité doit être > 0.`;
+      if (!(Number(l.unitPrice) >= 0)) return `Ligne ${i + 1} : prix unitaire invalide.`;
+      if (Number(l.discountPercent) < 0 || Number(l.discountPercent) > 100) return `Ligne ${i + 1} : remise 0-100 %.`;
+    }
+    if (total <= 0) return 'Le total du devis doit être supérieur à zéro.';
+    if (!quoteDate) return 'Date d’émission invalide.';
+    if (validUntil && quoteDate && validUntil < quoteDate) return 'La fin de validité doit être postérieure à la date d’émission.';
+    return null;
+  };
+
+  const handleSave = async (statusToSet: 'Brouillon' | 'Envoyé' = 'Brouillon', openPreviewModal: boolean = false) => {
+    const err = validateQuoteForm();
+    if (err) {
+      alert(err);
       return;
     }
-
-    if (currentUser?.role === 'Directeur' && !serviceId) {
-      alert("Veuillez sélectionner un service");
-      return;
-    }
-
-    if (lines.length === 0) {
-      alert("Veuillez ajouter au moins une ligne de prestation au devis.");
+    // En création : Brouillon ou Envoyé uniquement (plus de passage direct à Accepté)
+    if (!sourceQuote && statusToSet !== 'Brouillon' && statusToSet !== 'Envoyé') {
+      alert('Un nouveau devis doit être enregistré en Brouillon ou Envoyé.');
       return;
     }
 
@@ -414,7 +459,7 @@ export function QuoteCreation() {
               </select>
             </div>
 
-            {currentUser?.role === 'Directeur' && (
+            {canChooseService && (
               <div className="form-group">
                 <label>Service concerné *</label>
                 <select className="form-control" value={serviceId} onChange={e => setServiceId(e.target.value)}>
@@ -801,13 +846,13 @@ export function QuoteCreation() {
             <Eye size={16} /> Aperçu en direct
           </button>
           <button className="btn btn-secondary" onClick={() => handleSave('Brouillon')}>
-            <Save size={16} style={{ marginRight: '8px' }} /> Brouillon
+            <Save size={16} style={{ marginRight: '8px' }} /> Enregistrer en brouillon
           </button>
-          <button className="btn btn-primary" onClick={() => handleSave('Accepté')}>
-            <Save size={16} style={{ marginRight: '8px' }} /> Valider le devis (Accepté)
+          <button className="btn btn-primary" onClick={() => handleSave('Envoyé')}>
+            <Save size={16} style={{ marginRight: '8px' }} /> Enregistrer & marquer Envoyé
           </button>
-          <button className="btn btn-primary" onClick={() => handleSave('Accepté', true)} style={{ marginLeft: '8px', background: '#0D9488', borderColor: '#0D9488' }}>
-            <FileText size={16} style={{ marginRight: '8px' }} /> Valider & Prévisualiser PDF
+          <button className="btn btn-primary" onClick={() => handleSave('Brouillon', true)} style={{ marginLeft: '8px', background: '#0D9488', borderColor: '#0D9488' }}>
+            <FileText size={16} style={{ marginRight: '8px' }} /> Enregistrer & Prévisualiser PDF
           </button>
         </div>
       </div>

@@ -1310,7 +1310,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             validUntil: q.valid_until || undefined, paymentTerms: q.payment_terms || undefined, notes: q.notes || undefined, signatoryName: q.signatory_name || undefined, signatoryRole: q.signatory_role || undefined,
             style: q.style, accentColor: q.accent_color,
             discountPercent: q.discount_percent || 0, discountAmount: q.discount_amount || 0, clientComment: q.client_comment,
-            lines: (q.quote_lines || []).map((l: any) => ({ id: l.id, prestationId: l.prestation_id, description: l.description, quantity: l.quantity, unit: l.unit || undefined, unitPrice: l.unit_price, total: l.total, discountPercent: l.discount_percent || 0 }))
+            lines: (q.quote_lines || []).map((l: any) => ({ id: l.id, prestationId: l.prestation_id, description: l.description, quantity: l.quantity, unit: l.unit || undefined, unitPrice: l.unit_price, total: l.total, discountPercent: l.discount_percent || 0, costPrice: l.cost_price || 0 }))
           }));
           const merged = mergeData(cachedQuotes, parsedQuotes);
           setQuotes(merged); await db.quotes.setItem('data', merged);
@@ -2447,12 +2447,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('UPDATE_SCORING_RULE', { ...data, id });
   };
 
+  // Transitions autorisées (garde-fou anti-statut incohérent)
+  const isQuoteTransitionAllowed = (from: Quote['status'], to: Quote['status']): boolean => {
+    if (from === to) return true;
+    const allowed: Record<Quote['status'], Quote['status'][]> = {
+      'Brouillon': ['Envoyé'],
+      'Envoyé': ['Accepté', 'Refusé', 'Révision'],
+      'Révision': ['Envoyé', 'Accepté', 'Refusé'],
+      'Accepté': ['Révision'],
+      'Refusé': ['Révision'],
+    };
+    return (allowed[from] || []).includes(to);
+  };
+
+  const nextQuoteNumberFor = (baseNumber: string, existing: Quote[]): string => {
+    if (!existing.some(q => q.quoteNumber === baseNumber)) return baseNumber;
+    const m = baseNumber.match(/^(DV-\d{4}-)(\d+)$/);
+    if (m) {
+      const prefix = m[1];
+      let n = parseInt(m[2], 10) + 1;
+      let guard = 0;
+      while (existing.some(q => q.quoteNumber === `${prefix}${String(n).padStart(4, '0')}`) && guard < 10000) {
+        n += 1;
+        guard += 1;
+      }
+      return `${prefix}${String(n).padStart(4, '0')}`;
+    }
+    return `${baseNumber}-bis${Math.floor(1000 + Math.random() * 9000)}`;
+  };
+
   const addQuote = async (quote: Quote) => {
     // Generate true UUIDs for DB compatibility if they used Date.now()
     const quoteId = quote.id.length > 20 ? quote.id : uuidv4();
-    const newQuote = { 
-      ...quote, 
-      id: quoteId, 
+    const safeNumber = nextQuoteNumberFor(quote.quoteNumber, quotes);
+    const newQuote = {
+      ...quote,
+      id: quoteId,
+      quoteNumber: safeNumber,
       lines: quote.lines.map(l => ({ ...l, id: l.id.length > 20 ? l.id : uuidv4() }))
     };
     
@@ -2476,6 +2507,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateQuoteStatus = async (id: string, status: Quote['status'], clientComment?: string) => {
     const quote = quotes.find(q => q.id === id);
     if (!quote) return;
+    if (!isQuoteTransitionAllowed(quote.status, status)) {
+      console.warn(`[Quotes] Transition refusée : ${quote.status} -> ${status}`);
+      return;
+    }
     const newQuote = { ...quote, status, ...(clientComment !== undefined && { clientComment }) };
     const newQuotes = quotes.map(q => q.id === id ? newQuote : q);
     setQuotes(newQuotes);
@@ -2484,6 +2519,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteQuote = async (id: string) => {
+    const linkedInvoice = invoices.find(inv => inv.quoteId === id);
+    if (linkedInvoice) {
+      throw new Error(`Suppression impossible : facture ${linkedInvoice.invoiceNumber} liée au devis.`);
+    }
     const newQuotes = quotes.filter(q => q.id !== id);
     setQuotes(newQuotes);
     await db.quotes.setItem('data', newQuotes);
