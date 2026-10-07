@@ -13,8 +13,9 @@ export function DashboardCommercial() {
   const myQuotes = quotes.filter(q => q.commercialId === currentUser?.id);
   const myClients = clients.filter(c => c.commercialId === currentUser?.id);
   const myPrestations = crmPrestations.filter(p => p.cree_par === currentUser?.id || p.commercial_id === currentUser?.id || p.apporteur_id === currentUser?.id);
-  const myCommissions = crmCommissions.filter(c => c.beneficiaire_id === currentUser?.id || c.cree_par === currentUser?.id || (c.beneficiaire_nom && c.beneficiaire_nom.toLowerCase().includes((currentUser?.name || '').toLowerCase())));
-  const myInvoices = invoices.filter(i => i.commercialId === currentUser?.id);
+  // Rattachement strict : id, créateur, ou nom exact (jamais de sous-chaîne : « Jean » ne doit pas matcher « Jean Kouassi »)
+  const myCommissions = crmCommissions.filter(c => c.beneficiaire_id === currentUser?.id || c.cree_par === currentUser?.id || (c.beneficiaire_nom && (currentUser?.name || '') !== '' && c.beneficiaire_nom.trim().toLowerCase() === (currentUser?.name || '').trim().toLowerCase()));
+  const myInvoices = invoices.filter(i => i.commercialId === currentUser?.id || (i as any).commercial_id === currentUser?.id || (i as any).createdBy === currentUser?.id || (i as any).created_by === currentUser?.id);
 
   const totalQuotes = myQuotes.length;
   const acceptedQuotes = myQuotes.filter(q => q.status === 'Accepté');
@@ -30,8 +31,8 @@ export function DashboardCommercial() {
 
   const countedPrestations = myPrestations.filter(p => p.statut !== 'ANNULEE' && p.statut !== 'BROUILLON');
   const totalVentePrestations = countedPrestations.reduce((sum, p) => sum + (p.prix_client_final || p.montant_total_vente || 0), 0);
-  const totalCommissionsVal = myCommissions.reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
-  const totalFactureVal = myInvoices.reduce((sum, i) => sum + (i.totalAmount || 0), 0);
+  const totalCommissionsVal = myCommissions.filter(c => c.statut !== 'ANNULEE').reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
+  const totalFactureVal = myInvoices.filter(i => (i.status as string) !== 'ANNULEE' && (i.status as string) !== 'Annulée').reduce((sum, i) => sum + (i.totalAmount || 0), 0);
 
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Inconnu';
 
@@ -101,7 +102,7 @@ export function DashboardCommercial() {
             </div>
             <div className="widget-content">
               <div className="widget-label">MES COMMANDES</div>
-              <div className="widget-value">{myPrestations.length}</div>
+              <div className="widget-value">{countedPrestations.length}</div>
               <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '2px', fontWeight: 600 }}>
                 {totalVentePrestations.toLocaleString('fr-FR')} FCFA générés
               </div>

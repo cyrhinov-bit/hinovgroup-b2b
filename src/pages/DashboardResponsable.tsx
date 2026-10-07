@@ -182,7 +182,7 @@ export function DashboardResponsable() {
   const donutData: DonutDataPoint[] = [
     ...(currentUser?.crmPrestationsEnabled ? [
       { label: 'Commandes Payées', value: filteredServicePrestations.filter(p => p.statut === 'PAYEE').length, color: '#10B981' },
-      { label: 'Commandes En cours', value: filteredServicePrestations.filter(p => p.statut !== 'PAYEE' && p.statut !== 'BROUILLON').length, color: '#3B82F6' }
+      { label: 'Commandes En cours', value: filteredServicePrestations.filter(p => p.statut !== 'PAYEE' && p.statut !== 'BROUILLON' && p.statut !== 'ANNULEE' && p.statut !== 'CLOTUREE').length, color: '#3B82F6' }
     ] : []),
     { label: 'Devis Acceptés', value: acceptedQuotes.length, color: '#059669' },
     ...(currentUser?.crmMaintenanceEnabled ? [

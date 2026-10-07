@@ -6,7 +6,7 @@ import { useConfirm } from '../../components/ConfirmModal';
 import type { CommissionPrestation, StatutCommission, TypeBeneficiaire } from '../../types/crmModules';
 
 export function CrmCommissions() {
-  const { crmCommissions, crmPrestations, users, updateCrmCommissionStatus, payerCrmCommission } = useAppContext();
+  const { crmCommissions, crmPrestations, crmCaisse, users, updateCrmCommissionStatus, payerCrmCommission } = useAppContext();
   const { currentUser: authUser } = useAuth();
   const currentUser = users.find(u => u.id === authUser?.id) || authUser;
   const isDirecteur = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
@@ -56,11 +56,17 @@ export function CrmCommissions() {
 
   const handleConfirmPay = async () => {
     if (!payingCommission || isPaying) return;
+    // Provision : même règle que la saisie manuelle en Caisse (pas de solde négatif)
+    const soldeCaisse = crmCaisse.reduce((s, m) => s + (m.type === 'ENTREE' ? (m.montant || 0) : -(m.montant || 0)), 0);
+    if ((payingCommission.montant || 0) > soldeCaisse) {
+      alert(`Provision insuffisante : solde caisse ${soldeCaisse.toLocaleString('fr-FR')} FCFA pour ${((payingCommission.montant || 0)).toLocaleString('fr-FR')} FCFA à décaisser.`);
+      return;
+    }
     setIsPaying(true);
     try {
       const ok = await payerCrmCommission(payingCommission.id, paymentMode);
       if (!ok) {
-        alert('Cette commission est déjà payée. Aucun nouveau décaissement effectué.');
+        alert('Paiement impossible : commission déjà payée, annulée, ou provision insuffisante. Aucun décaissement effectué.');
       }
       setPayingCommission(null);
     } finally {
@@ -250,7 +256,8 @@ export function CrmCommissions() {
                     </td>
                     <td data-label="Actions">
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                        {comm.statut === 'EN_ATTENTE' && (
+                        {/* Validation et paiement réservés à la Direction (décaissement financier) */}
+                        {isDirecteur && comm.statut === 'EN_ATTENTE' && (
                           <button
                             className="btn btn-secondary"
                             style={{ padding: '3px 8px', fontSize: '11px', color: '#2563EB' }}
@@ -260,7 +267,7 @@ export function CrmCommissions() {
                             <CheckCircle size={12} style={{ marginRight: '3px' }} /> Valider
                           </button>
                         )}
-                        {(comm.statut === 'VALIDEE') && (
+                        {isDirecteur && (comm.statut === 'VALIDEE') && (
                           <button
                             className="btn btn-primary"
                             style={{ padding: '3px 8px', fontSize: '11px', background: '#10B981', borderColor: '#10B981' }}

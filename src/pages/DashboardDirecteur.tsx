@@ -249,10 +249,11 @@ export function DashboardDirecteur() {
   }, [invoices, selectedPeriod, selectedUserFilter, selectedServiceFilter, searchQuery, clients]);
 
   // ─── Synthèses Financières & Quantitatives Multi-Modules ───────
-  // Prestations KPIs
-  const totalCommandesVente = filteredPrestations.reduce((sum, p) => sum + (p.prix_client_final || p.montant_total_vente || 0), 0);
-  const totalMargeInterne = filteredPrestations.reduce((sum, p) => sum + (p.marge_interne || 0), 0);
-  const totalBeneficeNet = filteredPrestations.reduce((sum, p) => sum + (p.benefice_net || p.benefice_reel || 0), 0);
+  // Prestations KPIs — brouillons et annulées exclus du CA piloté (même règle que la page Prestations)
+  const isCountedPresta = (p: any) => p.statut !== 'ANNULEE' && p.statut !== 'BROUILLON';
+  const totalCommandesVente = filteredPrestations.filter(isCountedPresta).reduce((sum, p) => sum + (p.prix_client_final || p.montant_total_vente || 0), 0);
+  const totalMargeInterne = filteredPrestations.filter(isCountedPresta).reduce((sum, p) => sum + (p.marge_interne || 0), 0);
+  const totalBeneficeNet = filteredPrestations.filter(isCountedPresta).reduce((sum, p) => sum + (p.benefice_net || p.benefice_reel || 0), 0);
   const totalCommandesPayees = filteredPrestations.filter(p => p.statut === 'PAYEE' || p.statut === 'CLOTUREE').length;
 
   // Devis KPIs
@@ -265,7 +266,7 @@ export function DashboardDirecteur() {
   // Factures KPIs
   const totalFacturesCount = filteredInvoices.length;
   const totalFactureMontant = filteredInvoices.filter(i => (i.status as string) !== 'ANNULEE' && (i.status as string) !== 'Annulée').reduce((sum, i) => sum + (i.totalAmount || 0), 0);
-  const totalFacturePaye = filteredInvoices.reduce((sum, i) => sum + (i.payments || []).reduce((ps, p) => ps + (p.amount || 0), 0), 0);
+  const totalFacturePaye = filteredInvoices.filter(i => (i.status as string) !== 'ANNULEE' && (i.status as string) !== 'Annulée').reduce((sum, i) => sum + (i.payments || []).reduce((ps, p) => ps + (p.amount || 0), 0), 0);
   const facturesEnRetardCount = filteredInvoices.filter(i => {
     const paid = (i.payments || []).reduce((ps, p) => ps + (p.amount || 0), 0);
     const due = i.dueDate || i.due_date;
@@ -280,7 +281,7 @@ export function DashboardDirecteur() {
   // Maintenance KPIs
   const totalTickets = filteredMaintenance.length;
   const ticketsUrgents = filteredMaintenance.filter(t => t.priorite === 'URGENTE' || t.priorite === 'HAUTE').length;
-  const totalFacturationMaintenance = filteredMaintenance.reduce((sum, t) => sum + (t.prix_total || t.prix || (t.quantite * t.prix_unitaire) || 0), 0);
+  const totalFacturationMaintenance = filteredMaintenance.filter(t => t.statut !== 'ANNULE' && t.statut !== 'ANNULEE').reduce((sum, t) => sum + (t.prix_total || t.prix || (t.quantite * t.prix_unitaire) || 0), 0);
   const ticketsTermines = filteredMaintenance.filter(t => t.statut === 'CLOTURE' || t.statut === 'TERMINE_A_FACTURER' || t.statut === 'TERMINEE').length;
 
   // Stocks KPIs
@@ -290,7 +291,7 @@ export function DashboardDirecteur() {
   const valorisationStockVente = crmArticles.reduce((sum: number, s) => sum + ((s.quantite_stock || 0) * (s.prix_unitaire_vente || 0)), 0);
 
   // Commissions KPIs
-  const totalCommissionsMontant = filteredCommissions.reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
+  const totalCommissionsMontant = filteredCommissions.filter(c => c.statut !== 'ANNULEE').reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
   const totalCommissionsPayees = filteredCommissions.filter(c => c.statut === 'PAYEE').reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
   const totalCommissionsEnAttente = filteredCommissions.filter(c => c.statut !== 'PAYEE' && c.statut !== 'ANNULEE').reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
 
@@ -299,8 +300,9 @@ export function DashboardDirecteur() {
     return users.map(u => {
       const uService = services.find(s => s.id === u.serviceId);
 
-      // Devis
-      const uQuotes = filteredQuotes.filter(q => q.commercialId === u.id || (q.serviceId === u.serviceId && !q.commercialId));
+      // Devis — attribution stricte au commercial assigné (pas de diffusion au service :
+      // un devis sans commercial n'est attribué à personne plutôt qu'à tout le service)
+      const uQuotes = filteredQuotes.filter(q => q.commercialId === u.id);
       const uAcceptedQuotes = uQuotes.filter(q => q.status === 'Accepté');
       const uTotalQuotesVal = uQuotes.filter(q => q.status !== 'Refusé').reduce((sum, q) => sum + q.total, 0);
       const uAcceptedQuotesVal = uAcceptedQuotes.reduce((sum, q) => sum + q.total, 0);
@@ -321,9 +323,9 @@ export function DashboardDirecteur() {
       const uEntrees = uCaisse.filter(m => m.type === 'ENTREE').reduce((sum, m) => sum + (m.montant || 0), 0);
       const uSorties = uCaisse.filter(m => m.type === 'SORTIE').reduce((sum, m) => sum + (m.montant || 0), 0);
 
-      // Maintenance
-      const uMaint = filteredMaintenance.filter(t => 
-        t.cree_par === u.id || t.technicien_assigne?.toLowerCase().includes((u.name || '').toLowerCase())
+      // Maintenance — assignation exacte au technicien (égalité stricte, pas de sous-chaîne)
+      const uMaint = filteredMaintenance.filter(t =>
+        t.cree_par === u.id || (t.technicien_assigne || '').trim().toLowerCase() === (u.name || '').trim().toLowerCase()
       );
       const uUrgents = uMaint.filter(t => t.priorite === 'URGENTE' || t.priorite === 'HAUTE').length;
       const uFact = uMaint.reduce((sum, t) => sum + (t.prix_total || t.prix || (t.quantite * t.prix_unitaire) || 0), 0);
@@ -334,9 +336,9 @@ export function DashboardDirecteur() {
       const uClientsCount = uTiers.filter(t => t.type === 'CLIENT').length;
       const uPartenairesCount = uTiers.filter(t => t.type === 'PARTENAIRE').length;
 
-      // Commissions
-      const uComms = filteredCommissions.filter(c => 
-        c.beneficiaire_id === u.id || c.cree_par === u.id || (c.beneficiaire_nom && c.beneficiaire_nom.toLowerCase().includes((u.name || '').toLowerCase()))
+      // Commissions — rattachement strict (id ou créateur, repli nom exact ; jamais de sous-chaîne)
+      const uComms = filteredCommissions.filter(c =>
+        c.beneficiaire_id === u.id || c.cree_par === u.id || (c.beneficiaire_nom && (u.name || '') !== '' && c.beneficiaire_nom.trim().toLowerCase() === (u.name || '').trim().toLowerCase())
       );
       const uCommTotal = uComms.reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);
       const uCommPayee = uComms.filter(c => c.statut === 'PAYEE').reduce((sum, c) => sum + (c.montant || c.montant_commission || 0), 0);

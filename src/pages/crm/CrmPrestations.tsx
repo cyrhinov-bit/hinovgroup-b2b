@@ -48,11 +48,14 @@ export function CrmPrestations() {
     cout_unitaire_achat: 0,
     prix_vente_unitaire: 0,
     taux_commission_app: 10,
-    commission_apporteur: 0,
     has_apporteur: false,
     commission_resp_service: 0,
+    taux_commission_resp: 0,
+    mode_commission_resp: 'MONTANT' as 'MONTANT' | 'TAUX',
     has_resp_commission: false,
     commission_agent: 0,
+    taux_commission_agent: 0,
+    mode_commission_agent: 'MONTANT' as 'MONTANT' | 'TAUX',
     has_commercial_commission: false,
     statut: 'BROUILLON' as StatutPrestation,
     notes: ''
@@ -61,17 +64,31 @@ export function CrmPrestations() {
   const clientsList = crmTiers.filter(t => t.type === 'CLIENT');
   const apporteursList = crmTiers.filter(t => t.type === 'PARTENAIRE');
 
-  // Dynamic calculations for the 11-column financial model
+  // Dynamic calculations — règles métier :
+  // - Apporteur : prix_client_final * taux_app / 100 (montant auto, non saisissable)
+  // - Resp / Commercial : bascule MONTANT (forfait saisi) ou TAUX (% de la marge interne)
   const q = Number(formData.quantite) || 1;
   const cu_achat = Number(formData.cout_unitaire_achat) || 0;
   const ct_achat = q * cu_achat;
   const pu_vente = Number(formData.prix_vente_unitaire) || 0;
   const pt_vente = q * pu_vente;
   const marge_interne = pt_vente - ct_achat;
+  const base_marge_taux = Math.max(0, marge_interne);
 
-  const c_app = formData.has_apporteur ? Number(formData.commission_apporteur) || 0 : 0;
-  const c_resp = formData.has_resp_commission ? Number(formData.commission_resp_service) || 0 : 0;
-  const c_com = formData.has_commercial_commission ? Number(formData.commission_agent) || 0 : 0;
+  const taux_app = Math.max(0, Number(formData.taux_commission_app) || 0);
+  const c_app = formData.has_apporteur ? Math.round((pt_vente * taux_app) / 100) : 0;
+  const taux_resp = Math.max(0, Number(formData.taux_commission_resp) || 0);
+  const c_resp = formData.has_resp_commission
+    ? (formData.mode_commission_resp === 'TAUX'
+        ? Math.round((base_marge_taux * taux_resp) / 100)
+        : Math.max(0, Number(formData.commission_resp_service) || 0))
+    : 0;
+  const taux_com = Math.max(0, Number(formData.taux_commission_agent) || 0);
+  const c_com = formData.has_commercial_commission
+    ? (formData.mode_commission_agent === 'TAUX'
+        ? Math.round((base_marge_taux * taux_com) / 100)
+        : Math.max(0, Number(formData.commission_agent) || 0))
+    : 0;
   const benefice_net = marge_interne - (c_app + c_resp + c_com);
 
   const filteredPrestations = crmPrestations.filter(p => {
@@ -102,11 +119,14 @@ export function CrmPrestations() {
       cout_unitaire_achat: 0,
       prix_vente_unitaire: 0,
       taux_commission_app: 10,
-      commission_apporteur: 0,
       has_apporteur: false,
       commission_resp_service: 0,
+      taux_commission_resp: 0,
+      mode_commission_resp: 'MONTANT',
       has_resp_commission: false,
       commission_agent: 0,
+      taux_commission_agent: 0,
+      mode_commission_agent: 'MONTANT',
       has_commercial_commission: false,
       statut: 'BROUILLON',
       notes: ''
@@ -116,6 +136,20 @@ export function CrmPrestations() {
 
   const handleOpenEdit = (p: PrestationCommande) => {
     setEditingPrestation(p);
+    const pt = (p.quantite || 1) * (p.prix_vente_unitaire || 0);
+    const marge = p.marge_interne ?? (pt - (p.quantite || 1) * (p.cout_unitaire_achat || 0));
+    const baseMarge = Math.max(0, marge);
+    // Compat anciennes données : retrouver le taux depuis le montant si aucun taux stocké
+    const tauxApp = p.taux_commission_app
+      || (pt > 0 && (p.commission_apporteur || 0) > 0 ? Math.round(((p.commission_apporteur || 0) / pt) * 10000) / 100 : 10);
+    const modeResp = p.mode_commission_resp ?? ((p.taux_commission_resp || 0) > 0 ? 'TAUX' : 'MONTANT');
+    const tauxResp = p.taux_commission_resp
+      || (modeResp === 'TAUX' && baseMarge > 0 && (p.commission_resp_service || 0) > 0
+        ? Math.round(((p.commission_resp_service || 0) / baseMarge) * 10000) / 100 : 0);
+    const modeAgent = p.mode_commission_agent ?? ((p.taux_commission_agent || 0) > 0 ? 'TAUX' : 'MONTANT');
+    const tauxAgent = p.taux_commission_agent
+      || (modeAgent === 'TAUX' && baseMarge > 0 && (p.commission_agent || 0) > 0
+        ? Math.round(((p.commission_agent || 0) / baseMarge) * 10000) / 100 : (p.commercial_id ? 5 : 0));
     setFormData({
       client_id: p.client_id || '',
       client_nom: p.client_nom || '',
@@ -129,12 +163,15 @@ export function CrmPrestations() {
       quantite: p.quantite || 1,
       cout_unitaire_achat: p.cout_unitaire_achat || 0,
       prix_vente_unitaire: p.prix_vente_unitaire || 0,
-      taux_commission_app: p.taux_commission_app || 10,
-      commission_apporteur: p.commission_apporteur || 0,
+      taux_commission_app: tauxApp,
       has_apporteur: (p.commission_apporteur || 0) > 0 || !!p.apporteur_id,
       commission_resp_service: p.commission_resp_service || 0,
+      taux_commission_resp: tauxResp,
+      mode_commission_resp: modeResp,
       has_resp_commission: (p.commission_resp_service || 0) > 0,
       commission_agent: p.commission_agent || 0,
+      taux_commission_agent: tauxAgent,
+      mode_commission_agent: modeAgent,
       has_commercial_commission: (p.commission_agent || 0) > 0 || !!p.commercial_id,
       statut: p.statut,
       notes: p.notes || ''
@@ -153,27 +190,27 @@ export function CrmPrestations() {
 
   const handleApporteurSelect = (appId: string) => {
     const selected = apporteursList.find(a => a.id === appId);
-    const taux = Number(formData.taux_commission_app) || 0;
-    const calculatedCommission = selected ? Math.round((pt_vente * taux) / 100) : 0;
     setFormData(prev => ({
       ...prev,
       apporteur_id: appId,
       apporteur_nom: selected ? selected.nom : '',
       has_apporteur: !!appId,
-      commission_apporteur: calculatedCommission
+      // Le montant est dérivé automatiquement : pt_vente * taux_app / 100
     }));
   };
 
   const handleCommercialSelect = (commId: string) => {
     const selected = crmCommerciaux.find(c => c.id === commId);
     const taux = selected?.taux_commission_defaut || 0;
-    const calculatedCommission = Math.round((pt_vente * taux) / 100);
     setFormData(prev => ({
       ...prev,
       commercial_id: commId,
       commercial_nom: selected ? selected.nom : '',
       has_commercial_commission: !!commId,
-      commission_agent: calculatedCommission
+      // Par défaut : bascule en mode TAUX avec le taux de la fiche commercial
+      // (commission = marge_interne * taux / 100), modifiable ensuite.
+      mode_commission_agent: commId ? 'TAUX' : prev.mode_commission_agent,
+      taux_commission_agent: commId ? taux : prev.taux_commission_agent,
     }));
   };
 
@@ -189,6 +226,10 @@ export function CrmPrestations() {
     }
     if (Number(formData.cout_unitaire_achat) < 0 || Number(formData.prix_vente_unitaire) < 0) {
       alert('Les montants ne peuvent pas être négatifs.');
+      return;
+    }
+    if (taux_app < 0 || taux_resp < 0 || taux_com < 0) {
+      alert('Les taux de commission ne peuvent pas être négatifs.');
       return;
     }
 
@@ -210,9 +251,15 @@ export function CrmPrestations() {
       prix_vente_unitaire: pu_vente,
       prix_client_final: pt_vente,
       marge_interne: marge_interne,
-      taux_commission_app: formData.has_apporteur ? formData.taux_commission_app : 0,
+      taux_commission_app: formData.has_apporteur ? taux_app : 0,
       commission_apporteur: c_app,
+      // Case décochée = pas de commission : mode/taux forcés à neutre pour que le
+      // recalcul contexte (TAUX => marge * taux) ne ressuscite pas un montant à 0 affiché.
+      mode_commission_resp: formData.has_resp_commission ? formData.mode_commission_resp : 'MONTANT',
+      taux_commission_resp: formData.has_resp_commission && formData.mode_commission_resp === 'TAUX' ? taux_resp : 0,
       commission_resp_service: c_resp,
+      mode_commission_agent: formData.has_commercial_commission ? formData.mode_commission_agent : 'MONTANT',
+      taux_commission_agent: formData.has_commercial_commission && formData.mode_commission_agent === 'TAUX' ? taux_com : 0,
       commission_agent: c_com,
       benefice_net: benefice_net,
       statut: formData.statut,
@@ -283,13 +330,15 @@ export function CrmPrestations() {
     }
   };
 
-  // KPIs — seuls les statuts engagés comptent (brouillons et annulées exclus du CA piloté)
+  // KPIs — seuls les statuts engagés comptent (brouillons et annulées exclus du CA piloté),
+  // calculés sur le périmètre visible (scopé pour les non-directeurs, jamais le global).
   const isCounted = (p: PrestationCommande) => p.statut !== 'ANNULEE' && p.statut !== 'BROUILLON';
-  const totalCommandes = crmPrestations.length;
-  const caTotal = crmPrestations.filter(isCounted).reduce((sum, p) => sum + (p.prix_client_final || 0), 0);
-  const margeTotal = crmPrestations.filter(isCounted).reduce((sum, p) => sum + (p.marge_interne || 0), 0);
-  const beneficeNetTotal = crmPrestations.filter(isCounted).reduce((sum, p) => sum + (p.benefice_net || 0), 0);
-  const commissionsTotal = crmPrestations.filter(isCounted).reduce((sum, p) => sum + (p.commission_apporteur || 0) + (p.commission_resp_service || 0) + (p.commission_agent || 0), 0);
+  const countedVisible = filteredPrestations.filter(isCounted);
+  const totalCommandes = filteredPrestations.length;
+  const caTotal = countedVisible.reduce((sum, p) => sum + (p.prix_client_final || 0), 0);
+  const margeTotal = countedVisible.reduce((sum, p) => sum + (p.marge_interne || 0), 0);
+  const beneficeNetTotal = countedVisible.reduce((sum, p) => sum + (p.benefice_net || 0), 0);
+  const commissionsTotal = countedVisible.reduce((sum, p) => sum + (p.commission_apporteur || 0) + (p.commission_resp_service || 0) + (p.commission_agent || 0), 0);
 
   if (!isDirecteur && currentUser?.crmPrestationsEnabled === false) {
     return (
@@ -539,13 +588,14 @@ export function CrmPrestations() {
                         PAYEE: 'Payée', CLOTUREE: 'Clôturée', ANNULEE: 'Annulée',
                         DEVIS: 'Devis (legacy)', CONFIRMEE: 'Confirmée (legacy)', EN_COURS: 'En cours (legacy)', FACTUREE: 'Facturée (legacy)'
                       };
-                      // Transitions autorisées (anti-régression pour les non-Direction ; Direction = tous les statuts)
+                      // Transitions autorisées (anti-régression pour les non-Direction ; Direction = tous les statuts).
+                      // PAYEE exclu du sélecteur manuel : seul le bouton Encaisser y mène (génère l'écriture caisse).
                       const NEXT: Record<string, string[]> = {
                         BROUILLON: ['BROUILLON', 'EN_ATTENTE_VALIDATION', 'ANNULEE'],
                         EN_ATTENTE_VALIDATION: ['EN_ATTENTE_VALIDATION', 'VALIDE', 'BROUILLON', 'ANNULEE'],
                         VALIDE: ['VALIDE', 'EN_COURS_EXECUTION', 'ANNULEE'],
                         EN_COURS_EXECUTION: ['EN_COURS_EXECUTION', 'LIVREE', 'ANNULEE'],
-                        LIVREE: ['LIVREE', 'PAYEE', 'ANNULEE'],
+                        LIVREE: ['LIVREE', 'ANNULEE'],
                         PAYEE: ['PAYEE', 'CLOTUREE'],
                         CLOTUREE: ['CLOTUREE'],
                         ANNULEE: ['ANNULEE'],
@@ -554,7 +604,7 @@ export function CrmPrestations() {
                         EN_COURS: ['EN_COURS', 'FACTUREE', 'ANNULEE'],
                         FACTUREE: ['FACTUREE', 'CLOTUREE', 'ANNULEE']
                       };
-                      const CANON = ['BROUILLON', 'EN_ATTENTE_VALIDATION', 'VALIDE', 'EN_COURS_EXECUTION', 'LIVREE', 'PAYEE', 'CLOTUREE', 'ANNULEE'];
+                      const CANON = ['BROUILLON', 'EN_ATTENTE_VALIDATION', 'VALIDE', 'EN_COURS_EXECUTION', 'LIVREE', 'CLOTUREE', 'ANNULEE'];
                       const current = formData.statut;
                       const allowed = isDirecteur ? CANON : (NEXT[current] || [current]);
                       const opts = allowed.includes(current) ? allowed : [...allowed, current];
@@ -655,7 +705,7 @@ export function CrmPrestations() {
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-                    {/* Apporteur */}
+                    {/* Apporteur : taux sur PRIX_CLIENT_FINAL, montant auto */}
                     <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', marginBottom: '6px' }}>
                         <input
@@ -678,18 +728,30 @@ export function CrmPrestations() {
                               <option key={a.id} value={a.id}>{a.nom}</option>
                             ))}
                           </select>
+                          <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Taux sur prix client final (%)</label>
                           <input
                             type="number"
+                            min="0"
+                            step="0.01"
                             className="table-input"
-                            value={formData.commission_apporteur}
-                            onChange={e => setFormData({ ...formData, commission_apporteur: Number(e.target.value) })}
-                            placeholder="Montant FCFA"
+                            value={formData.taux_commission_app}
+                            onChange={e => setFormData({ ...formData, taux_commission_app: Number(e.target.value) })}
+                            placeholder="Ex: 10"
+                            style={{ marginBottom: '6px' }}
+                          />
+                          <input
+                            type="text"
+                            className="table-input"
+                            value={`${c_app.toLocaleString('fr-FR')} FCFA`}
+                            disabled
+                            title="Montant auto = prix client final × taux / 100"
+                            style={{ background: 'var(--color-surface-alt)', fontWeight: 700 }}
                           />
                         </>
                       )}
                     </div>
 
-                    {/* Responsable de Service */}
+                    {/* Responsable de Service : bascule MONTANT / TAUX sur marge interne */}
                     <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', marginBottom: '6px' }}>
                         <input
@@ -700,17 +762,52 @@ export function CrmPrestations() {
                         <span>8. Comm. Resp. Service</span>
                       </label>
                       {formData.has_resp_commission && (
-                        <input
-                          type="number"
-                          className="table-input"
-                          value={formData.commission_resp_service}
-                          onChange={e => setFormData({ ...formData, commission_resp_service: Number(e.target.value) })}
-                          placeholder="Montant forfaitaire FCFA"
-                        />
+                        <>
+                          <select
+                            className="table-input"
+                            value={formData.mode_commission_resp}
+                            onChange={e => setFormData({ ...formData, mode_commission_resp: e.target.value as 'MONTANT' | 'TAUX' })}
+                            style={{ marginBottom: '6px', fontSize: '0.8rem' }}
+                          >
+                            <option value="MONTANT">Montant fixe (FCFA)</option>
+                            <option value="TAUX">Taux sur marge interne (%)</option>
+                          </select>
+                          {formData.mode_commission_resp === 'TAUX' ? (
+                            <>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="table-input"
+                                value={formData.taux_commission_resp}
+                                onChange={e => setFormData({ ...formData, taux_commission_resp: Number(e.target.value) })}
+                                placeholder="Ex: 5"
+                                style={{ marginBottom: '6px' }}
+                              />
+                              <input
+                                type="text"
+                                className="table-input"
+                                value={`${c_resp.toLocaleString('fr-FR')} FCFA`}
+                                disabled
+                                title="Montant auto = marge interne × taux / 100"
+                                style={{ background: 'var(--color-surface-alt)', fontWeight: 700 }}
+                              />
+                            </>
+                          ) : (
+                            <input
+                              type="number"
+                              min="0"
+                              className="table-input"
+                              value={formData.commission_resp_service}
+                              onChange={e => setFormData({ ...formData, commission_resp_service: Number(e.target.value) })}
+                              placeholder="Montant forfaitaire FCFA"
+                            />
+                          )}
+                        </>
                       )}
                     </div>
 
-                    {/* Agent Commercial */}
+                    {/* Agent Commercial : bascule MONTANT / TAUX sur marge interne */}
                     <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', marginBottom: '6px' }}>
                         <input
@@ -733,13 +830,46 @@ export function CrmPrestations() {
                               <option key={c.id} value={c.id}>{c.nom} ({c.taux_commission_defaut}%)</option>
                             ))}
                           </select>
-                          <input
-                            type="number"
+                          <select
                             className="table-input"
-                            value={formData.commission_agent}
-                            onChange={e => setFormData({ ...formData, commission_agent: Number(e.target.value) })}
-                            placeholder="Montant FCFA"
-                          />
+                            value={formData.mode_commission_agent}
+                            onChange={e => setFormData({ ...formData, mode_commission_agent: e.target.value as 'MONTANT' | 'TAUX' })}
+                            style={{ marginBottom: '6px', fontSize: '0.8rem' }}
+                          >
+                            <option value="MONTANT">Montant fixe (FCFA)</option>
+                            <option value="TAUX">Taux sur marge interne (%)</option>
+                          </select>
+                          {formData.mode_commission_agent === 'TAUX' ? (
+                            <>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="table-input"
+                                value={formData.taux_commission_agent}
+                                onChange={e => setFormData({ ...formData, taux_commission_agent: Number(e.target.value) })}
+                                placeholder="Ex: 5"
+                                style={{ marginBottom: '6px' }}
+                              />
+                              <input
+                                type="text"
+                                className="table-input"
+                                value={`${c_com.toLocaleString('fr-FR')} FCFA`}
+                                disabled
+                                title="Montant auto = marge interne × taux / 100"
+                                style={{ background: 'var(--color-surface-alt)', fontWeight: 700 }}
+                              />
+                            </>
+                          ) : (
+                            <input
+                              type="number"
+                              min="0"
+                              className="table-input"
+                              value={formData.commission_agent}
+                              onChange={e => setFormData({ ...formData, commission_agent: Number(e.target.value) })}
+                              placeholder="Montant FCFA"
+                            />
+                          )}
                         </>
                       )}
                     </div>
@@ -804,9 +934,9 @@ export function CrmPrestations() {
               <div><strong>Prix Client Final :</strong> {(viewingPrestation.prix_client_final || 0).toLocaleString('fr-FR')} FCFA</div>
               <div><strong>Marge Interne :</strong> {(viewingPrestation.marge_interne || 0).toLocaleString('fr-FR')} FCFA</div>
               <div><strong>Bénéfice Net :</strong> <strong style={{ color: '#10B981' }}>{(viewingPrestation.benefice_net || 0).toLocaleString('fr-FR')} FCFA</strong></div>
-              <div><strong>Comm. Apporteur :</strong> {(viewingPrestation.commission_apporteur || 0).toLocaleString('fr-FR')} FCFA ({viewingPrestation.apporteur_nom || '-'})</div>
-              <div><strong>Comm. Resp. Service :</strong> {(viewingPrestation.commission_resp_service || 0).toLocaleString('fr-FR')} FCFA ({viewingPrestation.resp_service_nom || '-'})</div>
-              <div><strong>Comm. Agent Commercial :</strong> {(viewingPrestation.commission_agent || 0).toLocaleString('fr-FR')} FCFA ({viewingPrestation.commercial_nom || '-'})</div>
+              <div><strong>Comm. Apporteur :</strong> {(viewingPrestation.commission_apporteur || 0).toLocaleString('fr-FR')} FCFA ({viewingPrestation.apporteur_nom || '-'}{(viewingPrestation.taux_commission_app || 0) > 0 ? ` — ${viewingPrestation.taux_commission_app}% du prix client` : ''})</div>
+              <div><strong>Comm. Resp. Service :</strong> {(viewingPrestation.commission_resp_service || 0).toLocaleString('fr-FR')} FCFA ({viewingPrestation.resp_service_nom || '-'}{viewingPrestation.mode_commission_resp === 'TAUX' ? ` — ${viewingPrestation.taux_commission_resp || 0}% de la marge` : ''})</div>
+              <div><strong>Comm. Agent Commercial :</strong> {(viewingPrestation.commission_agent || 0).toLocaleString('fr-FR')} FCFA ({viewingPrestation.commercial_nom || '-'}{viewingPrestation.mode_commission_agent === 'TAUX' ? ` — ${viewingPrestation.taux_commission_agent || 0}% de la marge` : ''})</div>
               <div><strong>Date Création :</strong> {viewingPrestation.date_creation || '-'}</div>
             </div>
 

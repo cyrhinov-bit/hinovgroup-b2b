@@ -327,9 +327,21 @@ export function Factures() {
     const remainingAmount = Math.max(0, formAmountToPay - formAmountPaid);
     const commissionRate = grossMargin > 0 ? Math.round((commissionAmount / grossMargin) * 100) : 0;
 
-    const invoiceNumber = editingInvoiceId 
-      ? (invoices.find(i => i.id === editingInvoiceId)?.invoiceNumber || `FAC-${periodYear}-${String(periodMonth).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`)
-      : `FAC-${periodYear}-${String(periodMonth).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const baseNumber = `FAC-${periodYear}-${String(periodMonth).padStart(2, '0')}`;
+    const existingNumbers = new Set(invoices.map(i => i.invoiceNumber));
+    const makeNumber = () => `${baseNumber}-${Math.floor(1000 + Math.random() * 9000)}`;
+    let invoiceNumber: string;
+    if (editingInvoiceId) {
+      invoiceNumber = invoices.find(i => i.id === editingInvoiceId)?.invoiceNumber || makeNumber();
+    } else {
+      // Anti-collision (même principe que CMD-/MNT-/ART- côté CRM)
+      invoiceNumber = makeNumber();
+      let guard = 0;
+      while (existingNumbers.has(invoiceNumber) && guard < 50) {
+        invoiceNumber = makeNumber();
+        guard++;
+      }
+    }
 
     const matchedService = createdServices.find(s => s.name === formServiceName || s.id === formServiceId);
 
@@ -423,6 +435,15 @@ export function Factures() {
     if (!selectedInvoice) return;
     if (payAmount <= 0) {
       toast.error('Veuillez saisir un montant supérieur à zéro.');
+      return;
+    }
+    // Garde anti-surpaiement : le modèle n'a pas de notion d'avoir/trop-perçu ;
+    // tout excédent serait silencieusement absorbé (statut PAYÉE, reste 0).
+    const remainingBefore = selectedInvoice.remainingAmount !== undefined
+      ? selectedInvoice.remainingAmount
+      : Math.max(0, selectedInvoice.totalAmount - (selectedInvoice.amountPaid || 0));
+    if (payAmount > remainingBefore) {
+      toast.error(`Montant supérieur au reste dû (${remainingBefore.toLocaleString('fr-FR')} FCFA). Ajustez d'abord le total de la facture si c'est un avoir.`);
       return;
     }
 
@@ -721,7 +742,8 @@ export function Factures() {
   // Filtering
   // Scopage : direction = tout, autres rôles (Responsable inclus) = propres factures uniquement
   const allowedInvoices = useMemo(() => {
-    return visibleTo(invoices, currentUser?.role, currentUser?.id, i => [i.commercialId, (i as any).commercial_id]);
+    // Scopage aligné sur le RLS (owner = commercial assigné OU créateur)
+    return visibleTo(invoices, currentUser?.role, currentUser?.id, i => [i.commercialId, (i as any).commercial_id, (i as any).createdBy, (i as any).created_by]);
   }, [invoices, currentUser]);
 
   const monthInvoices = useMemo(() => {

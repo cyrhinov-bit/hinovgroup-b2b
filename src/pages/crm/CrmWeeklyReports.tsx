@@ -508,10 +508,11 @@ export function CrmWeeklyReports() {
   const activeStaff = useMemo(() => {
     return users.filter(u => {
       if (u.active === false) return false;
+      // La Direction est exclue de l'effectif attendu AVANT tout (un rapport de directeur ne doit pas gonfler le dénominateur)
+      if (['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(u.role)) return false;
       // Tout collaborateur ayant un rapport créé ou soumis apparaît dans le cockpit
       const hasReport = v2WeeklyReports.some(r => r.authorId === u.id);
       if (hasReport) return true;
-      if (['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(u.role)) return false;
       return u.crmReportsEnabled !== false;
     });
   }, [users, v2WeeklyReports]);

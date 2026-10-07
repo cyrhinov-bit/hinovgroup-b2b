@@ -71,6 +71,14 @@ export interface PrestationCommande {
   commission_apporteur_taux?: number;
   commission_apporteur?: number;
   commission_apporteur_montant?: number;
+  // Mode de saisie des commissions responsable / commercial : 'MONTANT' (forfait FCFA)
+  // ou 'TAUX' (pourcentage appliqué sur la marge interne).
+  // Règle métier : apporteur = prix_client_final * taux / 100 ;
+  // responsable & commercial = montant direct OU marge_interne * taux / 100.
+  taux_commission_resp?: number;
+  mode_commission_resp?: 'MONTANT' | 'TAUX';
+  taux_commission_agent?: number;
+  mode_commission_agent?: 'MONTANT' | 'TAUX';
   commission_resp_service?: number;
   commission_responsable_montant?: number;
   commission_agent?: number;

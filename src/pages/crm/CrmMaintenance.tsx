@@ -331,11 +331,11 @@ export function CrmMaintenance() {
     }
   };
 
-  // KPIs - Tickets
-  const totalTickets = crmMaintenance.length;
-  const enCoursCount = crmMaintenance.filter(m => ['NOUVEAU', 'EN_COURS', 'EN_ATTENTE_PIECE'].includes(m.statut)).length;
-  const urgentesCount = crmMaintenance.filter(m => m.priorite === 'URGENTE' && m.statut !== 'CLOTURE').length;
-  const totalFacturation = crmMaintenance.filter(m => m.statut !== 'ANNULE').reduce((sum, m) => sum + (m.prix_total || 0), 0);
+  // KPIs - Tickets (périmètre visible scopé, jamais le global ; annulées exclues partout)
+  const totalTickets = filteredInterventions.length;
+  const enCoursCount = filteredInterventions.filter(m => ['NOUVEAU', 'EN_COURS', 'EN_ATTENTE_PIECE'].includes(m.statut)).length;
+  const urgentesCount = filteredInterventions.filter(m => m.priorite === 'URGENTE' && m.statut !== 'CLOTURE').length;
+  const totalFacturation = filteredInterventions.filter(m => m.statut !== 'ANNULE' && m.statut !== 'ANNULEE').reduce((sum, m) => sum + (m.prix_total || 0), 0);
 
   // KPIs - Techniciens
   const totalTechs = crmTechniciens.length;

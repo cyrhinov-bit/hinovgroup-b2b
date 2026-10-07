@@ -72,13 +72,13 @@ export function CrmCaisse() {
     }).sort((a, b) => new Date(b.date_mouvement || b.created_at || '').getTime() - new Date(a.date_mouvement || a.created_at || '').getTime());
   }, [ownCaisse, searchTerm, typeFilter, categoryFilter]);
 
-  // Financial Metrics — calculées sur les mouvements filtrés pour rester cohérentes avec le tableau
-  const totalEntrees = filteredMouvements.filter(m => m.type === 'ENTREE').reduce((sum, m) => sum + (m.montant || 0), 0);
-  const totalSorties = filteredMouvements.filter(m => m.type === 'SORTIE').reduce((sum, m) => sum + (m.montant || 0), 0);
+  // Financial Metrics — calculées sur le périmètre visible (ownCaisse), PAS sur le filtre
+  // de recherche : une recherche ne doit jamais changer le solde affiché.
+  const totalEntrees = ownCaisse.filter(m => m.type === 'ENTREE').reduce((sum, m) => sum + (m.montant || 0), 0);
+  const totalSorties = ownCaisse.filter(m => m.type === 'SORTIE').reduce((sum, m) => sum + (m.montant || 0), 0);
   const soldeDisponible = totalEntrees - totalSorties;
   // Solde global réel (périmètre visible) utilisé pour le contrôle de provision
-  const soldeGlobal = ownCaisse.filter(m => m.type === 'ENTREE').reduce((sum, m) => sum + (m.montant || 0), 0)
-    - ownCaisse.filter(m => m.type === 'SORTIE').reduce((sum, m) => sum + (m.montant || 0), 0);
+  const soldeGlobal = soldeDisponible;
 
   const handleOpenAdd = (defaultType: TypeMouvementCaisse = 'SORTIE') => {
     setFormData({
@@ -142,7 +142,10 @@ export function CrmCaisse() {
   };
 
   const deleteMouvement = async (id: string) => {
-    await deleteCrmMouvementCaisse(id);
+    const ok = await deleteCrmMouvementCaisse(id);
+    if (!ok) {
+      alert('Écriture générée automatiquement : suppression interdite pour préserver la cohérence avec la commande / commission liée.');
+    }
   };
 
   const getCategoryLabel = (type: TypeMouvementCaisse, cat: string) => {

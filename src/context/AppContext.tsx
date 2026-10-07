@@ -624,7 +624,7 @@ interface AppState {
   deleteCrmPrestation: (id: string) => Promise<void>;
   encaisserCrmPrestation: (id: string, modeReglement?: string) => Promise<boolean>;
   addCrmMouvementCaisse: (mvt: MouvementCaisse) => Promise<void>;
-  deleteCrmMouvementCaisse: (id: string) => Promise<void>;
+  deleteCrmMouvementCaisse: (id: string) => Promise<boolean>;
   updateCrmCommissionStatus: (id: string, status: CommissionPrestation['statut']) => Promise<void>;
   payerCrmCommission: (id: string, modeReglement: string) => Promise<boolean>;
   addCrmArticle: (art: CatalogueArticle) => Promise<void>;
@@ -635,7 +635,7 @@ interface AppState {
   deleteCrmIntervention: (id: string) => Promise<void>;
   addCrmTechnicien: (tech: TechnicienMaintenance) => Promise<void>;
   updateCrmTechnicien: (id: string, tech: Partial<TechnicienMaintenance>) => Promise<void>;
-  deleteCrmTechnicien: (id: string) => Promise<void>;
+  deleteCrmTechnicien: (id: string) => Promise<boolean>;
   // Module Facturation Client
   invoices: Invoice[];
   invoicePayments: InvoicePayment[];
@@ -1808,6 +1808,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             apporteur_nom: p.apporteur_nom || undefined,
             resp_service_id: p.resp_service_id || undefined,
             resp_service_nom: p.resp_service_nom || undefined,
+            responsable_service_id: (p as any).responsable_service_id || undefined,
+            responsable_service_nom: (p as any).responsable_service_nom || undefined,
             designation: p.designation,
             quantite: Number(p.quantite) || 1,
             cout_unitaire_achat: Number(p.cout_unitaire_achat) || 0,
@@ -1817,15 +1819,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
             marge_interne: Number(p.marge_interne) || 0,
             taux_commission_app: Number(p.taux_commission_app) || 0,
             commission_apporteur: Number(p.commission_apporteur) || 0,
+            taux_commission_resp: Number((p as any).taux_commission_resp) || 0,
+            mode_commission_resp: ((p as any).mode_commission_resp === 'TAUX' ? 'TAUX' : 'MONTANT') as 'MONTANT' | 'TAUX',
             commission_resp_service: Number(p.commission_resp_service) || 0,
+            taux_commission_agent: Number((p as any).taux_commission_agent) || 0,
+            mode_commission_agent: ((p as any).mode_commission_agent === 'TAUX' ? 'TAUX' : 'MONTANT') as 'MONTANT' | 'TAUX',
             commission_agent: Number(p.commission_agent) || 0,
             benefice_net: Number(p.benefice_net) || 0,
             statut: p.statut || 'BROUILLON',
             cree_par: p.cree_par,
             cree_par_nom: p.cree_par_nom || undefined,
             date_creation: p.date_creation || p.created_at,
+            date_commande: (p as any).date_commande || undefined,
             date_validation: p.date_validation || undefined,
-            notes: p.notes || undefined
+            notes: p.notes || undefined,
+            created_at: (p as any).created_at || undefined,
+            updated_at: (p as any).updated_at || undefined
           }));
           const merged = mergeData(cachedCrmPrestations, parsed);
           setCrmPrestations(merged); await db.crmPrestations.setItem('data', merged);
@@ -1837,7 +1846,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             type: m.type,
             categorie: m.categorie,
             montant: Number(m.montant) || 0,
-            date_mouvement: m.date_mouvement,
+            date_mouvement: m.date_mouvement || m.date || m.created_at,
             mode_reglement: m.mode_reglement,
             motif: m.motif,
             module_code: m.module_code || undefined,
@@ -1863,7 +1872,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             type_beneficiaire: c.type_beneficiaire,
             type: c.type || undefined,
             beneficiaire_id: c.beneficiaire_id || undefined,
-            beneficiaire_nom: c.beneficiaire_nom,
+            beneficiaire_nom: c.beneficiaire_nom || '',
             montant: Number(c.montant) || 0,
             montant_prestation: c.montant_prestation !== null && c.montant_prestation !== undefined ? Number(c.montant_prestation) : undefined,
             montant_commission: c.montant_commission !== null && c.montant_commission !== undefined ? Number(c.montant_commission) : undefined,
@@ -4695,12 +4704,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // Module 6: Agents Commerciaux
+  const clampTauxDefaut = (v: unknown) => Math.min(100, Math.max(0, Number(v) || 0));
   const addCrmCommercial = async (comm: AgentCommercial) => {
     const id = comm.id || uuidv4();
     const item: AgentCommercial = {
       ...comm,
       id,
-      taux_commission_defaut: comm.taux_commission_defaut ?? 0,
+      taux_commission_defaut: clampTauxDefaut(comm.taux_commission_defaut),
       total_ventes: comm.total_ventes ?? 0,
       contrats_clos_count: comm.contrats_clos_count ?? 0,
       cree_par: comm.cree_par || currentUser?.id,
@@ -4714,10 +4724,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const updateCrmCommercial = async (id: string, comm: Partial<AgentCommercial>) => {
-    const next = crmCommerciaux.map(c => c.id === id ? { ...c, ...comm } : c);
+    const safe: Partial<AgentCommercial> = {
+      ...comm,
+      ...(comm.taux_commission_defaut !== undefined
+        ? { taux_commission_defaut: clampTauxDefaut(comm.taux_commission_defaut) }
+        : {}),
+      ...(comm.total_ventes !== undefined ? { total_ventes: Math.max(0, Number(comm.total_ventes) || 0) } : {}),
+      ...(comm.contrats_clos_count !== undefined ? { contrats_clos_count: Math.max(0, Number(comm.contrats_clos_count) || 0) } : {})
+    };
+    const next = crmCommerciaux.map(c => c.id === id ? { ...c, ...safe } : c);
     setCrmCommerciaux(next);
     await db.crmCommerciaux.setItem('data', next);
-    await queueSyncAction('UPDATE_CRM_COMMERCIAL', { ...comm, id });
+    await queueSyncAction('UPDATE_CRM_COMMERCIAL', { ...safe, id });
   };
 
   const deleteCrmCommercial = async (id: string): Promise<boolean> => {
@@ -4739,77 +4757,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Champs NOT NULL cote serveur (contraintes) : toujours renseignes
     const montantPrestation = Number(prest.prix_client_final ?? prest.montant_total_vente) || 0;
 
-    // Commission Apporteur (si montant > 0)
-    // Geliko : une commission PAYEE n'est jamais réécrite (argent déjà décaissé)
-    if ((prest.commission_apporteur || 0) > 0 && (prest.apporteur_id || prest.apporteur_nom)) {
-      const existing = crmCommissions.find(c => c.prestation_id === prest.id && c.type_beneficiaire === 'APPORTEUR');
-      const montant = existing?.statut === 'PAYEE' ? (existing.montant || 0) : (prest.commission_apporteur || 0);
-      const comm: CommissionPrestation = {
+    // Règle de gel : une fiche PAYEE n'est jamais réécrite (argent déjà décaissé —
+    // ni montant, ni bénéficiaire, ni référence ne bougent). Elle est conservée
+    // telle quelle par la réconciliation (keptPayees) sans repasser par la file sync.
+    // Une fiche VALIDEE dont le montant change repasse EN_ATTENTE (re-validation requise).
+    const buildComm = (
+      type: CommissionPrestation['type_beneficiaire'],
+      montantPrest: number,
+      beneficiaire_id: string | undefined,
+      beneficiaire_nom: string
+    ) => {
+      if (!(montantPrest > 0)) return;
+      const existing = crmCommissions.find(c => c.prestation_id === prest.id && c.type_beneficiaire === type);
+      if (existing?.statut === 'PAYEE') return;
+      const prevStatut = existing?.statut || 'EN_ATTENTE';
+      const statut = prevStatut === 'VALIDEE' && (existing?.montant || 0) !== montantPrest ? 'EN_ATTENTE' : prevStatut;
+      newCommissionsToSave.push({
         id: existing?.id || uuidv4(),
         prestation_id: prest.id,
         prestation_ref: prest.reference,
-        type_beneficiaire: 'APPORTEUR',
-        beneficiaire_id: prest.apporteur_id || undefined,
-        beneficiaire_nom: prest.apporteur_nom || 'Apporteur',
-        montant,
+        type_beneficiaire: type,
+        beneficiaire_id,
+        beneficiaire_nom,
+        montant: montantPrest,
         montant_prestation: montantPrestation,
-        montant_commission: montant,
-        statut: existing?.statut || 'EN_ATTENTE',
+        montant_commission: montantPrest,
+        statut,
         date_reglement: existing?.date_reglement,
         mode_reglement: existing?.mode_reglement,
         mouvement_caisse_id: existing?.mouvement_caisse_id,
         cree_par: prest.cree_par,
         created_at: existing?.created_at || new Date().toISOString()
-      };
-      newCommissionsToSave.push(comm);
+      });
+    };
+
+    // Commission Apporteur (si montant > 0)
+    if (prest.apporteur_id || prest.apporteur_nom) {
+      buildComm('APPORTEUR', prest.commission_apporteur || 0, prest.apporteur_id || undefined, prest.apporteur_nom || 'Apporteur');
     }
 
     // Commission Agent Commercial (si montant > 0)
-    if ((prest.commission_agent || 0) > 0 && (prest.commercial_id || prest.commercial_nom)) {
-      const existing = crmCommissions.find(c => c.prestation_id === prest.id && c.type_beneficiaire === 'AGENT_COMMERCIAL');
-      const montant = existing?.statut === 'PAYEE' ? (existing.montant || 0) : (prest.commission_agent || 0);
-      const comm: CommissionPrestation = {
-        id: existing?.id || uuidv4(),
-        prestation_id: prest.id,
-        prestation_ref: prest.reference,
-        type_beneficiaire: 'AGENT_COMMERCIAL',
-        beneficiaire_id: prest.commercial_id || undefined,
-        beneficiaire_nom: prest.commercial_nom || 'Commercial',
-        montant,
-        montant_prestation: montantPrestation,
-        montant_commission: montant,
-        statut: existing?.statut || 'EN_ATTENTE',
-        date_reglement: existing?.date_reglement,
-        mode_reglement: existing?.mode_reglement,
-        mouvement_caisse_id: existing?.mouvement_caisse_id,
-        cree_par: prest.cree_par,
-        created_at: existing?.created_at || new Date().toISOString()
-      };
-      newCommissionsToSave.push(comm);
+    if (prest.commercial_id || prest.commercial_nom) {
+      buildComm('AGENT_COMMERCIAL', prest.commission_agent || 0, prest.commercial_id || undefined, prest.commercial_nom || 'Commercial');
     }
 
     // Commission Responsable de Service (si montant > 0)
-    if ((prest.commission_resp_service || 0) > 0 && (prest.resp_service_id || prest.resp_service_nom)) {
-      const existing = crmCommissions.find(c => c.prestation_id === prest.id && c.type_beneficiaire === 'RESPONSABLE');
-      const montant = existing?.statut === 'PAYEE' ? (existing.montant || 0) : (prest.commission_resp_service || 0);
-      const comm: CommissionPrestation = {
-        id: existing?.id || uuidv4(),
-        prestation_id: prest.id,
-        prestation_ref: prest.reference,
-        type_beneficiaire: 'RESPONSABLE',
-        beneficiaire_id: prest.resp_service_id || undefined,
-        beneficiaire_nom: prest.resp_service_nom || 'Responsable de Service',
-        montant,
-        montant_prestation: montantPrestation,
-        montant_commission: montant,
-        statut: existing?.statut || 'EN_ATTENTE',
-        date_reglement: existing?.date_reglement,
-        mode_reglement: existing?.mode_reglement,
-        mouvement_caisse_id: existing?.mouvement_caisse_id,
-        cree_par: prest.cree_par,
-        created_at: existing?.created_at || new Date().toISOString()
-      };
-      newCommissionsToSave.push(comm);
+    if (prest.resp_service_id || prest.resp_service_nom) {
+      buildComm('RESPONSABLE', prest.commission_resp_service || 0, prest.resp_service_id || undefined, prest.resp_service_nom || 'Responsable de Service');
     }
 
     // Réconciliation : supprimer les fiches devenues à 0 (jamais les PAYEE : argent déjà mouvementé)
@@ -4847,10 +4841,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const prix_vente_unitaire = Math.max(0, Number(prest.prix_vente_unitaire) || 0);
     const prix_client_final = quantite * prix_vente_unitaire;
     const marge_interne = prix_client_final - cout_final_achat;
+    // Règles métier commissions :
+    // - Apporteur : TOUJOURS prix_client_final * taux_commission_app / 100
+    //   (repli sur le montant fourni uniquement pour les anciennes données sans taux).
+    // - Responsable / Commercial : bascule MONTANT (forfait FCFA) ou TAUX
+    //   (% appliqué sur la marge interne, base >= 0).
     const taux_commission_app = Math.max(0, Number(prest.taux_commission_app) || 0);
-    const commission_apporteur = prest.commission_apporteur !== undefined ? Math.max(0, Number(prest.commission_apporteur)) : (taux_commission_app > 0 ? (prix_client_final * taux_commission_app) / 100 : 0);
-    const commission_resp_service = Math.max(0, Number(prest.commission_resp_service) || 0);
-    const commission_agent = Math.max(0, Number(prest.commission_agent) || 0);
+    const commission_apporteur = taux_commission_app > 0
+      ? Math.round((prix_client_final * taux_commission_app) / 100)
+      : Math.max(0, Number(prest.commission_apporteur) || 0);
+    const mode_commission_resp = prest.mode_commission_resp === 'TAUX' ? 'TAUX' : 'MONTANT';
+    const taux_commission_resp = Math.max(0, Number(prest.taux_commission_resp) || 0);
+    const commission_resp_service = mode_commission_resp === 'TAUX'
+      ? Math.round((Math.max(0, marge_interne) * taux_commission_resp) / 100)
+      : Math.max(0, Number(prest.commission_resp_service) || 0);
+    const mode_commission_agent = prest.mode_commission_agent === 'TAUX' ? 'TAUX' : 'MONTANT';
+    const taux_commission_agent = Math.max(0, Number(prest.taux_commission_agent) || 0);
+    const commission_agent = mode_commission_agent === 'TAUX'
+      ? Math.round((Math.max(0, marge_interne) * taux_commission_agent) / 100)
+      : Math.max(0, Number(prest.commission_agent) || 0);
     const benefice_net = marge_interne - (commission_apporteur + commission_resp_service + commission_agent);
 
     const item: PrestationCommande = {
@@ -4865,7 +4874,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       marge_interne,
       taux_commission_app,
       commission_apporteur,
+      mode_commission_resp,
+      taux_commission_resp,
       commission_resp_service,
+      mode_commission_agent,
+      taux_commission_agent,
       commission_agent,
       benefice_net,
       statut: prest.statut || 'BROUILLON',
@@ -4882,8 +4895,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Auto-generate commissions if > 0
     await syncCommissionsForPrestation(item);
 
-    // Update commercial metrics if assigned
-    if (item.commercial_id) {
+    // Update commercial metrics if assigned — uniquement les statuts engagés
+    // (BROUILLON/ANNULEE exclus, même règle que les KPIs de la page Prestations)
+    const countedForCommercial = item.statut !== 'ANNULEE' && item.statut !== 'BROUILLON';
+    if (item.commercial_id && countedForCommercial) {
       const comm = crmCommerciaux.find(c => c.id === item.commercial_id);
       if (comm) {
         const total_ventes = (comm.total_ventes || 0) + item.prix_client_final;
@@ -4896,17 +4911,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateCrmPrestation = async (id: string, prest: Partial<PrestationCommande>) => {
     const current = crmPrestations.find(p => p.id === id);
     if (!current) return;
-    const quantite = Math.max(1, Math.round(prest.quantite !== undefined ? Number(prest.quantite) : current.quantite) || 1);
-    const cout_unitaire_achat = Math.max(0, prest.cout_unitaire_achat !== undefined ? Number(prest.cout_unitaire_achat) : current.cout_unitaire_achat);
+    // Marqueur interne : seul l'encaissement (qui génère l'écriture caisse) peut passer au PAYEE
+    const viaEncaissement = (prest as any)._viaEncaissement === true;
+    // Bornes anti-NaN : Number(undefined/texte) = NaN et Math.max(0, NaN) = NaN → repli explicite
+    const quantite = Math.max(1, Math.round((prest.quantite !== undefined ? Number(prest.quantite) : Number(current.quantite)) || 1));
+    const cout_unitaire_achat = Math.max(0, (prest.cout_unitaire_achat !== undefined ? Number(prest.cout_unitaire_achat) : Number(current.cout_unitaire_achat)) || 0);
     const cout_final_achat = quantite * cout_unitaire_achat;
-    const prix_vente_unitaire = Math.max(0, prest.prix_vente_unitaire !== undefined ? Number(prest.prix_vente_unitaire) : current.prix_vente_unitaire);
+    const prix_vente_unitaire = Math.max(0, (prest.prix_vente_unitaire !== undefined ? Number(prest.prix_vente_unitaire) : Number(current.prix_vente_unitaire)) || 0);
     const prix_client_final = quantite * prix_vente_unitaire;
     const marge_interne = prix_client_final - cout_final_achat;
-    const taux_commission_app = Math.max(0, prest.taux_commission_app !== undefined ? Number(prest.taux_commission_app) : (current.taux_commission_app || 0));
-    const commission_apporteur = Math.max(0, prest.commission_apporteur !== undefined ? Number(prest.commission_apporteur) : (current.commission_apporteur || 0));
-    const commission_resp_service = Math.max(0, prest.commission_resp_service !== undefined ? Number(prest.commission_resp_service) : (current.commission_resp_service || 0));
-    const commission_agent = Math.max(0, prest.commission_agent !== undefined ? Number(prest.commission_agent) : (current.commission_agent || 0));
+    const taux_commission_app = Math.max(0, (prest.taux_commission_app !== undefined ? Number(prest.taux_commission_app) : Number(current.taux_commission_app)) || 0);
+    const prix_for_app = prix_client_final;
+    const commission_apporteur = (prest.taux_commission_app !== undefined || prest.commission_apporteur !== undefined)
+      ? (taux_commission_app > 0
+          ? Math.round((prix_for_app * taux_commission_app) / 100)
+          : Math.max(0, (prest.commission_apporteur !== undefined ? Number(prest.commission_apporteur) : Number(current.commission_apporteur)) || 0))
+      : (current.commission_apporteur || 0);
+    const mode_commission_resp = prest.mode_commission_resp ?? current.mode_commission_resp ?? 'MONTANT';
+    const taux_commission_resp = Math.max(0, (prest.taux_commission_resp !== undefined ? Number(prest.taux_commission_resp) : Number(current.taux_commission_resp)) || 0);
+    const commission_resp_service = mode_commission_resp === 'TAUX'
+      ? Math.round((Math.max(0, marge_interne) * taux_commission_resp) / 100)
+      : Math.max(0, (prest.commission_resp_service !== undefined ? Number(prest.commission_resp_service) : Number(current.commission_resp_service)) || 0);
+    const mode_commission_agent = prest.mode_commission_agent ?? current.mode_commission_agent ?? 'MONTANT';
+    const taux_commission_agent = Math.max(0, (prest.taux_commission_agent !== undefined ? Number(prest.taux_commission_agent) : Number(current.taux_commission_agent)) || 0);
+    const commission_agent = mode_commission_agent === 'TAUX'
+      ? Math.round((Math.max(0, marge_interne) * taux_commission_agent) / 100)
+      : Math.max(0, (prest.commission_agent !== undefined ? Number(prest.commission_agent) : Number(current.commission_agent)) || 0);
     const benefice_net = marge_interne - (commission_apporteur + commission_resp_service + commission_agent);
+
+    // Machine à états (anti-régression) :
+    // - PAYEE uniquement via encaisserCrmPrestation (génère l'ENTREE caisse)
+    // - PAYEE → CLOTUREE uniquement ; CLOTUREE et ANNULEE définitifs
+    const prevStatut = current.statut;
+    let nextStatut = prest.statut ?? prevStatut;
+    if (nextStatut === 'PAYEE' && prevStatut !== 'PAYEE' && !viaEncaissement) nextStatut = prevStatut;
+    if ((prevStatut === 'PAYEE' && nextStatut !== 'PAYEE' && nextStatut !== 'CLOTUREE')
+      || (prevStatut === 'CLOTUREE' && nextStatut !== 'CLOTUREE')
+      || (prevStatut === 'ANNULEE' && nextStatut !== 'ANNULEE')) {
+      nextStatut = prevStatut;
+    }
 
     const updated: PrestationCommande = {
       ...current,
@@ -4919,33 +4962,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
       marge_interne,
       taux_commission_app,
       commission_apporteur,
+      mode_commission_resp,
+      taux_commission_resp,
       commission_resp_service,
+      mode_commission_agent,
+      taux_commission_agent,
       commission_agent,
-      benefice_net
+      benefice_net,
+      statut: nextStatut
     };
+    delete (updated as any)._viaEncaissement;
 
     const next = crmPrestations.map(p => p.id === id ? updated : p);
     setCrmPrestations(next);
     await db.crmPrestations.setItem('data', next);
     await queueSyncAction('UPDATE_CRM_PRESTATION', updated);
 
-    // Réajuster les compteurs commerciaux si réassignation ou montant modifié (M6).
+    // Réajuster les compteurs commerciaux si réassignation, montant modifié
+    // ou entrée/sortie du périmètre compté (BROUILLON/ANNULEE exclus).
     // Application en une passe unique (les setState successifs verraient le même state périmé).
     const oldCommId = current.commercial_id;
     const newCommId = updated.commercial_id;
     const commercialChanged = oldCommId !== newCommId;
     const amountChanged = (current.prix_client_final || 0) !== (updated.prix_client_final || 0);
-    if (commercialChanged || amountChanged) {
+    const oldCounted = prevStatut !== 'ANNULEE' && prevStatut !== 'BROUILLON';
+    const newCounted = nextStatut !== 'ANNULEE' && nextStatut !== 'BROUILLON';
+    if (commercialChanged || amountChanged || oldCounted !== newCounted) {
       const deltas = new Map<string, { dv: number; dc: number }>();
       const addDelta = (cid: string | undefined, dv: number, dc: number) => {
         if (!cid) return;
         const prev = deltas.get(cid) || { dv: 0, dc: 0 };
         deltas.set(cid, { dv: prev.dv + dv, dc: prev.dc + dc });
       };
-      // Déduire l'ancien rattachement (montant + 1 contrat)
-      addDelta(oldCommId, -(current.prix_client_final || 0), -1);
-      // Ajouter le nouveau rattachement (montant + 1 contrat ; même commercial + montant modifié → net = différence, contrat inchangé)
-      addDelta(newCommId, (updated.prix_client_final || 0), 1);
+      // Déduire l'ancien rattachement s'il était compté (montant + 1 contrat)
+      if (oldCounted) addDelta(oldCommId, -(current.prix_client_final || 0), -1);
+      // Ajouter le nouveau rattachement s'il est compté (même commercial + montant modifié → net = différence, contrat inchangé)
+      if (newCounted) addDelta(newCommId, (updated.prix_client_final || 0), 1);
       if (deltas.size > 0) {
         const nextComms = crmCommerciaux.map(c => {
           const d = deltas.get(c.id);
@@ -4974,8 +5026,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCrmPrestations(next);
     await db.crmPrestations.setItem('data', next);
     await queueSyncAction('DELETE_CRM_PRESTATION', { id });
-    // Décrémenter le commercial + supprimer les fiches de commission non payées (PAYEE conservées : trace)
-    if (target?.commercial_id) {
+    // Décrémenter le commercial (uniquement si la commande était comptée) + supprimer les fiches de commission non payées (PAYEE conservées : trace)
+    if (target?.commercial_id && target.statut !== 'ANNULEE' && target.statut !== 'BROUILLON') {
       const comm = crmCommerciaux.find(c => c.id === target.commercial_id);
       if (comm) {
         await updateCrmCommercial(comm.id, {
@@ -4998,16 +5050,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const encaisserCrmPrestation = async (id: string, modeReglement: string = 'ESPECES'): Promise<boolean> => {
     const prest = crmPrestations.find(p => p.id === id);
     if (!prest) return false;
-    // Idempotence (B4) : un encaissement existant ne peut pas être rejoué
-    if (prest.statut === 'PAYEE') return false;
+    // Idempotence : PAYEE ou CLOTUREE = déjà encaissé (l'écriture ENTREE existe), pas de 2e écriture
+    if (prest.statut === 'PAYEE' || prest.statut === 'CLOTUREE') return false;
     const now = new Date().toISOString();
     const today = now.split('T')[0];
 
-    // 1. Marquer la prestation PAYEE
+    // 1. Marquer la prestation PAYEE (seul chemin autorisé vers PAYEE — génère l'écriture caisse)
     await updateCrmPrestation(id, {
       statut: 'PAYEE',
-      date_validation: today
-    });
+      date_validation: today,
+      _viaEncaissement: true
+    } as Partial<PrestationCommande>);
 
     // 2. Générer l'encaissement dans le journal de caisse (ENTREE)
     const mvtCaisse: MouvementCaisse = {
@@ -5045,19 +5098,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('INSERT_CRM_MOUVEMENT', item);
   };
 
-  const deleteCrmMouvementCaisse = async (id: string) => {
+  const deleteCrmMouvementCaisse = async (id: string): Promise<boolean> => {
+    // Garde anti-incohérence (miroir du garde UI CrmCaisse) : les écritures système
+    // (encaissements PRESTATIONS / règlements COMMISSIONS) sont la contrepartie
+    // d'une prestation ou commission — leur suppression casserait la cohérence.
+    const target = crmCaisse.find(m => m.id === id);
+    if (target?.module_code && target.module_code !== 'CAISSE_DEPENSES') return false;
     const next = crmCaisse.filter(c => c.id !== id);
     setCrmCaisse(next);
     await db.crmCaisse.setItem('data', next);
     await queueSyncAction('DELETE_CRM_MOUVEMENT', { id });
+    return true;
   };
 
   // Module 7: Commissions
   const updateCrmCommissionStatus = async (id: string, status: CommissionPrestation['statut']) => {
     const current = crmCommissions.find(c => c.id === id);
     if (!current) return;
-    // Garde anti-régression (M9) : une commission PAYEE ou ANNULEE est définitive
+    // Garde anti-régression : une commission PAYEE ou ANNULEE est définitive,
+    // et le passage au PAYEE impose payerCrmCommission (génère la SORTIE caisse).
     if ((current.statut === 'PAYEE' || current.statut === 'ANNULEE') && current.statut !== status) return;
+    if (status === 'PAYEE') return;
     const next = crmCommissions.map(c => c.id === id ? { ...c, statut: status } : c);
     setCrmCommissions(next);
     await db.crmCommissions.setItem('data', next);
@@ -5067,8 +5128,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const payerCrmCommission = async (id: string, modeReglement: string = 'ESPECES'): Promise<boolean> => {
     const comm = crmCommissions.find(c => c.id === id);
     if (!comm) return false;
-    // Idempotence (B5) : un règlement existant ne peut pas être rejoué
-    if (comm.statut === 'PAYEE') return false;
+    // Idempotence : PAYEE rejoué ou ANNULEE payée = interdit
+    if (comm.statut === 'PAYEE' || comm.statut === 'ANNULEE') return false;
+    // Provision : le règlement ne doit pas rendre la caisse négative
+    // (même règle que la saisie manuelle d'une SORTIE en Caisse).
+    const soldeCaisse = crmCaisse.reduce((s, m) => s + (m.type === 'ENTREE' ? (m.montant || 0) : -(m.montant || 0)), 0);
+    if ((comm.montant || 0) > soldeCaisse) return false;
     const now = new Date().toISOString();
     const today = now.split('T')[0];
 
@@ -5262,11 +5327,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const deleteCrmTechnicien = async (id: string) => {
+  const deleteCrmTechnicien = async (id: string): Promise<boolean> => {
+    // Garde anti-orphelin (miroir du garde UI CrmMaintenance) : technicien assigné = suppression interdite
+    const target = crmTechniciens.find(t => t.id === id);
+    if (target && crmMaintenance.some(m => m.technicien_assigne === target.nom)) return false;
     const next = crmTechniciens.filter(t => t.id !== id);
     setCrmTechniciens(next);
     await db.crmTechniciens.setItem('data', next);
     await queueSyncAction('DELETE_CRM_TECHNICIEN', { id });
+    return true;
   };
 
   // Helper statut facture
@@ -5322,13 +5391,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const id = ('id' in invoiceData && invoiceData.id) ? invoiceData.id : uuidv4();
     const now = new Date().toISOString();
     
-    // Calculs de rentabilité et suivi
+    // Calculs de rentabilité et suivi (marge brute bornée à 0, même règle que l'UI Factures)
     const totalAmount = Number(invoiceData.totalAmount) || 0;
     const costAmount = Number(invoiceData.costAmount) || 0;
-    const grossMargin = totalAmount - costAmount;
+    const grossMargin = Math.max(0, totalAmount - costAmount);
     const commissionRate = invoiceData.commissionRate !== undefined ? Number(invoiceData.commissionRate) : 10;
     const commissionAmount = grossMargin > 0 ? Math.round(grossMargin * (commissionRate / 100)) : 0;
-    const hinovMargin = grossMargin - commissionAmount;
+    const hinovMargin = Math.max(0, grossMargin - commissionAmount);
 
     // Détermination de la période
     const d = invoiceData.deliveryDate || invoiceData.issueDate || now;
@@ -5393,10 +5462,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const totalAmount = data.totalAmount !== undefined ? Number(data.totalAmount) : (existing.totalAmount || 0);
     const costAmount = data.costAmount !== undefined ? Number(data.costAmount) : (existing.costAmount || 0);
-    const grossMargin = totalAmount - costAmount;
+    const grossMargin = Math.max(0, totalAmount - costAmount);
     const commissionRate = data.commissionRate !== undefined ? Number(data.commissionRate) : (existing.commissionRate || 10);
     const commissionAmount = grossMargin > 0 ? Math.round(grossMargin * (commissionRate / 100)) : 0;
-    const hinovMargin = grossMargin - commissionAmount;
+    const hinovMargin = Math.max(0, grossMargin - commissionAmount);
     const amountPaid = data.amountPaid !== undefined ? Number(data.amountPaid) : (existing.amountPaid || 0);
     const remainingAmount = data.remainingAmount !== undefined ? Number(data.remainingAmount) : Math.max(0, totalAmount - amountPaid);
 
@@ -5490,12 +5559,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setInvoicePayments(nextPayments);
     await db.invoicePayments.setItem('data', nextPayments);
 
-    // Mise à jour automatique du statut de la facture
+    // Mise à jour automatique du statut ET des montants de la facture (source unique : somme des paiements)
     if (targetInvoice) {
       const newStatus = computeInvoiceStatus(targetInvoice.totalAmount, newTotalPaid, targetInvoice.dueDate, targetInvoice.status);
       const updatedInvoice: Invoice = {
         ...targetInvoice,
         status: newStatus,
+        amountPaid: newTotalPaid,
+        remainingAmount: Math.max(0, (targetInvoice.totalAmount || 0) - newTotalPaid),
         updatedAt: now
       };
       const nextInvoices = invoices.map(i => i.id === targetInvoice.id ? updatedInvoice : i);
@@ -5538,6 +5609,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const updatedInvoice: Invoice = {
           ...targetInvoice,
           status: newStatus,
+          amountPaid: totalPaid,
+          remainingAmount: Math.max(0, (targetInvoice.totalAmount || 0) - totalPaid),
           updatedAt: now
         };
         const nextInvoices = invoices.map(i => i.id === targetInvoice.id ? updatedInvoice : i);

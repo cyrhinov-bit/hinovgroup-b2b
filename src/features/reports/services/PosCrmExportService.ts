@@ -170,8 +170,8 @@ export function buildPosCrmWorkbook(data: PosCrmExportData, keys: ExportKey[]): 
   }
   if (set.has('crm_prestations')) {
     addSheet(wb, EXPORT_LABELS.crm_prestations.sheet,
-      ['Référence', 'Client', 'Commercial', 'Apporteur', 'Désignation', 'Qté', 'Coût unitaire', 'Coût final', 'PU vente', 'Prix final', 'Marge interne', 'Bénéfice net', 'Statut', 'Date commande', 'Date validation'],
-      (data.crmPrestations || []).map(p => [fmt(p.reference), fmt(p.client_nom), fmt(p.commercial_nom), fmt(p.apporteur_nom), fmt(p.designation), p.quantite ?? 0, p.cout_unitaire_achat ?? 0, p.cout_final_achat ?? 0, p.prix_vente_unitaire ?? 0, p.prix_client_final ?? 0, p.marge_interne ?? 0, p.benefice_net ?? 0, fmt(p.statut), fmtDate(p.date_commande), fmtDate(p.date_validation)]));
+      ['Référence', 'Client', 'Commercial', 'Apporteur', 'Désignation', 'Qté', 'Coût unitaire', 'Coût final', 'PU vente', 'Prix final', 'Marge interne', 'Taux apporteur % (prix final)', 'Comm. apporteur', 'Mode resp.', 'Taux resp. % (marge)', 'Comm. resp.', 'Mode commercial', 'Taux commercial % (marge)', 'Comm. commercial', 'Bénéfice net', 'Statut', 'Date commande', 'Date validation'],
+      (data.crmPrestations || []).map(p => [fmt(p.reference), fmt(p.client_nom), fmt(p.commercial_nom), fmt(p.apporteur_nom), fmt(p.designation), p.quantite ?? 0, p.cout_unitaire_achat ?? 0, p.cout_final_achat ?? 0, p.prix_vente_unitaire ?? 0, p.prix_client_final ?? 0, p.marge_interne ?? 0, p.taux_commission_app ?? 0, p.commission_apporteur ?? 0, fmt((p as any).mode_commission_resp), (p as any).taux_commission_resp ?? 0, p.commission_resp_service ?? 0, fmt((p as any).mode_commission_agent), (p as any).taux_commission_agent ?? 0, p.commission_agent ?? 0, p.benefice_net ?? 0, fmt(p.statut), fmtDate(p.date_commande), fmtDate(p.date_validation)]));
   }
   if (set.has('crm_caisse')) {
     addSheet(wb, EXPORT_LABELS.crm_caisse.sheet,

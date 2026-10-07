@@ -1927,12 +1927,12 @@ export const processSyncQueue = async () => {
         }
         // ─── Modules CRM : Prestations & Commandes ───
         case 'INSERT_CRM_PRESTATION': {
-          success = await syncCrmUpsert('prestations_commandes', action.payload, ['client_id', 'apporteur_id', 'commercial_id', 'cree_par', 'responsable_service_id'], 'INSERT_CRM_PRESTATION', { table: 'prestations_commandes', field: 'reference', storeKey: 'crmPrestations' });
+           success = await syncCrmUpsert('prestations_commandes', action.payload, ['client_id', 'apporteur_id', 'commercial_id', 'cree_par', 'resp_service_id', 'responsable_service_id'], 'INSERT_CRM_PRESTATION', { table: 'prestations_commandes', field: 'reference', storeKey: 'crmPrestations' });
           break;
         }
         case 'UPDATE_CRM_PRESTATION': {
           const { id, ...updates } = action.payload;
-          success = await syncCrmUpdate('prestations_commandes', id, updates, ['client_id', 'apporteur_id', 'commercial_id', 'cree_par', 'responsable_service_id'], 'UPDATE_CRM_PRESTATION', { table: 'prestations_commandes', field: 'reference', storeKey: 'crmPrestations' });
+           success = await syncCrmUpdate('prestations_commandes', id, updates, ['client_id', 'apporteur_id', 'commercial_id', 'cree_par', 'resp_service_id', 'responsable_service_id'], 'UPDATE_CRM_PRESTATION', { table: 'prestations_commandes', field: 'reference', storeKey: 'crmPrestations' });
           break;
         }
         case 'DELETE_CRM_PRESTATION': {
