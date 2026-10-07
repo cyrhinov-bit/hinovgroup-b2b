@@ -2,18 +2,31 @@ import { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { Plus, Edit2, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import { useCanManagePosReferentials } from '../../hooks/useCanManagePosReferentials';
 
 export default function PosDiscounts() {
   const { posDiscounts, addPosDiscount, updatePosDiscount, deletePosDiscount } = useAppContext();
+  const canEdit = useCanManagePosReferentials();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ name: '', type: 'Pourcentage' as 'Pourcentage' | 'Montant', value: 0, maxPercent: 10, maxAmount: 5000, active: true });
 
   const handleSave = async () => {
+    // F22 : bornes validées (pas de % > 100 ni montant négatif), nom requis.
+    const name = form.name.trim();
+    if (!name) { alert('Nom de remise requis.'); return; }
+    if (form.type === 'Pourcentage' && !(form.maxPercent >= 0 && form.maxPercent <= 100)) {
+      alert('Le pourcentage maximum doit être compris entre 0 et 100.');
+      return;
+    }
+    if (form.type === 'Montant' && !(form.maxAmount >= 0)) {
+      alert('Le montant maximum doit être positif ou zéro.');
+      return;
+    }
     if (editing) {
-      await updatePosDiscount(editing.id, form);
+      await updatePosDiscount(editing.id, { ...form, name });
     } else {
-      await addPosDiscount({ ...form, id: uuidv4() });
+      await addPosDiscount({ ...form, name, id: uuidv4() });
     }
     setShowForm(false);
     setEditing(null);
@@ -26,9 +39,11 @@ export default function PosDiscounts() {
     <div className="pos-page">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 700 }}>Remises</h1>
+        {canEdit && (
         <button onClick={() => { setShowForm(true); setEditing(null); setForm({ name: '', type: 'Pourcentage', value: 0, maxPercent: 10, maxAmount: 5000, active: true }); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 }}>
           <Plus size={16} /> Ajouter
         </button>
+        )}
       </div>
       {showForm && (
         <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: '24px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
@@ -53,14 +68,20 @@ export default function PosDiscounts() {
                 <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{d.type === 'Pourcentage' ? `${d.maxPercent ?? 0}% max` : `${(d.maxAmount ?? 0).toLocaleString()} max`}</div>
               </div>
               <div style={{ display: 'flex', gap: '4px' }}>
+                {canEdit && (
+                <>
                 <button onClick={() => { setEditing(d); setForm({ name: d.name, type: d.type, value: d.value, maxPercent: d.maxPercent || 10, maxAmount: d.maxAmount || 5000, active: d.active }); setShowForm(true); }} style={{ padding: '4px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}><Edit2 size={14} /></button>
-                <button onClick={() => deletePosDiscount(d.id)} style={{ padding: '4px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)' }}><Trash2 size={14} /></button>
+                <button onClick={() => { if (window.confirm(`Supprimer la remise « ${d.name} » ?`)) deletePosDiscount(d.id); }} style={{ padding: '4px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)' }}><Trash2 size={14} /></button>
+                </>
+                )}
               </div>
             </div>
+            {canEdit && (
             <button onClick={() => updatePosDiscount(d.id, { active: !d.active })} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: d.active ? 'var(--color-success)' : 'var(--color-text-muted)' }}>
               {d.active ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
               {d.active ? 'Active' : 'Inactive'}
             </button>
+            )}
           </div>
         ))}
         {posDiscounts.length === 0 && <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)' }}>Aucune remise configurée</div>}

@@ -120,6 +120,19 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
     const normBarcode = (formData.barcode || '').trim().toLowerCase();
     const normIsbn = (formData.isbn || '').trim().toLowerCase();
 
+    // F2 : référence finale vide interdite (slug vide reproductible à l'infini).
+    if (!normRef) {
+      toast.error('Référence invalide : saisissez un nom ou une référence.');
+      return;
+    }
+    // F3 : prix bornés (négatifs interdits, vente > 0 si renseignée).
+    const purchasePrice = Number(formData.purchasePrice) || 0;
+    const sellingPrice = Number(formData.sellingPrice) || 0;
+    if (purchasePrice < 0 || sellingPrice < 0) {
+      toast.error("Les prix d'achat et de vente ne peuvent pas être négatifs.");
+      return;
+    }
+
     // Unicité (B4) : référence / code-barres / ISBN déjà utilisés par un AUTRE produit = blocage
     const duplicate = posProducts.find(p => {
       if (initialProduct && p.id === initialProduct.id) return false;
@@ -133,18 +146,35 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
       toast.error(`Doublon refusé : déjà utilisé par « ${duplicate.name} » (${duplicate.reference}).`);
       return;
     }
+    // F1 : contrôle serveur anti-doublon cross-terminal (le local ne voit pas les
+    // créations hors-ligne des autres postes — la contrainte d'unicité ayant sauté).
+    if (!initialProduct) {
+      try {
+        const { supabase } = await import('../../../lib/supabase');
+        const { data: serverDup } = await supabase
+          .from('pos_products')
+          .select('id, name, reference')
+          .ilike('reference', reference)
+          .limit(1)
+          .maybeSingle();
+        const dupRow = serverDup as any;
+        if (dupRow?.id) {
+          toast.error(`Doublon serveur : la référence « ${reference} » existe déjà (« ${dupRow.name} »).`);
+          return;
+        }
+      } catch { /* hors-ligne : le contrôle local ci-dessus s'applique, la synchro tranchera */ }
+    }
 
     if (initialProduct) {
-      // Edit mode
-      const isService = formData.family === 'Service';
+      // Edit mode — F7 : le stock ne s'édite plus dans la fiche (last-writer-wins) :
+      // quantité conservée telle quelle, ajustements via entrée/inventaire.
       await updatePosProduct(initialProduct.id, {
         reference,
         barcode: formData.barcode || '',
         isbn: formData.isbn || '',
         name: formData.name || reference,
-        purchasePrice: Number(formData.purchasePrice) || 0,
-        sellingPrice: Number(formData.sellingPrice) || 0,
-        quantity: isService ? 0 : (Number(formData.quantity) || 0),
+        purchasePrice,
+        sellingPrice,
         family: formData.family,
       });
 
@@ -395,7 +425,7 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
             ) : (
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
-                  Quantité en stock *
+                  Quantité en stock {initialProduct ? '(lecture seule — ajuster via Entrée ou Inventaire)' : '*'}
                 </label>
                 <input
                   type="number"
@@ -404,7 +434,9 @@ export default function ProductEntryForm({ initialBarcode, initialProduct, onCan
                   min="0"
                   value={formData.quantity}
                   onChange={(e) => setFormData({ ...formData, quantity: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value)) })}
-                  required
+                  required={!initialProduct}
+                  disabled={!!initialProduct}
+                  title={initialProduct ? 'Stock modifiable uniquement via Approvisionnement ou Inventaire' : undefined}
                 />
               </div>
             )}

@@ -1,7 +1,16 @@
 import { useState } from 'react';
+import { toast } from 'react-hot-toast';
 import { useAppContext } from '../../context/AppContext';
 import { Shield, ToggleRight, ToggleLeft, Package, Truck, ClipboardList, Warehouse, RotateCcw } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+
+const FIELD_COLUMN: Record<string, string> = {
+  posReturnsEnabled: 'pos_returns_enabled',
+  posCatalogueEnabled: 'pos_catalogue_enabled',
+  posSupplyEnabled: 'pos_supply_enabled',
+  posInventoryEnabled: 'pos_inventory_enabled',
+  posStockEnabled: 'pos_stock_enabled',
+};
 
 export default function CashierModulesManager() {
   const { users, updateUser } = useAppContext();
@@ -11,24 +20,43 @@ export default function CashierModulesManager() {
   const cashiers = users.filter(u => (u.role === 'Caissier' || u.posRole === 'Caissier') && u.active !== false);
   const filteredCashiers = cashiers.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
 
+  // H1 : feedback + rollback optimiste vérifié serveur (l'écriture locale seule
+  // ne suffit pas — la synchro UPDATE_PROFILE peut échouer silencieusement).
   const togglePermission = async (
-    id: string, 
-    field: 'posReturnsEnabled' | 'posCatalogueEnabled' | 'posSupplyEnabled' | 'posInventoryEnabled' | 'posStockEnabled', 
-    currentValue: boolean
+    id: string,
+    field: 'posReturnsEnabled' | 'posCatalogueEnabled' | 'posSupplyEnabled' | 'posInventoryEnabled' | 'posStockEnabled',
+    currentValue: boolean,
+    label: string
   ) => {
     const user = users.find(u => u.id === id);
     if (!user) return;
-    
+    const nextValue = !currentValue;
+
     await updateUser(id, {
       name: user.name,
       role: user.role,
       serviceId: user.serviceId,
-      posReturnsEnabled: field === 'posReturnsEnabled' ? !currentValue : !!user.posReturnsEnabled,
-      posCatalogueEnabled: field === 'posCatalogueEnabled' ? !currentValue : !!user.posCatalogueEnabled,
-      posSupplyEnabled: field === 'posSupplyEnabled' ? !currentValue : !!user.posSupplyEnabled,
-      posInventoryEnabled: field === 'posInventoryEnabled' ? !currentValue : !!user.posInventoryEnabled,
-      posStockEnabled: field === 'posStockEnabled' ? !currentValue : !!user.posStockEnabled,
+      posReturnsEnabled: field === 'posReturnsEnabled' ? nextValue : !!user.posReturnsEnabled,
+      posCatalogueEnabled: field === 'posCatalogueEnabled' ? nextValue : !!user.posCatalogueEnabled,
+      posSupplyEnabled: field === 'posSupplyEnabled' ? nextValue : !!user.posSupplyEnabled,
+      posInventoryEnabled: field === 'posInventoryEnabled' ? nextValue : !!user.posInventoryEnabled,
+      posStockEnabled: field === 'posStockEnabled' ? nextValue : !!user.posStockEnabled,
     });
+    toast.success(`Module « ${label} » ${nextValue ? 'activé' : 'désactivé'} pour ${user.name} (synchronisation en cours).`);
+
+    try {
+      if (navigator.onLine) {
+        const { supabase } = await import('../../lib/supabase');
+        const col = FIELD_COLUMN[field];
+        // Laisse la file traiter, puis vérifie la valeur serveur effective.
+        await new Promise(r => setTimeout(r, 2500));
+        const { data } = await supabase.from('profiles').select(col).eq('id', id).maybeSingle();
+        if (data && (data as any)[col] !== nextValue) {
+          await updateUser(id, { [field]: currentValue } as any);
+          toast.error(`Échec serveur : « ${label} » rétabli à sa valeur précédente pour ${user.name}. Réessayez en ligne.`, { duration: 6000 });
+        }
+      }
+    } catch { /* vérification best-effort : le local + la file font foi */ }
   };
 
   if (currentUser?.role !== 'Directeur' && currentUser?.role !== 'Gerant' && currentUser?.role !== 'Responsable') {
@@ -79,31 +107,31 @@ export default function CashierModulesManager() {
                 label="Catalogue" 
                 icon={<Package size={16} />} 
                 isActive={!!cashier.posCatalogueEnabled} 
-                onToggle={() => togglePermission(cashier.id, 'posCatalogueEnabled', !!cashier.posCatalogueEnabled)} 
+                onToggle={() => togglePermission(cashier.id, 'posCatalogueEnabled', !!cashier.posCatalogueEnabled, 'Catalogue')} 
               />
               <ModuleToggle 
                 label="Approvisionnement" 
                 icon={<Truck size={16} />} 
                 isActive={!!cashier.posSupplyEnabled} 
-                onToggle={() => togglePermission(cashier.id, 'posSupplyEnabled', !!cashier.posSupplyEnabled)} 
+                onToggle={() => togglePermission(cashier.id, 'posSupplyEnabled', !!cashier.posSupplyEnabled, 'Approvisionnement')} 
               />
               <ModuleToggle 
                 label="Inventaire" 
                 icon={<ClipboardList size={16} />} 
                 isActive={!!cashier.posInventoryEnabled} 
-                onToggle={() => togglePermission(cashier.id, 'posInventoryEnabled', !!cashier.posInventoryEnabled)} 
+                onToggle={() => togglePermission(cashier.id, 'posInventoryEnabled', !!cashier.posInventoryEnabled, 'Inventaire')} 
               />
               <ModuleToggle 
                 label="Stock & Mouvements" 
                 icon={<Warehouse size={16} />} 
                 isActive={!!cashier.posStockEnabled} 
-                onToggle={() => togglePermission(cashier.id, 'posStockEnabled', !!cashier.posStockEnabled)} 
+                onToggle={() => togglePermission(cashier.id, 'posStockEnabled', !!cashier.posStockEnabled, 'Stock et Mouvements')} 
               />
               <ModuleToggle 
                 label="Retours" 
                 icon={<RotateCcw size={16} />} 
                 isActive={!!cashier.posReturnsEnabled} 
-                onToggle={() => togglePermission(cashier.id, 'posReturnsEnabled', !!cashier.posReturnsEnabled)} 
+                onToggle={() => togglePermission(cashier.id, 'posReturnsEnabled', !!cashier.posReturnsEnabled, 'Retours')} 
               />
             </div>
           </div>

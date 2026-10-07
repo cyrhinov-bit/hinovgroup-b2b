@@ -14,7 +14,7 @@ type Period = 'today' | '7days' | '30days' | 'custom';
 
 export default function PosFinance() {
   const { 
-    posTransactions, posCashSessions, posPayments, posProducts, 
+    posTransactions, posCashSessions, posProducts, 
     posReturns, deletePosMovementsByDateRange, refreshData, users 
   } = useAppContext();
   const { currentUser } = useAuth();
@@ -81,11 +81,16 @@ export default function PosFinance() {
   const totalTxCount = rangeValidTx.length;
   const avgBasket = totalTxCount > 0 ? Math.round(totalRevenue / totalTxCount) : 0;
 
-  const rangePayments = posPayments.filter(p => rangeValidTx.some(t => t.id === p.transactionId));
-  const paymentTotals = { 'Espèces': 0, 'Mobile Money': 0, 'Mixte': 0 };
-  rangePayments.forEach(p => { 
+  // F1 : répartition depuis les paiements embarqués des transactions (t.payments),
+  // pas depuis le registre posPayments (alimenté seulement pour les nouvelles ventes).
+  const rangePayments = rangeValidTx.flatMap(t => (t.payments || []).map(p => ({ ...p, transactionId: t.id })));
+  const paymentTotals: Record<string, number> = { 'Espèces': 0, 'Mobile Money': 0, 'Mixte': 0 };
+  rangePayments.forEach(p => {
     if (p.method === 'Espèces' || p.method === 'Mobile Money' || p.method === 'Mixte') {
       paymentTotals[p.method] = (paymentTotals[p.method] || 0) + p.amount;
+    } else if (p.method) {
+      // F3 : méthode inconnue/legacy — isolée au lieu d'être perdue.
+      paymentTotals['Autres'] = (paymentTotals['Autres'] || 0) + p.amount;
     }
   });
 
@@ -99,11 +104,14 @@ export default function PosFinance() {
   let rawLivresRev = 0;
   let rawFournituresRev = 0;
 
+  // F2 : familles NETTES — les remboursements sont ventilés au prorata des lignes
+  // (par famille produit) au lieu d'être imputés aux fournitures. Les ventes sans
+  // lignes (données incomplètes) vont dans un bucket « Non ventilé » isolé.
+  let unventilatedRev = 0;
   rangeValidTx.forEach(t => {
     const lines = t.lines || [];
     if (lines.length === 0) {
-      // Pour les transactions sans lignes détaillées, attribuer aux ventes diverses / fournitures
-      rawFournituresRev += t.total;
+      unventilatedRev += t.total;
     } else {
       const linesGross = lines.reduce((s, l) => s + (l.total || 0), 0);
       const ratio = linesGross > 0 ? t.total / linesGross : 1;
@@ -119,8 +127,17 @@ export default function PosFinance() {
     }
   });
 
-  const periodLivresRev = Math.round(rawLivresRev);
-  const periodFournituresRev = totalRevenue - periodLivresRev;
+  let refundLivres = 0;
+  let refundFournitures = 0;
+  rangeReturns.forEach(r => {
+    (r.lines || []).forEach(l => {
+      const p = l.productId ? posProducts.find(x => x.id === l.productId) : undefined;
+      if (isLivreProd(p)) refundLivres += (l.total || 0);
+      else refundFournitures += (l.total || 0);
+    });
+  });
+  const periodLivresRev = Math.max(0, Math.round(rawLivresRev - refundLivres));
+  const periodFournituresRev = Math.max(0, Math.round(rawFournituresRev - refundFournitures));
 
   const rangeSessions = posCashSessions.filter(s => inRange(s.openedAt));
   const closedSessions = rangeSessions.filter(s => s.status === 'Fermée');
@@ -233,7 +250,10 @@ export default function PosFinance() {
     }
   };
 
-  const purgeRoles = ['Directeur', 'Directeur adjoint', 'SuperAdmin', 'Gerant'];
+  // F4 : purge réservée au SuperAdmin. Le stock physique n'est PAS réajusté par la
+  // purge (les quantités restent décrémentées) : le libellé l'impose explicitement
+  // et un export préalable est exigé.
+  const purgeRoles = ['SuperAdmin'];
   const isAuthorized = !!currentUser && (purgeRoles.includes(currentUser.role) || (!!currentUser.posRole && purgeRoles.includes(currentUser.posRole)));
 
   return (
@@ -361,6 +381,13 @@ export default function PosFinance() {
               {totalRevenue > 0 ? ((periodFournituresRev / totalRevenue) * 100).toFixed(1) : 0}% des ventes
             </div>
           </div>
+          {unventilatedRev > 0 && (
+            <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', background: '#fef3c7', border: '1px solid #fcd34d' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#92400e' }}>⚠️ NON VENTILÉ (lignes manquantes)</div>
+              <div style={{ fontSize: '18px', fontWeight: 700, color: '#92400e' }}>{Math.round(unventilatedRev).toLocaleString()} FCFA</div>
+              <div style={{ fontSize: '11px', color: '#92400e', marginTop: '2px' }}>Ventes à reconstituer — exclues des familles</div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -372,6 +399,7 @@ export default function PosFinance() {
             { label: 'Espèces', value: paymentTotals['Espèces'], icon: <Wallet size={18} />, color: 'var(--color-success)', bg: 'var(--color-success-tint)' },
             { label: 'Mobile Money', value: paymentTotals['Mobile Money'], icon: <Smartphone size={18} />, color: 'var(--color-warning)', bg: 'var(--color-warning-tint)' },
             { label: 'Mixte', value: paymentTotals['Mixte'], icon: <Layers size={18} />, color: 'var(--color-secondary)', bg: 'var(--color-secondary-tint)' },
+            ...((paymentTotals['Autres'] || 0) > 0 ? [{ label: 'Autres (à ventiler)', value: paymentTotals['Autres'], icon: <Layers size={18} />, color: '#92400e', bg: '#fef3c7' }] : []),
           ].map(p => (
             <div key={p.label} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', borderRadius: 'var(--radius-md)', background: p.bg }}>
               <span style={{ color: p.color }}>{p.icon}</span>
@@ -698,6 +726,7 @@ export default function PosFinance() {
               />
               <span>
                 Je confirme vouloir supprimer définitivement les mouvements de vente et d'encaissement de la période du <strong>{purgeStartDate}</strong> au <strong>{purgeEndDate}</strong>.
+                J'ai exporté les données au préalable (menu Export) et je comprends que <strong>le stock physique n'est PAS réajusté</strong> par cette purge.
               </span>
             </label>
 

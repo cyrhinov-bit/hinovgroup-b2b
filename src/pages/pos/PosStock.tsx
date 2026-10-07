@@ -8,9 +8,12 @@ export default function PosStock() {
   const { posProducts } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
 
+  // F16 : seuil par défaut 10 quand minStock n'est pas renseigné (cohérent avec
+  // la fiche produit) ; rupture sur quantité ≤ 0 (jamais de négatif silencieux).
+  const DEFAULT_MIN_STOCK = 10;
   const physicalProducts = posProducts.filter(p => p.family !== 'Service');
-  const lowStock = physicalProducts.filter(p => p.quantity <= p.minStock && p.minStock > 0);
-  const outOfStock = physicalProducts.filter(p => p.quantity === 0);
+  const lowStock = physicalProducts.filter(p => p.quantity <= (p.minStock > 0 ? p.minStock : DEFAULT_MIN_STOCK));
+  const outOfStock = physicalProducts.filter(p => p.quantity <= 0);
   
   // Rendre les calculs robustes si un produit n'a pas de prix défini
   const totalStockValue = physicalProducts.reduce((sum, p) => sum + (p.purchasePrice || 0) * (p.quantity || 0), 0);

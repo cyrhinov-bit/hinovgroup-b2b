@@ -1,4 +1,10 @@
 import { posEmitter } from './PosEvents.js';
+/**
+ * Session mémoire de DÉMONSTRATION (page de diagnostic uniquement).
+ * La source de vérité des caisses est `pos_cash_sessions` (Supabase), gérée
+ * côté web — ne jamais considérer cette session comme une caisse réelle
+ * (double source de vérité sinon).
+ */
 export class SaleSession {
   private static currentSession: any = null;
 

@@ -3,6 +3,7 @@ import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
 import { Outlet, useLocation } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
+import WebReceiptPrinter from './pos/WebReceiptPrinter';
 
 export function Layout() {
   const location = useLocation();
@@ -22,6 +23,7 @@ export function Layout() {
 
   return (
     <div className="app-container">
+      <WebReceiptPrinter />
       <Sidebar mobileOpen={mobileMenuOpen} setMobileOpen={setMobileMenuOpen} />
       {mobileMenuOpen && <div className="sidebar-overlay" onClick={() => setMobileMenuOpen(false)} />}
       <div className="main-content">

@@ -888,10 +888,10 @@ export class ExcelImportService {
               ? mapped.sellingPrice
               : existing.sellingPrice,
 
-          quantity:
-            mapped.quantity !== undefined
-              ? mapped.quantity
-              : existing.quantity,
+          // F4 : un import ne pilote JAMAIS le stock — la quantité du fichier est
+          // ignorée en update (le stock réel vit dans ventes/entrées/inventaires).
+          // Un ajustement volontaire passe par entrée ou inventaire tracé.
+          quantity: existing.quantity,
 
           updatedAt:
             new Date().toISOString(),

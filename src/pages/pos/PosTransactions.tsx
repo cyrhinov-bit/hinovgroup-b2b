@@ -1,7 +1,7 @@
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
-import { Search, RotateCcw, XCircle, ArrowLeft, Trash2, Calendar, Archive, ChevronDown, ChevronRight, Printer, RefreshCw, Wallet, Smartphone, TrendingUp, Receipt } from 'lucide-react';
+import { Search, RotateCcw, XCircle, ArrowLeft, Trash2, Calendar, Archive, ChevronDown, ChevronRight, Printer, RefreshCw, Wallet, Smartphone, TrendingUp, Eraser } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
@@ -14,6 +14,7 @@ import { matchesSearchQuery } from '../../lib/searchUtils';
 import { getWeekKey, formatWeekLabel, isCurrentWeek, todayLocalKey, toLocalDayKey } from '../../lib/dates';
 import { platform } from '../../platform';
 import { toast } from 'react-hot-toast';
+import { purgePosBrowserToServerTruth, formatPurgeReport, PURGE_TARGET_DAY } from '../../lib/posBrowserPurge';
 
 export default function PosTransactions() {
   const { posTransactions, posCashSessions, voidPosTransaction, clearPosSalesHistory, posSettings, settings: crmSettings, users, refreshData } = useAppContext();
@@ -24,6 +25,7 @@ export default function PosTransactions() {
   const [selectedReceiptData, setSelectedReceiptData] = useState<ReceiptData | null>(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isPurging, setIsPurging] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -42,9 +44,35 @@ export default function PosTransactions() {
     }
   };
 
+  const handlePurgeBrowser = () => {
+    confirm({
+      title: 'Épurer le navigateur du poste de vente',
+      message: `Le cache local sera realigné sur la vérité serveur, puis vérifié sur le ${PURGE_TARGET_DAY} (référence : 15 ventes, CA 73 940 FCFA). Les ventes locales absentes du serveur sont remises en file de synchronisation (jamais supprimées) ; le panier en cours est préservé. Continuer ?`,
+      variant: 'warning',
+      confirmLabel: 'Épurer le navigateur',
+      onConfirm: async () => {
+        setIsPurging(true);
+        try {
+          const report = await purgePosBrowserToServerTruth(PURGE_TARGET_DAY);
+          console.log('[Purge navigateur]', formatPurgeReport(report));
+          await refreshData();
+          if (report.ok) {
+            toast.success(`Navigateur épuré : ${report.after.dayTx} ventes le ${report.day}, CA ${report.after.dayCa.toLocaleString('fr-FR')} FCFA — conforme serveur.`);
+          } else {
+            toast.error(formatPurgeReport(report), { duration: 9000 });
+          }
+        } catch (e: any) {
+          toast.error('Épuration impossible : ' + (e?.message || e));
+        } finally {
+          setIsPurging(false);
+        }
+      },
+    });
+  };
+
   const currentWeekKey = getWeekKey(new Date());
 
-  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === todayLocalKey() && (s.cashierId === currentUser?.id || !s.cashierId));
+  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === todayLocalKey() && s.cashierId === currentUser?.id);
 
   const filtered = useMemo(() => {
     return posTransactions.filter(t => {
@@ -59,17 +87,41 @@ export default function PosTransactions() {
     }).sort((a, b) => b.date.localeCompare(a.date));
   }, [posTransactions, search]);
 
+  // H4 : une vente sans ligne de paiement n'est JAMAIS imputée aux espèces par
+  // défaut (tiroir surévalué) — elle est marquée « Non ventilé » et comptée à 0.
+  const hasPayments = (t: PosTransaction) => (t.payments?.length || 0) > 0;
   const getTxCash = (t: PosTransaction) => {
     const cashPayments = (t.payments || [])
       .filter(p => p.method === 'Espèces' || p.method === 'Mixte')
       .reduce((a, p) => a + p.amount, 0);
-    return cashPayments > 0 ? cashPayments : (t.payments?.length === 0 ? t.total : 0);
+    return cashPayments;
   };
 
   const getTxMobile = (t: PosTransaction) => {
     return (t.payments || [])
       .filter(p => p.method === 'Mobile Money')
       .reduce((a, p) => a + p.amount, 0);
+  };
+
+  const renderPaymentBadge = (t: PosTransaction) => {
+    if (!hasPayments(t)) return <Badge variant="warning">Non ventilé</Badge>;
+    const payments = t.payments || [];
+    if (payments.length > 1) {
+      const methods = Array.from(new Set(payments.map(p => p.method)));
+      if (methods.includes('Espèces') && methods.includes('Mobile Money')) {
+        return (
+          <Badge variant="neutral">
+            Mixte (Espèces + Mobile)
+          </Badge>
+        );
+      }
+      return (
+        <Badge variant="neutral">
+          Mixte ({methods.join(' + ')})
+        </Badge>
+      );
+    }
+    return <Badge variant="info">{payments[0]?.method || 'Espèces'}</Badge>;
   };
 
   // Regroupement des ventes par semaine (du lundi au dimanche)
@@ -167,11 +219,10 @@ export default function PosTransactions() {
 
   const canVoid = (t: PosTransaction) => {
     if (t.status !== 'Validée') return false;
-    // Session clôturée = annulation interdite (écart déjà figé ; M6)
+    // H1 : session clôturée = annulation interdite pour tout le monde (écart figé ;
+    // le service refuse de toute façon). Le bouton n'est plus proposé — passer par un retour.
     const sess = posCashSessions.find(s => s.id === t.sessionId);
-    if (sess && sess.status !== 'Ouverte') {
-      if (!(role === 'Directeur' || role === 'Directeur adjoint' || role === 'SuperAdmin')) return false;
-    }
+    if (sess && sess.status !== 'Ouverte') return false;
     if (role === 'Directeur' || role === 'Directeur adjoint' || role === 'SuperAdmin' || role === 'Gerant') return true;
     if (role === 'Caissier') {
       return !!openSession && t.cashierId === currentUser?.id && t.sessionId === openSession.id;
@@ -202,6 +253,9 @@ export default function PosTransactions() {
   const handleReprint = (t: PosTransaction) => {
     const cashier = users?.find(u => u.id === t.cashierId);
     const cashierName = cashier ? cashier.name : (t.cashierId === currentUser?.id ? currentUser?.name : undefined);
+    // H2 : « Espèces reçues » = part espèces seule (pas receivedAmount qui inclut le mobile en Mixte).
+    const cashOnly = t.payments?.find(p => p.method === 'Espèces')?.amount ?? (t.payments?.[0]?.method === 'Espèces' ? t.total : 0);
+    const isMixed = (t.payments && t.payments.length > 1);
     const data: ReceiptData = {
       transaction: t,
       cart: (t.lines || []).map(l => ({
@@ -214,8 +268,8 @@ export default function PosTransactions() {
         discountAmount: l.discountAmount || 0,
         total: l.total
       })),
-      paymentMethod: t.payments?.[0]?.method || 'Espèces',
-      cashAmount: t.receivedAmount ?? (t.payments?.find(p => p.method === 'Espèces')?.amount || (t.payments?.[0]?.method === 'Espèces' ? t.total : 0)),
+      paymentMethod: isMixed ? 'Mixte' : (t.payments?.[0]?.method || 'Espèces'),
+      cashAmount: cashOnly,
       changeAmount: t.changeAmount ?? 0,
       total: t.total,
       subtotal: t.subtotal || t.total,
@@ -246,10 +300,24 @@ export default function PosTransactions() {
     }
   };
 
+  // H3 : purge réservée au SuperAdmin + double confirmation explicite (export
+  // préalable exigé dans le libellé). Irréversible local + serveur.
+  const [clearArmed, setClearArmed] = useState(false);
   const handleClearHistory = () => {
+    if (role !== 'SuperAdmin') {
+      toast.error("Suppression de l'historique réservée au SuperAdmin.");
+      return;
+    }
+    if (!clearArmed) {
+      setClearArmed(true);
+      toast.error("Cliquez à nouveau pour confirmer la suppression DÉFINITIVE (exportez d'abord vos données via Export).", { duration: 6000 });
+      setTimeout(() => setClearArmed(false), 10000);
+      return;
+    }
+    setClearArmed(false);
     confirm({
       title: "Supprimer l'historique des ventes",
-      message: "ATTENTION — IRRÉVERSIBLE : supprime définitivement toutes les transactions, lignes, paiements et retours EN LOCAL ET SUR LE SERVEUR. Exportez vos données avant toute purge.",
+      message: "DERNIÈRE CONFIRMATION — IRRÉVERSIBLE : supprime définitivement toutes les transactions, lignes, paiements et retours EN LOCAL ET SUR LE SERVEUR. Confirmez avoir exporté vos données.",
       variant: 'danger',
       confirmLabel: "Supprimer tout l'historique",
       onConfirm: async () => {
@@ -260,6 +328,12 @@ export default function PosTransactions() {
 
   return (
     <div className="pos-page">
+      {/* Zone d'impression cachée (print seul) : sans elle, window.print() sort une page
+          blanche car le ticket du modal est en mode preview (sans classe print-zone).
+          Même pattern que PosTerminal. */}
+      {selectedReceiptData && (
+        <ReceiptTicket data={selectedReceiptData} settings={posSettings} crmSettings={crmSettings} />
+      )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button onClick={() => navigate('/pos')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer', color: 'var(--color-text)' }} title="Retour au tableau de bord">
@@ -277,13 +351,22 @@ export default function PosTransactions() {
             variant="secondary" 
             icon={<RefreshCw size={16} className={isRefreshing ? "animate-spin" : ""} />}
             onClick={handleRefresh}
-            disabled={isRefreshing}
+            disabled={isRefreshing || isPurging}
           >
             {isRefreshing ? 'Actualisation...' : 'Actualiser'}
           </Button>
-          {(role === 'Directeur' || role === 'Directeur adjoint' || role === 'SuperAdmin' || role === 'Gerant' || currentUser?.posRole === 'Gerant') && posTransactions.length > 0 && (
+          <Button
+            variant="secondary"
+            icon={<Eraser size={16} className={isPurging ? "animate-spin" : ""} />}
+            onClick={handlePurgeBrowser}
+            disabled={isRefreshing || isPurging}
+            title={`Remplace le cache navigateur par la vérité serveur et vérifie le ${PURGE_TARGET_DAY} (15 ventes, 73 940 FCFA)`}
+          >
+            {isPurging ? 'Épuration...' : 'Épurer le navigateur'}
+          </Button>
+          {role === 'SuperAdmin' && posTransactions.length > 0 && (
             <Button variant="danger" icon={<Trash2 size={16} />} onClick={handleClearHistory}>
-              Vider l'historique des ventes
+              {clearArmed ? 'Confirmer la suppression DÉFINITIVE' : "Vider l'historique des ventes"}
             </Button>
           )}
         </div>
@@ -507,7 +590,7 @@ export default function PosTransactions() {
                             <td style={{ padding: '12px 16px', fontSize: '14px', fontFamily: 'monospace' }}>{t.transactionNumber}</td>
                             <td style={{ padding: '12px 16px', fontSize: '14px' }}>{new Date(t.date).toLocaleString('fr-FR')}</td>
                             <td style={{ padding: '12px 16px', fontSize: '14px' }}>{t.lines.length} article(s)</td>
-                            <td style={{ padding: '12px 16px' }}><Badge variant="info">{t.payments[0]?.method || 'N/A'}</Badge></td>
+                            <td style={{ padding: '12px 16px' }}>{renderPaymentBadge(t)}</td>
                             <td style={{ padding: '12px 16px' }}><Badge variant={t.status === 'Validée' ? 'success' : 'danger'}>{t.status}</Badge></td>
                             <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right', fontWeight: 600 }}>{t.total.toLocaleString()} FCFA</td>
                             <td style={{ padding: '12px 16px', textAlign: 'center' }}>

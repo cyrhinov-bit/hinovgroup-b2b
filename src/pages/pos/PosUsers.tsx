@@ -14,15 +14,31 @@ export default function PosUsers() {
   const [form, setForm] = useState({ name: '', email: '', pin: '', role: 'Caissier' as 'Gerant' | 'Caissier' });
 
   const handleSave = async () => {
+    // F23 : validation stricte (nom, email unique/format, PIN exactement 6 chiffres).
+    const name = form.name.trim();
+    const email = form.email.trim().toLowerCase();
+    if (!name) { alert('Nom requis.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Email invalide.'); return; }
+    const emailDupe = users.find(u => u.email.trim().toLowerCase() === email && (!editingUser || u.id !== editingUser.id));
+    if (emailDupe) { alert(`Email déjà utilisé par « ${emailDupe.name} ».`); return; }
+    if (!editingUser && !/^\d{6}$/.test(form.pin)) { alert('PIN : exactement 6 chiffres.'); return; }
     if (editingUser) {
-      await updateUser(editingUser.id, { name: form.name, role: form.role, serviceId: undefined, posReturnsEnabled: !!editingUser.posReturnsEnabled, posCatalogueEnabled: !!editingUser.posCatalogueEnabled });
+      await updateUser(editingUser.id, { name, role: form.role, serviceId: undefined, posReturnsEnabled: !!editingUser.posReturnsEnabled, posCatalogueEnabled: !!editingUser.posCatalogueEnabled });
     } else {
       // Matrice complète des flags POS (M17) : tout est désactivé à la création, à activer via Modules Caissier
-      await addUser({ id: uuidv4(), name: form.name, email: form.email, pin: form.pin, role: form.role, lastLogin: 'Jamais', active: true, posReturnsEnabled: false, posCatalogueEnabled: false, posSupplyEnabled: false, posInventoryEnabled: false, posStockEnabled: false });
+      await addUser({ id: uuidv4(), name, email, pin: form.pin, role: form.role, lastLogin: 'Jamais', active: true, posReturnsEnabled: false, posCatalogueEnabled: false, posSupplyEnabled: false, posInventoryEnabled: false, posStockEnabled: false });
     }
     setShowForm(false);
     setEditingUser(null);
     setForm({ name: '', email: '', pin: '', role: 'Caissier' });
+  };
+
+  // F24 : garde anti auto-suppression et dernier gestionnaire actif.
+  const handleDelete = (u: typeof posUsers[number]) => {
+    if (u.id === currentUser?.id) { alert('Vous ne pouvez pas supprimer votre propre compte.'); return; }
+    const activeManagers = posUsers.filter(x => x.active && x.id !== u.id && (x.role === 'Gerant' || x.role === 'Directeur'));
+    if (u.role === 'Gerant' && activeManagers.length === 0) { alert('Suppression impossible : dernier gérant actif.'); return; }
+    if (window.confirm(`Supprimer définitivement l'utilisateur ${u.name} ? Cette action est irréversible.`)) deleteUser(u.id);
   };
 
   const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '14px', outline: 'none' };
@@ -75,7 +91,7 @@ export default function PosUsers() {
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={() => { setEditingUser(u); setForm({ name: u.name, email: u.email, pin: '', role: u.role as any }); setShowForm(true); }} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}><Edit2 size={16} /></button>
                     <button onClick={() => toggleUserStatus(u.id)} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: u.active ? 'var(--color-warning)' : 'var(--color-success)' }}>{u.active ? 'Désactiver' : 'Activer'}</button>
-                    <button onClick={() => { if (window.confirm(`Supprimer définitivement l'utilisateur ${u.name} ? Cette action est irréversible.`) ) deleteUser(u.id); }} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)' }}><Trash2 size={16} /></button>
+                    <button onClick={() => handleDelete(u)} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)' }}><Trash2 size={16} /></button>
                   </div>
                 </td>
               </tr>

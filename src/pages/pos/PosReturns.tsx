@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { toast } from 'react-hot-toast';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
@@ -23,7 +24,7 @@ export default function PosReturns() {
   const { posReturns, posTransactions, addPosReturn, cancelPosReturn, posProducts, posCashSessions, addPosTransaction, voidPosTransaction, updatePosReturn } = useAppContext();
   const { currentUser } = useAuth();
   const today = todayLocalKey();
-  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today && (s.cashierId === currentUser?.id || !s.cashierId));
+  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today && s.cashierId === currentUser?.id);
   const { confirm } = useConfirm();
   const location = useLocation();
   const navigate = useNavigate();
@@ -160,6 +161,11 @@ export default function PosReturns() {
     setTicketSearchResults([]); // Cacher les résultats de recherche après sélection
     const tx = posTransactions.find(t => t.id === txId);
     if (tx) {
+      // R5 : méthode de remboursement pré-remplie avec celle d'origine (pas Espèces
+      // par défaut — sinon une vente 100 % mobile débite le tiroir à tort).
+      const originMethod = tx.payments?.[0]?.method;
+      setRefundMethod(originMethod === 'Mobile Money' ? 'Mobile Money' : 'Espèces');
+      setComplementMethod(originMethod === 'Mobile Money' ? 'Mobile Money' : 'Espèces');
       setReturnLines(tx.lines.map(l => {
         const returned = getAlreadyReturned(tx.id, l);
         const maxQuantity = Math.max(0, l.quantity - returned);
@@ -270,7 +276,22 @@ export default function PosReturns() {
     }
 
     const validLines = returnLines.filter(l => l.quantity > 0);
-    if (!validLines.length) return;
+    // R6 : validation silencieuse interdite — message explicite.
+    if (!validLines.length) {
+      alert('Sélectionnez au moins un article avec une quantité supérieure à 0.');
+      return;
+    }
+    // R4 : recontrôle frais des quantités déjà retournées au moment de valider
+    // (un autre retour a pu être traité entre la sélection du ticket et la validation).
+    for (const line of validLines) {
+      const freshMax = Math.max(0, (originalTx.lines.find(l =>
+        (l.productId && l.productId === line.productId) || (!l.productId && l.description === line.description)
+      )?.quantity || 0) - getAlreadyReturned(originalTx.id, line));
+      if (line.quantity > freshMax) {
+        alert(`Quantité invalide pour ${line.description} : déjà retournée entre-temps (reste : ${freshMax}).`);
+        return;
+      }
+    }
 
     for (const line of validLines) {
       const originalLine = originalTx.lines.find(l => 
@@ -300,10 +321,11 @@ export default function PosReturns() {
     const totalRefund = difference < 0 ? Math.abs(difference) : 0;
     const amountToPay = difference > 0 ? difference : 0;
 
-    if (totalRefund > 0 && !openSession) {
-      if (!window.confirm("Attention: Aucune session de caisse n'est ouverte pour votre compte pour imputer ce remboursement d'espèces. Voulez-vous continuer ?")) {
-        return;
-      }
+    // R1 : un remboursement en espèces sort du tiroir → session ouverte exigée
+    // (comme pour le complément). Sans session, la sortie serait invisible en caisse.
+    if (totalRefund > 0 && refundMethod === 'Espèces' && !openSession) {
+      alert("Remboursement en espèces impossible : ouvrez d'abord votre session de caisse pour imputer la sortie du tiroir.");
+      return;
     }
 
     // Complément d'échange (B7) : de l'argent est ENCAISSÉ → session obligatoire + transaction dédiée
@@ -381,7 +403,8 @@ export default function PosReturns() {
       variant: 'warning',
       confirmLabel: 'Annuler le retour',
       onConfirm: async () => {
-        await cancelPosReturn(r.id);
+        const ok = await cancelPosReturn(r.id);
+        if (ok) toast.success('Retour annulé, stocks ré-inversés.');
       },
     });
   };

@@ -4,6 +4,8 @@ export interface ElectronAPI {
   getPlatform: () => Promise<string>;
   ping: () => Promise<string>;
   getMetrics: () => Promise<any>;
+  getBrowserCacheInfo: () => Promise<{ httpCacheBytes: number }>;
+  clearBrowserCache: (options?: any) => Promise<{ httpCacheCleared: boolean; storagesCleared: string[]; requiresReload: boolean }>;
 
   // Dialog
   showMessageBox: (options: any) => Promise<any>;

@@ -2,18 +2,25 @@ import { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import { useCanManagePosReferentials } from '../../hooks/useCanManagePosReferentials';
 
 export default function PosBrands() {
   const { posBrands, addPosBrand, updatePosBrand, deletePosBrand } = useAppContext();
+  const canEdit = useCanManagePosReferentials();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ name: '' });
 
   const handleSave = async () => {
+    // F21 : nom normalisé, vide et doublon (insensible à la casse) refusés.
+    const name = form.name.trim();
+    if (!name) { alert('Nom de marque requis.'); return; }
+    const dupe = posBrands.find(b => b.name.trim().toLowerCase() === name.toLowerCase() && (!editing || b.id !== editing.id));
+    if (dupe) { alert(`Marque déjà existante : « ${dupe.name} ».`); return; }
     if (editing) {
-      await updatePosBrand(editing.id, form);
+      await updatePosBrand(editing.id, { ...form, name });
     } else {
-      await addPosBrand({ ...form, id: uuidv4() });
+      await addPosBrand({ ...form, name, id: uuidv4() });
     }
     setShowForm(false);
     setEditing(null);
@@ -26,9 +33,11 @@ export default function PosBrands() {
     <div className="pos-page">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 700 }}>Marques</h1>
+        {canEdit && (
         <button onClick={() => { setShowForm(true); setEditing(null); setForm({ name: '' }); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 }}>
           <Plus size={16} /> Ajouter
         </button>
+        )}
       </div>
       {showForm && (
         <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: '24px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
@@ -50,8 +59,12 @@ export default function PosBrands() {
                 <td style={{ padding: '12px 16px', fontSize: '14px' }}>{b.name}</td>
                 <td style={{ padding: '12px 16px' }}>
                   <div style={{ display: 'flex', gap: '8px' }}>
+                    {canEdit && (
+                    <>
                     <button onClick={() => { setEditing(b); setForm({ name: b.name }); setShowForm(true); }} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}><Edit2 size={16} /></button>
                     <button onClick={async () => { if (window.confirm('Supprimer cette marque ?')) { const ok = await deletePosBrand(b.id); if (!ok) alert('Suppression impossible : des produits utilisent cette marque.'); } }} style={{ padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)' }}><Trash2 size={16} /></button>
+                    </>
+                    )}
                   </div>
                 </td>
               </tr>

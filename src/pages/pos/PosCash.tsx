@@ -21,8 +21,8 @@ export default function PosCash() {
   const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
 
   const today = todayLocalKey();
-  // Même règle que le terminal : session du jour, du caissier ou non assignée (M1)
-  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today && (s.cashierId === currentUser?.id || !s.cashierId));
+  // Même règle que le terminal (T3) : session strictement personnelle.
+  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today && s.cashierId === currentUser?.id);
   const staleOpenSessions = posCashSessions.filter(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) < today);
   const closedSessions = posCashSessions
     .filter(s => s.status === 'Fermée')
@@ -32,11 +32,12 @@ export default function PosCash() {
 
   // Seule la part encaissée en espèces (ou mixte) doit apparaître dans la caisse physique.
   // Les paiements Mobile Money ne passent pas par le tiroir-caisse physique.
+  // H4 : vente sans paiement → 0 (jamais imputée aux espèces par défaut).
   const cashOfTransaction = (t: typeof posTransactions[number]) => {
     const cashPayments = (t.payments || [])
       .filter(p => p.method === 'Espèces' || p.method === 'Mixte')
       .reduce((a, p) => a + p.amount, 0);
-    return cashPayments > 0 ? cashPayments : (t.payments?.length === 0 ? t.total : 0);
+    return cashPayments;
   };
 
   const mobileOfTransaction = (t: typeof posTransactions[number]) => {
@@ -74,6 +75,12 @@ export default function PosCash() {
       alert('Le fonds de caisse doit être supérieur ou égal à 0.');
       return;
     }
+    // T6 : une seule session ouverte par caissier et par jour.
+    const existing = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today && s.cashierId === currentUser?.id);
+    if (existing) {
+      alert('Une session est déjà ouverte pour cette caisse.');
+      return;
+    }
     setIsBusy(true);
     try {
       await addPosCashSession({
@@ -95,8 +102,9 @@ export default function PosCash() {
     const target = closingSession;
     if (!target) return;
     const final = Number(finalAmount);
-    if (finalAmount === '' || Number.isNaN(final)) {
-      alert('Veuillez saisir le montant réel en caisse.');
+    // C2 : montant réel négatif refusé + champ obligatoire (comptage aveugle).
+    if (finalAmount === '' || Number.isNaN(final) || final < 0) {
+      alert('Veuillez saisir le montant réel compté en caisse (0 ou plus).');
       return;
     }
     setIsBusy(true);
@@ -300,7 +308,8 @@ export default function PosCash() {
               </div>
             </div>
 
-            <Button variant="warning" onClick={() => { setClosingSessionId(null); setFinalAmount(String(expectedAmount)); setShowClose(true); }}>
+            {/* C1 : comptage aveugle — le champ reste vide, aucun ancrage sur l'attendu. */}
+            <Button variant="warning" onClick={() => { setClosingSessionId(null); setFinalAmount(''); setShowClose(true); }}>
               Fermer la caisse
             </Button>
           </div>

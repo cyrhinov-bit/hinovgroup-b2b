@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { Save, CheckCircle2 } from 'lucide-react';
+import { useCanManagePosReferentials } from '../../hooks/useCanManagePosReferentials';
 
 export default function PosSettings() {
   const { posSettings, updatePosSettings } = useAppContext();
+  const canEdit = useCanManagePosReferentials();
   const [form, setForm] = useState(posSettings);
   const [saved, setSaved] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
@@ -14,6 +16,29 @@ export default function PosSettings() {
   }, [posSettings]);
 
   const handleSave = async () => {
+    // F25 : formats validés (WhatsApp E.164 souple, email, couleur hex, longueurs).
+    const wa = ((form as any).whatsappOrderPhone || '').trim();
+    if (wa && !/^\+?[0-9][0-9\s.-]{5,19}$/.test(wa)) {
+      alert('Numéro WhatsApp invalide : utilisez le format international (ex : +225 07 00 00 00 00).');
+      return;
+    }
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      alert('Email invalide.');
+      return;
+    }
+    const theme = ((form as any).themeColor || '').trim();
+    if (theme && !/^#[0-9a-fA-F]{6}$/.test(theme)) {
+      alert('Couleur du thème invalide : format hexadécimal attendu (ex : #0D9488).');
+      return;
+    }
+    if ((form.ticketMessage || '').length > 500) {
+      alert('Message ticket trop long (500 caractères maximum).');
+      return;
+    }
+    if (((form as any).catalogBannerText || '').length > 200) {
+      alert("Texte d'accroche trop long (200 caractères maximum).");
+      return;
+    }
     await updatePosSettings(form);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -33,10 +58,12 @@ export default function PosSettings() {
           >
             Vider le cache local (Test)
           </button>
+          {canEdit && (
           <button onClick={handleSave} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 }}>
             {saved ? <CheckCircle2 size={16} /> : <Save size={16} />}
             {saved ? 'Enregistré !' : 'Enregistrer'}
           </button>
+          )}
         </div>
       </div>
       <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
@@ -158,7 +185,7 @@ export default function PosSettings() {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: 'white', padding: '24px', borderRadius: 'var(--radius-lg)', width: '400px', maxWidth: '90%', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
             <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '18px', fontWeight: 600 }}>Confirmer la réinitialisation</h3>
-            <p style={{ marginBottom: '24px', color: 'var(--color-text-muted)', fontSize: '14px', lineHeight: '1.5' }}>Voulez-vous vraiment supprimer toutes les données locales de l'interface ? Cela réinitialisera l'interface pour vos tests.</p>
+            <p style={{ marginBottom: '24px', color: 'var(--color-text-muted)', fontSize: '14px', lineHeight: '1.5' }}>Voulez-vous vraiment supprimer toutes les données locales de l'interface ? Cela réinitialisera l'interface pour vos tests. La purge est <strong>refusée tant que la file de synchronisation n'est pas vide</strong>, puis exige une resynchronisation complète vérifiée.</p>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button onClick={() => setShowClearModal(false)} style={{ padding: '8px 16px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'white', cursor: 'pointer', fontWeight: 500 }}>Annuler</button>
               <button onClick={() => {

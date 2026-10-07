@@ -24,7 +24,9 @@ export default function PosReports() {
     }
   };
 
-  const validTransactions = posTransactions.filter(t => t.status === 'Validée');
+  // G4 : paniers brut ET net séparés ; familles NETTES ventilées au prorata ;
+  // ventes sans lignes exclues des familles (bucket isolé, pas Fournitures).
+  const validTransactions = posTransactions.filter(t => t.status === 'Validée' && !t.transactionNumber?.startsWith('CMP-'));
   const grossRevenue = validTransactions.reduce((sum, t) => sum + t.total, 0);
   // CA net : retours Traités déduits (M8)
   const totalRefunds = posReturns
@@ -32,6 +34,7 @@ export default function PosReports() {
     .reduce((sum, r) => sum + (r.totalRefund || 0), 0);
   const totalRevenue = Math.max(0, grossRevenue - totalRefunds);
   const totalTransactions = validTransactions.length;
+  const avgBasketGross = totalTransactions > 0 ? Math.round(grossRevenue / totalTransactions) : 0;
   const avgBasket = totalTransactions > 0 ? Math.round(totalRevenue / totalTransactions) : 0;
 
   const isServiceProd = (p?: typeof posProducts[0], desc?: string) => 
@@ -44,6 +47,7 @@ export default function PosReports() {
   // Family totals
   let rawLivres = 0;
   let rawFournitures = 0;
+  let unventilated = 0;
 
   // Top products
   const productSales: Record<string, { name: string; quantity: number; revenue: number; family: string }> = {};
@@ -51,7 +55,7 @@ export default function PosReports() {
   validTransactions.forEach(t => {
     const lines = t.lines || [];
     if (lines.length === 0) {
-      rawFournitures += t.total;
+      unventilated += t.total;
     } else {
       const linesGross = lines.reduce((s, l) => s + (l.total || 0), 0);
       const ratio = linesGross > 0 ? t.total / linesGross : 1;
@@ -82,8 +86,19 @@ export default function PosReports() {
     }
   });
 
-  const revenueLivres = Math.round(rawLivres);
-  const revenueFournitures = totalRevenue - revenueLivres;
+  // G4 : remboursements ventilés par famille (lignes de retour classées produit),
+  // pas imputés aux fournitures.
+  let refundLivres = 0;
+  let refundFournitures = 0;
+  posReturns.filter(r => r.status === 'Traité').forEach(r => {
+    (r.lines || []).forEach(l => {
+      const product = l.productId ? posProducts.find(p => p.id === l.productId) : undefined;
+      if (isLivreProd(product)) refundLivres += (l.total || 0);
+      else refundFournitures += (l.total || 0);
+    });
+  });
+  const revenueLivres = Math.max(0, Math.round(rawLivres - refundLivres));
+  const revenueFournitures = Math.max(0, Math.round(rawFournitures - refundFournitures));
 
   const topProducts = Object.values(productSales).sort((a, b) => b.quantity - a.quantity).slice(0, 10);
 
@@ -125,7 +140,7 @@ export default function PosReports() {
         <div style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ background: 'var(--color-warning-tint)', borderRadius: 'var(--radius-md)', padding: '10px' }}><BarChart3 size={24} color="var(--color-warning)" /></div>
-            <div><div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Panier moyen</div><div style={{ fontSize: '24px', fontWeight: 700 }}>{avgBasket.toLocaleString()} FCFA</div></div>
+            <div><div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Panier moyen (net)</div><div style={{ fontSize: '24px', fontWeight: 700 }}>{avgBasket.toLocaleString()} FCFA</div><div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>brut : {avgBasketGross.toLocaleString()} FCFA</div></div>
           </div>
         </div>
       </div>
@@ -155,6 +170,13 @@ export default function PosReports() {
               {totalRevenue > 0 ? ((revenueFournitures / totalRevenue) * 100).toFixed(1) : 0}% du CA total
             </div>
           </div>
+          {unventilated > 0 && (
+            <div style={{ ...cardStyle, borderLeft: '4px solid #d97706' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>⚠️ NON VENTILÉ (lignes manquantes)</div>
+              <div style={{ fontSize: '22px', fontWeight: 700, color: '#92400e' }}>{Math.round(unventilated).toLocaleString()} FCFA</div>
+              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '4px' }}>Ventes à reconstituer — exclues des familles</div>
+            </div>
+          )}
         </div>
       </div>
 

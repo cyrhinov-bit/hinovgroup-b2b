@@ -29,6 +29,56 @@ const mergeData = <T extends { id: string }>(oldData: T[] | null | undefined, ne
   return Array.from(map.values());
 };
 
+// Garde B7 générique (B1-B5) : ne jamais écraser des enfants locaux non vides
+// (lignes, paiements) par un vide serveur (insertion partielle, RLS). Retourne
+// les objets fusionnés + les ids à remettre en file pour auto-réparation.
+const mergeKeepChildren = <T extends { id: string }>(
+  local: T[] | null | undefined,
+  parsed: T[],
+  childKeys: string[]
+): { merged: T[]; healedIds: string[] } => {
+  const base = mergeData(local, parsed);
+  const localById = new Map((local || []).map(t => [t.id, t]));
+  const parsedById = new Map(parsed.map(t => [t.id, t]));
+  const healedIds: string[] = [];
+  const merged = base.map(t => {
+    const l = localById.get(t.id);
+    const p = parsedById.get(t.id);
+    if (!l || !p) return t;
+    let changed = false;
+    const next: any = { ...t };
+    for (const k of childKeys) {
+      const serverEmpty = !Array.isArray((p as any)[k]) || (p as any)[k].length === 0;
+      const localFull = Array.isArray((l as any)[k]) && (l as any)[k].length > 0;
+      if (serverEmpty && localFull) {
+        next[k] = (l as any)[k];
+        changed = true;
+      }
+    }
+    if (changed) healedIds.push(t.id);
+    return next;
+  });
+  return { merged, healedIds };
+};
+
+// Remet en file les objets dont les enfants ont été protégés, pour que le
+// serveur soit réparé (chemins résilients). Best-effort, jamais bloquant.
+const healQueueMissingChildren = async (
+  localById: Map<string, any>,
+  healedIds: string[],
+  actionType: string
+) => {
+  if (healedIds.length === 0) return;
+  try {
+    const queue = (await db.syncQueue.getItem<any[]>('queue').catch(() => null)) || [];
+    const queuedIds = new Set(queue.filter(a => a?.type === actionType).map(a => a?.payload?.id));
+    for (const id of healedIds) {
+      const local = localById.get(id);
+      if (local && !queuedIds.has(id)) await queueSyncAction(actionType as any, local);
+    }
+  } catch { /* le local reste protégé dans tous les cas */ }
+};
+
 import type { 
   ClientFournisseur, AgentCommercial, PrestationCommande, 
   MouvementCaisse, CommissionPrestation, CatalogueArticle, 
@@ -324,7 +374,7 @@ export interface PosReturnLine { id: string; productId?: string; description: st
 export interface ExchangeLine { id: string; productId: string; description: string; quantity: number; unitPrice: number; total: number; }
 export interface PosReturn { id: string; returnNumber: string; transactionId?: string; sessionId?: string; date: string; type: 'Retour simple' | 'Retour avec échange'; totalRefund: number; totalExchange: number; amountToPay: number; refundMethod?: 'Espèces' | 'Mobile Money'; complementTransactionId?: string; status: 'En attente' | 'Traité' | 'Annulé'; lines: PosReturnLine[]; exchangeLines?: ExchangeLine[]; notes?: string; createdBy?: string; }
 export interface PosCartItem { id: string; productId: string; name: string; reference: string; unitPrice: number; quantity: number; discountType: 'none' | 'percent' | 'amount'; discountPercent: number; discountAmount: number; total: number; }
-export interface SuspendedCart { id: string; reference?: string; date: string; cart: PosCartItem[]; }
+  export interface SuspendedCart { id: string; reference?: string; date: string; cart: PosCartItem[]; discountType?: 'none' | 'percent' | 'amount'; discountValue?: number; }
 
 // Product Module Interfaces
 export interface PosStockMovement { id: string; productId: string; type: 'Vente' | 'Retour' | 'Approvisionnement' | 'Inventaire' | 'Ajustement Manuel'; quantity: number; reference?: string; date: string; createdBy?: string; notes?: string; }
@@ -395,7 +445,7 @@ interface AppState {
   posStockEntries: PosStockEntry[]; posInventories: PosInventory[]; posCashSessions: PosCashSession[];
   posStockMovements: PosStockMovement[];
   posTransactions: PosTransaction[]; posPayments: PosPayment[];   posDiscounts: PosDiscount[]; posSettings: PosSettings;
-  posReturns: PosReturn[]; addPosReturn: (ret: PosReturn) => Promise<void>; updatePosReturn: (id: string, data: Partial<PosReturn>) => Promise<void>; cancelPosReturn: (id: string) => Promise<void>;
+  posReturns: PosReturn[]; addPosReturn: (ret: PosReturn) => Promise<void>; updatePosReturn: (id: string, data: Partial<PosReturn>) => Promise<void>; cancelPosReturn: (id: string) => Promise<boolean>;
   suspendedCarts: SuspendedCart[]; addSuspendedCart: (cart: SuspendedCart) => void; removeSuspendedCart: (id: string) => void;
   // Product Module
   productCompletions: ProductCompletion[]; importSessions: ImportSession[];
@@ -896,8 +946,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const lastSyncTime = await db.syncMetadata.getItem<string>('lastSyncTime');
         const syncTimestamp = new Date().toISOString();
 
-        // Chaque table est récupérée isolément avec timeout sécurisé (7.5s)
-        const safeFetch = async (queryFn: () => any, allowDelta: boolean = false): Promise<any> => {
+        // Chaque table est récupérée isolément avec timeout sécurisé (7.5s).
+        // F1 : les échecs ne sont plus muets — journalisés avec la table concernée
+        // (RLS 42501, PGRST, timeout) pour un diagnostic visible au lieu d'un cache
+        // périmé affiché comme à jour.
+        const fetchFailures: Record<string, number> = {};
+        const safeFetch = async (queryFn: () => any, allowDelta: boolean = false, label = 'requête'): Promise<any> => {
           try {
             let query = queryFn();
             if (allowDelta && lastSyncTime) {
@@ -905,10 +959,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
             }
             const res = await withTimeout<any>(query, 7500);
             if (res && res.error) {
+              fetchFailures[label] = (fetchFailures[label] || 0) + 1;
+              console.warn(`[Refresh] ${label} en échec (${fetchFailures[label]}x) :`, res.error.message || res.error);
               return null;
             }
             return res ? res.data : null;
-          } catch {
+          } catch (e: any) {
+            fetchFailures[label] = (fetchFailures[label] || 0) + 1;
+            console.warn(`[Refresh] ${label} exception (${fetchFailures[label]}x) :`, e?.message || e);
             return null;
           }
         };
@@ -926,6 +984,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
               if (from === 0) q = q.order('created_at', { ascending: true });
               const res = await withTimeout<any>(q, 15000);
               if (res && res.error) {
+                fetchFailures[table] = (fetchFailures[table] || 0) + 1;
+                console.warn(`[Refresh] table ${table} en échec (${fetchFailures[table]}x) :`, res.error.message || res.error);
                 if (from === 0) {
                   const r2 = await withTimeout<any>(supabase.from(table).select(select).range(0, PAGE - 1), 15000);
                   if (r2 && !r2.error && Array.isArray(r2.data)) return r2.data;
@@ -939,7 +999,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
               from += PAGE;
             }
             return out;
-          } catch {
+          } catch (e: any) {
+            fetchFailures[table] = (fetchFailures[table] || 0) + 1;
+            console.warn(`[Refresh] table ${table} exception (${fetchFailures[table]}x) :`, e?.message || e);
             return null;
           }
         };
@@ -1312,8 +1374,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             discountPercent: q.discount_percent || 0, discountAmount: q.discount_amount || 0, clientComment: q.client_comment,
             lines: (q.quote_lines || []).map((l: any) => ({ id: l.id, prestationId: l.prestation_id, description: l.description, quantity: l.quantity, unit: l.unit || undefined, unitPrice: l.unit_price, total: l.total, discountPercent: l.discount_percent || 0, costPrice: l.cost_price || 0 }))
           }));
-          const merged = mergeData(cachedQuotes, parsedQuotes);
+          const mergedQuotes = mergeKeepChildren(cachedQuotes, parsedQuotes, ['lines']);
+          const merged = mergedQuotes.merged;
           setQuotes(merged); await db.quotes.setItem('data', merged);
+          await healQueueMissingChildren(new Map((cachedQuotes || []).map(q => [q.id, q])), mergedQuotes.healedIds, 'INSERT_QUOTE');
         }
         if (salesData && salesData.length > 0) {
           const parsedSales = salesData.map((s: any) => ({
@@ -1321,8 +1385,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             subtotal: s.subtotal, total: s.total, status: s.status, date: s.date, notes: s.notes,
             lines: (s.vente_lines || []).map((l: any) => ({ id: l.id, description: l.description, quantity: l.quantity, unitPrice: l.unit_price, costPrice: l.cost_price || 0, total: l.total }))
           }));
-          const merged = mergeData(cachedSales, parsedSales);
+          const mergedSales = mergeKeepChildren(cachedSales, parsedSales, ['lines']);
+          const merged = mergedSales.merged;
           setSales(merged); await db.sales.setItem('data', merged);
+          await healQueueMissingChildren(new Map((cachedSales || []).map(s => [s.id, s])), mergedSales.healedIds, 'INSERT_SALE');
         }
         if (commissionsData && commissionsData.length > 0) {
           const parsedCommissions = commissionsData.map((c: any) => ({
@@ -1536,8 +1602,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
               }))
             }));
           const filteredCached = (cachedPosStockEntries || []).filter(e => e.notes !== 'VENTE' && !e.reference?.startsWith('VENTE-'));
-          const merged = mergeData(filteredCached, parsed);
+          const kept = mergeKeepChildren(filteredCached, parsed, ['lines']);
+          const merged = kept.merged;
           setPosStockEntries(merged); await db.posStockEntries.setItem('data', merged);
+          await healQueueMissingChildren(new Map(filteredCached.map(e => [e.id, e])), kept.healedIds, 'INSERT_POS_STOCK_ENTRY');
         }
         if (posStockMovementsData && posStockMovementsData.length > 0) {
           const parsed = posStockMovementsData.map((m: any) => ({
@@ -1554,8 +1622,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
               id: l.id, productId: l.product_id, expectedQty: l.expected_qty, countedQty: l.counted_qty, difference: l.difference
             }))
           }));
-          const merged = mergeData(cachedPosInventories, parsed);
+          const keptInv = mergeKeepChildren(cachedPosInventories, parsed, ['lines']);
+          const merged = keptInv.merged;
           setPosInventories(merged); await db.posInventories.setItem('data', merged);
+          await healQueueMissingChildren(new Map((cachedPosInventories || []).map(i => [i.id, i])), keptInv.healedIds, 'INSERT_POS_INVENTORY');
         }
         if (posCashSessionsData && posCashSessionsData.length > 0) {
           const parsed = posCashSessionsData.map((s: any) => ({
@@ -1582,8 +1652,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
             }))
           }));
           const latestLocalTxs = (await safeGet<PosTransaction[]>(db.posTransactions)) || cachedPosTransactions;
-          const merged = mergeData(latestLocalTxs, parsed);
+          const baseMerged = mergeData(latestLocalTxs, parsed);
+          // Garde B7 : une vente valide a toujours ≥1 ligne et ≥1 paiement (panier vide bloqué
+          // dans PosTerminal). Si le serveur renvoie une vente sans lignes (échec partiel de
+          // synchro), ne jamais écraser le local : garder lignes/paiements locaux et remettre
+          // la vente en file pour auto-réparation (le chemin résilient détachera si besoin).
+          const localById = new Map((latestLocalTxs || []).map(t => [t.id, t]));
+          const merged = baseMerged.map(t => {
+            const local = localById.get(t.id);
+            if (!local) return t;
+            const keepLines = (!t.lines || t.lines.length === 0) && (local.lines?.length || 0) > 0;
+            const keepPays = (!t.payments || t.payments.length === 0) && (local.payments?.length || 0) > 0;
+            if (!keepLines && !keepPays) return t;
+            return { ...t, lines: keepLines ? local.lines : t.lines, payments: keepPays ? local.payments : t.payments };
+          });
           setPosTransactions(merged); await safeSet(db.posTransactions, merged);
+          try {
+            const healed = merged.filter(t => {
+              const local = localById.get(t.id);
+              return local && (local.lines?.length || 0) > 0 && (!parsed.find((p: any) => p.id === t.id)?.lines?.length);
+            });
+            if (healed.length > 0) {
+              const queue = (await db.syncQueue.getItem<any[]>('queue').catch(() => null)) || [];
+              const queuedIds = new Set(queue.filter(a => a?.type === 'INSERT_POS_TRANSACTION').map(a => a?.payload?.id));
+              for (const t of healed) {
+                const local = localById.get(t.id)!;
+                if (!queuedIds.has(t.id)) await queueSyncAction('INSERT_POS_TRANSACTION', local);
+              }
+            }
+          } catch { /* auto-réparation best-effort : le local reste protégé dans tous les cas */ }
         }
         if (posPaymentsData && posPaymentsData.length > 0) {
           const parsed = posPaymentsData.map((p: any) => ({ id: p.id, transactionId: p.transaction_id, method: p.method, amount: p.amount, reference: p.reference }));
@@ -1638,8 +1735,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             }))
           }));
           const latestLocalReturns = (await safeGet<PosReturn[]>(db.posReturns)) || cachedPosReturns;
-          const merged = mergeData(latestLocalReturns, parsed);
+          const keptRet = mergeKeepChildren(latestLocalReturns, parsed, ['lines', 'exchangeLines']);
+          const merged = keptRet.merged;
           setPosReturns(merged); await safeSet(db.posReturns, merged);
+          await healQueueMissingChildren(new Map((latestLocalReturns || []).map(r => [r.id, r])), keptRet.healedIds, 'INSERT_POS_RETURN');
         }
 
         if (crmTiersData && crmTiersData.length > 0) {
@@ -3348,14 +3447,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
   const deletePosProduct = async (id: string): Promise<boolean> => {
     // Intégrité (B6) : produit avec historique (ventes, mouvements, entrées, inventaires, retours)
-    // = suppression interdite (le serveur le refuserait par FK de toute façon)
-    const used =
+    // = suppression interdite (le serveur le refuserait par FK de toute façon).
+    // F6 : le contrôle local ne voit pas l'historique des autres postes pas encore
+    // synchronisé → vérification serveur avant suppression définitive.
+    const usedLocally =
       posTransactions.some(t => (t.lines || []).some(l => l.productId === id)) ||
       posStockMovements.some(m => m.productId === id) ||
       posStockEntries.some(e => (e.lines || []).some(l => l.productId === id)) ||
       posInventories.some(i => (i.lines || []).some(l => l.productId === id)) ||
       posReturns.some(r => (r.lines || []).some(l => l.productId === id) || (r.exchangeLines || []).some(l => l.productId === id));
-    if (used) return false;
+    if (usedLocally) return false;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        const { supabase: sb } = await import('../lib/supabase');
+        const checks = [
+          sb.from('pos_transaction_lines').select('id').eq('product_id', id).limit(1),
+          sb.from('pos_stock_movements').select('id').eq('product_id', id).limit(1),
+          sb.from('pos_stock_entry_lines').select('id').eq('product_id', id).limit(1),
+          sb.from('pos_inventory_lines').select('id').eq('product_id', id).limit(1),
+          sb.from('pos_return_lines').select('id').eq('product_id', id).limit(1),
+        ];
+        const results = await Promise.all(checks.map(q => q.maybeSingle()));
+        if (results.some(r => (r as any)?.data)) return false;
+      }
+    } catch { /* hors-ligne : le contrôle local + la FK serveur tranchent */ }
     setPosProducts(prev => {
       const next = prev.filter(p => p.id !== id);
       void db.posProducts.setItem('data', next);
@@ -3574,11 +3689,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Cumule correctement les lignes d'un même produit (pas de relecture d'un état stale).
   // Si pushSync est vrai, synchronise aussi le stock serveur via UPDATE_POS_PRODUCT.
   // Si movementParams est fourni, génère un mouvement de stock pour chaque delta.
-  const adjustProductStock = async (
+  // C1 : les ajustements sont sérialisés (chaîne) et calculés sur l'état frais
+  // relu en IndexedDB — plus de quantité absolue poussée depuis une closure périmée
+  // en cas d'appels en rafale (vente + entrée simultanées).
+  const stockAdjustChainRef = useRef<Promise<void>>(Promise.resolve());
+  const adjustProductStock = (
     deltas: { productId?: string; quantity: number }[],
     pushSync: boolean,
     movementParams?: { type: PosStockMovement['type']; reference?: string; createdBy?: string; notes?: string }
   ) => {
+    const task = async () => {
     const map = new Map<string, number>();
     for (const d of deltas) {
       if (!d.productId || d.productId.startsWith('srv-') || d.productId === '00000000-0000-0000-0000-000000000000') continue;
@@ -3589,7 +3709,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       map.set(resolvedPid, (map.get(resolvedPid) || 0) + d.quantity);
     }
     if (map.size === 0) return;
-    
+
     if (movementParams) {
       for (const [pid, delta] of map) {
         await addPosStockMovement({
@@ -3603,31 +3723,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    const updatedQtyMap = new Map<string, number>();
-    setPosProducts(prev => {
-      const next = prev.map(p => {
-        const delta = map.get(p.id);
-        if (delta !== undefined) {
-          const newQty = Math.max(0, p.quantity + delta);
-          updatedQtyMap.set(p.id, newQty);
-          return { ...p, quantity: newQty };
+    // Base fraîche : ce que la tâche précédente de la chaîne a persisté.
+    let base: PosProduct[] = posProducts;
+    try {
+      const stored = await db.posProducts.getItem<PosProduct[]>('data').catch(() => null);
+      if (stored && stored.length > 0) base = stored;
+    } catch {}
+    const next = base.map(p => {
+      const delta = map.get(p.id);
+      if (delta !== undefined) {
+        const raw = p.quantity + delta;
+        // F10 : le plancher 0 est conservé mais l'écrêtement est journalisé
+        // (écart réel visible au lieu d'être perdu silencieusement).
+        if (raw < 0) {
+          console.warn('[Stock] Écrêtement à 0 (stock insuffisant) :', p.reference || p.name, `stock=${p.quantity} delta=${delta}`);
         }
-        return p;
-      });
-      void db.posProducts.setItem('data', next);
-      return next;
+        return { ...p, quantity: Math.max(0, raw) };
+      }
+      return p;
     });
+    const nextQty = new Map(next.filter(p => map.has(p.id)).map(p => [p.id, p.quantity] as [string, number]));
+    setPosProducts(next);
+    await safeSet(db.posProducts, next);
 
     if (pushSync) {
-      for (const [pid, delta] of map) {
-        const currentProd = posProducts.find(p => p.id === pid);
-        const fallbackQty = currentProd ? Math.max(0, currentProd.quantity + delta) : undefined;
-        const newQty = updatedQtyMap.get(pid) ?? fallbackQty;
+      for (const [pid] of map) {
+        const newQty = nextQty.get(pid);
         if (newQty !== undefined) {
           await queueSyncAction('UPDATE_POS_PRODUCT', { id: pid, quantity: newQty });
         }
       }
     }
+    };
+    const run = stockAdjustChainRef.current.then(task, task);
+    stockAdjustChainRef.current = run.catch(() => {});
+    return run;
   };
 
   // Recalcule le statut d'une transaction selon ses retours actifs (non annulés).
@@ -3711,7 +3841,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.posTransactions.clear();
     await db.posPayments.clear();
     await db.posReturns.clear();
-    await queueSyncAction('CLEAR_POS_SALES_HISTORY', {});
+    await queueSyncAction('CLEAR_POS_SALES_HISTORY', { confirmed: true });
   };
 
   const deletePosMovementsByDateRange = async (startDate: string, endDate: string) => {
@@ -3747,7 +3877,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.posReturns.setItem('data', nextReturns);
     await db.posCashSessions.setItem('data', nextSessions);
 
-    await queueSyncAction('DELETE_POS_MOVEMENTS_BY_RANGE', { startDate, endDate });
+    await queueSyncAction('DELETE_POS_MOVEMENTS_BY_RANGE', { startDate, endDate, confirmed: true });
   };
 
   const addPosDiscount = async (discount: PosDiscount) => {
@@ -3823,15 +3953,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // Annulation d'un retour : statut 'Annulé', ré-injecte le stock (local + serveur), recalcule la transaction
-  const cancelPosReturn = async (id: string) => {
+  // R3 : si le void de la transaction complément échoue (session clôturée), on
+  // interrompt l'annulation AVANT toute ré-inversion de stock (divergence sinon).
+  const cancelPosReturn = async (id: string): Promise<boolean> => {
     const ret = posReturns.find(r => r.id === id);
-    if (!ret || ret.status === 'Annulé') return;
-    
-    await updatePosReturn(id, { status: 'Annulé' });
+    if (!ret || ret.status === 'Annulé') return false;
+
     // Annuler aussi la transaction de complément éventuelle (encaissement lié)
     if (ret.complementTransactionId) {
-      await voidPosTransaction(ret.complementTransactionId);
+      const complement = posTransactions.find(t => t.id === ret.complementTransactionId);
+      if (complement && complement.status === 'Validée') {
+        const ok = await voidPosTransaction(ret.complementTransactionId);
+        if (!ok) {
+          toast.error("Annulation impossible : la transaction complément est sur une session clôturée. Aucun stock n'a été modifié.");
+          return false;
+        }
+      }
     }
+
+    await updatePosReturn(id, { status: 'Annulé' });
     const tx = ret.transactionId ? posTransactions.find(t => t.id === ret.transactionId) : undefined;
     
     // Inverser les stocks si la transaction n'est pas complètement annulée par ailleurs
@@ -3856,6 +3996,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (ret.transactionId) {
       await recomputeTransactionStatus(ret.transactionId);
     }
+    return true;
   };
 
   // Product Module CRUD

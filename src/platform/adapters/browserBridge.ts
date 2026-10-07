@@ -1,5 +1,6 @@
 import { DesktopOnlyFeatureError } from '../errors';
 import type { PlatformBridge } from '../types';
+import { requestWebPrint } from '../../lib/webPrintBus';
 
 export const browserBridge: PlatformBridge = {
   isDesktop: false,
@@ -8,6 +9,27 @@ export const browserBridge: PlatformBridge = {
     getPlatform: async () => 'Navigateur',
     ping: async () => 'pong (simulé)',
     getMetrics: async () => ({ platform: 'Navigateur', userAgent: navigator.userAgent }),
+    getBrowserCacheInfo: async () => {
+      // Sur le web on ne peut pas mesurer le cache HTTP : on rapporte le stockage estimé.
+      let storageBytes = 0;
+      try {
+        const est = await navigator.storage?.estimate?.();
+        storageBytes = est?.usage || 0;
+      } catch { /* non supporté */ }
+      return { httpCacheBytes: 0, storageBytes };
+    },
+    clearBrowserCache: async (options) => {
+      const storages = options?.storages || [];
+      const destructive = storages.filter(s => ['cookies', 'localstorage', 'indexdb'].includes(s));
+      if (destructive.length > 0) {
+        throw new DesktopOnlyFeatureError(`system.clearBrowserCache(${destructive.join(',')}) — effacement refusé sur le web, utilisez l'application Electron`);
+      }
+      // Équivalent web : vider le CacheStorage (Service Workers / assets PWA).
+      if (typeof caches !== 'undefined') {
+        for (const key of await caches.keys()) await caches.delete(key);
+      }
+      return { httpCacheCleared: true, storagesCleared: [], requiresReload: false };
+    },
   },
   dialog: {
     showMessageBox: async (opts) => { alert(opts.message); return { response: 0 }; },
@@ -195,7 +217,7 @@ export const browserBridge: PlatformBridge = {
     getSession: async () => null,
     pay: async (amount, method) => { console.log(`[Web] Paiement de ${amount} via ${method}`); return { success: true }; },
     openDrawer: async () => { console.log('[Web] Tiroir-caisse ouvert (simulation)'); return true; },
-    printReceipt: async (data) => { console.log('[Web] Impression ticket', data); return 'receipt_printed_web'; },
+    printReceipt: async (data) => requestWebPrint(data),
     displayMessage: async (l1, l2) => { console.log(`[Web] LCD: [${l1}] [${l2}]`); return true; },
     onEvent: (_cb) => { console.log('[Web] Enregistrement callback onPosEvent'); }
   },

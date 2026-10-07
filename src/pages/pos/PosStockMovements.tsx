@@ -15,16 +15,27 @@ export default function PosStockMovements() {
   const [isRebuilding, setIsRebuilding] = useState(false);
 
   const rebuildHistory = async () => {
+    if (isRebuilding) return;
     setIsRebuilding(true);
     try {
+      // F15 : déduplication par triplet (référence, produit, type) relu à chaque
+      // ligne — une relance après interruption ne complète que les lignes manquantes
+      // au lieu d'ignorer le document entier ou de dupliquer.
+      const seen = new Set(posStockMovements.map(m => `${m.reference || ''}::${m.productId || ''}::${m.type}`));
+      const claim = (reference: string | undefined, productId: string | undefined, type: string) => {
+        const key = `${reference || ''}::${productId || ''}::${type}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      };
+      let added = 0;
       // 1. Transactions (Ventes)
       for (const tx of posTransactions) {
         if (tx.status !== 'Validée' && tx.status !== 'Retournée') continue;
-        const exists = posStockMovements.some(m => m.reference === tx.transactionNumber);
-        if (exists) continue;
-        
+
         for (const line of tx.lines) {
           if (!line.productId) continue;
+          if (!claim(tx.transactionNumber, line.productId, 'Vente')) continue;
           await addPosStockMovement({
             productId: line.productId,
             type: 'Vente',
@@ -34,17 +45,17 @@ export default function PosStockMovements() {
             createdBy: 'Système (Migration)',
             notes: 'Généré automatiquement'
           } as any); // using 'any' to force the past date
+          added++;
         }
       }
 
       // 2. Approvisionnements
       for (const entry of posStockEntries) {
         if (entry.status !== 'Validé') continue;
-        const exists = posStockMovements.some(m => m.reference === entry.reference);
-        if (exists) continue;
-        
+
         for (const line of entry.lines) {
           if (!line.productId) continue;
+          if (!claim(entry.reference, line.productId, 'Approvisionnement')) continue;
           await addPosStockMovement({
             productId: line.productId,
             type: 'Approvisionnement',
@@ -54,17 +65,17 @@ export default function PosStockMovements() {
             createdBy: entry.createdBy || 'Système',
             notes: 'Généré automatiquement'
           } as any);
+          added++;
         }
       }
 
       // 3. Inventaires
       for (const inv of posInventories) {
         if (inv.status !== 'Terminé') continue;
-        const exists = posStockMovements.some(m => m.reference === inv.reference);
-        if (exists) continue;
 
         for (const line of inv.lines) {
           if (!line.productId) continue;
+          if (!claim(inv.reference, line.productId, 'Inventaire')) continue;
           await addPosStockMovement({
             productId: line.productId,
             type: 'Inventaire',
@@ -74,10 +85,11 @@ export default function PosStockMovements() {
             createdBy: inv.createdBy || 'Système',
             notes: 'Généré automatiquement'
           } as any);
+          added++;
         }
       }
-      
-      alert("Historique reconstruit avec succès !");
+
+      alert(added > 0 ? `Historique reconstruit : ${added} mouvement(s) ajouté(s).` : 'Historique déjà complet : rien à ajouter.');
     } catch (e) {
       console.error(e);
       alert("Erreur lors de la reconstruction.");

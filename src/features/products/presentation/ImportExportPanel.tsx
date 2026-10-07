@@ -59,17 +59,26 @@ export default function ImportExportPanel() {
 
   const confirmImport = async () => {
     if (!selectedFile || !importAnalysis) return;
-    
+
     setIsImporting(true);
     setIsProcessing(true);
     setProcessProgress(0);
     setCurrentReport(null);
 
     try {
+      // F5 : revalider chaque ligne contre le catalogue FRAIS au moment de confirmer
+      // (créations/updates décidées à la sélection du fichier sinon périmées).
+      // Repli sur l'analyse initiale si le fichier n'est pas ré-analysable (ex : JSON).
+      let items = importAnalysis.items;
+      try {
+        const freshAnalysis = await excelImportService.analyzeFile(selectedFile, posProducts);
+        setImportAnalysis(freshAnalysis);
+        items = freshAnalysis.items;
+      } catch { /* conserve l'analyse initiale */ }
       const report = await excelImportService.importExcel(
         selectedFile,
         [...posProducts],
-        importAnalysis.items,
+        items,
         async (product: PosProduct, mode: 'create' | 'update') => {
           if (mode === 'create') {
             const initialQuantity = product.quantity || 0;

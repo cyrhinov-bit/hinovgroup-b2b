@@ -66,7 +66,9 @@ export default function PosTerminal() {
   const [selectedFamily, setSelectedFamily] = useState<'all' | 'Livre' | 'Fourniture'>('all');
   const [showCashierBreakdownModal, setShowCashierBreakdownModal] = useState(false);
   const today = todayLocalKey();
-  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today && (s.cashierId === currentUser?.id || !s.cashierId));
+  // T3 : session strictement personnelle — une session sans caissier n'est plus
+  // réutilisée par un autre caissier (tiroirs mélangés).
+  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today && s.cashierId === currentUser?.id);
 
   const sessionTxs = useMemo(() => {
     if (!openSession) return [];
@@ -274,6 +276,16 @@ export default function PosTerminal() {
     try {
     if (!openSession) { alert('Aucune session caisse ouverte.'); return; }
     if (cart.length === 0) { alert('Panier vide.'); return; }
+    // T2 : revalider la session juste avant l'écriture (clôture sur un 2e onglet
+    // entre l'ouverture du modal et le paiement → vente orpheline sinon).
+    try {
+      const latest = posCashSessions.find(s => s.id === openSession.id);
+      if (!latest || latest.status !== 'Ouverte') {
+        alert('Session de caisse clôturée entre-temps. Rouvrez une session pour encaisser.');
+        await refreshData().catch(() => {});
+        return;
+      }
+    } catch { /* garde best-effort sur l'état local */ }
 
     if (marginInfo.isLoss) {
       const confirmLoss = window.confirm(
@@ -311,7 +323,14 @@ export default function PosTerminal() {
     }
     const txNumber = `hnv${Date.now()}${Math.floor(100 + Math.random() * 900)}`;
 
-    const changeAmount = paymentMethod === 'Espèces' || paymentMethod === 'Mixte' ? Math.max(0, receivedTotal - total) : 0;
+    // T1 : la monnaie rendue n'existe qu'en espèces. En Mixte, seul l'excédent
+    // des espèces versées (au-delà du reste dû après le mobile) est rendu —
+    // jamais un excédent mobile (sinon le tiroir perd de l'argent réel).
+    const mobileCover = paymentMethod === 'Mixte' ? Math.min(receivedMobile, total) : 0;
+    const cashChange = (paymentMethod === 'Espèces' || paymentMethod === 'Mixte')
+      ? Math.max(0, receivedCash - Math.max(0, total - mobileCover))
+      : 0;
+    const changeAmount = paymentMethod === 'Espèces' ? Math.max(0, receivedTotal - total) : cashChange;
 
     const payments: any[] = [];
     if (paymentMethod === 'Mixte') {
@@ -393,12 +412,15 @@ export default function PosTerminal() {
 
   const handleSuspendCart = () => {
     if (cart.length === 0) return;
+    // T5 : la remise globale est persistée avec le ticket (sinon perdue à la reprise).
     addSuspendedCart({
       id: uuidv4(),
       reference: suspendReference || `Ticket ${suspendedCarts.length + 1}`,
       date: new Date().toISOString(),
-      cart: [...cart]
-    });
+      cart: [...cart],
+      discountType,
+      discountValue
+    } as any);
     setCart([]);
     setDiscountType('none');
     setDiscountValue(0);
@@ -412,9 +434,61 @@ export default function PosTerminal() {
         return;
       }
     }
-    setCart(suspendedCart.cart);
+    // T5 : revalidation catalogue/stock/existence à la reprise (produit désactivé
+    // ou supprimé entre-temps, stock insuffisant devenu).
+    const revived: typeof cart = [];
+    const dropped: string[] = [];
+    for (const c of (suspendedCart.cart || [])) {
+      const product = posProducts.find(p => p.id === c.productId);
+      if (!product || product.status === 'Inactive' || (product as any).isActive === false) {
+        dropped.push(c.name || 'Article');
+        continue;
+      }
+      const isService = product.family === 'Service' || product.reference?.startsWith('SRV-');
+      const available = isService ? 999999 : Number(product.quantity ?? 0);
+      if (!isService && Number(c.quantity) > available) {
+        dropped.push(`${c.name} (stock restant : ${available})`);
+        continue;
+      }
+      revived.push({ ...c, unitPrice: product.sellingPrice ?? c.unitPrice });
+    }
+    if (dropped.length > 0) {
+      alert('Articles non repris (produit indisponible ou stock insuffisant) :\n• ' + dropped.join('\n• '));
+    }
+    if (revived.length === 0) {
+      alert('Aucun article du ticket en attente ne peut être repris.');
+      return;
+    }
+    setCart(revived);
+    if (suspendedCart.discountType) setDiscountType(suspendedCart.discountType);
+    if (suspendedCart.discountValue !== undefined) setDiscountValue(suspendedCart.discountValue);
     removeSuspendedCart(suspendedCart.id);
     setShowSuspendedList(false);
+  };
+
+  // T6+T7 : ouverture unique (une session Ouverte par caissier/jour) et fonds ≥ 0.
+  const [isOpeningSession, setIsOpeningSession] = useState(false);
+  const handleOpenSession = async () => {
+    if (isOpeningSession) return;
+    if (openSession) {
+      alert('Une session est déjà ouverte pour cette caisse.');
+      setShowOpenModal(false);
+      return;
+    }
+    if (initialFund === '') return;
+    const fund = Number(initialFund);
+    if (isNaN(fund) || fund < 0) {
+      alert('Fonds de caisse invalide : saisissez un montant positif ou zéro.');
+      return;
+    }
+    setIsOpeningSession(true);
+    try {
+      await addPosCashSession({ id: uuidv4(), cashierId: currentUser?.id, openedAt: new Date().toISOString(), initialFund: fund, status: 'Ouverte' });
+      setShowOpenModal(false);
+      setInitialFund('');
+    } finally {
+      setIsOpeningSession(false);
+    }
   };
 
   useEffect(() => {
@@ -440,13 +514,7 @@ export default function PosTerminal() {
       }
       if (showOpenModal && e.key === 'Enter') {
         e.preventDefault();
-        const fund = Number(initialFund);
-        if (!isNaN(fund)) {
-          addPosCashSession({ id: uuidv4(), cashierId: currentUser?.id, openedAt: new Date().toISOString(), initialFund: fund, status: 'Ouverte' }).then(() => {
-            setShowOpenModal(false);
-            setInitialFund('');
-          });
-        }
+        handleOpenSession();
         return;
       }
 
@@ -912,16 +980,9 @@ export default function PosTerminal() {
           <>
             <Button 
               variant="success" 
-              onClick={async () => {
-                if (initialFund === '') return;
-                const fund = Number(initialFund);
-                if (!isNaN(fund)) {
-                  await addPosCashSession({ id: uuidv4(), cashierId: currentUser?.id, openedAt: new Date().toISOString(), initialFund: fund, status: 'Ouverte' });
-                  setShowOpenModal(false);
-                  setInitialFund('');
-                }
-              }}
-            >Ouvrir</Button>
+              onClick={handleOpenSession}
+              disabled={isOpeningSession}
+            >{isOpeningSession ? 'Ouverture...' : 'Ouvrir'}</Button>
             <Button variant="ghost" onClick={() => { setShowOpenModal(false); setInitialFund(''); }}>Annuler</Button>
           </>
         }
@@ -937,13 +998,7 @@ export default function PosTerminal() {
             onKeyDown={async e => {
               if (e.key === 'Enter') {
                 e.preventDefault();
-                if (initialFund === '') return;
-                const fund = Number(initialFund);
-                if (!isNaN(fund)) {
-                  await addPosCashSession({ id: uuidv4(), cashierId: currentUser?.id, openedAt: new Date().toISOString(), initialFund: fund, status: 'Ouverte' });
-                  setShowOpenModal(false);
-                  setInitialFund('');
-                }
+                handleOpenSession();
               }
             }}
             autoFocus 

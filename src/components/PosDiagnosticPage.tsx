@@ -1,11 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { platform } from '../platform';
 
 export default function PosDiagnosticPage() {
   const [session, setSession] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
+  // Le bridge n'expose pas de désabonnement : une seule souscription par montage.
+  const subscribedRef = useRef(false);
 
   useEffect(() => {
+    if (subscribedRef.current) return;
+    subscribedRef.current = true;
     // S'abonner aux événements du POS
     platform.pos.onEvent((payload) => {
       setEvents(prev => [...prev, payload]);
@@ -51,8 +55,25 @@ export default function PosDiagnosticPage() {
 
   const handlePrint = async () => {
     try {
-      await platform.pos.printReceipt({ test: true, total: 150.50 });
-    } catch(e) { alert(String(e)); }
+      // Ticket de test réaliste (même format 80mm que les vrais tickets).
+      const now = new Date().toISOString();
+      await platform.pos.printReceipt({
+        transaction: {
+          transactionNumber: 'TEST-IMPRESSION',
+          date: now,
+          payments: [{ method: 'Espèces', amount: 150.50 }],
+        },
+        cart: [{ name: 'Article test', quantity: 1, unitPrice: 150.50, total: 150.50 }],
+        paymentMethod: 'Espèces',
+        cashAmount: 150.50,
+        changeAmount: 0,
+        total: 150.50,
+        subtotal: 150.50,
+        globalDiscount: 0,
+        cashierName: 'Test',
+      });
+      alert("Ticket de test envoyé à l'impression.");
+    } catch(e: any) { alert("Échec d'impression : " + (e?.message || e)); }
   };
 
   return (

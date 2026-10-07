@@ -28,6 +28,103 @@ export const resolveProductUuid = (id?: string, reference?: string): string => {
   return id || '';
 };
 
+// Cache court des IDs produits serveur : évite qu'une ligne référençant un
+// produit inconnu (supprimé, créé sur un autre poste pas encore synchronisé)
+// fasse échouer toute la vente (FK) → vente enregistrée mais « 0 articles ».
+let serverProductIdsCache: { at: number; ids: Set<string> } | null = null;
+async function fetchServerProductIds(force = false): Promise<Set<string> | null> {
+  const now = Date.now();
+  if (!force && serverProductIdsCache && now - serverProductIdsCache.at < 60_000) return serverProductIdsCache.ids;
+  try {
+    const ids = new Set<string>();
+    const PAGE = 1000;
+    for (let guard = 0; guard < 50; guard++) {
+      const { data, error } = await supabase.from('pos_products').select('id').range(ids.size, ids.size + PAGE - 1);
+      if (error) return null;
+      const rows = (data || []) as any[];
+      for (const r of rows) if (r?.id) ids.add(String(r.id));
+      if (rows.length < PAGE) break;
+    }
+    serverProductIdsCache = { at: now, ids };
+    return ids;
+  } catch {
+    return null;
+  }
+}
+// Neutralise les product_id inconnus du serveur : la ligne est conservée
+// (description/quantité/prix, produit détaché) au lieu de perdre toutes les lignes.
+// Ne touche à rien si le catalogue serveur est injoignable (ids null).
+function sanitizeSaleLines<T extends { product_id?: string | null; description?: string }>(p_lines: T[], serverIds: Set<string> | null): { lines: T[]; neutralized: string[] } {
+  const neutralized: string[] = [];
+  if (!serverIds) return { lines: p_lines, neutralized };
+  const lines = (p_lines || []).map((l) => {
+    const pid = (l as any).product_id;
+    if (pid && !serverIds.has(String(pid))) {
+      neutralized.push(`${(l as any).description || 'Article'} (${String(pid).slice(0, 8)})`);
+      return { ...(l as any), product_id: null };
+    }
+    return l;
+  });
+  return { lines, neutralized };
+}
+// Insertion des lignes une par une : une ligne en échec ne fait plus perdre
+// les autres. Sur violation FK produit, la ligne est rejouée détachée (product_id null).
+// Insertion des lignes de retour une par une : même blindage (une ligne au
+// produit inconnu est conservée détachée au lieu de perdre tout le retour).
+async function upsertReturnLinesResilient(allLinesData: any[]): Promise<{ ok: boolean; neutralized: string[] }> {
+  const neutralized: string[] = [];
+  let ok = true;
+  for (const line of allLinesData) {
+    const { error } = await supabase.from('pos_return_lines').upsert([line], { onConflict: 'id' });
+    if (!error) continue;
+    if (isNetworkOrTransientError(error)) throw new Error(`[NetworkError] ${error.message}`);
+    if (/foreign key|product_id/i.test(error.message)) {
+      const retry = { ...line, product_id: null };
+      const { error: retryErr } = await supabase.from('pos_return_lines').upsert([retry], { onConflict: 'id' });
+      if (!retryErr) {
+        neutralized.push(`${line.description || 'Article'} (${String(line.product_id || '').slice(0, 8)})`);
+        console.warn('[Sync] Ligne retour détachée du produit inconnu (retour préservé) :', line.description, line.product_id);
+        continue;
+      }
+      if (isNetworkOrTransientError(retryErr)) throw new Error(`[NetworkError] ${retryErr.message}`);
+      console.error('[Sync] Erreur insertion pos_return_lines :', retryErr.message);
+      ok = false;
+    } else {
+      console.error('[Sync] Erreur insertion pos_return_lines :', error.message);
+      ok = false;
+    }
+  }
+  return { ok, neutralized };
+}
+async function upsertSaleLinesResilient(p_lines: any[]): Promise<{ ok: boolean; neutralized: string[]; errors: string[] }> {
+  const neutralized: string[] = [];
+  const errors: string[] = [];
+  let ok = true;
+  for (const line of p_lines) {
+    const { error } = await supabase.from('pos_transaction_lines').upsert([line], { onConflict: 'id' });
+    if (!error) continue;
+    if (isNetworkOrTransientError(error)) throw new Error(`[NetworkError] ${error.message}`);
+    if (/foreign key|product_id/i.test(error.message)) {
+      const retry = { ...line, product_id: null };
+      const { error: retryErr } = await supabase.from('pos_transaction_lines').upsert([retry], { onConflict: 'id' });
+      if (!retryErr) {
+        neutralized.push(`${line.description || 'Article'} (${String(line.product_id || '').slice(0, 8)})`);
+        console.warn('[Sync] Ligne vente détachée du produit inconnu (vente préservée) :', line.description, line.product_id);
+        continue;
+      }
+      if (isNetworkOrTransientError(retryErr)) throw new Error(`[NetworkError] ${retryErr.message}`);
+      console.error('[Sync] Erreur insertion pos_transaction_lines :', retryErr.message);
+      errors.push(retryErr.message);
+      ok = false;
+    } else {
+      console.error('[Sync] Erreur insertion pos_transaction_lines :', error.message);
+      errors.push(error.message);
+      ok = false;
+    }
+  }
+  return { ok, neutralized, errors };
+}
+
 export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT' | 
                              'INSERT_AFFAIRE' | 'UPDATE_AFFAIRE' | 'DELETE_AFFAIRE' |
                              'INSERT_FACTURE_PAIEMENT' |
@@ -2091,6 +2188,22 @@ export const processSyncQueue = async () => {
             payloadToInsert = buildProductPayload({ stripFk: true, stripBarcode: true });
             const retryBarcode = await supabase.from('pos_products').upsert([payloadToInsert], { onConflict: 'id' });
             error = retryBarcode.error;
+            // F18 : conflit remonté en erreur visible au lieu d'un succès silencieux
+            // (le local garde un barcode que le serveur n'a pas).
+            if (!error) {
+              try {
+                const errors = (await db.syncErrors.getItem<any[]>('errors')) || [];
+                errors.push({
+                  action: { id: `barcode-conflict-${resolvedId}`, type: 'INSERT_POS_PRODUCT' as SyncActionType, payload: { id: resolvedId, barcode: action.payload.barcode, reference: safeRef }, timestamp: Date.now() },
+                  failedAt: new Date().toISOString(),
+                  message: `Code-barres « ${action.payload.barcode} » déjà utilisé par un autre produit : produit synchronisé SANS code-barres. Corrigez le doublon dans le catalogue.`
+                });
+                await db.syncErrors.setItem('errors', errors);
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: errors.length } }));
+                }
+              } catch {}
+            }
           }
 
           // 3. Auto-réparation Image volumineuse ou payload
@@ -2233,8 +2346,9 @@ export const processSyncQueue = async () => {
           }], { onConflict: 'id' });
           if (error) {
             if (isForeignKeyError(error)) {
-              console.warn('[Sync] INSERT_POS_STOCK_MOVEMENT ignoré (clé étrangère / produit inexistant) :', error.message);
-              success = true;
+              // C2 : FK avalée → erreur visible avec rejeu au lieu d'un succès silencieux.
+              console.warn('[Sync] INSERT_POS_STOCK_MOVEMENT produit inexistant :', error.message);
+              success = false;
               break;
             }
             console.error('[Sync] INSERT_POS_STOCK_MOVEMENT échoué :', error);
@@ -2314,16 +2428,14 @@ export const processSyncQueue = async () => {
           const { error } = await supabase.from('pos_stock_entries').update(mapped).eq('id', id);
           let updOk = !error;
           if (!error) {
-            const { error: delErr } = await supabase.from('pos_stock_entry_lines').delete().eq('entry_id', id);
-            if (delErr) {
-              if (isNetworkOrTransientError(delErr)) throw new Error(`[NetworkError] ${delErr.message}`);
-              console.error('[Sync] Suppression lignes entrée échouée :', delErr.message);
-              updOk = false;
-            } else if (lines && lines.length > 0) {
-              const linesData = lines.map((l: any) => ({
-                id: l.id || uuidv4(), entry_id: id, product_id: isUuid(l.productId) ? l.productId : null,
-                quantity: l.quantity, purchase_price: l.purchasePrice, total: l.total
-              }));
+            // Diff plutôt que delete-then-insert : un échec de réinsertion ne laisse
+            // plus l'entrée à 0 ligne (A3). Seules les lignes retirées sont supprimées,
+            // après upsert réussi des lignes conservées/ajoutées.
+            const linesData = (lines && lines.length > 0) ? lines.map((l: any) => ({
+              id: l.id || uuidv4(), entry_id: id, product_id: isUuid(l.productId) ? l.productId : null,
+              quantity: l.quantity, purchase_price: l.purchasePrice, total: l.total
+            })) : [];
+            if (linesData.length > 0) {
               const { error: insLinesErr } = await supabase.from('pos_stock_entry_lines').upsert(linesData, { onConflict: 'id' });
               if (insLinesErr) {
                 if (isNetworkOrTransientError(insLinesErr)) throw new Error(`[NetworkError] ${insLinesErr.message}`);
@@ -2331,6 +2443,28 @@ export const processSyncQueue = async () => {
                 updOk = false;
               }
             }
+            if (updOk && data.status !== undefined && linesData.length > 0) {
+              // Ne retirer les lignes obsolètes qu'après upsert réussi.
+              try {
+                const { data: existing } = await supabase.from('pos_stock_entry_lines').select('id').eq('entry_id', id);
+                const keep = new Set(linesData.map((l: any) => l.id));
+                const doomed = ((existing as any[]) || []).map(r => r.id).filter((lid: string) => !keep.has(lid));
+                if (doomed.length > 0) {
+                  const { error: delErr } = await supabase.from('pos_stock_entry_lines').delete().in('id', doomed);
+                  if (delErr) {
+                    if (isNetworkOrTransientError(delErr)) throw new Error(`[NetworkError] ${delErr.message}`);
+                    console.error('[Sync] Suppression lignes entrée obsolètes échouée :', delErr.message);
+                    updOk = false;
+                  }
+                }
+              } catch (e: any) {
+                if (String(e?.message || '').startsWith('[NetworkError]')) throw e;
+                console.error('[Sync] Réconciliation lignes entrée échouée :', e?.message || e);
+                updOk = false;
+              }
+            }
+            // Sinon : les lignes serveur existantes sont conservées (une mise à jour
+            // de statut seul ne doit jamais vider les lignes).
             // Miroir des transitions locales : →Validé incrémente, Validé→Annulé décrémente
             if (prevStatus && prevStatus !== data.status) {
               if (data.status === 'Validé') {
@@ -2359,20 +2493,45 @@ export const processSyncQueue = async () => {
         }
         case 'INSERT_POS_INVENTORY': {
           const { lines, ...invData } = action.payload;
+          // Anti-double-comptage au rejeu : si l'inventaire est déjà Terminé côté
+          // serveur AVANT notre upsert, l'ajustement a déjà été appliqué.
+          let invPreDone = false;
+          try {
+            const { data: preInv } = await supabase.from('pos_inventories').select('status').eq('id', invData.id).maybeSingle();
+            invPreDone = (preInv as any)?.status === 'Terminé';
+          } catch {}
           const { error } = await supabase.from('pos_inventories').upsert([{
             id: invData.id, reference: invData.reference, date: invData.date,
             status: invData.status, notes: invData.notes,
             created_by: isUuid(invData.createdBy) ? invData.createdBy : null
           }], { onConflict: 'id' });
+          let invOk = !error;
           if (!error && lines && lines.length > 0) {
             const linesData = lines.map((l: any) => ({
               id: l.id || uuidv4(), inventory_id: invData.id, product_id: isUuid(l.productId) ? l.productId : null,
               expected_qty: l.expectedQty, counted_qty: l.countedQty, difference: l.difference
             }));
             const { error: linesErr } = await supabase.from('pos_inventory_lines').upsert(linesData, { onConflict: 'id' });
-            if (linesErr && isNetworkOrTransientError(linesErr)) throw new Error(`[NetworkError] ${linesErr.message}`);
+            if (linesErr) {
+              if (isNetworkOrTransientError(linesErr)) throw new Error(`[NetworkError] ${linesErr.message}`);
+              console.error('[Sync] Erreur insertion pos_inventory_lines :', linesErr.message);
+              invOk = false;
+            }
           }
-          success = checkResult(error);
+          // Remontée stock serveur : un inventaire Terminé applique le delta
+          // (compté - attendu), sauf rejeu déjà Terminé (incrément déjà appliqué).
+          if (!error && invOk && invData.status === 'Terminé' && !invPreDone) {
+            for (const l of (lines || [])) {
+              const delta = Number(l.difference ?? ((Number(l.countedQty) || 0) - (Number(l.expectedQty) || 0)));
+              if (!isUuid(l.productId) || !(delta !== 0)) continue;
+              const { error: stErr } = await supabase.rpc('increment_pos_stock', { p_product_id: l.productId, p_delta: delta });
+              if (stErr) { console.error('[Sync] Stock inventaire non remonté :', stErr.message); invOk = false; }
+            }
+          } else if (!error && invData.status === 'Terminé' && invPreDone) {
+            console.warn('[Sync] Inventaire déjà Terminé côté serveur, ajustement ignoré (anti-doublon) :', invData.id);
+          }
+          success = !error && invOk ? checkResult(error) : false;
+          if (!success) console.error('[Sync] INSERT_POS_INVENTORY incomplet (lignes/stock).');
           break;
         }
         case 'UPDATE_POS_INVENTORY': {
@@ -2445,6 +2604,22 @@ export const processSyncQueue = async () => {
             reference: p.reference || null
           }));
 
+          // Garde B7 : neutraliser les produits inconnus du serveur AVANT le RPC,
+          // sinon la FK fait échouer atomiquement toute la vente, puis le repli partiel
+          // crée un en-tête sans lignes → « 0 articles » dans l'historique.
+          const neutralizedBefore: string[] = [];
+          try {
+            const serverIds = await fetchServerProductIds();
+            if (serverIds) {
+              const s = sanitizeSaleLines(p_lines, serverIds);
+              if (s.neutralized.length > 0) {
+                neutralizedBefore.push(...s.neutralized);
+                p_lines.splice(0, p_lines.length, ...s.lines);
+                console.warn('[Sync] Produits inconnus détachés avant envoi (vente préservée) :', s.neutralized.join(', '));
+              }
+            }
+          } catch { /* catalogue injoignable : le repli résilient prendra le relais */ }
+
           let p_stock_entry = null;
           let p_stock_entry_lines = null;
 
@@ -2467,12 +2642,11 @@ export const processSyncQueue = async () => {
             if (!txErr) {
               let childrenOk = true;
               if (p_lines.length > 0) {
-                const { error: linesErr } = await supabase.from('pos_transaction_lines').upsert(p_lines, { onConflict: 'id' });
-                if (linesErr) {
-                  if (isNetworkOrTransientError(linesErr)) throw new Error(`[NetworkError] ${linesErr.message}`);
-                  console.error('[Sync] Erreur insertion pos_transaction_lines :', linesErr.message);
-                  childrenOk = false;
-                }
+                // Résilient : une ligne en échec ne fait plus perdre les autres ;
+                // une ligne au produit inconnu est conservée détachée (product_id null).
+                const res = await upsertSaleLinesResilient(p_lines);
+                if (!res.ok) childrenOk = false;
+                neutralizedBefore.push(...res.neutralized);
               }
               if (p_payments.length > 0) {
                 const { error: payErr } = await supabase.from('pos_payments').upsert(p_payments, { onConflict: 'id' });
@@ -2494,6 +2668,7 @@ export const processSyncQueue = async () => {
               // Succès réel : header + lignes + paiements + stock (sinon file d'erreur visible et rejeu)
               success = childrenOk;
               if (!childrenOk) console.error('[Sync] Insertion directe pos_transactions incomplète (lignes/paiements/stock).');
+              if (neutralizedBefore.length > 0) console.warn('[Sync] Vente synchronisée avec lignes détachées (produits inconnus) :', neutralizedBefore.join(', '));
             } else {
               if (isNetworkOrTransientError(txErr)) {
                 throw new Error(`[NetworkError] ${txErr.message}`);
@@ -2515,6 +2690,23 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'CLEAR_POS_SALES_HISTORY': {
+          // D4 : wipe à double détente — jamais sans confirmation explicite, et les
+          // actions de données antérieures au wipe sont retirées de la file pour ne
+          // pas ressusciter des ventes supprimées (ni effacer des ventes repoussées).
+          if (action.payload?.confirmed !== true) {
+            console.error('[Sync] CLEAR_POS_SALES_HISTORY sans confirmation : refusé.');
+            success = false;
+            break;
+          }
+          try {
+            const q: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
+            const wipeable = new Set(['INSERT_POS_TRANSACTION', 'UPDATE_POS_TRANSACTION', 'INSERT_POS_PAYMENT', 'INSERT_POS_RETURN', 'UPDATE_POS_RETURN', 'INSERT_POS_CASH_SESSION', 'UPDATE_POS_CASH_SESSION']);
+            for (const a of q) {
+              if (a.id !== action.id && wipeable.has(a.type) && (a.timestamp || 0) <= (action.timestamp || 0)) {
+                processedIds.add(a.id);
+              }
+            }
+          } catch {}
           const { error: e1 } = await supabase.from('pos_return_lines').delete().neq('id', '00000000-0000-0000-0000-000000000000');
           if (e1 && isNetworkOrTransientError(e1)) throw new Error(`[NetworkError] ${e1.message}`);
           const { error: e2 } = await supabase.from('pos_returns').delete().neq('id', '00000000-0000-0000-0000-000000000000');
@@ -2529,9 +2721,27 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'DELETE_POS_MOVEMENTS_BY_RANGE': {
+          // D4 : même garde que CLEAR — confirmation exigée, et les ventes/retours
+          // de la plage encore en file sont retirés pour ne pas être repoussés
+          // après la suppression.
+          if (action.payload?.confirmed !== true) {
+            console.error('[Sync] DELETE_POS_MOVEMENTS_BY_RANGE sans confirmation : refusé.');
+            success = false;
+            break;
+          }
           const { startDate, endDate } = action.payload;
           const startIso = `${startDate}T00:00:00.000Z`;
           const endIso = `${endDate}T23:59:59.999Z`;
+          try {
+            const q: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
+            for (const a of q) {
+              if (a.id === action.id) continue;
+              const d = a.payload?.date;
+              if ((a.type === 'INSERT_POS_TRANSACTION' || a.type === 'INSERT_POS_RETURN') && typeof d === 'string' && d >= startIso && d <= endIso) {
+                processedIds.add(a.id);
+              }
+            }
+          } catch {}
 
           // 1. Transactions de la plage
           const { data: targetTxs, error: txFetchErr } = await supabase
@@ -2687,12 +2897,9 @@ export const processSyncQueue = async () => {
               });
             }
             if (allLinesData.length > 0) {
-              const { error: linesErr } = await supabase.from('pos_return_lines').upsert(allLinesData, { onConflict: 'id' });
-              if (linesErr) {
-                if (isNetworkOrTransientError(linesErr)) throw new Error(`[NetworkError] ${linesErr.message}`);
-                console.error('[Sync] Erreur insertion pos_return_lines :', linesErr.message);
-                linesOk = false;
-              }
+              const res = await upsertReturnLinesResilient(allLinesData);
+              if (!res.ok) linesOk = false;
+              if (res.neutralized.length > 0) console.warn('[Sync] Retour synchronisé avec lignes détachées :', res.neutralized.join(', '));
             }
             // Remontée stock serveur (M11) : retours réintègrent, échanges décrémentent (plancher 0),
             // sauf rejeu (déjà Traité avant notre upsert).
@@ -2724,8 +2931,57 @@ export const processSyncQueue = async () => {
           if (data.complementTransactionId !== undefined) mapped.complement_transaction_id = isUuid(data.complementTransactionId) ? data.complementTransactionId : null;
           if (data.sessionId !== undefined) mapped.session_id = isUuid(data.sessionId) ? data.sessionId : null;
           if (data.notes !== undefined) mapped.notes = data.notes;
+          // Transition de statut pour la remontée stock (miroir du local).
+          let prevStatus: string | null = null;
+          if (data.status !== undefined) {
+            try {
+              const { data: prev } = await supabase.from('pos_returns').select('status').eq('id', id).maybeSingle();
+              prevStatus = (prev as any)?.status || null;
+            } catch {}
+          }
           const { error } = await supabase.from('pos_returns').update(mapped).eq('id', id);
-          success = checkResult(error);
+          let updOk = !error;
+          if (!error) {
+            // Rejeu des lignes si fournies (une édition locale ne doit plus être perdue).
+            const allLinesData: any[] = [];
+            if (lines && lines.length > 0) {
+              lines.forEach((l: any) => {
+                allLinesData.push({
+                  id: l.id || uuidv4(), return_id: id,
+                  product_id: isUuid(l.productId) ? l.productId : null,
+                  description: l.description, quantity: l.quantity,
+                  unit_price: l.unitPrice, total: l.total, reason: l.reason || 'Retour'
+                });
+              });
+            }
+            if (exchangeLines && exchangeLines.length > 0) {
+              exchangeLines.forEach((l: any) => {
+                allLinesData.push({
+                  id: l.id || uuidv4(), return_id: id,
+                  product_id: isUuid(l.productId) ? l.productId : null,
+                  description: l.description, quantity: l.quantity,
+                  unit_price: l.unitPrice, total: l.total, reason: 'Échange'
+                });
+              });
+            }
+            if (allLinesData.length > 0) {
+              const res = await upsertReturnLinesResilient(allLinesData);
+              if (!res.ok) updOk = false;
+            }
+            // Miroir stock : passage à Traité → retours réintègrent, échanges décrémentent.
+            if (data.status === 'Traité' && prevStatus !== 'Traité') {
+              const stockLines = allLinesData.length > 0 ? allLinesData.map((l: any) => ({ productId: l.product_id, quantity: l.quantity, exchange: l.reason === 'Échange' }))
+                : [...(lines || []).map((l: any) => ({ ...l, exchange: false })), ...(exchangeLines || []).map((l: any) => ({ ...l, exchange: true }))];
+              for (const l of stockLines) {
+                const pid = l.productId || l.product_id;
+                if (!isUuid(pid) || !(Number(l.quantity) > 0)) continue;
+                const { error: stErr } = await supabase.rpc('increment_pos_stock', { p_product_id: pid, p_delta: l.exchange ? -Number(l.quantity) : Number(l.quantity) });
+                if (stErr) { console.error('[Sync] Stock retour (update) non remonté :', stErr.message); updOk = false; }
+              }
+            }
+          }
+          success = !error && updOk ? checkResult(error) : false;
+          if (!success) console.error('[Sync] UPDATE_POS_RETURN incomplet (lignes/stock).');
           break;
         }
         case 'INSERT_PRODUCT_COMPLETION': {
@@ -3059,10 +3315,19 @@ export const processSyncQueue = async () => {
     }
   }
 
-  // Sauvegarder la file d'attente restante sans écraser les nouvelles actions
-  const latestQueue: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
-  const nextQueue = latestQueue.filter(a => !processedIds.has(a.id));
-  await db.syncQueue.setItem('queue', nextQueue);
+  // Sauvegarder la file d'attente restante via la chaîne sérialisée (D1) : un
+  // queueSyncAction concurrent intercalé n'est plus écrasé (vente perdue).
+  const drainTask = async () => {
+    const latestQueue: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
+    const nextQueue = latestQueue.filter(a => !processedIds.has(a.id));
+    await db.syncQueue.setItem('queue', nextQueue);
+  };
+  queueChain = queueChain.then(drainTask, drainTask);
+  try {
+    await queueChain;
+  } catch (e) {
+    console.error('[Sync] Écriture finale de file échouée :', e);
+  }
   } finally {
     syncLock = false;
   }
@@ -3126,6 +3391,9 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
   let movementsSynced = 0;
   let returnsSynced = 0;
   let errorsReplayed = 0;
+  // A6 : les partiels ne sont plus silencieux — ils font échouer le résultat
+  // avec le détail, au lieu d'un success:true trompeur.
+  const partials: string[] = [];
 
   try {
     if (navigator.onLine) {
@@ -3162,10 +3430,15 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
           errorsReplayed++;
         }
       }
-      // Vider le store d'erreurs une fois remises dans la file
-      await db.syncErrors.setItem('errors', []);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: 0 } }));
+      // D2 : ne purger le store d'erreurs qu'après remise en file effective —
+      // hors-ligne, la trace (failedAt) est conservée pour le prochain passage.
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        await db.syncErrors.setItem('errors', []);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: 0 } }));
+        }
+      } else {
+        console.warn('[SyncReconcile] Hors-ligne : erreurs conservées pour rejeu ultérieur.');
       }
     }
 
@@ -3230,6 +3503,19 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
           reference: p.reference || null
         }));
 
+        // Garde B7 : même blindage que le chemin nominal (produits inconnus → détachés,
+        // lignes insérées une par une pour ne plus perdre toute la vente sur une ligne).
+        try {
+          const serverIds = await fetchServerProductIds();
+          if (serverIds) {
+            const s = sanitizeSaleLines(p_lines, serverIds);
+            if (s.neutralized.length > 0) {
+              p_lines.splice(0, p_lines.length, ...s.lines);
+              console.warn('[Sync] Réconciliation : produits inconnus détachés :', s.neutralized.join(', '));
+            }
+          }
+        } catch { /* repli résilient ci-dessous */ }
+
         const { error: rpcErr } = await supabase.rpc('process_pos_transaction', {
           p_transaction, p_lines, p_payments, p_stock_entry: null, p_stock_entry_lines: null
         });
@@ -3237,16 +3523,22 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
         if (rpcErr) {
           const { error: insErr } = await supabase.from('pos_transactions').upsert([p_transaction], { onConflict: 'id' });
           if (!insErr) {
-            const { error: recLinesErr } = p_lines.length > 0
-              ? await supabase.from('pos_transaction_lines').upsert(p_lines, { onConflict: 'id' })
-              : { error: null };
-            const { error: recPayErr } = (!recLinesErr && p_payments.length > 0)
+            let linesOk = true;
+            if (p_lines.length > 0) {
+              try {
+                const res = await upsertSaleLinesResilient(p_lines);
+                linesOk = res.ok;
+              } catch {
+                linesOk = false;
+              }
+            }
+            const { error: recPayErr } = p_payments.length > 0
               ? await supabase.from('pos_payments').upsert(p_payments, { onConflict: 'id' })
               : { error: null };
-            if (!recLinesErr && !recPayErr) {
+            if (linesOk && !recPayErr) {
               transactionsSynced++;
             } else {
-              console.error('[Sync] Reconciliation transaction partielle :', tx.id, recLinesErr?.message, recPayErr?.message);
+              console.error('[Sync] Reconciliation transaction partielle :', tx.id, linesOk ? 'lignes OK' : 'lignes en échec', recPayErr?.message);
             }
           }
         } else {
@@ -3335,9 +3627,14 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
             });
           }
           if (allLinesData.length > 0) {
-            const { error: recRetLinesErr } = await supabase.from('pos_return_lines').upsert(allLinesData, { onConflict: 'id' });
-            if (recRetLinesErr) {
-              console.error('[Sync] Reconciliation retour partielle :', ret.id, recRetLinesErr.message);
+            try {
+              const res = await upsertReturnLinesResilient(allLinesData);
+              if (!res.ok) {
+                partials.push(`retour ${ret.returnNumber || ret.id} : lignes en échec`);
+                continue;
+              }
+            } catch {
+              partials.push(`retour ${ret.returnNumber || ret.id} : lignes en échec`);
               continue;
             }
           }
@@ -3374,8 +3671,22 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
             purchase_price: l.purchasePrice,
             total: l.total
           }));
-          const { error: recEntLinesErr } = await supabase.from('pos_stock_entry_lines').upsert(linesData, { onConflict: 'id' });
-          if (recEntLinesErr) console.error('[Sync] Reconciliation entree partielle :', entry.id, recEntLinesErr.message);
+          // Ligne par ligne : une ligne au produit inconnu est détachée, les autres passent.
+          let entryLinesOk = true;
+          for (const line of linesData) {
+            const { error: oneErr } = await supabase.from('pos_stock_entry_lines').upsert([line], { onConflict: 'id' });
+            if (!oneErr) continue;
+            if (/foreign key|product_id/i.test(oneErr.message || '')) {
+              const { error: retryErr } = await supabase.from('pos_stock_entry_lines').upsert([{ ...line, product_id: null }], { onConflict: 'id' });
+              if (!retryErr) {
+                console.warn('[Sync] Ligne entrée détachée du produit inconnu :', line.id);
+                continue;
+              }
+            }
+            console.error('[Sync] Reconciliation entree partielle :', entry.id, oneErr.message);
+            entryLinesOk = false;
+          }
+          if (!entryLinesOk) partials.push(`entrée ${entry.reference || entry.id} : lignes en échec`);
         }
       }
     }
@@ -3406,8 +3717,21 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
             counted_qty: l.countedQty,
             difference: l.difference
           }));
-          const { error: recInvLinesErr } = await supabase.from('pos_inventory_lines').upsert(linesData, { onConflict: 'id' });
-          if (recInvLinesErr) console.error('[Sync] Reconciliation inventaire partielle :', inv.id, recInvLinesErr.message);
+          let invLinesOk = true;
+          for (const line of linesData) {
+            const { error: oneErr } = await supabase.from('pos_inventory_lines').upsert([line], { onConflict: 'id' });
+            if (!oneErr) continue;
+            if (/foreign key|product_id/i.test(oneErr.message || '')) {
+              const { error: retryErr } = await supabase.from('pos_inventory_lines').upsert([{ ...line, product_id: null }], { onConflict: 'id' });
+              if (!retryErr) {
+                console.warn('[Sync] Ligne inventaire détachée du produit inconnu :', line.id);
+                continue;
+              }
+            }
+            console.error('[Sync] Reconciliation inventaire partielle :', inv.id, oneErr.message);
+            invLinesOk = false;
+          }
+          if (!invLinesOk) partials.push(`inventaire ${inv.reference || inv.id} : lignes en échec`);
         }
       }
     }
@@ -3415,6 +3739,17 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
     // 8. Traiter toute file d'attente restante
     await processSyncQueue();
 
+    if (partials.length > 0) {
+      return {
+        success: false,
+        sessionsSynced,
+        transactionsSynced,
+        movementsSynced,
+        returnsSynced,
+        errorsReplayed,
+        message: `Rapprochement partiel : ${sessionsSynced} session(s), ${transactionsSynced} transaction(s), ${movementsSynced} mouvement(s), ${returnsSynced} retour(s). Restes en échec — voir page Erreurs de synchronisation : ${partials.slice(0, 5).join(' ; ')}${partials.length > 5 ? ` (+${partials.length - 5} autres)` : ''}`
+      };
+    }
     return {
       success: true,
       sessionsSynced,

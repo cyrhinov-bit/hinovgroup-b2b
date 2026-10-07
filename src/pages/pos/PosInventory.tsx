@@ -32,21 +32,57 @@ export default function PosInventory() {
 
   const totalDifference = form.lines.reduce((sum, l) => sum + l.difference, 0);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const handleValidate = async () => {
-    const ref = `INV-${Date.now().toString(36).toUpperCase()}`;
+    if (isSubmitting) return;
+    // F13 : comptages validés ligne par ligne (entier ≥ 0, pas de NaN).
+    for (const l of form.lines) {
+      const q = Number(l.countedQty);
+      if (!Number.isFinite(q) || q < 0 || !Number.isInteger(q)) {
+        const p = posProducts.find(x => x.id === l.productId);
+        alert(`Comptage invalide pour ${p?.name || 'un article'} : saisissez un nombre entier positif ou zéro.`);
+        return;
+      }
+    }
+    // F12 : relecture du stock au moment de valider — si le stock a bougé depuis
+    // l'ouverture du formulaire (vente/entrée entre-temps), l'attendu est recalculé
+    // et l'utilisateur confirme avant application.
+    const moved: string[] = [];
+    const freshLines = form.lines.map(l => {
+      const p = posProducts.find(x => x.id === l.productId);
+      const freshExpected = p ? Number(p.quantity || 0) : l.expectedQty;
+      if (freshExpected !== l.expectedQty) {
+        moved.push(`${p?.name || 'Article'} (était ${l.expectedQty}, maintenant ${freshExpected})`);
+      }
+      const counted = Number(l.countedQty);
+      return { ...l, expectedQty: freshExpected, countedQty: counted, difference: counted - freshExpected };
+    });
+    if (moved.length > 0) {
+      if (!window.confirm(`Attention, le stock a bougé depuis l'ouverture de l'inventaire :\n• ${moved.slice(0, 10).join('\n• ')}${moved.length > 10 ? `\n(+${moved.length - 10} autres)` : ''}\n\nLes écarts seront recalculés sur le stock actuel. Continuer ?`)) {
+        return;
+      }
+    }
+    const activeLines = freshLines.filter(l => l.difference !== 0);
+    if (activeLines.length === 0) { alert('Aucun écart : rien à valider.'); return; }
+    const ref = `INV-${Date.now().toString(36).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`;
     const inventory = {
       id: uuidv4(), reference: ref, date: todayLocalKey(),
       status: 'Terminé' as const, notes: form.notes, createdBy: undefined,
-      lines: form.lines.filter(l => l.difference !== 0)
+      lines: activeLines
     };
-    await addPosInventory(inventory);
-    setShowForm(false);
-    setForm({ 
-      notes: '', 
-      lines: posProducts
-        .filter(p => p.family !== 'Service')
-        .map(p => ({ id: uuidv4(), productId: p.id, expectedQty: p.quantity, countedQty: p.quantity, difference: 0 })) 
-    });
+    setIsSubmitting(true);
+    try {
+      await addPosInventory(inventory);
+      setShowForm(false);
+      setForm({
+        notes: '',
+        lines: posProducts
+          .filter(p => p.family !== 'Service')
+          .map(p => ({ id: uuidv4(), productId: p.id, expectedQty: p.quantity, countedQty: p.quantity, difference: 0 }))
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const confirmDelete = async () => {
@@ -225,7 +261,7 @@ export default function PosInventory() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--color-border)', paddingTop: '16px', marginTop: '16px' }}>
             <div style={{ fontSize: '16px', fontWeight: 600, color: totalDifference !== 0 ? 'var(--color-error)' : 'var(--color-success)' }}>Écart total: {totalDifference > 0 ? '+' : ''}{totalDifference}</div>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <button onClick={handleValidate} style={{ padding: '8px 16px', backgroundColor: 'var(--color-success)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 500 }}>Valider & Corriger</button>
+              <button onClick={handleValidate} disabled={isSubmitting} style={{ padding: '8px 16px', backgroundColor: 'var(--color-success)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 500 }}>{isSubmitting ? 'Validation...' : 'Valider & Corriger'}</button>
               <button onClick={() => setShowForm(false)} style={{ padding: '8px 16px', backgroundColor: 'var(--color-surface-alt)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>Annuler</button>
             </div>
           </div>
@@ -283,7 +319,7 @@ export default function PosInventory() {
           <div style={{ background: 'white', padding: '24px', borderRadius: 'var(--radius-lg)', maxWidth: '400px', width: '100%' }}>
             <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>Confirmer la suppression</h3>
             <p style={{ fontSize: '14px', marginBottom: '24px', color: 'var(--color-text-muted)' }}>
-              Êtes-vous sûr de vouloir supprimer cet inventaire ? Cette action est irréversible.
+              Êtes-vous sûr de vouloir supprimer cet inventaire ? Le stock appliqué sera contre-passé (réimputé en sens inverse). Cette action est irréversible.
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <button onClick={() => setDeleteModal({ isOpen: false, inventoryId: null })} style={{ padding: '8px 16px', background: 'var(--color-surface-alt)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 }}>Annuler</button>

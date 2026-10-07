@@ -3,6 +3,8 @@ export interface SystemInterface {
   getPlatform(): Promise<string>;
   ping(): Promise<string>;
   getMetrics(): Promise<any>;
+  getBrowserCacheInfo(): Promise<{ httpCacheBytes: number; storageBytes?: number }>;
+  clearBrowserCache(options?: { httpCache?: boolean; storages?: string[] }): Promise<{ httpCacheCleared: boolean; storagesCleared: string[]; requiresReload: boolean }>;
 }
 
 export interface DialogInterface {

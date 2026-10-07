@@ -2,15 +2,24 @@ import { PrinterManager } from '../services/printer/PrinterManager.js';
 
 export class ReceiptEngine {
   static async printReceipt(data: any): Promise<string> {
+    // Données minimales exigées : jamais de ticket vide à 0 FCFA d'apparence valable.
+    const tx = data?.transaction || data;
+    const cart = (Array.isArray(data?.cart) && data.cart.length > 0) ? data.cart : (tx?.lines || []);
+    const total = Number(data?.total ?? tx?.total ?? 0);
+    if (!data || cart.length === 0 || !(total > 0)) {
+      throw new Error('Ticket invalide : panier vide ou total nul (impression refusée).');
+    }
     const html = ReceiptEngine.buildReceiptHtml(data);
     if (!html) {
-      return 'receipt_failed';
+      throw new Error('Ticket invalide : génération impossible.');
     }
     try {
       await PrinterManager.printHtml(html, data?.printerName);
       return 'receipt_printed';
     } catch (err: any) {
-      return `receipt_failed:${String(err?.message || err)}`;
+      // Échec remonté en exception (le renderer affiche un fallback au lieu
+      // d'un faux succès).
+      throw new Error(`Échec d'impression : ${String(err?.message || err)}`);
     }
   }
 

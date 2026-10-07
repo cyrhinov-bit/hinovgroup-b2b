@@ -90,26 +90,48 @@ export default function PosSupply() {
 
   const totalAmount = form.lines.filter(l => l.productId).reduce((sum, l) => sum + l.total, 0);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const handleValidate = async () => {
+    // F8 : anti-double-submit (double-clic = double entrée = double stock).
+    if (isSubmitting) return;
     const validLines = form.lines.filter(l => l.productId);
     if (validLines.length === 0) { alert('Ajoutez au moins un produit.'); return; }
     if (validLines.some(l => !(Number(l.quantity) > 0))) { alert('Chaque ligne doit avoir une quantité supérieure à 0.'); return; }
     if (validLines.some(l => Number(l.purchasePrice) < 0)) { alert('Les prix d\u2019achat ne peuvent pas être négatifs.'); return; }
-    const ref = `APV-${Date.now().toString(36).toUpperCase()}`;
-    const entry = {
-      id: uuidv4(), reference: ref, supplierId: form.supplierId || undefined,
-      date: todayLocalKey(), totalAmount, status: 'Validé' as const,
-      notes: form.notes, createdBy: undefined, lines: validLines
-    };
-    await addPosStockEntry(entry);
-    for (const line of entry.lines) {
-      const product = posProducts.find(p => p.id === line.productId);
-      if (product && line.purchasePrice > 0 && line.purchasePrice !== product.purchasePrice) {
-        await updatePosProduct(line.productId, { purchasePrice: line.purchasePrice });
+    // F9 : fusion des lignes du même produit (prix du dernier appliqué sinon).
+    const merged = new Map<string, typeof validLines[number]>();
+    for (const l of validLines) {
+      const prev = merged.get(l.productId);
+      if (prev) {
+        const qty = Number(prev.quantity) + Number(l.quantity);
+        merged.set(l.productId, { ...prev, quantity: qty, purchasePrice: Number(l.purchasePrice), total: qty * Number(l.purchasePrice) });
+      } else {
+        merged.set(l.productId, { ...l });
       }
     }
-    setShowForm(false);
-    setForm({ supplierId: '', notes: '', lines: [{ id: uuidv4(), productId: '', quantity: 1, purchasePrice: 0, total: 0 }] });
+    const finalLines = [...merged.values()];
+    const finalTotal = finalLines.reduce((sum, l) => sum + l.total, 0);
+    // Référence unique (UUID court) : Date.now() seul collisionne à la milliseconde.
+    const ref = `APV-${Date.now().toString(36).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`;
+    const entry = {
+      id: uuidv4(), reference: ref, supplierId: form.supplierId || undefined,
+      date: todayLocalKey(), totalAmount: finalTotal, status: 'Validé' as const,
+      notes: form.notes, createdBy: undefined, lines: finalLines
+    };
+    setIsSubmitting(true);
+    try {
+      await addPosStockEntry(entry);
+      for (const line of entry.lines) {
+        const product = posProducts.find(p => p.id === line.productId);
+        if (product && line.purchasePrice > 0 && line.purchasePrice !== product.purchasePrice) {
+          await updatePosProduct(line.productId, { purchasePrice: line.purchasePrice });
+        }
+      }
+      setShowForm(false);
+      setForm({ supplierId: '', notes: '', lines: [{ id: uuidv4(), productId: '', quantity: 1, purchasePrice: 0, total: 0 }] });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleAnnulEntry = async (id: string) => {
@@ -176,7 +198,7 @@ export default function PosSupply() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--color-border)', paddingTop: '16px' }}>
             <div style={{ fontSize: '18px', fontWeight: 700 }}>Total: {totalAmount.toLocaleString()} FCFA</div>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <button onClick={handleValidate} disabled={!form.lines.some(l => l.productId)} style={{ padding: '8px 16px', backgroundColor: 'var(--color-success)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 500 }}>Valider l'entrée</button>
+              <button onClick={handleValidate} disabled={!form.lines.some(l => l.productId) || isSubmitting} style={{ padding: '8px 16px', backgroundColor: 'var(--color-success)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 500 }}>{isSubmitting ? 'Validation...' : "Valider l'entrée"}</button>
               <button onClick={() => setShowForm(false)} style={{ padding: '8px 16px', backgroundColor: 'var(--color-surface-alt)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>Annuler</button>
             </div>
           </div>

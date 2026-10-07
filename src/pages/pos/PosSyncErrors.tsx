@@ -10,6 +10,13 @@ interface SyncError {
   failedAt: string;
 }
 
+// D3 : les erreurs retirées sont archivées (restaurables), jamais détruites.
+async function archiveErrors(entries: SyncError[]) {
+  if (entries.length === 0) return;
+  const archived = (await db.syncErrors.getItem<SyncError[]>('archived')) || [];
+  await db.syncErrors.setItem('archived', [...entries, ...archived].slice(0, 200));
+}
+
 export default function PosSyncErrors() {
   const [errors, setErrors] = useState<SyncError[]>([]);
   const [pendingQueue, setPendingQueue] = useState<SyncAction[]>([]);
@@ -43,18 +50,44 @@ export default function PosSyncErrors() {
   }, []);
 
   const clearAll = async () => {
-    if (!window.confirm('Voulez-vous vraiment supprimer toutes ces erreurs ? Elles seront définitivement perdues.')) return;
-    await db.syncErrors.removeItem('errors');
+    if (!window.confirm('Archiver toutes ces erreurs ? Elles resteront restaurables depuis les archives (200 dernières).')) return;
+    await archiveErrors(errors);
+    await db.syncErrors.setItem('errors', []);
     setErrors([]);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: 0 } }));
     }
-    toast.success('Historique des erreurs vidé.');
+    toast.success('Erreurs archivées (restaurables).');
+  };
+
+  const restoreArchived = async () => {
+    const archived = (await db.syncErrors.getItem<SyncError[]>('archived')) || [];
+    if (archived.length === 0) { toast.error('Aucune archive.'); return; }
+    const current = (await db.syncErrors.getItem<SyncError[]>('errors')) || [];
+    const merged = [...archived, ...current].slice(0, 200);
+    await db.syncErrors.setItem('errors', merged);
+    await db.syncErrors.setItem('archived', []);
+    setErrors(merged);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: merged.length } }));
+    }
+    toast.success(`${archived.length} erreur(s) restaurée(s).`);
   };
 
   const retryAction = async (error: SyncError, index: number) => {
+    // D3 : remise en file D'ABORD, retrait ensuite — jamais l'inverse. En cas
+    // d'échec du rejeu, processSyncQueue réenregistre l'erreur (anti-perte, cf. D1).
+    if (!isRetiredServicePayload(error.action.type, error.action.payload)) {
+      try {
+        await queueSyncAction(error.action.type, error.action.payload);
+      } catch {
+        toast.error("Remise en file impossible pour le moment.");
+        return;
+      }
+    }
     const newErrors = [...errors];
-    newErrors.splice(index, 1);
+    const [removed] = newErrors.splice(index, 1);
+    await archiveErrors(removed ? [removed] : []);
     await db.syncErrors.setItem('errors', newErrors);
     setErrors(newErrors);
     if (typeof window !== 'undefined') {
@@ -62,10 +95,9 @@ export default function PosSyncErrors() {
     }
 
     if (!isRetiredServicePayload(error.action.type, error.action.payload)) {
-      await queueSyncAction(error.action.type, error.action.payload);
       toast.success('Action remise en file d\'attente de synchronisation.');
     } else {
-      toast.success('Action de service ignorée et retirée.');
+      toast.success('Action de service ignorée et archivée.');
     }
   };
 
@@ -74,15 +106,22 @@ export default function PosSyncErrors() {
     const count = errors.length;
     for (const err of errors) {
       if (!isRetiredServicePayload(err.action.type, err.action.payload)) {
-        await queueSyncAction(err.action.type, err.action.payload);
+        try {
+          await queueSyncAction(err.action.type, err.action.payload);
+        } catch {
+          toast.error('Remise en file interrompue : réessayez plus tard.');
+          await loadErrors();
+          return;
+        }
       }
     }
+    await archiveErrors(errors);
     await db.syncErrors.setItem('errors', []);
     setErrors([]);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: 0 } }));
     }
-    toast.success(`${count} action(s) traitée(s).`);
+    toast.success(`${count} action(s) remise(s) en file (anciennes entrées archivées).`);
   };
 
   const handleGlobalReconciliation = async () => {
@@ -143,7 +182,10 @@ export default function PosSyncErrors() {
                 Tout ré-essayer ({errors.length})
               </Button>
               <Button variant="danger" icon={<Trash2 size={16} />} onClick={clearAll}>
-                Vider l'historique
+                Archiver
+              </Button>
+              <Button variant="secondary" icon={<RefreshCw size={16} />} onClick={restoreArchived}>
+                Restaurer archives
               </Button>
             </>
           )}

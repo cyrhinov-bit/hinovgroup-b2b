@@ -15,8 +15,15 @@ import { toast } from 'react-hot-toast';
 
 type PeriodType = 'today' | '7d' | '30d' | '12m';
 
+// G2 : parse une clé jour locale (YYYY-MM-DD) en Date locale — new Date('YYYY-MM-DD')
+// parse en UTC et décale le libellé autour de minuit.
+function parseDayKey(dayKey: string): Date {
+  const [y, m, d] = dayKey.split('-').map(Number);
+  return new Date(y || 1970, (m || 1) - 1, d || 1);
+}
+
 export default function DashboardPos() {
-  const { posProducts, posTransactions, posCashSessions, posReturns, posPayments, posStockEntries, posStockMovements, refreshData, reconcilePosData } = useAppContext();
+  const { posProducts, posTransactions, posCashSessions, posReturns, posStockEntries, posStockMovements, refreshData, reconcilePosData } = useAppContext();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
   const [period, setPeriod] = useState<PeriodType>('today');
@@ -80,8 +87,10 @@ export default function DashboardPos() {
   }, [posProducts]);
 
   // 3. Calculs d'évolution selon la période sélectionnée
-  const { evolutionData, currentTotalRevenue, currentTotalMargin, currentTicketCount, avgBasket, growthRate, previousRevenue } = useMemo(() => {
-    const validTransactions = posTransactions.filter(t => t.status === 'Validée');
+  const { evolutionData, currentTotalRevenue, currentTotalMargin, currentTicketCount, avgBasket, growthRate, previousRevenue, periodRefunds } = useMemo(() => {
+    // G5 : les compléments d'échange (CMP-) sont des encaissements de soulte, pas du
+    // CA plein (les articles échangés sont déjà comptés) → neutralisés ici.
+    const validTransactions = posTransactions.filter(t => t.status === 'Validée' && !t.transactionNumber?.startsWith('CMP-'));
     const now = new Date();
 
     const calculateMarginForTx = (tx: typeof posTransactions[0]) => {
@@ -102,6 +111,9 @@ export default function DashboardPos() {
     let curMargin = 0;
     let curTickets = 0;
     let prevRev = 0;
+    let prevRef = 0;
+    const prevRefundsOf = (pred: (r: (typeof posReturns)[number]) => boolean) =>
+      posReturns.filter(r => r.status === 'Traité' && pred(r)).reduce((s, r) => s + (r.totalRefund || 0), 0);
 
     if (period === 'today') {
       // Tranche horaire (8h à 20h)
@@ -130,25 +142,26 @@ export default function DashboardPos() {
         });
       }
 
-      // Comparaison avec hier
+      // Comparaison avec hier (G2 : clé locale, pas UTC — sinon décalage autour de minuit)
       const yesterdayDate = new Date();
       yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-      const yesterdayKey = yesterdayDate.toISOString().split('T')[0];
+      const yesterdayKey = toLocalDayKey(yesterdayDate);
       prevRev = validTransactions
         .filter(t => toLocalDayKey(t.date) === yesterdayKey)
         .reduce((s, t) => s + t.total, 0);
+      prevRef = prevRefundsOf(r => toLocalDayKey(r.date) === yesterdayKey);
 
     } else if (period === '7d') {
-      // 7 derniers jours
+      // 7 derniers jours (G2 : clés locales)
       const days: string[] = [];
       for (let i = 6; i >= 0; i--) {
         const d = new Date();
         d.setDate(now.getDate() - i);
-        days.push(d.toISOString().split('T')[0]);
+        days.push(toLocalDayKey(d));
       }
 
       dataPoints = days.map(dayKey => {
-        const dObj = new Date(dayKey);
+        const dObj = parseDayKey(dayKey);
         const dayLabel = dObj.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' });
         const txs = validTransactions.filter(t => toLocalDayKey(t.date) === dayKey);
         const rev = txs.reduce((s, t) => s + t.total, 0);
@@ -174,23 +187,24 @@ export default function DashboardPos() {
       for (let i = 13; i >= 7; i--) {
         const d = new Date();
         d.setDate(now.getDate() - i);
-        prevDays.push(d.toISOString().split('T')[0]);
+        prevDays.push(toLocalDayKey(d));
       }
       prevRev = validTransactions
         .filter(t => prevDays.includes(toLocalDayKey(t.date)))
         .reduce((s, t) => s + t.total, 0);
+      prevRef = prevRefundsOf(r => prevDays.includes(toLocalDayKey(r.date)));
 
     } else if (period === '30d') {
-      // 30 derniers jours
+      // 30 derniers jours (G2 : clés locales)
       const days: string[] = [];
       for (let i = 29; i >= 0; i--) {
         const d = new Date();
         d.setDate(now.getDate() - i);
-        days.push(d.toISOString().split('T')[0]);
+        days.push(toLocalDayKey(d));
       }
 
       dataPoints = days.map(dayKey => {
-        const dObj = new Date(dayKey);
+        const dObj = parseDayKey(dayKey);
         const dayLabel = `${dObj.getDate()}/${dObj.getMonth() + 1}`;
         const txs = validTransactions.filter(t => toLocalDayKey(t.date) === dayKey);
         const rev = txs.reduce((s, t) => s + t.total, 0);
@@ -216,11 +230,12 @@ export default function DashboardPos() {
       for (let i = 59; i >= 30; i--) {
         const d = new Date();
         d.setDate(now.getDate() - i);
-        prevDays.push(d.toISOString().split('T')[0]);
+        prevDays.push(toLocalDayKey(d));
       }
       prevRev = validTransactions
         .filter(t => prevDays.includes(toLocalDayKey(t.date)))
         .reduce((s, t) => s + t.total, 0);
+      prevRef = prevRefundsOf(r => prevDays.includes(toLocalDayKey(r.date)));
 
     } else if (period === '12m') {
       // 12 derniers mois
@@ -257,21 +272,44 @@ export default function DashboardPos() {
       prevRev = validTransactions
         .filter(t => t.date.startsWith(prevYearMonth))
         .reduce((s, t) => s + t.total, 0);
+      prevRef = prevRefundsOf(r => r.date.startsWith(prevYearMonth));
     }
 
-    const growth = prevRev > 0 ? (((curRev - prevRev) / prevRev) * 100).toFixed(1) : curRev > 0 ? '+100' : '0';
+    // G1 : CA et marge NETS — déduire les remboursements Traités de la période
+    // (revenus rendus - coûts réintégrés en stock).
+    const periodKeys = new Set<string>(
+      period === 'today' ? [today] : dataPoints.map(d => d.dateKey).filter(Boolean) as string[]
+    );
+    const periodReturnList = posReturns.filter(r => {
+      if (r.status !== 'Traité') return false;
+      const k = toLocalDayKey(r.date);
+      return period === '12m' ? periodKeys.has(k.substring(0, 7)) : periodKeys.has(k);
+    });
+    const refundsTotal = periodReturnList.reduce((s, r) => s + (r.totalRefund || 0), 0);
+    let refundsMargin = 0;
+    for (const r of periodReturnList) {
+      for (const l of (r.lines || [])) {
+        const cost = l.productId ? (productPurchasePriceMap.get(l.productId) || 0) : 0;
+        refundsMargin += (l.total || 0) - cost * (l.quantity || 0);
+      }
+    }
+
+    const netCur = curRev - refundsTotal;
+    const netPrev = prevRev - prevRef;
+    const growth = netPrev > 0 ? (((netCur - netPrev) / netPrev) * 100).toFixed(1) : netCur > 0 ? '+100' : '0';
     const basket = curTickets > 0 ? Math.round(curRev / curTickets) : 0;
 
     return {
       evolutionData: dataPoints,
-      currentTotalRevenue: curRev,
-      currentTotalMargin: curMargin,
+      currentTotalRevenue: netCur,
+      currentTotalMargin: curMargin - refundsMargin,
       currentTicketCount: curTickets,
       avgBasket: basket,
       growthRate: growth,
-      previousRevenue: prevRev
+      previousRevenue: netPrev,
+      periodRefunds: refundsTotal
     };
-  }, [posTransactions, period, today, productPurchasePriceMap]);
+  }, [posTransactions, posReturns, period, today, productPurchasePriceMap]);
 
   // 4. Distribution horaire pour la journée en cours
   const hourlyData: HourlyDataPoint[] = useMemo(() => {
@@ -299,7 +337,8 @@ export default function DashboardPos() {
 
   // 5. Répartition des familles et modes de paiement sur la période filtrée
   const { familyBreakdown, paymentBreakdown } = useMemo(() => {
-    const validTransactions = posTransactions.filter(t => t.status === 'Validée');
+    // G5 : compléments d'échange exclus (soulte, pas CA plein).
+    const validTransactions = posTransactions.filter(t => t.status === 'Validée' && !t.transactionNumber?.startsWith('CMP-'));
     const selectedDateKeys = new Set(evolutionData.map(d => d.dateKey).filter(Boolean));
 
     const filteredTxs = period === 'today'
@@ -337,7 +376,8 @@ export default function DashboardPos() {
       { name: 'Livres & Manuels', revenue: revLivres, quantity: qtyLivres, color: '#3B82F6' },
     ];
 
-    // Modes de paiement
+    // Modes de paiement — G3 : taxonomie unifiée (Mixte = espèces tiroir, cohérent
+    // caisse) et jamais d'imputation par défaut (sans paiement → Autre).
     const paymentMap: Record<string, { amount: number; count: number; color: string }> = {
       'Espèces': { amount: 0, count: 0, color: '#10B981' },
       'Wave / Mobile Money': { amount: 0, count: 0, color: '#06B6D4' },
@@ -348,11 +388,12 @@ export default function DashboardPos() {
     filteredTxs.forEach(t => {
       if (t.payments && t.payments.length > 0) {
         t.payments.forEach(p => {
-          const method = p.method || 'Espèces';
+          const method = p.method || 'Autre';
+          const low = method.toLowerCase();
           let key = 'Autre';
-          if (method.toLowerCase().includes('esp')) key = 'Espèces';
-          else if (method.toLowerCase().includes('wave') || method.toLowerCase().includes('orange') || method.toLowerCase().includes('moov') || method.toLowerCase().includes('mtn') || method.toLowerCase().includes('mobile')) key = 'Wave / Mobile Money';
-          else if (method.toLowerCase().includes('carte') || method.toLowerCase().includes('visa') || method.toLowerCase().includes('cb')) key = 'Carte Bancaire';
+          if (low.includes('esp') || low.includes('mixte')) key = 'Espèces';
+          else if (low.includes('wave') || low.includes('orange') || low.includes('moov') || low.includes('mtn') || low.includes('mobile') || low.includes('money')) key = 'Wave / Mobile Money';
+          else if (low.includes('carte') || low.includes('visa') || low.includes('cb')) key = 'Carte Bancaire';
 
           if (!paymentMap[key]) {
             paymentMap[key] = { amount: 0, count: 0, color: '#64748B' };
@@ -361,8 +402,8 @@ export default function DashboardPos() {
           paymentMap[key].count += 1;
         });
       } else {
-        paymentMap['Espèces'].amount += t.total;
-        paymentMap['Espèces'].count += 1;
+        paymentMap['Autre'].amount += t.total;
+        paymentMap['Autre'].count += 1;
       }
     });
 
@@ -413,7 +454,8 @@ export default function DashboardPos() {
     const explicitReturnRefs = new Set(explicitMovements.filter(m => m.type === 'Retour').map(m => m.reference).filter(Boolean));
 
     // --- Ventes dans la période (consolidation automatique si non doublonnées) ---
-    const validTransactions = posTransactions.filter(t => t.status === 'Validée' && isDateInPeriod(t.date));
+    // G5 : compléments d'échange (CMP-) exclus : soulte déjà comptée, pas des lignes vendues.
+    const validTransactions = posTransactions.filter(t => t.status === 'Validée' && isDateInPeriod(t.date) && !t.transactionNumber?.startsWith('CMP-'));
     let ventesCount = explicitMovements.filter(m => m.type === 'Vente').length;
     validTransactions.forEach(t => {
       if (!explicitSaleRefs.has(t.transactionNumber)) {
@@ -569,10 +611,14 @@ export default function DashboardPos() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ fontSize: '12px', fontWeight: 600, color: '#047857' }}>
-                CA RÉALISÉ ({periodLabels[period].toUpperCase()})
+                CA RÉALISÉ NET ({periodLabels[period].toUpperCase()})
               </div>
               <div style={{ fontSize: '22px', fontWeight: 800, color: '#064E3B', marginTop: '4px' }}>
                 {currentTotalRevenue.toLocaleString('fr-FR')} FCFA
+              </div>
+              <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>
+                Période précédente : {previousRevenue.toLocaleString('fr-FR')} FCFA
+                {periodRefunds > 0 && <> • retours déduits : −{periodRefunds.toLocaleString('fr-FR')} FCFA</>}
               </div>
             </div>
             <div className="kpi-icon-box" style={{ background: '#D1FAE5' }}>

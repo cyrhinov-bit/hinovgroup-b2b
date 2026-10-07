@@ -9,6 +9,8 @@ export const electronBridge: PlatformBridge = {
     getPlatform: async () => electron.getPlatform(),
     ping: async () => electron.ping(),
     getMetrics: async () => electron.getMetrics(),
+    getBrowserCacheInfo: async () => electron.getBrowserCacheInfo(),
+    clearBrowserCache: async (options) => electron.clearBrowserCache(options),
   },
   dialog: {
     showMessageBox: async (opts) => electron.showMessageBox(opts),

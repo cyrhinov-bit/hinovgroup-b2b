@@ -59,8 +59,19 @@ export default function ReceiptTicket({ data, settings, crmSettings, preview = f
     ? transaction.payments
     : [{ method: paymentMethod || 'Espèces', amount: total }];
 
+  // I2 : bandeau visible quand des replis ont masqué des données incomplètes
+  // (vente à 0 ligne, paiements manquants) — jamais un ticket « normal » silencieux.
+  const cartFromFallback = !(rawCart && Array.isArray(rawCart) && rawCart.length > 0);
+  const paymentsFromFallback = !(transaction?.payments && Array.isArray(transaction.payments) && transaction.payments.length > 0);
+  const incomplete = (cartFromFallback && cart.length === 0) || paymentsFromFallback;
+
   return (
     <div className={preview ? "" : "receipt-print-zone"} style={{ width: '80mm', padding: '10px', fontSize: '12px', fontFamily: 'monospace', color: '#000', margin: '0 auto', background: '#fff' }}>
+      {incomplete && (
+        <div style={{ border: '2px solid #000', padding: '6px', marginBottom: '10px', textAlign: 'center', fontWeight: 700 }}>
+          ⚠ DONNÉES INCOMPLÈTES — CONTRÔLE REQUIS
+        </div>
+      )}
       {/* En-tête */}
       <div style={{ textAlign: 'center', marginBottom: '14px' }}>
         <h2 style={{ fontSize: '16px', margin: '0 0 4px 0', textTransform: 'uppercase', fontWeight: 700 }}>{activeSettings.libraryName}</h2>

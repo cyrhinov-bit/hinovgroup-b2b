@@ -10,6 +10,8 @@ const electronAPI = {
   getPlatform: () => ipcRenderer.invoke('system:getPlatform'),
   ping: () => ipcRenderer.invoke('system:ping'),
   getMetrics: () => ipcRenderer.invoke('system:getMetrics'),
+  getBrowserCacheInfo: () => ipcRenderer.invoke('system:getBrowserCacheInfo'),
+  clearBrowserCache: (options?: any) => ipcRenderer.invoke('system:clearBrowserCache', options),
 
   // Dialog
   showMessageBox: (options: any) => ipcRenderer.invoke('dialog:showMessageBox', options),
