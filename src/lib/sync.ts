@@ -651,6 +651,8 @@ export const processSyncQueue = async () => {
 
     const currentQueue: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
     if (currentQueue.length === 0) return;
+    // Sonde rapide : manifestement hors-ligne, on n'entame pas le run.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
 
     // Purge automatique des anciennes erreurs liées aux services retirés
     try {
@@ -673,6 +675,9 @@ export const processSyncQueue = async () => {
     });
 
     const processedIds = new Set<string>();
+    // Compteur d'échecs réseau consécutifs (head-of-line : on saute l'action
+    // fautive au lieu de bloquer toute la file ; arrêt après 5 d'affilée).
+    let consecutiveNetworkErrors = 0;
 
     for (const action of sortedQueue) {
       if (isRetiredServicePayload(action.type, action.payload)) {
@@ -2261,6 +2266,18 @@ export const processSyncQueue = async () => {
             success = true;
             break;
           }
+          // Anti-écrasement : une mise à jour "quantité seule" (flux stock) calculée
+          // il y a longtemps ne doit pas écraser le stock serveur avec une valeur
+          // périmée — on repart de la quantité locale la plus fraîche.
+          if (Object.keys(data).every(k => k === 'quantity') && data.quantity !== undefined) {
+            try {
+              const local = (await db.posProducts.getItem<any[]>('data').catch(() => null)) || [];
+              const found = local.find((p: any) => p.id === id || p.id === resolvedId);
+              if (found && Number.isFinite(Number(found.quantity))) {
+                data.quantity = Math.max(0, Number(found.quantity));
+              }
+            } catch { /* repli : quantité du payload */ }
+          }
 
           const buildUpdateMapped = (opts: { stripFk?: boolean; stripBarcode?: boolean; stripImage?: boolean } = {}) => {
             const mapped: any = { id: resolvedId };
@@ -3422,11 +3439,16 @@ export const processSyncQueue = async () => {
       try {
         const actionTimeout = (action.type === 'INSERT_DOCUMENT' || action.type === 'UPDATE_DOCUMENT') ? 90000 : 25000;
         success = await withSyncTimeout(executeAction(), actionTimeout);
+        consecutiveNetworkErrors = 0;
       } catch (e: any) {
         if (isNetworkOrTransientError(e) || e?.message?.includes('[NetworkError]')) {
-          console.warn(`[Sync] Coupure ou instabilité réseau détectée lors de l'action ${action.type}. L'action reste en file d'attente.`);
-          // Arrêter le traitement de la file sans purger l'action
-          break;
+          // Head-of-line : on saute l'action fautive (conservée en file) au lieu de
+          // bloquer les centaines suivantes. Après 5 échecs réseau d'affilée, on
+          // considère la liaison comme coupée et on arrête le run.
+          consecutiveNetworkErrors++;
+          console.warn(`[Sync] Réseau instable sur ${action.type} (${consecutiveNetworkErrors}/5). Action conservée, suite de la file.`);
+          if (consecutiveNetworkErrors >= 5) break;
+          continue;
         }
         console.error('Erreur inattendue pour l\'action', action, e);
         success = false;

@@ -2123,17 +2123,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [currentUser, refreshData]);
 
   // Écoute les erreurs critiques de synchronisation et les affiche comme toast.
-  // Anti-boucle : une même entité en échec ne déclenche qu'un toast toutes les 10 min
-  // (le compteur reste visible via le badge d'erreurs).
+  // Anti-boucle : une même entité en échec ne déclenche qu'un toast toutes les 10 min,
+  // et jamais plus de 3 toasts par minute (rafale pendant la résorption d'une file).
+  // Le compteur reste visible via le badge d'erreurs.
   const TOAST_SYNC_COOLDOWN_MS = 10 * 60 * 1000;
+  const TOAST_SYNC_MAX_PER_MIN = 3;
+  const toastSyncWindow: number[] = [];
   useEffect(() => {
     const handleSyncCriticalError = (e: Event) => {
       const detail = (e as CustomEvent).detail as { message: string; action?: any };
+      const now = Date.now();
       try {
         const key = `${detail?.action?.type || ''}::${detail?.action?.payload?.id ?? detail?.action?.payload?.reference ?? detail?.message ?? ''}`;
         const last = toastedSyncErrorKeys.get(key) || 0;
-        if (Date.now() - last < TOAST_SYNC_COOLDOWN_MS) return;
-        toastedSyncErrorKeys.set(key, Date.now());
+        if (now - last < TOAST_SYNC_COOLDOWN_MS) return;
+        while (toastSyncWindow.length > 0 && now - toastSyncWindow[0] > 60000) toastSyncWindow.shift();
+        if (toastSyncWindow.length >= TOAST_SYNC_MAX_PER_MIN) return;
+        toastedSyncErrorKeys.set(key, now);
+        toastSyncWindow.push(now);
       } catch { /* en cas de doute, on affiche */ }
       toast((t) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
