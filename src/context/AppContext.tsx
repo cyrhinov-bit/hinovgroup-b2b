@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { db } from '../lib/db';
-import { queueSyncAction, processSyncQueue, reconcileLocalPosDataWithCloud, reconcileAllOfflineDataWithCloud, resolveProductUuid, isRetiredServicePayload } from '../lib/sync';
+import { queueSyncAction, processSyncQueue, reconcileLocalPosDataWithCloud, reconcileAllOfflineDataWithCloud, resolveProductUuid, isRetiredServicePayload, getProductRemap, setProductRemap, applyProductRemapToAction } from '../lib/sync';
 import { v4 as uuidv4 } from 'uuid';
 import toast from 'react-hot-toast';
 import { isProductComplete } from '../features/products/services/ProductService';
@@ -562,6 +562,7 @@ interface AppState {
   updatePosProduct: (id: string, data: Partial<PosProduct>) => Promise<void>;
   deletePosProduct: (id: string) => Promise<boolean>;
   mergePosProducts: (loserId: string, keeperId: string) => Promise<{ movedLines: number; message: string }>;
+  repairLocalCatalog: () => Promise<{ remapped: number; dropped: number; rewrittenActions: number; message: string }>;
   // Catalogue central (mêmes produits que le POS)
   findProductByBarcode: (barcode: string) => PosProduct | undefined;
   findProductByReference: (reference: string) => PosProduct | undefined;
@@ -3535,6 +3536,123 @@ export function AppProvider({ children }: { children: ReactNode }) {
       message: `« ${loser.name} » fusionné dans « ${keeper.name} » : ${movedLines} ligne(s) repointée(s), stock cumulé à ${newQty}.`,
     };
   };
+  // Réparation du catalogue fantôme local : les doublons locaux (même référence
+  // ou même code-barres qu'un produit serveur, UUID différent) sont remappés vers
+  // le gardien serveur partout (données locales + file d'attente), puis retirés.
+  // En ligne uniquement. Les ventes à 0 ligne historiques restent à reconstituer.
+  const repairLocalCatalog = async (): Promise<{ remapped: number; dropped: number; rewrittenActions: number; message: string }> => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new Error('Connexion requise pour réparer le catalogue.');
+    }
+    const { supabase: sb } = await import('../lib/supabase');
+    const { data: serverProducts, error } = await sb.from('pos_products').select('id, reference, barcode');
+    if (error || !serverProducts) {
+      throw new Error('Catalogue serveur injoignable : ' + (error?.message || 'réseau'));
+    }
+    const norm = (s?: string | null) => (s || '').trim().toLowerCase();
+    const byRef = new Map<string, string>();
+    const byBarcode = new Map<string, string>();
+    for (const p of serverProducts as any[]) {
+      const r = norm(p.reference);
+      if (r && !byRef.has(r)) byRef.set(r, p.id);
+      const b = norm(p.barcode);
+      if (b && !byBarcode.has(b)) byBarcode.set(b, p.id);
+    }
+    const local: PosProduct[] = (await safeGet<PosProduct[]>(db.posProducts)) || posProducts;
+    const remap: Record<string, string> = {};
+    for (const p of local) {
+      const r = norm((p as any).reference);
+      const keeperByRef = r ? byRef.get(r) : undefined;
+      if (keeperByRef && keeperByRef !== p.id) {
+        remap[p.id] = keeperByRef;
+        continue;
+      }
+      const b = norm((p as any).barcode);
+      const keeperByBc = b ? byBarcode.get(b) : undefined;
+      if (keeperByBc && keeperByBc !== p.id) {
+        remap[p.id] = keeperByBc;
+      }
+    }
+    const shadowIds = new Set(Object.keys(remap));
+    if (shadowIds.size === 0) {
+      return { remapped: 0, dropped: 0, rewrittenActions: 0, message: 'Aucun doublon local détecté.' };
+    }
+    // Persister la table AVANT de réécrire (les passe suivantes s'en servent).
+    setProductRemap({ ...getProductRemap(), ...remap });
+
+    const rewriteLines = (lines: any[]) =>
+      (lines || []).map((l: any) => {
+        const pid = l?.productId ?? l?.product_id;
+        if (typeof pid === 'string' && remap[pid]) {
+          const out = { ...l };
+          if ('productId' in out) out.productId = remap[pid];
+          if ('product_id' in out) out.product_id = remap[pid];
+          return out;
+        }
+        return l;
+      });
+
+    // 1. Données locales
+    const nextTxs = (await safeGet<PosTransaction[]>(db.posTransactions)) || posTransactions;
+    const fixedTxs = nextTxs.map(t => ({ ...t, lines: rewriteLines(t.lines || []) }));
+    setPosTransactions(fixedTxs);
+    await safeSet(db.posTransactions, fixedTxs);
+
+    const nextEntries = (await safeGet<PosStockEntry[]>(db.posStockEntries)) || posStockEntries;
+    const fixedEntries = nextEntries.map(e => ({ ...e, lines: rewriteLines((e as any).lines || []) }));
+    setPosStockEntries(fixedEntries);
+    await safeSet(db.posStockEntries, fixedEntries);
+
+    const nextInvs = (await safeGet<PosInventory[]>(db.posInventories)) || posInventories;
+    const fixedInvs = nextInvs.map(i => ({ ...i, lines: rewriteLines((i as any).lines || []) }));
+    setPosInventories(fixedInvs);
+    await safeSet(db.posInventories, fixedInvs);
+
+    const nextReturns = (await safeGet<PosReturn[]>(db.posReturns)) || posReturns;
+    const fixedReturns = nextReturns.map(r => ({
+      ...r,
+      lines: rewriteLines(r.lines || []),
+      exchangeLines: rewriteLines((r as any).exchangeLines || []),
+    }));
+    setPosReturns(fixedReturns);
+    await safeSet(db.posReturns, fixedReturns);
+
+    const nextMovs = (await safeGet<PosStockMovement[]>(db.posStockMovements)) || posStockMovements;
+    const fixedMovs = nextMovs.map(m => (m.productId && remap[m.productId] ? { ...m, productId: remap[m.productId] } : m));
+    setPosStockMovements(fixedMovs);
+    await safeSet(db.posStockMovements, fixedMovs);
+
+    const nextProducts = local.filter(p => !shadowIds.has(p.id));
+    setPosProducts(nextProducts);
+    await safeSet(db.posProducts, nextProducts);
+
+    // 2. File d'attente : réécriture vers les gardiens, abandon des upserts fantômes
+    let rewrittenActions = 0;
+    let droppedActions = 0;
+    try {
+      const queue = (await db.syncQueue.getItem<any[]>('queue').catch(() => null)) || [];
+      const nextQueue: any[] = [];
+      for (const a of queue) {
+        if (!a?.type) continue;
+        const r = applyProductRemapToAction(a.type, a.payload);
+        if (r.drop) {
+          droppedActions++;
+          continue;
+        }
+        if (r.payload !== a.payload) rewrittenActions++;
+        nextQueue.push({ ...a, payload: r.payload });
+      }
+      await db.syncQueue.setItem('queue', nextQueue);
+    } catch { /* file conservée telle quelle en cas d'échec */ }
+
+    await refreshData();
+    return {
+      remapped: shadowIds.size,
+      dropped: droppedActions,
+      rewrittenActions,
+      message: `${shadowIds.size} doublon(s) remappé(s) vers le serveur, ${rewrittenActions} action(s) réécrite(s), ${droppedActions} action(s) fantôme(s) abandonnée(s).`,
+    };
+  };
   const deletePosProduct = async (id: string): Promise<boolean> => {
     // Intégrité (B6) : produit avec historique (ventes, mouvements, entrées, inventaires, retours)
     // = suppression interdite (le serveur le refuserait par FK de toute façon).
@@ -5434,7 +5552,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, sendWeeklyReportReminder, reviewV2WeeklyReport, deleteV2WeeklyReport, deleteV2DailyReport, updateMyProfile, addCrmDocument, updateCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, mergePosProducts, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData, reconcilePosData: (opts?: { force?: boolean }) => reconcileLocalPosDataWithCloud(opts),
+      users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, sendWeeklyReportReminder, reviewV2WeeklyReport, deleteV2WeeklyReport, deleteV2DailyReport, updateMyProfile, addCrmDocument, updateCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, mergePosProducts, repairLocalCatalog, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData, reconcilePosData: (opts?: { force?: boolean }) => reconcileLocalPosDataWithCloud(opts),
       // CRM Modules Responsables
       crmTiers, crmCommerciaux, crmPrestations, crmCaisse, crmCommissions, crmArticles, crmMaintenance, crmTechniciens,
       addCrmTier, updateCrmTier, deleteCrmTier,

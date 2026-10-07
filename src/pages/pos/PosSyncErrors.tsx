@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../lib/db';
-import { ShieldAlert, Trash2, RefreshCw, CloudUpload, CheckCircle, AlertTriangle } from 'lucide-react';
+import { ShieldAlert, Trash2, RefreshCw, CloudUpload, CheckCircle, AlertTriangle, Wrench } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { queueSyncAction, reconcileLocalPosDataWithCloud, isRetiredServicePayload, type SyncAction } from '../../lib/sync';
+import { useAppContext } from '../../context/AppContext';
 import { toast } from 'react-hot-toast';
 
 interface SyncError {
@@ -24,7 +25,9 @@ export default function PosSyncErrors() {
   const [pendingQueue, setPendingQueue] = useState<SyncAction[]>([]);
   const [loading, setLoading] = useState(true);
   const [isReconciling, setIsReconciling] = useState(false);
+  const [isRepairing, setIsRepairing] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<{ success: boolean; message: string } | null>(null);
+  const { repairLocalCatalog } = useAppContext();
 
   const loadErrors = async () => {
     setLoading(true);
@@ -126,6 +129,19 @@ export default function PosSyncErrors() {
     toast.success(`${count} action(s) remise(s) en file (anciennes entrées archivées).`);
   };
 
+  const handleRepairCatalog = async () => {
+    if (!window.confirm("Remapper les doublons locaux du catalogue vers les produits du serveur (ventes, stocks, file d'attente) ? L'historique est conservé, les doublons retirés. Continuer ?")) return;
+    setIsRepairing(true);
+    try {
+      const res = await repairLocalCatalog();
+      await loadErrors();
+      toast.success(res.message, { duration: 6000 });
+    } catch (e: any) {
+      toast.error('Réparation impossible : ' + (e?.message || e), { duration: 6000 });
+    } finally {
+      setIsRepairing(false);
+    }
+  };
   const handleGlobalReconciliation = async () => {
     setIsReconciling(true);
     setReconcileResult(null);
@@ -176,6 +192,10 @@ export default function PosSyncErrors() {
             disabled={isReconciling}
           >
             {isReconciling ? 'Rapprochement en cours...' : 'Forcer Réconciliation Globale POS'}
+          </Button>
+
+          <Button variant="secondary" icon={<Wrench size={16} />} onClick={handleRepairCatalog} disabled={isRepairing} title="Remappe les doublons locaux du catalogue vers les produits du serveur (ventes, stocks, file). À lancer si des ventes perdent leurs lignes ou si des produits échouent.">
+            {isRepairing ? 'Réparation...' : 'Réparer le catalogue local'}
           </Button>
 
           {errors.length > 0 && (

@@ -28,6 +28,109 @@ export const resolveProductUuid = (id?: string, reference?: string): string => {
   return id || '';
 };
 
+// Table de remappage catalogue fantôme → produit serveur (persistée).
+// Quand le poste détient des doublons locaux (même référence, UUID différent),
+// leurs actions ne doivent JAMAIS repartir avec l'ancien UUID : ventes et
+// mouvements sont réécrits vers le gardien, les upserts produit du fantôme
+// sont abandonnés (le gardien fait foi côté serveur).
+const PRODUCT_REMAP_KEY = 'hinov_product_remap_v1';
+
+export const getProductRemap = (): Record<string, string> => {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(PRODUCT_REMAP_KEY) : null;
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+export const setProductRemap = (map: Record<string, string>): void => {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(PRODUCT_REMAP_KEY, JSON.stringify(map));
+    }
+  } catch { /* non bloquant */ }
+};
+
+export const remapProductId = (id?: string | null): string | null | undefined => {
+  if (!id) return id;
+  const map = getProductRemap();
+  return map[id] || id;
+};
+
+const remapLines = (lines: any[] | undefined): any[] | undefined => {
+  if (!Array.isArray(lines)) return lines;
+  const map = getProductRemap();
+  if (Object.keys(map).length === 0) return lines;
+  let changed = false;
+  const next = lines.map((l: any) => {
+    if (!l || typeof l !== 'object') return l;
+    const pid = l.productId ?? l.product_id;
+    if (typeof pid === 'string' && map[pid]) {
+      changed = true;
+      const out = { ...l };
+      if ('productId' in out) out.productId = map[pid];
+      if ('product_id' in out) out.product_id = map[pid];
+      return out;
+    }
+    return l;
+  });
+  return changed ? next : lines;
+};
+
+/**
+ * Applique le remappage à une action avant enfilage.
+ * Retourne null si l'action doit être abandonnée (upsert/suppression d'un
+ * fantôme : le gardien serveur fait foi), sinon le payload (cloné si modifié).
+ */
+export const applyProductRemapToAction = (type: SyncActionType, payload: any): { drop: boolean; payload: any } => {
+  const map = getProductRemap();
+  if (Object.keys(map).length === 0 || !payload || typeof payload !== 'object') {
+    return { drop: false, payload };
+  }
+  const mappedId = (id: any) => (typeof id === 'string' && map[id] ? map[id] : id);
+  switch (type) {
+    case 'INSERT_POS_PRODUCT':
+    case 'UPDATE_POS_PRODUCT':
+    case 'DELETE_POS_PRODUCT': {
+      const id = payload.id;
+      if (typeof id === 'string' && map[id]) {
+        console.info(`[Sync] Action ${type} abandonnée (produit fantôme remappé) :`, id);
+        return { drop: true, payload };
+      }
+      return { drop: false, payload };
+    }
+    case 'INSERT_POS_TRANSACTION':
+    case 'UPDATE_POS_TRANSACTION':
+    case 'INSERT_POS_RETURN':
+    case 'UPDATE_POS_RETURN':
+    case 'INSERT_POS_STOCK_ENTRY':
+    case 'UPDATE_POS_STOCK_ENTRY':
+    case 'INSERT_POS_INVENTORY':
+    case 'UPDATE_POS_INVENTORY': {
+      const lines = remapLines(payload.lines);
+      const exchangeLines = remapLines(payload.exchangeLines);
+      if (lines === payload.lines && exchangeLines === payload.exchangeLines) {
+        return { drop: false, payload };
+      }
+      return { drop: false, payload: { ...payload, lines, exchangeLines } };
+    }
+    case 'INSERT_POS_STOCK_MOVEMENT': {
+      if (typeof payload.productId === 'string' && map[payload.productId]) {
+        return { drop: false, payload: { ...payload, productId: map[payload.productId] } };
+      }
+      return { drop: false, payload };
+    }
+    default:
+      // Autres actions : remappe l'id produit direct s'il existe (mouvements CRM, etc.)
+      if (typeof payload.productId === 'string' && map[payload.productId]) {
+        return { drop: false, payload: { ...payload, productId: mappedId(payload.productId) } };
+      }
+      return { drop: false, payload };
+  }
+};
+
 // Cache court des IDs produits serveur : évite qu'une ligne référençant un
 // produit inconnu (supprimé, créé sur un autre poste pas encore synchronisé)
 // fasse échouer toute la vente (FK) → vente enregistrée mais « 0 articles ».
@@ -562,13 +665,19 @@ export const queueSyncAction = async (type: SyncActionType, payload: any) => {
     return;
   }
 
+  // Remappage catalogue fantôme : réécrit les UUID locaux vers les gardiens
+  // serveur, abandonne les upserts de fantômes (jamais de doublon recréé).
+  const remapped = applyProductRemapToAction(type, payload);
+  if (remapped.drop) return;
+  const finalPayload = remapped.payload;
+
   // Sérialise les read-modify-write sur la file (localforage sans transaction :
   // 2 appels concurrents = 1 action perdue).
   queueChain = queueChain.then(async () => {
     const action: SyncAction = {
       id: uuidv4(),
       type,
-      payload,
+      payload: finalPayload,
       timestamp: Date.now()
     };
 
