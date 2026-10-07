@@ -3,12 +3,11 @@ const path = require('path');
 const { Client } = require('pg');
 
 async function verifyAndExecuteAllMigrations() {
-  const connectionStrings = [
-    'postgresql://postgres.eqscmifbnqjxxzmtjvee:majorix0404199@aws-0-eu-central-1.pooler.supabase.com:6543/postgres',
-    'postgresql://postgres.eqscmifbnqjxxzmtjvee:majorix0404199@aws-0-eu-west-1.pooler.supabase.com:6543/postgres',
-    'postgresql://postgres:majorix0404199@db.eqscmifbnqjxxzmtjvee.supabase.co:5432/postgres',
-    'postgresql://postgres:majorix0404199@db.eqscmifbnqjxxzmtjvee.supabase.co:6543/postgres'
-  ];
+  const connectionStrings = [process.env.SUPABASE_DB_URL].filter(Boolean);
+  if (connectionStrings.length === 0) {
+    console.error('SUPABASE_DB_URL manquant : renseignez la chaine de connexion de la NOUVELLE base Supabase (tableau de bord > Connect).');
+    process.exit(1);
+  }
 
   let client = null;
   let connected = false;

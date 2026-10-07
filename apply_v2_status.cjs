@@ -2,7 +2,11 @@ const { Client } = require('pg');
 const fs = require('fs');
 
 async function run() {
-  const connectionString = 'postgresql://postgres:majorix0404199@db.eqscmifbnqjxxzmtjvee.supabase.co:5432/postgres';
+  const connectionString = process.env.SUPABASE_DB_URL;
+  if (!connectionString) {
+    console.error('SUPABASE_DB_URL manquant : renseignez la chaine de connexion de la NOUVELLE base Supabase (tableau de bord > Connect).');
+    process.exit(1);
+  }
   
   const client = new Client({
     connectionString,
