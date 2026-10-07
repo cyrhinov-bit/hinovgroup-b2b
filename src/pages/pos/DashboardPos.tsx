@@ -49,7 +49,7 @@ export default function DashboardPos() {
     setIsReconciling(true);
     const toastId = toast.loading('Réconciliation globale avec le serveur Cloud...');
     try {
-      const res = await reconcilePosData();
+      const res = await reconcilePosData({ force: true });
       await refreshData(true);
       if (res?.success) {
         toast.success(res.message || 'Synchronisation d\'urgence réussie !', { id: toastId, duration: 6000 });

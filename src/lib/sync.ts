@@ -3444,27 +3444,6 @@ export const processSyncQueue = async () => {
 
         // En cas de rejet définitif du serveur (ex: violation de schéma PostgreSQL avec données corrompues)
         console.warn(`[Sync] Action ${action.type} rejetée définitivement par la base de données. Sauvegardée dans syncErrors.`);
-        let currentErrorsCount = 1;
-        try {
-          const errors = await db.syncErrors.getItem<any[]>('errors') || [];
-          // Dédupliquer par entité : un rejeu ("Tout ré-essayer", réconciliation)
-          // remplace l'entrée existante au lieu d'empiler un doublon identique.
-          const entityId = (action.payload && (action.payload.id ?? action.payload.reference)) ?? '';
-          const dedupKey = (e: any) => `${e?.action?.type}::${(e?.action?.payload && (e.action.payload.id ?? e.action.payload.reference)) ?? ''}`;
-          const incomingKey = `${action.type}::${entityId}`;
-          const existingIdx = entityId === '' ? -1 : errors.findIndex(e => dedupKey(e) === incomingKey);
-          const entry = { action, failedAt: new Date().toISOString() };
-          if (existingIdx >= 0) {
-            errors[existingIdx] = entry;
-          } else {
-            errors.push(entry);
-          }
-          await db.syncErrors.setItem('errors', errors);
-          currentErrorsCount = errors.length;
-        } catch(err) {
-          console.error('Impossible de sauvegarder dans syncErrors', err);
-        }
-
         const labels: Partial<Record<SyncActionType, string>> = {
           'INSERT_POS_TRANSACTION': '⚠️ Une transaction de caisse n\'a pas pu être synchronisée avec le serveur.',
           'INSERT_POS_CASH_SESSION': '⚠️ L\'ouverture de session caisse n\'a pas pu être synchronisée.',
@@ -3478,6 +3457,34 @@ export const processSyncQueue = async () => {
           'INSERT_CLIENT': '⚠️ Échec de synchronisation d\'un client.',
         };
         const message = labels[action.type] || `⚠️ Échec de synchronisation : ${action.type}`;
+        let currentErrorsCount = 1;
+        try {
+          const errors = await db.syncErrors.getItem<any[]>('errors') || [];
+          // Dédupliquer par entité : un rejeu ("Tout ré-essayer", réconciliation)
+          // remplace l'entrée existante au lieu d'empiler un doublon identique.
+          // L'entrée garde le message + tentatives (backoff réconciliation + page erreurs).
+          const entityId = (action.payload && (action.payload.id ?? action.payload.reference)) ?? '';
+          const dedupKey = (e: any) => `${e?.action?.type}::${(e?.action?.payload && (e.action.payload.id ?? e.action.payload.reference)) ?? ''}`;
+          const incomingKey = `${action.type}::${entityId}`;
+          const existingIdx = entityId === '' ? -1 : errors.findIndex(e => dedupKey(e) === incomingKey);
+          const prevAttempts = (existingIdx >= 0 ? (errors[existingIdx] as any)?.attempts : 0) || 0;
+          const entry = {
+            action,
+            failedAt: new Date().toISOString(),
+            message,
+            attempts: prevAttempts + 1,
+            lastTried: Date.now(),
+          };
+          if (existingIdx >= 0) {
+            errors[existingIdx] = entry;
+          } else {
+            errors.push(entry);
+          }
+          await db.syncErrors.setItem('errors', errors);
+          currentErrorsCount = errors.length;
+        } catch(err) {
+          console.error('Impossible de sauvegarder dans syncErrors', err);
+        }
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('sync-critical-error', { detail: { message, action } }));
           window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: currentErrorsCount } }));
@@ -3551,6 +3558,7 @@ export interface ReconciliationResult {
   movementsSynced: number;
   returnsSynced: number;
   errorsReplayed: number;
+  deferredCount: number;
   message: string;
 }
 
@@ -3558,13 +3566,16 @@ export interface ReconciliationResult {
  * Fonction de réconciliation et de synchronisation d'urgence
  * Compare toutes les sessions, ventes et mouvements enregistrés localement dans IndexedDB
  * avec la base Supabase et pousse tout ce qui est manquant.
+ * En mode auto (force=false), les erreurs ayant déjà échoué ≥3 fois il y a moins de
+ * 30 min sont différées (anti-boucle) ; le mode manuel force le rejeu.
  */
-export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationResult> => {
+export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean }): Promise<ReconciliationResult> => {
   let sessionsSynced = 0;
   let transactionsSynced = 0;
   let movementsSynced = 0;
   let returnsSynced = 0;
   let errorsReplayed = 0;
+  let deferredCount = 0;
   // A6 : les partiels ne sont plus silencieux — ils font échouer le résultat
   // avec le détail, au lieu d'un success:true trompeur.
   const partials: string[] = [];
@@ -3574,11 +3585,24 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
       await ensureSupabaseAuth().catch(() => {});
     }
 
-    // 1. Rejouer d'abord les erreurs présentes dans syncErrors avec auto-réparation UUID
+    // 1. Rejouer d'abord les erreurs présentes dans syncErrors avec auto-réparation UUID.
+    // Backoff : en mode auto, on diffère les entrées en échec répété récent
+    // (≥3 tentatives il y a < 30 min) au lieu de les rejouer en boucle.
+    const force = opts?.force === true;
+    const BACKOFF_ATTEMPTS = 3;
+    const BACKOFF_MS = 30 * 60 * 1000;
     const syncErrors = (await db.syncErrors.getItem<any[]>('errors')) || [];
+    const deferred: any[] = [];
     if (syncErrors.length > 0) {
       for (const errItem of syncErrors) {
         if (errItem?.action) {
+          const attempts = Number((errItem as any)?.attempts || 0);
+          const lastTried = Number((errItem as any)?.lastTried || 0);
+          if (!force && attempts >= BACKOFF_ATTEMPTS && Date.now() - lastTried < BACKOFF_MS) {
+            deferred.push(errItem);
+            deferredCount++;
+            continue;
+          }
           const action = errItem.action;
           if (action.type === 'UPDATE_POS_PRODUCT' || action.type === 'INSERT_POS_PRODUCT' || action.type === 'DELETE_POS_PRODUCT') {
             const resolvedId = resolveProductUuid(action.payload.id, action.payload.reference);
@@ -3606,10 +3630,11 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
       }
       // D2 : ne purger le store d'erreurs qu'après remise en file effective —
       // hors-ligne, la trace (failedAt) est conservée pour le prochain passage.
+      // Les entrées différées (backoff) sont toujours conservées.
       if (typeof navigator === 'undefined' || navigator.onLine) {
-        await db.syncErrors.setItem('errors', []);
+        await db.syncErrors.setItem('errors', deferred);
         if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: 0 } }));
+          window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: deferred.length } }));
         }
       } else {
         console.warn('[SyncReconcile] Hors-ligne : erreurs conservées pour rejeu ultérieur.');
@@ -3921,6 +3946,7 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
         movementsSynced,
         returnsSynced,
         errorsReplayed,
+        deferredCount,
         message: `Rapprochement partiel : ${sessionsSynced} session(s), ${transactionsSynced} transaction(s), ${movementsSynced} mouvement(s), ${returnsSynced} retour(s). Restes en échec — voir page Erreurs de synchronisation : ${partials.slice(0, 5).join(' ; ')}${partials.length > 5 ? ` (+${partials.length - 5} autres)` : ''}`
       };
     }
@@ -3931,7 +3957,8 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
       movementsSynced,
       returnsSynced,
       errorsReplayed,
-      message: `Rapprochement réussi : ${sessionsSynced} session(s), ${transactionsSynced} transaction(s), ${movementsSynced} mouvement(s), ${returnsSynced} retour(s) et ${errorsReplayed} action(s) rejouée(s) vers le serveur.`
+      deferredCount,
+      message: `Rapprochement réussi : ${sessionsSynced} session(s), ${transactionsSynced} transaction(s), ${movementsSynced} mouvement(s), ${returnsSynced} retour(s) et ${errorsReplayed} action(s) rejouée(s) vers le serveur.${deferredCount > 0 ? ` ${deferredCount} erreur(s) différée(s) (backoff).` : ''}`
     };
   } catch (err: any) {
     console.error('Erreur réconciliation :', err);
@@ -3942,6 +3969,7 @@ export const reconcileLocalPosDataWithCloud = async (): Promise<ReconciliationRe
       movementsSynced,
       returnsSynced,
       errorsReplayed,
+      deferredCount,
       message: `Erreur lors de la réconciliation : ${err.message || err}`
     };
   }

@@ -8,6 +8,8 @@ import { toast } from 'react-hot-toast';
 interface SyncError {
   action: SyncAction;
   failedAt: string;
+  message?: string;
+  attempts?: number;
 }
 
 // D3 : les erreurs retirées sont archivées (restaurables), jamais détruites.
@@ -129,7 +131,7 @@ export default function PosSyncErrors() {
     setReconcileResult(null);
     const toastId = toast.loading('Réconciliation globale en cours...');
     try {
-      const result = await reconcileLocalPosDataWithCloud();
+      const result = await reconcileLocalPosDataWithCloud({ force: true });
       setReconcileResult(result);
       await loadErrors();
       if (result.success) {
@@ -249,6 +251,7 @@ export default function PosSyncErrors() {
                 <tr style={{ background: 'var(--color-surface-alt)', borderBottom: '1px solid var(--color-border)' }}>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Type d'Action</th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Date d'échec</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Cause</th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Données (Payload)</th>
                   <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)' }}>Actions</th>
                 </tr>
@@ -261,6 +264,12 @@ export default function PosSyncErrors() {
                     </td>
                     <td style={{ padding: '12px 16px', fontSize: '14px', color: 'var(--color-text-muted)' }}>
                       {new Date(err.failedAt).toLocaleString('fr-FR')}
+                      {(err.attempts || 0) > 1 && (
+                        <div style={{ fontSize: '11px', color: 'var(--color-warning-strong)' }}>{err.attempts} tentatives</div>
+                      )}
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '12px', maxWidth: '220px' }}>
+                      {err.message || <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
                     </td>
                     <td style={{ padding: '12px 16px', fontSize: '13px', fontFamily: 'monospace', maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={JSON.stringify(err.action.payload, null, 2)}>
                       {JSON.stringify(err.action.payload)}

@@ -61,8 +61,16 @@ const mergeKeepChildren = <T extends { id: string }>(
   return { merged, healedIds };
 };
 
+// Toasts d'erreurs sync déjà affichés (clé entité -> timestamp) : anti-boucle.
+const toastedSyncErrorKeys = new Map<string, number>();
+
 // Remet en file les objets dont les enfants ont été protégés, pour que le
 // serveur soit réparé (chemins résilients). Best-effort, jamais bloquant.
+// Anti-boucle : chaque entité n'est remise en file qu'une fois toutes les 6h
+// (marqueur persistant) — en cas d'échec persistant, le rejeu passe par la
+// page Erreurs (manuel) ou la réconciliation avec backoff.
+const HEAL_MARK_KEY = 'hinov_heal_queue_v1';
+const HEAL_MARK_TTL_MS = 6 * 60 * 60 * 1000;
 const healQueueMissingChildren = async (
   localById: Map<string, any>,
   healedIds: string[],
@@ -70,12 +78,25 @@ const healQueueMissingChildren = async (
 ) => {
   if (healedIds.length === 0) return;
   try {
+    let marks: Record<string, number> = {};
+    try {
+      marks = JSON.parse(localStorage.getItem(HEAL_MARK_KEY) || '{}');
+    } catch {}
+    const now = Date.now();
+    const todo = healedIds.filter(id => !marks[id] || now - marks[id] > HEAL_MARK_TTL_MS);
+    if (todo.length === 0) return;
     const queue = (await db.syncQueue.getItem<any[]>('queue').catch(() => null)) || [];
     const queuedIds = new Set(queue.filter(a => a?.type === actionType).map(a => a?.payload?.id));
-    for (const id of healedIds) {
-      const local = localById.get(id);
-      if (local && !queuedIds.has(id)) await queueSyncAction(actionType as any, local);
+    for (const id of todo) {
+      const local = localById.get(id)!;
+      if (local && !queuedIds.has(id)) {
+        await queueSyncAction(actionType as any, local);
+        marks[id] = now;
+      }
     }
+    try {
+      localStorage.setItem(HEAL_MARK_KEY, JSON.stringify(marks));
+    } catch {}
   } catch { /* le local reste protégé dans tous les cas */ }
 };
 
@@ -577,7 +598,7 @@ interface AppState {
   addImportError: (error: ImportError) => Promise<void>;
   completeProduct: (productId: string, updates: Partial<PosProduct>) => Promise<void>;
   refreshData: (isBackground?: boolean) => Promise<void>;
-  reconcilePosData: () => Promise<any>;
+  reconcilePosData: (opts?: { force?: boolean }) => Promise<any>;
   // CRM Modules Responsables
   crmTiers: ClientFournisseur[];
   crmCommerciaux: AgentCommercial[];
@@ -1668,20 +1689,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
             return { ...t, lines: keepLines ? local.lines : t.lines, payments: keepPays ? local.payments : t.payments };
           });
           setPosTransactions(merged); await safeSet(db.posTransactions, merged);
-          try {
-            const healed = merged.filter(t => {
+          await healQueueMissingChildren(
+            localById,
+            merged.filter(t => {
               const local = localById.get(t.id);
-              return local && (local.lines?.length || 0) > 0 && (!parsed.find((p: any) => p.id === t.id)?.lines?.length);
-            });
-            if (healed.length > 0) {
-              const queue = (await db.syncQueue.getItem<any[]>('queue').catch(() => null)) || [];
-              const queuedIds = new Set(queue.filter(a => a?.type === 'INSERT_POS_TRANSACTION').map(a => a?.payload?.id));
-              for (const t of healed) {
-                const local = localById.get(t.id)!;
-                if (!queuedIds.has(t.id)) await queueSyncAction('INSERT_POS_TRANSACTION', local);
-              }
-            }
-          } catch { /* auto-réparation best-effort : le local reste protégé dans tous les cas */ }
+              return !!(local && (local.lines?.length || 0) > 0 && (!parsed.find((p: any) => p.id === t.id)?.lines?.length));
+            }).map(t => t.id),
+            'INSERT_POS_TRANSACTION'
+          );
         }
         if (posPaymentsData && posPaymentsData.length > 0) {
           const parsed = posPaymentsData.map((p: any) => ({ id: p.id, transactionId: p.transaction_id, method: p.method, amount: p.amount, reference: p.reference }));
@@ -2107,10 +2122,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [currentUser, refreshData]);
 
-  // Écoute les erreurs critiques de synchronisation et les affiche comme toast
+  // Écoute les erreurs critiques de synchronisation et les affiche comme toast.
+  // Anti-boucle : une même entité en échec ne déclenche qu'un toast toutes les 10 min
+  // (le compteur reste visible via le badge d'erreurs).
+  const TOAST_SYNC_COOLDOWN_MS = 10 * 60 * 1000;
   useEffect(() => {
     const handleSyncCriticalError = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { message: string };
+      const detail = (e as CustomEvent).detail as { message: string; action?: any };
+      try {
+        const key = `${detail?.action?.type || ''}::${detail?.action?.payload?.id ?? detail?.action?.payload?.reference ?? detail?.message ?? ''}`;
+        const last = toastedSyncErrorKeys.get(key) || 0;
+        if (Date.now() - last < TOAST_SYNC_COOLDOWN_MS) return;
+        toastedSyncErrorKeys.set(key, Date.now());
+      } catch { /* en cas de doute, on affiche */ }
       toast((t) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <div style={{ fontWeight: 600, color: '#991B1B', fontSize: '13px' }}>
@@ -5404,7 +5428,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, sendWeeklyReportReminder, reviewV2WeeklyReport, deleteV2WeeklyReport, deleteV2DailyReport, updateMyProfile, addCrmDocument, updateCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, mergePosProducts, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData, reconcilePosData: reconcileLocalPosDataWithCloud,
+      users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, sendWeeklyReportReminder, reviewV2WeeklyReport, deleteV2WeeklyReport, deleteV2DailyReport, updateMyProfile, addCrmDocument, updateCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, mergePosProducts, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData, reconcilePosData: (opts?: { force?: boolean }) => reconcileLocalPosDataWithCloud(opts),
       // CRM Modules Responsables
       crmTiers, crmCommerciaux, crmPrestations, crmCaisse, crmCommissions, crmArticles, crmMaintenance, crmTechniciens,
       addCrmTier, updateCrmTier, deleteCrmTier,
