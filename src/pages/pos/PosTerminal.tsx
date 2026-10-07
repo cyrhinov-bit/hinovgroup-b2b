@@ -75,12 +75,13 @@ export default function PosTerminal() {
     return posTransactions.filter(t => t.sessionId === openSession.id && t.status === 'Validée');
   }, [posTransactions, openSession]);
 
+  // H4 : vente sans paiement → 0 espèces (jamais le total imputé par défaut).
   const sessionCashSales = useMemo(() => {
     return sessionTxs.reduce((sum, t) => {
       const cash = (t.payments || [])
         .filter(p => p.method === 'Espèces' || p.method === 'Mixte')
         .reduce((a, p) => a + p.amount, 0);
-      return sum + (cash > 0 ? cash : (t.payments?.length === 0 ? t.total : 0));
+      return sum + cash;
     }, 0);
   }, [sessionTxs]);
 
