@@ -1096,9 +1096,8 @@ export const processSyncQueue = async () => {
           }).eq('id', quoteData.id);
 
           if (!error) {
-            // Repli historique : remplace les lignes. Le chemin RPC (atomique)
-            // est préféré quand la fonction est déployée (voir plus haut).
-            await supabase.from('quote_lines').delete().eq('quote_id', quoteData.id);
+            // Repli historique : upsert d'abord, suppression des obsolètes après
+            // succès (jamais de delete-first : un échec laisserait 0 ligne).
             if (lines && lines.length > 0) {
               const linesData = lines.map((l: any) => ({
                 id: isUuid(l.id) ? l.id : uuidv4(),
@@ -1113,11 +1112,25 @@ export const processSyncQueue = async () => {
                 total: l.total
               }));
               const { error: insLinesErr } = await supabase.from('quote_lines').upsert(linesData, { onConflict: 'id' });
-              if (insLinesErr && isNetworkOrTransientError(insLinesErr)) throw new Error(`[NetworkError] ${insLinesErr.message}`);
               if (insLinesErr) {
+                if (isNetworkOrTransientError(insLinesErr)) throw new Error(`[NetworkError] ${insLinesErr.message}`);
                 console.error('[Sync] UPDATE_QUOTE lignes échouées :', insLinesErr.message);
                 success = checkResult(insLinesErr);
                 break;
+              }
+              try {
+                const { data: existing } = await supabase.from('quote_lines').select('id').eq('quote_id', quoteData.id);
+                const keep = new Set(linesData.map((l: any) => l.id));
+                const doomed = ((existing as any[]) || []).map(r => r.id).filter((lid: string) => !keep.has(lid));
+                if (doomed.length > 0) {
+                  const { error: delErr } = await supabase.from('quote_lines').delete().in('id', doomed);
+                  if (delErr) {
+                    if (isNetworkOrTransientError(delErr)) throw new Error(`[NetworkError] ${delErr.message}`);
+                    console.error('[Sync] UPDATE_QUOTE purge obsolètes échouée :', delErr.message);
+                  }
+                }
+              } catch (e: any) {
+                if (String(e?.message || '').startsWith('[NetworkError]')) throw e;
               }
             }
           }
@@ -1190,7 +1203,7 @@ export const processSyncQueue = async () => {
           }).eq('id', saleData.id);
 
           if (!error) {
-            await supabase.from('vente_lines').delete().eq('vente_id', saleData.id);
+            // Upsert d'abord, purge des obsolètes après succès (jamais de delete-first).
             if (lines && lines.length > 0) {
               const linesData = lines.map((l: any) => ({
                 id: isUuid(l.id) ? l.id : uuidv4(),
@@ -1202,11 +1215,25 @@ export const processSyncQueue = async () => {
                 total: l.total
               }));
               const { error: insLinesErr } = await supabase.from('vente_lines').upsert(linesData, { onConflict: 'id' });
-              if (insLinesErr && isNetworkOrTransientError(insLinesErr)) throw new Error(`[NetworkError] ${insLinesErr.message}`);
               if (insLinesErr) {
+                if (isNetworkOrTransientError(insLinesErr)) throw new Error(`[NetworkError] ${insLinesErr.message}`);
                 console.error('[Sync] UPDATE_SALE lignes échouées :', insLinesErr.message);
                 success = checkResult(insLinesErr);
                 break;
+              }
+              try {
+                const { data: existing } = await supabase.from('vente_lines').select('id').eq('vente_id', saleData.id);
+                const keep = new Set(linesData.map((l: any) => l.id));
+                const doomed = ((existing as any[]) || []).map(r => r.id).filter((lid: string) => !keep.has(lid));
+                if (doomed.length > 0) {
+                  const { error: delErr } = await supabase.from('vente_lines').delete().in('id', doomed);
+                  if (delErr) {
+                    if (isNetworkOrTransientError(delErr)) throw new Error(`[NetworkError] ${delErr.message}`);
+                    console.error('[Sync] UPDATE_SALE purge obsolètes échouée :', delErr.message);
+                  }
+                }
+              } catch (e: any) {
+                if (String(e?.message || '').startsWith('[NetworkError]')) throw e;
               }
             }
           }
@@ -2377,14 +2404,25 @@ export const processSyncQueue = async () => {
           }], { onConflict: 'id' });
           let entryOk = !error;
           if (!error && lines && lines.length > 0) {
+            // Ligne par ligne : une ligne au produit inconnu est détachée, les
+            // autres passent (plus d'entrée Validée à 0 ligne).
             const linesData = lines.map((l: any) => ({
               id: l.id || uuidv4(), entry_id: entryData.id, product_id: isUuid(l.productId) ? l.productId : null,
               quantity: l.quantity, purchase_price: l.purchasePrice, total: l.total
             }));
-            const { error: linesErr } = await supabase.from('pos_stock_entry_lines').upsert(linesData, { onConflict: 'id' });
-            if (linesErr) {
-              if (isNetworkOrTransientError(linesErr)) throw new Error(`[NetworkError] ${linesErr.message}`);
-              console.error('[Sync] Erreur insertion pos_stock_entry_lines :', linesErr.message);
+            for (const line of linesData) {
+              const { error: oneErr } = await supabase.from('pos_stock_entry_lines').upsert([line], { onConflict: 'id' });
+              if (!oneErr) continue;
+              if (isNetworkOrTransientError(oneErr)) throw new Error(`[NetworkError] ${oneErr.message}`);
+              if (/foreign key|product_id/i.test(oneErr.message || '')) {
+                const { error: retryErr } = await supabase.from('pos_stock_entry_lines').upsert([{ ...line, product_id: null }], { onConflict: 'id' });
+                if (!retryErr) {
+                  console.warn('[Sync] Ligne entrée détachée du produit inconnu :', line.id);
+                  continue;
+                }
+                if (isNetworkOrTransientError(retryErr)) throw new Error(`[NetworkError] ${retryErr.message}`);
+              }
+              console.error('[Sync] Erreur insertion pos_stock_entry_lines :', oneErr.message);
               entryOk = false;
             }
           }
@@ -2507,14 +2545,24 @@ export const processSyncQueue = async () => {
           }], { onConflict: 'id' });
           let invOk = !error;
           if (!error && lines && lines.length > 0) {
+            // Ligne par ligne avec détachement (plus d'inventaire Terminé à 0 ligne).
             const linesData = lines.map((l: any) => ({
               id: l.id || uuidv4(), inventory_id: invData.id, product_id: isUuid(l.productId) ? l.productId : null,
               expected_qty: l.expectedQty, counted_qty: l.countedQty, difference: l.difference
             }));
-            const { error: linesErr } = await supabase.from('pos_inventory_lines').upsert(linesData, { onConflict: 'id' });
-            if (linesErr) {
-              if (isNetworkOrTransientError(linesErr)) throw new Error(`[NetworkError] ${linesErr.message}`);
-              console.error('[Sync] Erreur insertion pos_inventory_lines :', linesErr.message);
+            for (const line of linesData) {
+              const { error: oneErr } = await supabase.from('pos_inventory_lines').upsert([line], { onConflict: 'id' });
+              if (!oneErr) continue;
+              if (isNetworkOrTransientError(oneErr)) throw new Error(`[NetworkError] ${oneErr.message}`);
+              if (/foreign key|product_id/i.test(oneErr.message || '')) {
+                const { error: retryErr } = await supabase.from('pos_inventory_lines').upsert([{ ...line, product_id: null }], { onConflict: 'id' });
+                if (!retryErr) {
+                  console.warn('[Sync] Ligne inventaire détachée du produit inconnu :', line.id);
+                  continue;
+                }
+                if (isNetworkOrTransientError(retryErr)) throw new Error(`[NetworkError] ${retryErr.message}`);
+              }
+              console.error('[Sync] Erreur insertion pos_inventory_lines :', oneErr.message);
               invOk = false;
             }
           }
@@ -2535,11 +2583,34 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'UPDATE_POS_INVENTORY': {
-          const { id, ...data } = action.payload;
+          const { id, lines, ...data } = action.payload;
           const mapped: any = {};
           if (data.status !== undefined) mapped.status = data.status;
           const { error } = await supabase.from('pos_inventories').update(mapped).eq('id', id);
-          success = checkResult(error);
+          let updOk = !error;
+          // Rejeu des lignes si fournies (édition jamais perdue silencieusement).
+          if (!error && lines && lines.length > 0) {
+            const linesData = lines.map((l: any) => ({
+              id: l.id || uuidv4(), inventory_id: id, product_id: isUuid(l.productId) ? l.productId : null,
+              expected_qty: l.expectedQty, counted_qty: l.countedQty, difference: l.difference
+            }));
+            let linesOk = true;
+            for (const line of linesData) {
+              const { error: oneErr } = await supabase.from('pos_inventory_lines').upsert([line], { onConflict: 'id' });
+              if (!oneErr) continue;
+              if (isNetworkOrTransientError(oneErr)) throw new Error(`[NetworkError] ${oneErr.message}`);
+              if (/foreign key|product_id/i.test(oneErr.message || '')) {
+                const { error: retryErr } = await supabase.from('pos_inventory_lines').upsert([{ ...line, product_id: null }], { onConflict: 'id' });
+                if (!retryErr) continue;
+                if (isNetworkOrTransientError(retryErr)) throw new Error(`[NetworkError] ${retryErr.message}`);
+              }
+              console.error('[Sync] UPDATE_POS_INVENTORY ligne échouée :', oneErr.message);
+              linesOk = false;
+            }
+            if (!linesOk) updOk = false;
+          }
+          success = !error && updOk ? checkResult(error) : false;
+          if (!success) console.error('[Sync] UPDATE_POS_INVENTORY incomplet.');
           break;
         }
         case 'DELETE_POS_INVENTORY': {
@@ -2682,11 +2753,47 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'UPDATE_POS_TRANSACTION': {
-          const { id, ...data } = action.payload;
+          const { id, lines, payments, ...data } = action.payload;
           const mapped: any = {};
           if (data.status !== undefined) mapped.status = data.status;
           const { error } = await supabase.from('pos_transactions').update(mapped).eq('id', id);
-          success = checkResult(error);
+          let updOk = !error;
+          // Rejeu des enfants si fournis (édition jamais perdue silencieusement).
+          if (!error && lines && lines.length > 0) {
+            const txLines = lines.map((l: any) => ({
+              id: l.id || uuidv4(), transaction_id: id,
+              product_id: isUuid(l.productId || l.product_id) ? (l.productId || l.product_id) : null,
+              description: l.description || l.name || 'Article',
+              quantity: Number(l.quantity) || 1,
+              unit_price: Number(l.unitPrice ?? l.unit_price ?? 0),
+              discount_percent: Number(l.discountPercent ?? l.discount_percent ?? 0),
+              discount_amount: Number(l.discountAmount ?? l.discount_amount ?? 0),
+              total: Number(l.total ?? 0),
+              cost_price: Number(l.costPrice ?? l.cost_price ?? 0)
+            }));
+            try {
+              const res = await upsertSaleLinesResilient(txLines);
+              if (!res.ok) updOk = false;
+            } catch (e: any) {
+              if (String(e?.message || '').startsWith('[NetworkError]')) throw e;
+              updOk = false;
+            }
+          }
+          if (!error && payments && payments.length > 0) {
+            const pays = payments.map((p: any) => ({
+              id: p.id || uuidv4(), transaction_id: id,
+              method: p.method || 'Espèces', amount: Number(p.amount ?? 0),
+              reference: p.reference || null
+            }));
+            const { error: payErr } = await supabase.from('pos_payments').upsert(pays, { onConflict: 'id' });
+            if (payErr) {
+              if (isNetworkOrTransientError(payErr)) throw new Error(`[NetworkError] ${payErr.message}`);
+              console.error('[Sync] UPDATE_POS_TRANSACTION paiements échoués :', payErr.message);
+              updOk = false;
+            }
+          }
+          success = !error && updOk ? checkResult(error) : false;
+          if (!success) console.error('[Sync] UPDATE_POS_TRANSACTION incomplet.');
           break;
         }
         case 'CLEAR_POS_SALES_HISTORY': {
@@ -2700,7 +2807,9 @@ export const processSyncQueue = async () => {
           }
           try {
             const q: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
-            const wipeable = new Set(['INSERT_POS_TRANSACTION', 'UPDATE_POS_TRANSACTION', 'INSERT_POS_PAYMENT', 'INSERT_POS_RETURN', 'UPDATE_POS_RETURN', 'INSERT_POS_CASH_SESSION', 'UPDATE_POS_CASH_SESSION']);
+            // Périmètre complet : toute donnée POS antérieure au wipe est retirée
+            // (sinon repoussée après suppression : stock/CA ressuscités).
+            const wipeable = new Set(['INSERT_POS_TRANSACTION', 'UPDATE_POS_TRANSACTION', 'INSERT_POS_PAYMENT', 'INSERT_POS_RETURN', 'UPDATE_POS_RETURN', 'INSERT_POS_CASH_SESSION', 'UPDATE_POS_CASH_SESSION', 'INSERT_POS_STOCK_ENTRY', 'UPDATE_POS_STOCK_ENTRY', 'INSERT_POS_INVENTORY', 'UPDATE_POS_INVENTORY', 'INSERT_POS_STOCK_MOVEMENT']);
             for (const a of q) {
               if (a.id !== action.id && wipeable.has(a.type) && (a.timestamp || 0) <= (action.timestamp || 0)) {
                 processedIds.add(a.id);
@@ -2717,7 +2826,15 @@ export const processSyncQueue = async () => {
           if (e4 && isNetworkOrTransientError(e4)) throw new Error(`[NetworkError] ${e4.message}`);
           const { error: e5 } = await supabase.from('pos_transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
           if (e5 && isNetworkOrTransientError(e5)) throw new Error(`[NetworkError] ${e5.message}`);
-          success = true;
+          // Atomicité : toute erreur logique (RLS, contrainte) fait échouer le wipe
+          // (rejeu visible) au lieu d'un succès partiel silencieux.
+          const wipeErr = e1 || e2 || e3 || e4 || e5;
+          if (wipeErr) {
+            console.error('[Sync] CLEAR_POS_SALES_HISTORY partiel, rejeu programmé :', wipeErr.message);
+            success = false;
+          } else {
+            success = true;
+          }
           break;
         }
         case 'DELETE_POS_MOVEMENTS_BY_RANGE': {
@@ -2732,12 +2849,20 @@ export const processSyncQueue = async () => {
           const { startDate, endDate } = action.payload;
           const startIso = `${startDate}T00:00:00.000Z`;
           const endIso = `${endDate}T23:59:59.999Z`;
+          const rangeStart = Date.parse(startIso);
+          const rangeEnd = Date.parse(endIso);
+          // Comparaison sur timestamps normalisés (formats ISO ou YYYY-MM-DD).
+          const inRange = (d: any) => {
+            if (typeof d !== 'string' || !d) return false;
+            const t = Date.parse(d.length === 10 ? `${d}T00:00:00.000Z` : d);
+            return Number.isFinite(t) && t >= rangeStart && t <= rangeEnd;
+          };
           try {
             const q: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
+            const wipeableRange = new Set(['INSERT_POS_TRANSACTION', 'INSERT_POS_RETURN', 'INSERT_POS_PAYMENT', 'INSERT_POS_STOCK_ENTRY', 'INSERT_POS_INVENTORY', 'INSERT_POS_STOCK_MOVEMENT']);
             for (const a of q) {
               if (a.id === action.id) continue;
-              const d = a.payload?.date;
-              if ((a.type === 'INSERT_POS_TRANSACTION' || a.type === 'INSERT_POS_RETURN') && typeof d === 'string' && d >= startIso && d <= endIso) {
+              if (wipeableRange.has(a.type) && inRange(a.payload?.date)) {
                 processedIds.add(a.id);
               }
             }
@@ -2751,13 +2876,27 @@ export const processSyncQueue = async () => {
             .lte('date', endIso);
 
           if (txFetchErr && isNetworkOrTransientError(txFetchErr)) throw new Error(`[NetworkError] ${txFetchErr.message}`);
+          if (txFetchErr) {
+            console.error('[Sync] DELETE_RANGE lecture ventes échouée :', txFetchErr.message);
+            success = false;
+            break;
+          }
 
           const txIds = (targetTxs || []).map((t: any) => t.id);
 
           if (txIds.length > 0) {
-            await supabase.from('pos_payments').delete().in('transaction_id', txIds);
-            await supabase.from('pos_transaction_lines').delete().in('transaction_id', txIds);
-            await supabase.from('pos_transactions').delete().in('id', txIds);
+            const { error: delPayErr } = await supabase.from('pos_payments').delete().in('transaction_id', txIds);
+            const { error: delLinesErr } = await supabase.from('pos_transaction_lines').delete().in('transaction_id', txIds);
+            const { error: delTxErr } = await supabase.from('pos_transactions').delete().in('id', txIds);
+            for (const e of [delPayErr, delLinesErr, delTxErr]) {
+              if (e && isNetworkOrTransientError(e)) throw new Error(`[NetworkError] ${e.message}`);
+            }
+            const rangeErr = delPayErr || delLinesErr || delTxErr;
+            if (rangeErr) {
+              console.error('[Sync] DELETE_RANGE ventes partiel, rejeu programmé :', rangeErr.message);
+              success = false;
+              break;
+            }
           }
 
           // 2. Retours de la plage
@@ -2771,8 +2910,17 @@ export const processSyncQueue = async () => {
 
           const returnIds = (targetReturns || []).map((r: any) => r.id);
           if (returnIds.length > 0) {
-            await supabase.from('pos_return_lines').delete().in('return_id', returnIds);
-            await supabase.from('pos_returns').delete().in('id', returnIds);
+            const { error: delRetLinesErr } = await supabase.from('pos_return_lines').delete().in('return_id', returnIds);
+            const { error: delRetErr } = await supabase.from('pos_returns').delete().in('id', returnIds);
+            for (const e of [delRetLinesErr, delRetErr]) {
+              if (e && isNetworkOrTransientError(e)) throw new Error(`[NetworkError] ${e.message}`);
+            }
+            const retErr = delRetLinesErr || delRetErr;
+            if (retErr) {
+              console.error('[Sync] DELETE_RANGE retours partiel, rejeu programmé :', retErr.message);
+              success = false;
+              break;
+            }
           }
 
           // 3. Sessions de caisse de la plage
@@ -2783,6 +2931,17 @@ export const processSyncQueue = async () => {
             .lte('opened_at', endIso);
 
           if (sessionDelErr && isNetworkOrTransientError(sessionDelErr)) throw new Error(`[NetworkError] ${sessionDelErr.message}`);
+          if (sessionDelErr) {
+            console.error('[Sync] DELETE_RANGE sessions partiel, rejeu programmé :', sessionDelErr.message);
+            success = false;
+            break;
+          }
+
+          if (retFetchErr) {
+            console.error('[Sync] DELETE_RANGE lecture retours échouée :', retFetchErr.message);
+            success = false;
+            break;
+          }
 
           success = true;
           break;
@@ -3080,13 +3239,28 @@ export const processSyncQueue = async () => {
           }
           let itemsOk = !error;
           if (!error && replaceItems) {
-            await supabase.from('invoice_items').delete().eq('invoice_id', invoice.id);
+            // Upsert d'abord, purge des obsolètes après succès (jamais de delete-first).
             if (items && items.length > 0) {
               const { error: itErr } = await supabase.from('invoice_items').upsert(items, { onConflict: 'id' });
               if (itErr) {
                 if (isNetworkOrTransientError(itErr)) throw new Error(`[NetworkError] ${itErr.message}`);
                 console.error('[Sync] UPSERT_INVOICE lignes échouées :', itErr.message);
                 itemsOk = false;
+              } else {
+                try {
+                  const { data: existing } = await supabase.from('invoice_items').select('id').eq('invoice_id', invoice.id);
+                  const keep = new Set(items.map((l: any) => l.id).filter(Boolean));
+                  const doomed = ((existing as any[]) || []).map(r => r.id).filter((lid: string) => !keep.has(lid));
+                  if (doomed.length > 0) {
+                    const { error: delErr } = await supabase.from('invoice_items').delete().in('id', doomed);
+                    if (delErr) {
+                      if (isNetworkOrTransientError(delErr)) throw new Error(`[NetworkError] ${delErr.message}`);
+                      console.error('[Sync] UPSERT_INVOICE purge obsolètes échouée :', delErr.message);
+                    }
+                  }
+                } catch (e: any) {
+                  if (String(e?.message || '').startsWith('[NetworkError]')) throw e;
+                }
               }
             }
           }

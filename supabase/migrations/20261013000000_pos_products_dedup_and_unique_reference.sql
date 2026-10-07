@@ -56,12 +56,14 @@ BEGIN
 
     loser_ids := array_remove(grp.ids, keeper_id);
 
-    -- Repointage des enfants vers le gardien
+    -- Repointage des enfants vers le gardien (dont product_completions,
+    -- sinon le DELETE des doublons supprime ces lignes par cascade)
     UPDATE pos_transaction_lines SET product_id = keeper_id WHERE product_id = ANY (loser_ids);
     UPDATE pos_stock_entry_lines SET product_id = keeper_id WHERE product_id = ANY (loser_ids);
     UPDATE pos_inventory_lines SET product_id = keeper_id WHERE product_id = ANY (loser_ids);
     UPDATE pos_return_lines SET product_id = keeper_id WHERE product_id = ANY (loser_ids);
     UPDATE pos_stock_movements SET product_id = keeper_id WHERE product_id = ANY (loser_ids);
+    UPDATE product_completions SET product_id = keeper_id WHERE product_id = ANY (loser_ids);
 
     -- Cumul des quantités sur le gardien
     UPDATE pos_products keeper
@@ -107,9 +109,29 @@ BEGIN
 END
 $report$;
 
--- 4. Verrou d'unicité (insensible casse/espaces). Échoue proprement s'il reste des
--- doublons : relire les NOTICE ci-dessus et arbitrer avant de rejouer.
-CREATE UNIQUE INDEX IF NOT EXISTS pos_products_reference_unique_ci
-  ON pos_products (lower(btrim(reference)));
+-- 4. Verrou d'unicité (insensible casse/espaces). Créé seulement si aucun doublon
+-- de référence ne subsiste ; sinon NOTICE (les fusions déjà appliquées sont
+-- conservées — pas de rollback — et la migration peut être rejouée après arbitrage).
+DO $unique_idx$
+DECLARE
+  v_remaining int;
+BEGIN
+  SELECT count(*) INTO v_remaining
+  FROM (
+    SELECT lower(btrim(reference)) AS norm_ref
+    FROM pos_products
+    GROUP BY 1
+    HAVING count(*) > 1
+  ) dups;
+
+  IF v_remaining = 0 THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS pos_products_reference_unique_ci
+      ON pos_products (lower(btrim(reference)));
+    RAISE NOTICE 'Index unique pos_products_reference_unique_ci créé.';
+  ELSE
+    RAISE NOTICE 'Index unique NON créé : % référence(s) en double subsistent (arbitrage manuel requis, puis rejouer cette migration).', v_remaining;
+  END IF;
+END
+$unique_idx$;
 
 COMMIT;
