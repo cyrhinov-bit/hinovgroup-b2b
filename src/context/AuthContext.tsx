@@ -116,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
       
       const data = response?.data;
-      const error = response?.error;
+      const error = (response as any)?.error;
 
       if (data && !error) {
         let cachedUser: User | undefined;
@@ -168,6 +168,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setCurrentUser(userObj);
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userObj));
+        setLoading(false);
+        return;
+      }
+
+      // En ligne mais profil introuvable (0 ligne, pas d'erreur réseau/RLS) :
+      // compte fantôme (auth sans profil, ou profil supprimé). PAS de repli local :
+      // déconnexion + retour à l'écran de connexion. M GBA reste seule caissière.
+      if (error && ((error as any)?.code === 'PGRST116' || String((error as any)?.message || '').includes('0 rows'))) {
+        console.warn('[AuthContext] Compte inconnu du serveur, déconnexion forcée.');
+        try {
+          await supabase.auth.signOut();
+        } catch {}
+        try {
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+        } catch {}
+        setCurrentUser(null);
         setLoading(false);
         return;
       }
@@ -261,13 +277,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return await attemptOfflineLogin();
       }
 
-      // Vérifier si le compte est actif
-      const profileRes = await withAuthTimeout(
-        supabase.from('profiles').select('*').eq('id', data.user.id).single(),
-        2500
-      ).catch(() => null);
+      // Vérifier si le compte est actif — et s'il existe encore côté serveur.
+      // Timeout réseau : on ne conclut pas (repli hors-ligne plus bas).
+      let profileRes: any = null;
+      let profileTimedOut = false;
+      try {
+        profileRes = await withAuthTimeout(
+          supabase.from('profiles').select('*').eq('id', data.user.id).single(),
+          2500
+        );
+      } catch {
+        profileTimedOut = true;
+      }
 
       const profile = profileRes?.data;
+      // Compte inconnu du serveur (supprimé ou jamais créé) : refus net, sans repli.
+      if (!profileTimedOut && !profile) {
+        await supabase.auth.signOut().catch(() => {});
+        return { success: false, error: 'Compte inconnu du serveur. Contactez la direction.' };
+      }
       if (profile && profile.active === false) {
         await supabase.auth.signOut().catch(() => {});
         return { success: false, error: 'Votre compte a été désactivé par le Directeur.' };

@@ -9,7 +9,7 @@ import { Badge } from '../../components/ui/Badge';
 import { todayLocalKey, toLocalDayKey, getWeekKey, formatWeekLabel, isCurrentWeek } from '../../lib/dates';
 
 export default function PosCash() {
-  const { posCashSessions, posTransactions, posReturns, addPosCashSession, updatePosCashSession } = useAppContext();
+  const { posCashSessions, posTransactions, posReturns, addPosCashSession, updatePosCashSession, users } = useAppContext();
   const { currentUser } = useAuth();
 
   const [showOpen, setShowOpen] = useState(false);
@@ -23,6 +23,12 @@ export default function PosCash() {
   const today = todayLocalKey();
   // Même règle que le terminal (T3) : session strictement personnelle.
   const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today && s.cashierId === currentUser?.id);
+  // Direction : voit les AUTRES sessions ouvertes du jour (ex : compte fantôme,
+  // session oubliée) pour les clôturer — M GBA reste seule caissière active.
+  const isDirection = !!currentUser && ['Directeur', 'Directeur adjoint', 'SuperAdmin', 'Gerant'].includes(currentUser.role);
+  const otherOpenSessions = isDirection
+    ? posCashSessions.filter(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today && s.id !== openSession?.id)
+    : [];
   const staleOpenSessions = posCashSessions.filter(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) < today);
   const closedSessions = posCashSessions
     .filter(s => s.status === 'Fermée')
@@ -254,6 +260,35 @@ export default function PosCash() {
                 </Button>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Autres sessions ouvertes du jour (direction) : à clôturer (comptes fantômes, oublis) */}
+      {otherOpenSessions.length > 0 && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-lg)', padding: '16px 20px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+            <div style={{ background: '#fee2e2', borderRadius: '8px', padding: '8px' }}>
+              <AlertTriangle size={20} color="#dc2626" />
+            </div>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 600, color: '#991b1b' }}>
+                {otherOpenSessions.length} autre(s) session(s) ouverte(s) aujourd'hui
+              </div>
+              <div style={{ fontSize: '13px', color: '#b91c1c', marginTop: '2px' }}>
+                Vérifiez le caissier puis clôturez après comptage réel du tiroir.
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {otherOpenSessions.map(s => {
+              const cashier = users?.find(u => u.id === s.cashierId);
+              return (
+                <Button key={s.id} variant="danger" onClick={() => handleCloseStale(s)} style={{ fontSize: '13px' }}>
+                  Clôturer : {cashier ? cashier.name : `compte inconnu (${String(s.cashierId || '?').slice(0, 8)})`} ({formatDate(s.openedAt)})
+                </Button>
+              );
+            })}
           </div>
         </div>
       )}

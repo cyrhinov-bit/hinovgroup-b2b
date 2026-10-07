@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Plus, Edit2, Trash2, ShieldAlert } from 'lucide-react';
+import { Plus, Edit2, Trash2, ShieldAlert, Ghost } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 export default function PosUsers() {
-  const { users, addUser, updateUser, toggleUserStatus, deleteUser } = useAppContext();
+  const { users, addUser, updateUser, toggleUserStatus, deleteUser, refreshData } = useAppContext();
   const { currentUser } = useAuth();
+  const [isCleaning, setIsCleaning] = useState(false);
   const canManage = !!currentUser && ['Directeur', 'SuperAdmin', 'Directeur adjoint', 'Gerant'].includes(currentUser.role);
   const posUsers = users.filter(u => u.role === 'Gerant' || u.role === 'Caissier');
   const [showForm, setShowForm] = useState(false);
@@ -33,6 +34,31 @@ export default function PosUsers() {
     setForm({ name: '', email: '', pin: '', role: 'Caissier' });
   };
 
+  // Comptes fantômes : présents en local sur ce poste mais inconnus du serveur
+  // (ex : compte supprimé côté serveur, jamais resynchronisé). Leurs ventes
+  // déjà synchronisées restent attribuées à leurs identifiants (traçabilité).
+  const handleCleanGhosts = async () => {
+    if (isCleaning) return;
+    setIsCleaning(true);
+    try {
+      const { supabase } = await import('../../lib/supabase');
+      const { data: serverProfiles, error } = await supabase.from('profiles').select('id');
+      if (error || !serverProfiles) { alert('Serveur injoignable : nettoyage impossible en ligne uniquement.'); return; }
+      const serverIds = new Set(serverProfiles.map((p: any) => p.id));
+      const { db } = await import('../../lib/db');
+      const cached = (await db.profiles.getItem<any[]>('data')) || [];
+      const ghosts = cached.filter(u => !serverIds.has(u.id) && u.id !== currentUser?.id);
+      if (ghosts.length === 0) { alert('Aucun compte fantôme sur ce poste.'); return; }
+      if (!window.confirm(`Retirer ${ghosts.length} compte(s) local(aux) inconnu(s) du serveur (${ghosts.map(g => g.name || g.email).join(', ')}) ? L'historique existant est conservé. Continuer ?`)) return;
+      await db.profiles.setItem('data', cached.filter(u => serverIds.has(u.id) || u.id === currentUser?.id));
+      await refreshData();
+      alert('Comptes fantômes retirés de ce poste. Si un fantôme est encore connecté, déconnectez-le.');
+    } catch (e: any) {
+      alert('Nettoyage impossible : ' + (e?.message || e));
+    } finally {
+      setIsCleaning(false);
+    }
+  };
   // F24 : garde anti auto-suppression et dernier gestionnaire actif.
   const handleDelete = (u: typeof posUsers[number]) => {
     if (u.id === currentUser?.id) { alert('Vous ne pouvez pas supprimer votre propre compte.'); return; }
@@ -57,9 +83,14 @@ export default function PosUsers() {
     <div className="pos-page">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 700 }}>Utilisateurs POS</h1>
-        <button onClick={() => { setShowForm(true); setEditingUser(null); setForm({ name: '', email: '', pin: '', role: 'Caissier' }); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 }}>
-          <Plus size={16} /> Ajouter
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={handleCleanGhosts} disabled={isCleaning} title="Retire de ce poste les comptes locaux inconnus du serveur (ex : compte supprimé). L'historique est conservé." style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: 'white', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 }}>
+            <Ghost size={16} /> {isCleaning ? 'Nettoyage...' : 'Nettoyer les fantômes'}
+          </button>
+          <button onClick={() => { setShowForm(true); setEditingUser(null); setForm({ name: '', email: '', pin: '', role: 'Caissier' }); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 }}>
+            <Plus size={16} /> Ajouter
+          </button>
+        </div>
       </div>
       {showForm && (
         <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: '24px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
