@@ -3663,7 +3663,30 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
       }
     }
 
-    // 2. Synchroniser les sessions de caisse locales manquantes
+    // 2. Pousser les produits locaux absents du serveur (sinon leurs updates de
+    // stock et leurs lignes de vente échouent). Plafonné à 100 par passage.
+    let productsQueued = 0;
+    try {
+      const localProducts = (await db.posProducts.getItem<any[]>('data')) || [];
+      if (localProducts.length > 0) {
+        const { data: remoteProducts } = await supabase.from('pos_products').select('id');
+        const remoteIds = new Set((remoteProducts || []).map((p: any) => p.id));
+        const missing = localProducts.filter(
+          p => p?.id && !remoteIds.has(p.id) && isUuid(resolveProductUuid(p.id, p.reference))
+        );
+        for (const p of missing.slice(0, 100)) {
+          await queueSyncAction('INSERT_POS_PRODUCT', p);
+          productsQueued++;
+        }
+        if (missing.length > 100) {
+          partials.push(`${missing.length - 100} produit(s) encore à pousser (prochain passage)`);
+        }
+      }
+    } catch (e: any) {
+      console.warn('[SyncReconcile] Produits manquants :', e?.message || e);
+    }
+
+    // 3. Synchroniser les sessions de caisse locales manquantes
     const localSessions = (await db.posCashSessions.getItem<any[]>('data')) || [];
     if (localSessions.length > 0) {
       const { data: remoteSessions } = await supabase.from('pos_cash_sessions').select('id');
@@ -3686,7 +3709,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
       }
     }
 
-    // 3. Synchroniser les transactions locales manquantes
+    // 4. Synchroniser les transactions locales manquantes
     const localTxs = (await db.posTransactions.getItem<any[]>('data')) || [];
     if (localTxs.length > 0) {
       const { data: remoteTxs } = await supabase.from('pos_transactions').select('id');
@@ -3768,7 +3791,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
       }
     }
 
-    // 4. Synchroniser les mouvements de stock manquants
+    // 5. Synchroniser les mouvements de stock manquants
     const localMovements = (await db.posStockMovements.getItem<any[]>('data')) || [];
     if (localMovements.length > 0) {
       const { data: remoteMovements } = await supabase.from('pos_stock_movements').select('id');
@@ -3796,7 +3819,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
       }
     }
 
-    // 5. Synchroniser les retours manquants
+    // 6. Synchroniser les retours manquants
     const localReturns = (await db.posReturns.getItem<any[]>('data')) || [];
     if (localReturns.length > 0) {
       const { data: remoteReturns } = await supabase.from('pos_returns').select('id');
@@ -3864,7 +3887,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
       }
     }
 
-    // 6. Synchroniser les entrées de stock manquantes
+    // 7. Synchroniser les entrées de stock manquantes
     const localEntries = (await db.posStockEntries.getItem<any[]>('data')) || [];
     if (localEntries.length > 0) {
       const { data: remoteEntries } = await supabase.from('pos_stock_entries').select('id');
@@ -3912,7 +3935,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
       }
     }
 
-    // 7. Synchroniser les inventaires manquants
+    // 8. Synchroniser les inventaires manquants
     const localInventories = (await db.posInventories.getItem<any[]>('data')) || [];
     if (localInventories.length > 0) {
       const { data: remoteInvs } = await supabase.from('pos_inventories').select('id');
@@ -3957,7 +3980,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
       }
     }
 
-    // 8. Traiter toute file d'attente restante
+    // 9. Traiter toute file d'attente restante
     await processSyncQueue();
 
     if (partials.length > 0) {
@@ -3980,7 +4003,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
       returnsSynced,
       errorsReplayed,
       deferredCount,
-      message: `Rapprochement réussi : ${sessionsSynced} session(s), ${transactionsSynced} transaction(s), ${movementsSynced} mouvement(s), ${returnsSynced} retour(s) et ${errorsReplayed} action(s) rejouée(s) vers le serveur.${deferredCount > 0 ? ` ${deferredCount} erreur(s) différée(s) (backoff).` : ''}`
+      message: `Rapprochement réussi : ${sessionsSynced} session(s), ${transactionsSynced} transaction(s), ${movementsSynced} mouvement(s), ${returnsSynced} retour(s) et ${errorsReplayed} action(s) rejouée(s) vers le serveur.${productsQueued > 0 ? ` ${productsQueued} produit(s) manquant(s) remis en file.` : ''}${deferredCount > 0 ? ` ${deferredCount} erreur(s) différée(s) (backoff).` : ''}`
     };
   } catch (err: any) {
     console.error('Erreur réconciliation :', err);
