@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Package, Upload, Camera, FileSpreadsheet, Search, Images, Edit, ArrowLeft, Trash2 } from 'lucide-react';
+import { Package, Upload, Camera, FileSpreadsheet, Search, Images, Edit, ArrowLeft, Trash2, Combine } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import ProductEntryForm from '../../features/products/presentation/ProductEntryForm';
 import ImportExportPanel from '../../features/products/presentation/ImportExportPanel';
@@ -13,11 +13,15 @@ import ProductImage from '../../features/products/images/ProductImage';
 import { useAppContext } from '../../context/AppContext';
 import { useProductImages } from '../../features/products/images/ProductImagesContext';
 import { useConfirm } from '../../components/ConfirmModal';
+import { Modal } from '../../components/ui/Modal';
+import { Button } from '../../components/ui/Button';
+import { useCanManagePosReferentials } from '../../hooks/useCanManagePosReferentials';
 import { matchesProductSearch } from '../../lib/searchUtils';
 
 export default function PosProducts() {
   const navigate = useNavigate();
-  const { posProducts, deletePosProduct } = useAppContext();
+  const { posProducts, deletePosProduct, mergePosProducts } = useAppContext();
+  const canManage = useCanManagePosReferentials();
   const { setProductImage } = useProductImages();
   const { confirm } = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -27,6 +31,70 @@ export default function PosProducts() {
   const [initialBarcode, setInitialBarcode] = useState('');
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [studioProduct, setStudioProduct] = useState<any>(null);
+  // Fusion de doublons : produit à absorber + gardien + aperçu d'impact.
+  const [mergeLoser, setMergeLoser] = useState<any>(null);
+  const [keeperSearch, setKeeperSearch] = useState('');
+  const [keeperId, setKeeperId] = useState('');
+  const [mergePreview, setMergePreview] = useState<Record<string, number> | null>(null);
+  const [isMerging, setIsMerging] = useState(false);
+
+  const openMerge = async (loser: any) => {
+    setMergeLoser(loser);
+    setKeeperSearch('');
+    setKeeperId('');
+    setMergePreview(null);
+    try {
+      const { supabase } = await import('../../lib/supabase');
+      const tables = ['pos_transaction_lines', 'pos_stock_entry_lines', 'pos_inventory_lines', 'pos_return_lines', 'pos_stock_movements', 'product_completions'];
+      const counts: Record<string, number> = {};
+      for (const t of tables) {
+        const { count } = await supabase.from(t).select('id', { count: 'exact', head: true }).eq('product_id', loser.id);
+        counts[t] = count || 0;
+      }
+      setMergePreview(counts);
+    } catch {
+      setMergePreview({});
+    }
+  };
+
+  const closeMerge = () => {
+    setMergeLoser(null);
+    setKeeperSearch('');
+    setKeeperId('');
+    setMergePreview(null);
+  };
+
+  const keeperCandidates = (keeperSearch.trim()
+    ? posProducts.filter(p => p.id !== mergeLoser?.id && matchesProductSearch(p, keeperSearch))
+    : posProducts.filter(p => {
+        if (!mergeLoser || p.id === mergeLoser.id) return false;
+        const norm = (s?: string) => (s || '').trim().toLowerCase();
+        return norm(p.name) === norm(mergeLoser.name) || norm(p.reference) === norm(mergeLoser.reference);
+      })
+  ).slice(0, 8);
+
+  const handleMerge = async () => {
+    if (!mergeLoser || !keeperId || isMerging) return;
+    const keeper = posProducts.find(p => p.id === keeperId);
+    confirm({
+      title: 'Fusionner les doublons',
+      message: `« ${mergeLoser.name} » sera absorbé par « ${keeper?.name} » : tout son historique est transféré, les stocks sont cumulés, puis le doublon est supprimé. Irréversible. Continuer ?`,
+      variant: 'danger',
+      confirmLabel: 'Fusionner',
+      onConfirm: async () => {
+        setIsMerging(true);
+        try {
+          const res = await mergePosProducts(mergeLoser.id, keeperId);
+          toast.success(res.message, { duration: 6000 });
+          closeMerge();
+        } catch (e: any) {
+          toast.error('Fusion impossible : ' + (e?.message || e), { duration: 6000 });
+        } finally {
+          setIsMerging(false);
+        }
+      },
+    });
+  };
 
   const tabs = [
     { id: 'catalog', label: 'Catalogue', icon: Package },
@@ -215,6 +283,15 @@ export default function PosProducts() {
                       >
                         <Edit size={16} />
                       </button>
+                      {canManage && (
+                        <button
+                          onClick={() => openMerge(product)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)' }}
+                          title="Fusionner ce doublon dans un autre produit (transfère l'historique)"
+                        >
+                          <Combine size={16} />
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           confirm({
@@ -228,7 +305,7 @@ export default function PosProducts() {
                                 if (deletePosProduct) {
                                   const ok = await deletePosProduct(product.id);
                                   if (ok) toast.success('Produit supprimé avec succès');
-                                  else toast.error('Suppression impossible : ce produit a un historique (ventes, stocks, retours). Désactivez-le plutôt.');
+                                  else toast.error("Suppression impossible : ce produit a un historique (ventes, stocks, retours). Désactivez-le ou fusionnez-le avec le bouton « Fusionner ».");
                                 }
                               } catch (error) {
                                 console.error(error);
@@ -278,6 +355,56 @@ export default function PosProducts() {
         isOpen={Boolean(studioProduct)}
         onClose={() => setStudioProduct(null)}
       />
+
+      {/* Modale de fusion de doublons (direction/gérance) */}
+      {mergeLoser && (
+        <Modal
+          open={Boolean(mergeLoser)}
+          onClose={closeMerge}
+          title={`Fusionner « ${mergeLoser.name} »`}
+          footer={
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', width: '100%' }}>
+              <Button variant="secondary" onClick={closeMerge}>Annuler</Button>
+              <Button variant="danger" onClick={handleMerge} disabled={!keeperId || isMerging}>
+                {isMerging ? 'Fusion en cours...' : 'Fusionner'}
+              </Button>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px' }}>
+            <div style={{ background: 'var(--color-surface-alt)', borderRadius: 'var(--radius-md)', padding: '10px 12px' }}>
+              <div><strong>Doublon à absorber :</strong> {mergeLoser.name} ({mergeLoser.reference}) — stock {mergeLoser.quantity ?? 0}</div>
+              {mergePreview ? (
+                <div style={{ marginTop: '6px', color: 'var(--color-text-muted)' }}>
+                  Historique rattaché : {(mergePreview['pos_transaction_lines'] || 0)} ligne(s) de vente, {(mergePreview['pos_stock_entry_lines'] || 0)} entrée(s), {(mergePreview['pos_inventory_lines'] || 0)} inventaire(s), {(mergePreview['pos_return_lines'] || 0)} retour(s), {(mergePreview['pos_stock_movements'] || 0)} mouvement(s).
+                  Tout sera transféré, puis les stocks cumulés.
+                </div>
+              ) : (
+                <div style={{ marginTop: '6px', color: 'var(--color-text-muted)' }}>Chargement de l'historique...</div>
+              )}
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: '4px' }}>Produit gardien (conservé) :</div>
+              <input
+                autoFocus
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '13px', outline: 'none', marginBottom: '8px' }}
+                placeholder="Rechercher le produit gardien..."
+                value={keeperSearch}
+                onChange={e => setKeeperSearch(e.target.value)}
+              />
+              {keeperCandidates.length === 0 && (
+                <div style={{ color: 'var(--color-text-muted)' }}>Aucun gardien trouvé — précisez la recherche.</div>
+              )}
+              {keeperCandidates.map(p => (
+                <label key={p.id} style={{ display: 'flex', gap: '8px', alignItems: 'center', padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: keeperId === p.id ? 'var(--color-primary-tint)' : 'transparent', cursor: 'pointer' }}>
+                  <input type="radio" name="keeper" checked={keeperId === p.id} onChange={() => setKeeperId(p.id)} />
+                  <span><strong>{p.name}</strong> <span style={{ color: 'var(--color-text-muted)' }}>({p.reference}) — stock {p.quantity ?? 0}</span></span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
