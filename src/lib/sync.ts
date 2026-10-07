@@ -2362,7 +2362,20 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'UPDATE_POS_PRODUCT': {
-          const { id, ...data } = action.payload;
+          const { id, ...payload } = action.payload;
+          // Anti-23502 : un upsert PARTIEL est rejeté (NOT NULL) même si la ligne
+          // existe — on repart toujours de la fiche locale complète fusionnée.
+          // (Remplace aussi le rebasage quantité : la valeur fraîche est incluse.)
+          let base: any = {};
+          try {
+            const local = (await db.posProducts.getItem<any[]>('data').catch(() => null)) || [];
+            const found = local.find((p: any) => p.id === id);
+            if (found) base = { ...found };
+          } catch { /* repli : payload seul */ }
+          const data: any = { ...base };
+          for (const [k, v] of Object.entries(payload)) {
+            if (v !== undefined) data[k] = v;
+          }
           const ref = data.reference;
           const fam = data.family;
           if (fam === 'Service' || ref?.startsWith('SRV-') || id === '00000000-0000-0000-0000-000000000000' || id?.startsWith('srv-')) {
@@ -2374,18 +2387,6 @@ export const processSyncQueue = async () => {
             console.warn('[Sync] UPDATE_POS_PRODUCT ignoré pour ID non-UUID :', id);
             success = true;
             break;
-          }
-          // Anti-écrasement : une mise à jour "quantité seule" (flux stock) calculée
-          // il y a longtemps ne doit pas écraser le stock serveur avec une valeur
-          // périmée — on repart de la quantité locale la plus fraîche.
-          if (Object.keys(data).every(k => k === 'quantity') && data.quantity !== undefined) {
-            try {
-              const local = (await db.posProducts.getItem<any[]>('data').catch(() => null)) || [];
-              const found = local.find((p: any) => p.id === id || p.id === resolvedId);
-              if (found && Number.isFinite(Number(found.quantity))) {
-                data.quantity = Math.max(0, Number(found.quantity));
-              }
-            } catch { /* repli : quantité du payload */ }
           }
 
           const buildUpdateMapped = (opts: { stripFk?: boolean; stripBarcode?: boolean; stripImage?: boolean } = {}) => {
