@@ -9,7 +9,7 @@ export default function SyncDiagnosticPage() {
     loadStatus();
     platform.sync.onEvent((payload) => {
       setEvents(prev => [...prev, payload]);
-      if (payload.event === 'queueUpdated' || payload.event === 'networkStatusChanged') {
+      if (['queueUpdated', 'networkStatusChanged', 'syncCompleted', 'syncFailed'].includes(payload.event)) {
         loadStatus();
       }
     });
@@ -23,10 +23,13 @@ export default function SyncDiagnosticPage() {
   };
 
   const handleAddFakeOp = async () => {
+    // PING : preuve de connectivité réelle à la base configurée, sans écriture.
+    // (L'ancien INSERT_SALE fictif aurait créé une fausse vente : refusé par le moteur.)
     try {
-      await platform.sync.enqueue({ type: 'INSERT_SALE', data: { total: 100 } });
+      const res: any = await platform.sync.enqueue({ kind: 'PING' });
       await loadStatus();
-    } catch(e) { alert(String(e)); }
+      alert(res?.id ? `PING enfilé (${res.id}) — surveillez le journal.` : 'PING enfilé.');
+    } catch(e: any) { alert('Enqueue impossible : ' + (e?.message || e)); }
   };
 
   const handleForceSync = async () => {
@@ -63,9 +66,39 @@ export default function SyncDiagnosticPage() {
             <strong>Opérations en attente : </strong> {status.pendingCount}
           </div>
 
+          {platform.isDesktop && (
+            <>
+              <div style={{ marginBottom: '10px' }}>
+                <strong>Base configurée : </strong>
+                <span style={{ color: status.configured ? 'green' : 'red', fontWeight: 'bold' }}>
+                  {status.configured ? 'OUI' : 'NON (connectez-vous pour configurer)'}
+                </span>
+              </div>
+              <div style={{ marginBottom: '10px' }}>
+                <strong>Authentifié : </strong>
+                <span style={{ color: status.authenticated ? 'green' : 'red', fontWeight: 'bold' }}>
+                  {status.authenticated ? 'OUI' : 'NON'}
+                </span>
+              </div>
+              <div style={{ marginBottom: '10px' }}>
+                <strong>Échecs : </strong> {status.failedCount ?? 0}
+              </div>
+              {status.lastError && (
+                <div style={{ marginBottom: '10px', color: '#b91c1c' }}>
+                  <strong>Dernière erreur : </strong> {status.lastError}
+                </div>
+              )}
+              {status.lastSyncAt && (
+                <div style={{ marginBottom: '10px' }}>
+                  <strong>Dernière synchro : </strong> {new Date(status.lastSyncAt).toLocaleString('fr-FR')}
+                </div>
+              )}
+            </>
+          )}
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px' }}>
             <button onClick={handleToggleNetwork}>Basculer le mode Hors-ligne / En-ligne</button>
-            <button onClick={handleAddFakeOp}>Ajouter une vente fictive à la file</button>
+            <button onClick={handleAddFakeOp}>Tester la connexion base (PING, sans écriture)</button>
             <button onClick={handleForceSync} disabled={!status.isOnline || status.pendingCount === 0}>Forcer la Synchronisation</button>
           </div>
         </div>

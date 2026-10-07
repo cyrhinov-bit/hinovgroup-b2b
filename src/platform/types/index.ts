@@ -192,6 +192,8 @@ export interface SyncInterface {
   forceSync(): Promise<void>;
   getStatus(): Promise<any>;
   setNetworkStatus(online: boolean): Promise<void>;
+  configure(config: { url: string; anonKey: string }): Promise<any>;
+  setAuthToken(token: string | null): Promise<any>;
   onEvent(callback: (payload: { event: string; data: any }) => void): void;
 }
 

@@ -93,6 +93,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: { user: { id: string } } | null) => {
       if (!isMounted) return;
       if (session) {
+        // Moteur sync du main-process (desktop) : lui transmettre le token de
+        // session pour ses appels authentifiés (jamais persisté côté main).
+        try {
+          const { platform } = await import('../platform');
+          const token = (session as any)?.access_token || null;
+          if (platform.isDesktop && token) {
+            await platform.sync.setAuthToken(token).catch(() => {});
+          }
+        } catch {}
         await fetchUserProfile(session.user.id);
       } else if (event === 'SIGNED_OUT') {
         localStorage.removeItem(AUTH_STORAGE_KEY);
@@ -355,6 +364,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setLoading(false);
+      // Moteur sync desktop : configuration base + token de session (une fois
+      // connecté en ligne ; le renderer garde sa propre synchro métier).
+      try {
+        const { platform } = await import('../platform');
+        if (platform.isDesktop) {
+          const url = (import.meta as any)?.env?.VITE_SUPABASE_URL;
+          const anonKey = (import.meta as any)?.env?.VITE_SUPABASE_ANON_KEY;
+          if (url && anonKey) {
+            await platform.sync.configure({ url, anonKey }).catch(() => {});
+          }
+          const token = (data as any)?.session?.access_token || null;
+          if (token) {
+            await platform.sync.setAuthToken(token).catch(() => {});
+          }
+        }
+      } catch {}
       return { success: true };
     } catch {
       // Si timeout ou défaillance réseau -> bascule automatique sur le mode hors-ligne
@@ -396,6 +421,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     localStorage.removeItem(AUTH_STORAGE_KEY);
     setCurrentUser(null);
+    try {
+      const { platform } = await import('../platform');
+      if (platform.isDesktop) {
+        await platform.sync.setAuthToken(null).catch(() => {});
+      }
+    } catch {}
     try {
       await withAuthTimeout(supabase.auth.signOut(), 2000);
     } catch {

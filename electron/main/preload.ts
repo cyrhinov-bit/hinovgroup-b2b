@@ -124,11 +124,13 @@ const electronAPI = {
     ipcRenderer.on('pos:onEvent', (_, payload) => callback(payload));
   },
 
-  // Sync
+  // Sync (moteur main-process, base Supabase configurée)
   enqueueSync: (op: any) => ipcRenderer.invoke('sync:enqueue', op),
   forceSync: () => ipcRenderer.invoke('sync:forceSync'),
   getSyncStatus: () => ipcRenderer.invoke('sync:getStatus'),
   setNetworkStatus: (online: boolean) => ipcRenderer.invoke('sync:setNetwork', online),
+  configureSync: (cfg: any) => ipcRenderer.invoke('sync:configure', cfg),
+  setSyncAuthToken: (token: string | null) => ipcRenderer.invoke('sync:setAuthToken', token),
   onSyncEvent: (callback: (payload: { event: string; data: any }) => void) => {
     ipcRenderer.on('sync:onEvent', (_, payload) => callback(payload));
   }

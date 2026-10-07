@@ -109,6 +109,8 @@ export interface ElectronAPI {
   forceSync: () => Promise<void>;
   getSyncStatus: () => Promise<any>;
   setNetworkStatus: (online: boolean) => Promise<void>;
+  configureSync: (config: any) => Promise<any>;
+  setSyncAuthToken: (token: string | null) => Promise<any>;
   onSyncEvent: (callback: (payload: { event: string; data: any }) => void) => void;
 }
 

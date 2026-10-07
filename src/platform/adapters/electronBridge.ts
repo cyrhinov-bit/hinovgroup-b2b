@@ -118,6 +118,8 @@ export const electronBridge: PlatformBridge = {
     forceSync: async () => electron.forceSync(),
     getStatus: async () => electron.getSyncStatus(),
     setNetworkStatus: async (online) => electron.setNetworkStatus(online),
+    configure: async (config) => electron.configureSync(config),
+    setAuthToken: async (token) => electron.setSyncAuthToken(token),
     onEvent: (cb) => electron.onSyncEvent(cb)
   }
 };

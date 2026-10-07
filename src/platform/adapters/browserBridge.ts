@@ -224,8 +224,10 @@ export const browserBridge: PlatformBridge = {
   sync: {
     enqueue: async (op) => { console.log('[Web] Ajout requête queue', op); },
     forceSync: async () => { console.log('[Web] Synchronisation forcée avec Supabase'); },
-    getStatus: async () => ({ isOnline: navigator.onLine, pendingCount: 0 }),
+    getStatus: async () => ({ isOnline: navigator.onLine, pendingCount: 0, engine: 'renderer' }),
     setNetworkStatus: async (online) => { console.log(`[Web] Simulation réseau: ${online}`); },
+    configure: async () => ({ configured: false, engine: 'renderer' }),
+    setAuthToken: async () => ({ authenticated: false, engine: 'renderer' }),
     onEvent: (cb) => { window.addEventListener('online', () => cb({ event: 'networkStatusChanged', data: { isOnline: true } })); }
   }
 };
