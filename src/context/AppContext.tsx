@@ -62,7 +62,11 @@ const mergeKeepChildren = <T extends { id: string }>(
 };
 
 // Toasts d'erreurs sync déjà affichés (clé entité -> timestamp) : anti-boucle.
+// Fenêtre glissante pour plafonner les rafales (commune à tous les montages).
 const toastedSyncErrorKeys = new Map<string, number>();
+const toastSyncWindow: number[] = [];
+const TOAST_SYNC_COOLDOWN_MS = 10 * 60 * 1000;
+const TOAST_SYNC_MAX_PER_MIN = 3;
 
 // Remet en file les objets dont les enfants ont été protégés, pour que le
 // serveur soit réparé (chemins résilients). Best-effort, jamais bloquant.
@@ -2127,9 +2131,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Anti-boucle : une même entité en échec ne déclenche qu'un toast toutes les 10 min,
   // et jamais plus de 3 toasts par minute (rafale pendant la résorption d'une file).
   // Le compteur reste visible via le badge d'erreurs.
-  const TOAST_SYNC_COOLDOWN_MS = 10 * 60 * 1000;
-  const TOAST_SYNC_MAX_PER_MIN = 3;
-  const toastSyncWindow: number[] = [];
   useEffect(() => {
     const handleSyncCriticalError = (e: Event) => {
       const detail = (e as CustomEvent).detail as { message: string; action?: any };
