@@ -65,13 +65,15 @@ export class PrinterManager {
     if (!target) {
       const jobIdFailed = `job_${Date.now()}`;
       PrintQueue.addJob(this.createJob(jobIdFailed, 'failed', undefined, "Aucune imprimante disponible."));
-      return jobIdFailed;
+      throw new PrinterNotFoundError("Aucune imprimante disponible.");
     }
 
     const jobId = `job_${Date.now()}`;
     const job: PrintJob = this.createJob(jobId, 'pending', target);
     PrintQueue.addJob(job);
-    this.startSilentPrint(job, html);
+    // Attend l'issue réelle (completed/failed) au lieu de rendre la main :
+    // l'appelant (renderer) reçoit un succès ou une exception exploitable.
+    await this.startSilentPrint(job, html);
 
     return jobId;
   }
@@ -89,44 +91,48 @@ export class PrinterManager {
     return job;
   }
 
-  private static startSilentPrint(job: PrintJob, html: string): void {
-    const win = new BrowserWindow({
-      show: false,
-      webPreferences: { sandbox: true, contextIsolation: true }
-    });
-    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  private static startSilentPrint(job: PrintJob, html: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const win = new BrowserWindow({
+        show: false,
+        webPreferences: { sandbox: true, contextIsolation: true }
+      });
+      win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
-    const finish = (status: PrintJob['status'], error?: string) => {
-      PrintQueue.updateStatus(job.id, status, error);
-      if (!win.isDestroyed()) win.destroy();
-    };
+      const finish = (status: PrintJob['status'], error?: string) => {
+        PrintQueue.updateStatus(job.id, status, error);
+        if (!win.isDestroyed()) win.destroy();
+        if (status === 'completed') resolve();
+        else reject(new Error(error || "Échec de l'impression."));
+      };
 
-    win.webContents.on('did-fail-load', (_event, _code, desc) => {
-      finish('failed', desc || "Échec du chargement de la page.");
-    });
+      win.webContents.on('did-fail-load', (_event, _code, desc) => {
+        finish('failed', desc || "Échec du chargement de la page.");
+      });
 
-    win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
-      .then(() => {
-        setTimeout(() => {
-          win.webContents.print(
-            { 
-              silent: true, 
-              printBackground: true, 
-              deviceName: job.printerName,
-              margins: { marginType: 'none' },
-              scaleFactor: 100,
-              pageSize: { width: 80000, height: 297000 } // 80mm x 297mm in microns
-            },
-            (success, failureReason) => {
-              if (success) {
-                finish('completed');
-              } else {
-                finish('failed', failureReason || "Échec de l'impression.");
+      win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
+        .then(() => {
+          setTimeout(() => {
+            win.webContents.print(
+              {
+                silent: true,
+                printBackground: true,
+                deviceName: job.printerName,
+                margins: { marginType: 'none' },
+                scaleFactor: 100,
+                pageSize: { width: 80000, height: 297000 } // 80mm x 297mm in microns
+              },
+              (success, failureReason) => {
+                if (success) {
+                  finish('completed');
+                } else {
+                  finish('failed', failureReason || "Échec de l'impression.");
+                }
               }
-            }
-          );
-        }, 150);
-      })
-      .catch(err => finish('failed', String(err)));
+            );
+          }, 150);
+        })
+        .catch(err => finish('failed', String(err)));
+    });
   }
 }
