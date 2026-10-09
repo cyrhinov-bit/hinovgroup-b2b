@@ -219,10 +219,13 @@ function App() {
                     <Route path="rapports-hebdo" element={<Navigate to="/crm/rapports" replace />} />
                     <Route path="crm/modules" element={<RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><CrmModulesManager /></RequireRole>} />
 
-                    {/* Commercial routes */}
-                    <Route path="commercial" element={<RequireRole roles={['Commercial', 'SuperAdmin']}><DashboardCommercial /></RequireRole>} />
-                    <Route path="commercial/clients" element={<RequireRole roles={['Commercial', 'SuperAdmin']}><CommercialClients /></RequireRole>} />
-                    <Route path="commercial/documents" element={<RequireRole roles={['Commercial', 'SuperAdmin']}><Documents /></RequireRole>} />
+                    {/* Commercial routes (Commercial uniquement : le SuperAdmin n'y bascule plus) */}
+                    <Route path="commercial" element={<RequireRole roles={['Commercial']}><DashboardCommercial /></RequireRole>} />
+                    <Route path="commercial/clients" element={<RequireRole roles={['Commercial']}><CommercialClients /></RequireRole>} />
+                    <Route path="commercial/documents" element={<RequireRole roles={['Commercial']}><Documents /></RequireRole>} />
+
+                    {/* Dashboard Responsable : Responsable + bascule SuperAdmin */}
+                    <Route path="responsable" element={<RequireRole roles={['Responsable', 'SuperAdmin']}><DashboardResponsable /></RequireRole>} />
 
                     {/* POS routes */}
                     <Route path="pos" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant']}><DashboardPos /></RequireRole></Suspense>} />

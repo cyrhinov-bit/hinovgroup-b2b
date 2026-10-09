@@ -109,7 +109,9 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
   // CRM nav items
   const crmNavItems: NavItemConfig[] = [
     { label: 'Dashboard', icon: Home, path: '/', color: '#2563EB', bg: '#EFF6FF', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'] },
-    { label: 'Dashboard', icon: Home, path: '/commercial', color: '#2563EB', bg: '#EFF6FF', roles: ['Commercial', 'SuperAdmin'] },
+    { label: 'Dashboard', icon: Home, path: '/commercial', color: '#2563EB', bg: '#EFF6FF', roles: ['Commercial'] },
+    // Bascule SuperAdmin vers le dashboard Responsable (l'espace commercial lui est interdit)
+    { label: 'Dashboard Responsable', icon: Home, path: '/responsable', color: '#7C3AED', bg: '#FAF5FF', roles: ['SuperAdmin'] },
     // Modules CRM Responsables de Service & Collaborateurs
     { label: 'Commandes', icon: ShoppingBag, path: '/crm/prestations', color: '#10B981', bg: '#ECFDF5', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmPrestationsEnabled' },
     { label: 'Caisse & Dépenses', icon: Wallet, path: '/crm/caisse', color: '#EF4444', bg: '#FEF2F2', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmCaisseEnabled' },
@@ -178,9 +180,9 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
   const userRole = normalizeRole(currentUser?.role);
   const userPosRole = normalizeRole(currentUser?.posRole);
   const isCommercial = userRole === 'Commercial';
-  const isSuperAdminInCommercial = userRole === 'SuperAdmin' && location.pathname.startsWith('/commercial');
 
-  const isCrmRoute = location.pathname.startsWith('/commercial') || 
+  const isCrmRoute = location.pathname.startsWith('/commercial') ||
+                     location.pathname.startsWith('/responsable') || 
                      location.pathname.startsWith('/crm') || 
                      location.pathname.startsWith('/devis') || 
                      location.pathname.startsWith('/clients') || 
@@ -195,14 +197,14 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
   const canAccessPos = isDirection || userRole === 'Caissier' || userRole === 'Gerant' || !!userPosRole;
   const isPos = canAccessPos && !isCommercial && !isCrmRoute && (location.pathname.startsWith('/pos') || posWorkspace.active);
   const navItems = isPos ? posNavItems : crmNavItems;
-  const effectiveRole = (isPos && userPosRole) ? userPosRole : (isSuperAdminInCommercial ? 'Commercial' : userRole);
+  const effectiveRole = (isPos && userPosRole) ? userPosRole : userRole;
 
   // Filtrer les éléments selon le rôle de l'utilisateur connecté et ses permissions
   const visibleNavItems = navItems.filter(item => {
     if (!currentUser) return false;
 
-    // Espace Commercial (Commercial connecté ou SuperAdmin navigant dans l'espace commercial)
-    if (isCommercial || isSuperAdminInCommercial) {
+    // Espace Commercial (Commercial connecté uniquement)
+    if (isCommercial) {
       if (item.path === '/') return false;
       const hasCommercialRole = item.roles.some(r => r.toLowerCase() === 'commercial');
       if (!hasCommercialRole) return false;
@@ -215,11 +217,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
       return true;
     }
 
-    // Vue SuperAdmin standard hors espace commercial
-    if (userRole === 'SuperAdmin' && item.path === '/commercial') {
-      return false;
-    }
-
+    // Vue SuperAdmin standard (l'espace commercial lui est interdit : cf. rôles des routes)
     const hasRole = item.roles.some(r => r.toLowerCase() === effectiveRole.toLowerCase());
     if (!hasRole) return false;
 

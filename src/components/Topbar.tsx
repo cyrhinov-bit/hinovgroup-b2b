@@ -183,16 +183,16 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
             <button
               className="topbar-switch-btn"
               onClick={() => {
-                const isComm = location.pathname.startsWith('/commercial');
-                navigate(isComm ? '/utilisateurs' : '/commercial');
+                const isResp = location.pathname.startsWith('/responsable');
+                navigate(isResp ? '/utilisateurs' : '/responsable');
               }}
               style={{
-                backgroundColor: location.pathname.startsWith('/commercial') ? '#2196F3' : 'var(--color-primary)',
+                backgroundColor: location.pathname.startsWith('/responsable') ? '#7C3AED' : 'var(--color-primary)',
               }}
             >
               <ArrowLeftRight size={14} />
-              <span className="topbar-btn-text">{location.pathname.startsWith('/commercial') ? 'Retour Admin' : 'Ouvrir Commercial'}</span>
-              <span className="topbar-btn-text-mobile">{location.pathname.startsWith('/commercial') ? 'Admin' : 'Commercial'}</span>
+              <span className="topbar-btn-text">{location.pathname.startsWith('/responsable') ? 'Retour Admin' : 'Ouvrir Responsable'}</span>
+              <span className="topbar-btn-text-mobile">{location.pathname.startsWith('/responsable') ? 'Admin' : 'Responsable'}</span>
             </button>
           )}
 
