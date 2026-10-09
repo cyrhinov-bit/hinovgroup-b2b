@@ -188,6 +188,23 @@ export interface CatalogueArticle {
   updated_at?: string;
 }
 
+export type TypeMouvementStock = 'CREATION' | 'ENTREE' | 'SORTIE' | 'AJUSTEMENT' | 'SUPPRESSION';
+
+// Journal des mouvements de stock métier (traçabilité, ajout seul).
+export interface MouvementStock {
+  id: string;
+  article_id?: string;
+  article_code?: string;
+  type: TypeMouvementStock;
+  quantite: number;
+  stock_avant: number;
+  stock_apres: number;
+  motif?: string;
+  cree_par?: string;
+  cree_par_nom?: string;
+  created_at?: string;
+}
+
 export type StatutIntervention = 
   | 'NOUVEAU' 
   | 'EN_ATTENTE_PIECE' 

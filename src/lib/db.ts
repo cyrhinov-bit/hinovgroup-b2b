@@ -74,6 +74,7 @@ export const db = {
   crmCaisse: createStore('crmCaisse'),
   crmCommissions: createStore('crmCommissions'),
   crmArticles: createStore('crmArticles'),
+  crmStockMouvements: createStore('crmStockMouvements'),
   crmMaintenance: createStore('crmMaintenance'),
   crmTechniciens: createStore('crmTechniciens'),
   // CRM Facturation

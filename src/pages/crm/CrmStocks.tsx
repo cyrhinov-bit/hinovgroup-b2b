@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Search, Edit2, Trash2, Package, AlertTriangle, TrendingUp, DollarSign, ArrowUpDown, Filter } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Package, AlertTriangle, TrendingUp, DollarSign, ArrowUpDown, Filter, History } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
@@ -18,11 +19,17 @@ interface ArticleFormData {
 }
 
 export function CrmStocks() {
-  const { crmArticles, users, addCrmArticle, updateCrmArticle, deleteCrmArticle } = useAppContext();
+  const { crmArticles, crmStockMouvements, users, addCrmArticle, updateCrmArticle, deleteCrmArticle, addCrmStockMouvement } = useAppContext();
   const { currentUser: authUser } = useAuth();
   const currentUser = users.find(u => u.id === authUser?.id) || authUser;
   const isDirecteur = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
   const { confirm } = useConfirm();
+
+  // Propriété alignée sur le RLS serveur (auteur ou Direction) : sans elle,
+  // l'édition locale est rejetée côté serveur (42501) et l'objet « revient ».
+  // Les lignes historiques sans auteur sont réservées à la Direction.
+  const canManageArticle = (art: Pick<CatalogueArticle, 'cree_par'>) =>
+    isDirecteur || (!!art.cree_par && art.cree_par === currentUser?.id);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAlertOnly, setFilterAlertOnly] = useState(false);
@@ -33,6 +40,9 @@ export function CrmStocks() {
   // Quick adjust modal
   const [adjustingArticle, setAdjustingArticle] = useState<CatalogueArticle | null>(null);
   const [adjustQty, setAdjustQty] = useState<string>('0');
+  const [adjustMotif, setAdjustMotif] = useState<string>('');
+  // History modal (journal des mouvements, lecture seule)
+  const [historyArticle, setHistoryArticle] = useState<CatalogueArticle | null>(null);
 
   const [formData, setFormData] = useState<ArticleFormData>({
     code_article: '',
@@ -106,7 +116,7 @@ export function CrmStocks() {
     };
 
     const payload: CatalogueArticle = {
-      id: editingArticle ? editingArticle.id : '',
+      id: editingArticle ? editingArticle.id : uuidv4(),
       code_article: formData.code_article.trim().toUpperCase(),
       designation: formData.designation.trim(),
       categorie: formData.categorie?.trim() || 'Général',
@@ -119,36 +129,104 @@ export function CrmStocks() {
     };
 
     if (editingArticle) {
+      if (!canManageArticle(editingArticle)) {
+        alert('Modification réservée à l\'auteur de la fiche ou à la Direction.');
+        return;
+      }
       await updateCrmArticle(editingArticle.id, payload);
+      // Journal : toute variation de stock issue de la fiche est tracée.
+      const avant = Number(editingArticle.quantite_stock) || 0;
+      if (payload.quantite_stock !== avant) {
+        await addCrmStockMouvement({
+          article_id: editingArticle.id,
+          article_code: payload.code_article,
+          type: 'AJUSTEMENT',
+          quantite: Math.abs(payload.quantite_stock - avant),
+          stock_avant: avant,
+          stock_apres: payload.quantite_stock,
+          motif: 'Modification fiche article'
+        });
+      }
     } else {
       await addCrmArticle(payload);
+      // Journal : stock initial (avant = 0). Rien si créé à 0.
+      if (payload.quantite_stock > 0) {
+        await addCrmStockMouvement({
+          article_id: payload.id,
+          article_code: payload.code_article,
+          type: 'CREATION',
+          quantite: payload.quantite_stock,
+          stock_avant: 0,
+          stock_apres: payload.quantite_stock,
+          motif: 'Stock initial'
+        });
+      }
     }
     setShowModal(false);
   };
 
   const handleDelete = (art: CatalogueArticle) => {
+    if (!canManageArticle(art)) {
+      alert('Suppression réservée à l\'auteur de la fiche ou à la Direction.');
+      return;
+    }
     confirm({
       title: 'Supprimer l\'article',
       message: `Êtes-vous sûr de vouloir supprimer l'article ${art.code_article} (${art.designation}) ?`,
       confirmLabel: 'Supprimer',
-      onConfirm: () => deleteArticle(art.id)
+      onConfirm: () => deleteArticle(art)
     });
   };
 
-  const deleteArticle = async (id: string) => {
-    await deleteCrmArticle(id);
+  const deleteArticle = async (art: CatalogueArticle) => {
+    // Journal : trace de sortie avant suppression (l'article disparaît, le mouvement reste).
+    const avant = Number(art.quantite_stock) || 0;
+    if (avant > 0) {
+      await addCrmStockMouvement({
+        article_id: art.id,
+        article_code: art.code_article,
+        type: 'SUPPRESSION',
+        quantite: avant,
+        stock_avant: avant,
+        stock_apres: 0,
+        motif: 'Suppression article'
+      });
+    }
+    await deleteCrmArticle(art.id);
   };
 
   const handleOpenAdjust = (art: CatalogueArticle) => {
+    if (!canManageArticle(art)) {
+      alert('Ajustement réservé à l\'auteur de la fiche ou à la Direction.');
+      return;
+    }
     setAdjustingArticle(art);
     setAdjustQty(art.quantite_stock !== undefined && art.quantite_stock !== null ? String(art.quantite_stock) : '0');
+    setAdjustMotif('');
   };
 
   const handleSaveAdjust = async () => {
     if (!adjustingArticle) return;
+    if (!canManageArticle(adjustingArticle)) {
+      alert('Ajustement réservé à l\'auteur de la fiche ou à la Direction.');
+      return;
+    }
     const raw = String(adjustQty ?? '').trim();
     const finalQty = raw === '' ? 0 : Math.max(0, Number(raw.replace(',', '.')) || 0);
+    const avant = Number(adjustingArticle.quantite_stock) || 0;
     await updateCrmArticle(adjustingArticle.id, { quantite_stock: finalQty });
+    // Journal : toute variation (même vers 0) est tracée avec son motif.
+    if (finalQty !== avant) {
+      await addCrmStockMouvement({
+        article_id: adjustingArticle.id,
+        article_code: adjustingArticle.code_article,
+        type: 'AJUSTEMENT',
+        quantite: Math.abs(finalQty - avant),
+        stock_avant: avant,
+        stock_apres: finalQty,
+        motif: adjustMotif.trim() || 'Ajustement manuel'
+      });
+    }
     setAdjustingArticle(null);
   };
 
@@ -329,19 +407,35 @@ export function CrmStocks() {
                     <td data-label="Actions">
                       <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                         <button
-                          className="btn btn-secondary"
-                          style={{ padding: '3px 8px', fontSize: '11px' }}
-                          title="Ajuster le niveau de stock"
-                          onClick={() => handleOpenAdjust(art)}
+                          className="icon-button"
+                          title="Historique des mouvements"
+                          onClick={() => setHistoryArticle(art)}
+                          style={{ color: 'var(--color-text-muted)' }}
                         >
-                          <ArrowUpDown size={12} style={{ marginRight: '2px' }} /> Ajuster
+                          <History size={14} />
                         </button>
-                        <button className="icon-button" title="Modifier" onClick={() => handleOpenEdit(art)} style={{ color: 'var(--color-primary)' }}>
-                          <Edit2 size={14} />
-                        </button>
-                        <button className="icon-button text-error" title="Supprimer" onClick={() => handleDelete(art)}>
-                          <Trash2 size={14} />
-                        </button>
+                        {canManageArticle(art) ? (
+                          <>
+                            <button
+                              className="btn btn-secondary"
+                              style={{ padding: '3px 8px', fontSize: '11px' }}
+                              title="Ajuster le niveau de stock"
+                              onClick={() => handleOpenAdjust(art)}
+                            >
+                              <ArrowUpDown size={12} style={{ marginRight: '2px' }} /> Ajuster
+                            </button>
+                            <button className="icon-button" title="Modifier" onClick={() => handleOpenEdit(art)} style={{ color: 'var(--color-primary)' }}>
+                              <Edit2 size={14} />
+                            </button>
+                            <button className="icon-button text-error" title="Supprimer" onClick={() => handleDelete(art)}>
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }} title="Fiche d'un autre auteur : modification réservée">
+                            Lecture seule
+                          </span>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -495,9 +589,90 @@ export function CrmStocks() {
               />
             </div>
 
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>Motif (tracé dans le journal)</label>
+              <input
+                type="text"
+                className="table-input"
+                placeholder="Ex : Inventaire, casse, réception fournisseur…"
+                value={adjustMotif}
+                onChange={e => setAdjustMotif(e.target.value)}
+              />
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button className="btn btn-secondary" onClick={() => setAdjustingArticle(null)}>Annuler</button>
               <button className="btn btn-primary" onClick={handleSaveAdjust}>Mettre à jour</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Historique des mouvements (journal, lecture seule) */}
+      {historyArticle && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, padding: '16px'
+        }}>
+          <div className="card" style={{ maxWidth: '620px', width: '100%', padding: '24px', maxHeight: '80vh', overflowY: 'auto' }}>
+            <h3 style={{ marginBottom: '4px' }}>Journal des mouvements</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+              <strong>{historyArticle.designation}</strong> ({historyArticle.code_article}) — stock actuel : <strong>{historyArticle.quantite_stock || 0}</strong>
+            </p>
+            {(() => {
+              const moves = crmStockMouvements
+                .filter(m => m.article_id === historyArticle.id)
+                .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+              const typeStyle: Record<string, { bg: string; color: string; label: string }> = {
+                CREATION: { bg: 'rgba(37, 99, 235, 0.12)', color: '#2563EB', label: 'Création' },
+                ENTREE: { bg: 'rgba(16, 185, 129, 0.12)', color: '#10B981', label: 'Entrée' },
+                SORTIE: { bg: 'rgba(239, 68, 68, 0.12)', color: '#DC2626', label: 'Sortie' },
+                AJUSTEMENT: { bg: 'rgba(234, 179, 8, 0.15)', color: '#CA8A04', label: 'Ajustement' },
+                SUPPRESSION: { bg: 'rgba(100, 116, 139, 0.15)', color: '#64748B', label: 'Suppression' }
+              };
+              if (moves.length === 0) {
+                return <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>Aucun mouvement enregistré pour cet article (journal actif depuis cette version).</p>;
+              }
+              return (
+                <table className="data-table" style={{ fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Type</th>
+                      <th style={{ textAlign: 'right' }}>Avant → Après</th>
+                      <th>Motif / Auteur</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {moves.map(m => {
+                      const t = typeStyle[m.type] || typeStyle.AJUSTEMENT;
+                      const delta = (m.stock_apres || 0) - (m.stock_avant || 0);
+                      return (
+                        <tr key={m.id}>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            {m.created_at ? new Date(m.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </td>
+                          <td><span className="badge-status" style={{ background: t.bg, color: t.color }}>{t.label}</span></td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                            {m.stock_avant} → {m.stock_apres}{' '}
+                            <span style={{ color: delta > 0 ? '#10B981' : delta < 0 ? '#EF4444' : 'var(--color-text-muted)' }}>
+                              ({delta > 0 ? `+${delta}` : delta})
+                            </span>
+                          </td>
+                          <td>
+                            <div>{m.motif || '—'}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{m.cree_par_nom || ''}</div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              );
+            })()}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+              <button className="btn btn-secondary" onClick={() => setHistoryArticle(null)}>Fermer</button>
             </div>
           </div>
         </div>

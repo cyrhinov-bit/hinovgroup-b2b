@@ -303,6 +303,7 @@ export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT'
                                'INSERT_CRM_MOUVEMENT' | 'DELETE_CRM_MOUVEMENT' |
                                'UPSERT_CRM_COMMISSION' | 'UPDATE_CRM_COMMISSION' | 'DELETE_CRM_COMMISSION' |
                                'INSERT_CRM_ARTICLE' | 'UPDATE_CRM_ARTICLE' | 'DELETE_CRM_ARTICLE' |
+                               'INSERT_CRM_STOCK_MOUVEMENT' |
                                'INSERT_CRM_INTERVENTION' | 'UPDATE_CRM_INTERVENTION' | 'DELETE_CRM_INTERVENTION' |
                                'INSERT_CRM_TECHNICIEN' | 'UPDATE_CRM_TECHNICIEN' | 'DELETE_CRM_TECHNICIEN';
 
@@ -714,6 +715,7 @@ const ACTION_PRIORITY: Record<string, number> = {
   'INSERT_POS_RETURN': 5,
   'UPDATE_POS_RETURN': 5,
   'INSERT_CRM_MOUVEMENT': 5,
+  'INSERT_CRM_STOCK_MOUVEMENT': 5,
   'UPSERT_CRM_COMMISSION': 5,
   'UPDATE_CRM_COMMISSION': 5,
   'DELETE_CRM_COMMISSION': 6,
@@ -2149,6 +2151,11 @@ export const processSyncQueue = async () => {
         }
         case 'DELETE_CRM_ARTICLE': {
           success = await syncCrmDelete('catalogue_articles', action.payload.id, 'DELETE_CRM_ARTICLE');
+          break;
+        }
+        // ─── Modules CRM : Stocks / Journal des mouvements (traçabilité, ajout seul) ───
+        case 'INSERT_CRM_STOCK_MOUVEMENT': {
+          success = await syncCrmUpsert('mouvements_stock', action.payload, ['article_id', 'cree_par'], 'INSERT_CRM_STOCK_MOUVEMENT');
           break;
         }
         // ─── Modules CRM : Maintenance ───

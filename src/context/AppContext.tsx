@@ -140,7 +140,7 @@ const healQueueMissingChildren = async (
 
 import type { 
   ClientFournisseur, AgentCommercial, PrestationCommande, 
-  MouvementCaisse, CommissionPrestation, CatalogueArticle, 
+  MouvementCaisse, CommissionPrestation, CatalogueArticle, MouvementStock,
   InterventionMaintenance, TechnicienMaintenance, ModeReglement,
   Invoice, InvoiceItem, InvoicePayment, InvoiceStatus
 } from '../types/crmModules';
@@ -645,6 +645,7 @@ interface AppState {
   crmCaisse: MouvementCaisse[];
   crmCommissions: CommissionPrestation[];
   crmArticles: CatalogueArticle[];
+  crmStockMouvements: MouvementStock[];
   crmMaintenance: InterventionMaintenance[];
   crmTechniciens: TechnicienMaintenance[];
   addCrmTier: (tier: ClientFournisseur) => Promise<void>;
@@ -664,6 +665,7 @@ interface AppState {
   addCrmArticle: (art: CatalogueArticle) => Promise<void>;
   updateCrmArticle: (id: string, art: Partial<CatalogueArticle>) => Promise<void>;
   deleteCrmArticle: (id: string) => Promise<void>;
+  addCrmStockMouvement: (mvt: Omit<MouvementStock, 'id' | 'created_at'> & { id?: string }) => Promise<void>;
   addCrmIntervention: (interv: InterventionMaintenance) => Promise<void>;
   updateCrmIntervention: (id: string, interv: Partial<InterventionMaintenance>) => Promise<void>;
   deleteCrmIntervention: (id: string) => Promise<void>;
@@ -797,6 +799,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [crmCaisse, setCrmCaisse] = useState<MouvementCaisse[]>([]);
   const [crmCommissions, setCrmCommissions] = useState<CommissionPrestation[]>([]);
   const [crmArticles, setCrmArticles] = useState<CatalogueArticle[]>([]);
+  const [crmStockMouvements, setCrmStockMouvements] = useState<MouvementStock[]>([]);
   const [crmMaintenance, setCrmMaintenance] = useState<InterventionMaintenance[]>([]);
   const [crmTechniciens, setCrmTechniciens] = useState<TechnicienMaintenance[]>([]);
   // Facturation
@@ -837,7 +840,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         cachedPosTransactions, cachedPosPayments, cachedPosDiscounts, cachedPosSettings,
         cachedPosReturns, cachedProductCompletions, cachedImportSessions,
         cachedCrmTiers, cachedCrmCommerciaux, cachedCrmPrestations, cachedCrmCaisse,
-        cachedCrmCommissions, cachedCrmArticles, cachedCrmMaintenance, cachedCrmTechniciens,
+        cachedCrmCommissions, cachedCrmArticles, cachedCrmStockMouvements, cachedCrmMaintenance, cachedCrmTechniciens,
         cachedInvoices, cachedInvoicePayments
       ] = await Promise.all([
         safeGet<User[]>(db.profiles),
@@ -889,6 +892,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         safeGet<MouvementCaisse[]>(db.crmCaisse),
         safeGet<CommissionPrestation[]>(db.crmCommissions),
         safeGet<CatalogueArticle[]>(db.crmArticles),
+        safeGet<MouvementStock[]>(db.crmStockMouvements),
         safeGet<InterventionMaintenance[]>(db.crmMaintenance),
         safeGet<TechnicienMaintenance[]>(db.crmTechniciens),
         safeGet<Invoice[]>(db.invoices),
@@ -957,6 +961,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (cachedCrmCaisse) setCrmCaisse(cachedCrmCaisse);
       if (cachedCrmCommissions) setCrmCommissions(cachedCrmCommissions);
       if (cachedCrmArticles) setCrmArticles(cachedCrmArticles);
+      if (cachedCrmStockMouvements) setCrmStockMouvements(cachedCrmStockMouvements);
       if (cachedCrmMaintenance) setCrmMaintenance(cachedCrmMaintenance);
       if (cachedCrmTechniciens) setCrmTechniciens(cachedCrmTechniciens);
 
@@ -1118,6 +1123,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           () => currentUser ? safeFetchAll('mouvements_caisse') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('commissions_prestations') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('catalogue_articles') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('mouvements_stock') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('interventions_maintenance') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('techniciens_maintenance') : Promise.resolve(null),
           // Factures : lignes chargées SÉPARÉMENT (pas d'embed `invoice_items(*)`).
@@ -1145,7 +1151,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           posDiscountsData, posSettingsData, crmDocumentsData, crmFoldersData, notificationsData,
           posReturnsData,
           crmTiersData, crmCommerciauxData, crmPrestationsData, crmCaisseData,
-          crmCommissionsData, crmArticlesData, crmMaintenanceData, crmTechniciensData,
+          crmCommissionsData, crmArticlesData, crmStockMouvementsData, crmMaintenanceData, crmTechniciensData,
           invoicesData, invoiceItemsData, invoicePaymentsData
         ] = await fetchInBatches(fetchTasks, 6);
 
@@ -1952,6 +1958,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }));
           const merged = mergeData(cachedCrmArticles, parsed);
           setCrmArticles(merged); await db.crmArticles.setItem('data', merged);
+        }
+
+        if (crmStockMouvementsData && crmStockMouvementsData.length > 0) {
+          const parsed: MouvementStock[] = crmStockMouvementsData.map((m: any) => ({
+            id: m.id,
+            article_id: m.article_id || undefined,
+            article_code: m.article_code || undefined,
+            type: m.type || 'AJUSTEMENT',
+            quantite: Number(m.quantite) || 0,
+            stock_avant: Number(m.stock_avant) || 0,
+            stock_apres: Number(m.stock_apres) || 0,
+            motif: m.motif || undefined,
+            cree_par: m.cree_par || undefined,
+            cree_par_nom: m.cree_par_nom || undefined,
+            created_at: m.created_at
+          }));
+          const merged = mergeData(cachedCrmStockMouvements, parsed);
+          setCrmStockMouvements(merged); await db.crmStockMouvements.setItem('data', merged);
         }
 
         if (crmMaintenanceData && crmMaintenanceData.length > 0) {
@@ -5280,6 +5304,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('DELETE_CRM_ARTICLE', { id });
   };
 
+  // Journal des mouvements de stock métier (traçabilité, ajout seul) :
+  // chaque création / ajustement / suppression d'article y laisse une trace
+  // synchronisée (table mouvements_stock). Immuable côté UI (pas de delete).
+  const addCrmStockMouvement = async (mvt: Omit<MouvementStock, 'id' | 'created_at'> & { id?: string }) => {
+    const item: MouvementStock = {
+      ...mvt,
+      id: mvt.id || uuidv4(),
+      quantite: Math.max(0, Number(mvt.quantite) || 0),
+      stock_avant: Math.max(0, Number(mvt.stock_avant) || 0),
+      stock_apres: Math.max(0, Number(mvt.stock_apres) || 0),
+      cree_par: mvt.cree_par || currentUser?.id,
+      cree_par_nom: mvt.cree_par_nom || currentUser?.name,
+      created_at: new Date().toISOString()
+    };
+    const next = [item, ...crmStockMouvements];
+    setCrmStockMouvements(next);
+    await db.crmStockMouvements.setItem('data', next);
+    await queueSyncAction('INSERT_CRM_STOCK_MOUVEMENT', item);
+  };
+
   // Module 3: Maintenance & Interventions
   const addCrmIntervention = async (interv: InterventionMaintenance) => {
     const id = interv.id || uuidv4();
@@ -5678,13 +5722,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider value={{
       users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, sendWeeklyReportReminder, reviewV2WeeklyReport, deleteV2WeeklyReport, deleteV2DailyReport, updateMyProfile, addCrmDocument, updateCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, mergePosProducts, repairLocalCatalog, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData, reconcilePosData: (opts?: { force?: boolean }) => reconcileLocalPosDataWithCloud(opts),
       // CRM Modules Responsables
-      crmTiers, crmCommerciaux, crmPrestations, crmCaisse, crmCommissions, crmArticles, crmMaintenance, crmTechniciens,
+      crmTiers, crmCommerciaux, crmPrestations, crmCaisse, crmCommissions, crmArticles, crmStockMouvements, crmMaintenance, crmTechniciens,
       addCrmTier, updateCrmTier, deleteCrmTier,
       addCrmCommercial, updateCrmCommercial, deleteCrmCommercial,
       addCrmPrestation, updateCrmPrestation, deleteCrmPrestation, encaisserCrmPrestation,
       addCrmMouvementCaisse, deleteCrmMouvementCaisse,
       updateCrmCommissionStatus, payerCrmCommission,
-      addCrmArticle, updateCrmArticle, deleteCrmArticle,
+      addCrmArticle, updateCrmArticle, deleteCrmArticle, addCrmStockMouvement,
       addCrmIntervention, updateCrmIntervention, deleteCrmIntervention,
       addCrmTechnicien, updateCrmTechnicien, deleteCrmTechnicien,
       // Module Facturation Client
