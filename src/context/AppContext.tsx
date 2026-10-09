@@ -88,8 +88,19 @@ const TOAST_SYNC_MAX_PER_MIN = 3;
 
 // Tables sans colonne created_at en prod : le .order() systématique de
 // safeFetchAll échoue en 400 et double les requêtes à chaque refresh.
-// Détectées une fois (message d'erreur), le tri est ensuite sauté d'office.
-const tablesWithoutCreatedAt = new Set<string>();
+// Liste pré-renseignée (constaté en prod) + détection dynamique au cas par cas.
+// Rater le tri n'est jamais bloquant : l'ordre ne sert qu'à stabiliser la pagination.
+const tablesWithoutCreatedAt = new Set<string>([
+  'profiles',
+  'prestations',
+  'categories',
+  'classements',
+  'prospect_activities',
+  'prospect_follow_ups',
+  'pos_cash_sessions',
+  'pos_payments',
+  'pos_stock_movements',
+]);
 
 // Remet en file les objets dont les enfants ont été protégés, pour que le
 // serveur soit réparé (chemins résilients). Best-effort, jamais bloquant.
