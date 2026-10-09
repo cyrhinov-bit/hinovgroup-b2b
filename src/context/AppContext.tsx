@@ -86,6 +86,11 @@ const toastSyncWindow: number[] = [];
 const TOAST_SYNC_COOLDOWN_MS = 10 * 60 * 1000;
 const TOAST_SYNC_MAX_PER_MIN = 3;
 
+// Tables sans colonne created_at en prod : le .order() systématique de
+// safeFetchAll échoue en 400 et double les requêtes à chaque refresh.
+// Détectées une fois (message d'erreur), le tri est ensuite sauté d'office.
+const tablesWithoutCreatedAt = new Set<string>();
+
 // Remet en file les objets dont les enfants ont été protégés, pour que le
 // serveur soit réparé (chemins résilients). Best-effort, jamais bloquant.
 // Anti-boucle : chaque entité n'est remise en file qu'une fois toutes les 6h
@@ -1026,12 +1031,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             let from = 0;
             for (let guard = 0; guard < 50; guard++) {
               let q: any = supabase.from(table).select(select).range(from, from + PAGE - 1);
-              if (from === 0) q = q.order('created_at', { ascending: true });
+              if (from === 0 && !tablesWithoutCreatedAt.has(table)) q = q.order('created_at', { ascending: true });
               const res = await withTimeout<any>(q, 15000);
               if (res && res.error) {
                 fetchFailures[table] = (fetchFailures[table] || 0) + 1;
                 console.warn(`[Refresh] table ${table} en échec (${fetchFailures[table]}x) :`, res.error.message || res.error);
                 if (from === 0) {
+                  if (/created_at/i.test(res.error.message || '')) tablesWithoutCreatedAt.add(table);
                   const r2 = await withTimeout<any>(supabase.from(table).select(select).range(0, PAGE - 1), 15000);
                   if (r2 && !r2.error && Array.isArray(r2.data)) return r2.data;
                 }
@@ -1101,7 +1107,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           () => currentUser ? safeFetchAll('catalogue_articles') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('interventions_maintenance') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('techniciens_maintenance') : Promise.resolve(null),
-          () => currentUser ? safeFetchAll('invoices', '*, invoice_items(*)') : Promise.resolve(null),
+          // Factures : lignes chargées SÉPARÉMENT (pas d'embed `invoice_items(*)`).
+          // PostgREST ne connaît pas la FK en prod ("Could not find a relationship"),
+          // ce qui faisait échouer tout le fetch (0 partout sur navigateur frais).
+          // Jointure locale par invoice_id ci-dessous.
+          () => currentUser ? safeFetchAll('invoices') : Promise.resolve(null),
+          () => currentUser ? safeFetchAll('invoice_items') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('invoice_payments') : Promise.resolve(null)
         ];
 
@@ -1122,7 +1133,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           posReturnsData,
           crmTiersData, crmCommerciauxData, crmPrestationsData, crmCaisseData,
           crmCommissionsData, crmArticlesData, crmMaintenanceData, crmTechniciensData,
-          invoicesData, invoicePaymentsData
+          invoicesData, invoiceItemsData, invoicePaymentsData
         ] = await fetchInBatches(fetchTasks, 6);
 
         if (profilesData && profilesData.length > 0) {
@@ -1976,6 +1987,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
 
         if (invoicesData && invoicesData.length > 0) {
+          // Jointure locale des lignes (fetch séparé, cf. fetchTasks) : regroupe
+          // par invoice_id au lieu de l'embed PostgREST défaillant en prod.
+          const itemsByInvoice = new Map<string, any[]>();
+          for (const it of (invoiceItemsData || [])) {
+            const k = (it as any)?.invoice_id;
+            if (!k) continue;
+            const arr = itemsByInvoice.get(k);
+            if (arr) arr.push(it);
+            else itemsByInvoice.set(k, [it]);
+          }
           const parsed: Invoice[] = invoicesData.map((inv: any) => {
             const d = inv.delivery_date || inv.issue_date || inv.created_at;
             const fallbackDate = d ? new Date(d) : new Date();
@@ -2016,7 +2037,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               createdBy: inv.created_by || undefined,
               createdAt: inv.created_at,
               updatedAt: inv.updated_at,
-              items: (inv.invoice_items || []).map((it: any) => ({
+              items: ((itemsByInvoice.get(inv.id) || []) as any[]).map((it: any) => ({
                 id: it.id,
                 invoiceId: it.invoice_id,
                 prestationId: it.prestation_id || undefined,
