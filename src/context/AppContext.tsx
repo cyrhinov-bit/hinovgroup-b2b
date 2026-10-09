@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import type { ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
-import { db } from '../lib/db';
+import { db, ensureDbHealth } from '../lib/db';
 import { queueSyncAction, processSyncQueue, reconcileLocalPosDataWithCloud, reconcileAllOfflineDataWithCloud, resolveProductUuid, isRetiredServicePayload, getProductRemap, setProductRemap, applyProductRemapToAction } from '../lib/sync';
 import { v4 as uuidv4 } from 'uuid';
 import toast from 'react-hot-toast';
@@ -811,6 +811,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!isBackground) {
         setLoading(true);
       }
+      // Base locale réparée d'abord (conflit de version = cache illisible = 0 partout).
+      await ensureDbHealth().catch(() => {});
       try {
         const [
         cachedUsers, cachedClients, cachedAffaires, cachedFacturePaiements, cachedCouts,
@@ -1062,7 +1064,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           () => currentUser ? safeFetchAll('clients') : Promise.resolve(null),
           () => safeFetchAll('services'),
           () => safeFetchAll('prestations'),
-          () => safeFetch(() => supabase.from('settings').select('*').single()),
+          () => safeFetch(() => supabase.from('settings').select('*').limit(1).maybeSingle()),
           () => currentUser ? safeFetchAll('quotes', '*, quote_lines(*)') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('ventes', '*, vente_lines(*)') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('commissions') : Promise.resolve(null),
@@ -1094,7 +1096,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           () => safeFetchAll('pos_transactions', '*, pos_transaction_lines(*), pos_payments(*)'),
           () => safeFetchAll('pos_payments'),
           () => safeFetchAll('pos_discounts'),
-          () => safeFetch(() => supabase.from('pos_settings').select('*').single()),
+          () => safeFetch(() => supabase.from('pos_settings').select('*').limit(1).maybeSingle()),
           () => currentUser ? safeFetchAll('crm_documents') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('crm_folders') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('notifications') : Promise.resolve(null),

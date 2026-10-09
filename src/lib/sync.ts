@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { db } from './db';
+import { db, ensureDbHealth } from './db';
 import { supabase } from './supabase';
 
 const isUuid = (value?: string) => !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -782,6 +782,8 @@ export const queueSyncAction = async (type: SyncActionType, payload: any) => {
   // Sérialise les read-modify-write sur la file (localforage sans transaction :
   // 2 appels concurrents = 1 action perdue).
   queueChain = queueChain.then(async () => {
+    // Base locale réparée d'abord (conflit de version IndexedDB = écriture perdue sinon).
+    await ensureDbHealth().catch(() => {});
     const action: SyncAction = {
       id: uuidv4(),
       type,
@@ -908,6 +910,8 @@ export const processSyncQueue = async () => {
   if (syncLock) return;
   syncLock = true;
   try {
+    // Base locale réparée d'abord (sinon file illisible = run fantôme).
+    await ensureDbHealth().catch(() => {});
     if (navigator.onLine) {
       await ensureSupabaseAuth().catch(() => {});
     }
