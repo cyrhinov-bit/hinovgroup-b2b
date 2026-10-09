@@ -275,7 +275,7 @@ export function CrmMaintenance() {
       title: 'Supprimer le technicien',
       message: `Êtes-vous sûr de vouloir supprimer le technicien ${t.nom} ?`,
       confirmLabel: 'Supprimer',
-      onConfirm: () => deleteCrmTechnicien(t.id)
+      onConfirm: () => { void deleteCrmTechnicien(t.id); }
     });
   };
 
