@@ -2714,10 +2714,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteQuote = async (id: string) => {
-    const linkedInvoice = invoices.find(inv => inv.quoteId === id);
-    if (linkedInvoice) {
-      throw new Error(`Suppression impossible : facture ${linkedInvoice.invoiceNumber} liée au devis.`);
-    }
     const newQuotes = quotes.filter(q => q.id !== id);
     setQuotes(newQuotes);
     await db.quotes.setItem('data', newQuotes);

@@ -26,7 +26,6 @@ import {
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { useAppContext } from '../context/AppContext';
-import type { Quote } from '../context/AppContext';
 import { visibleTo } from '../lib/scope';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
@@ -54,7 +53,6 @@ export function Factures() {
   const { currentUser: authUser } = useAuth();
   const { 
     invoices, 
-    quotes, 
     clients, 
     services, 
     users, 
@@ -213,47 +211,7 @@ export function Factures() {
     return Math.max(0, formAmountToPay - formAmountPaid);
   }, [formAmountToPay, formAmountPaid]);
 
-  // Handle URL param to auto open creation from quote
-  useEffect(() => {
-    const createQuoteId = searchParams.get('createFromQuoteId');
-    if (createQuoteId) {
-      const quote = quotes.find(q => q.id === createQuoteId);
-      if (quote) {
-        openCreateModalFromQuote(quote);
-      }
-    }
-  }, [searchParams, quotes]);
-
-  const openCreateModalFromQuote = (quote: Quote) => {
-    setEditingInvoiceId(null);
-    setFormPeriodYear(selectedYear);
-    setFormPeriodMonth(selectedMonth);
-    setFormQuoteId(quote.id);
-    setFormClientId(quote.clientId);
-    const client = clients.find(c => c.id === quote.clientId);
-    setFormClientName(client?.company || client?.name || '');
-    setFormCommercialId(quote.commercialId || currentUser?.id || '');
-    const comm = users.find(u => u.id === (quote.commercialId || currentUser?.id));
-    setFormCommercialName(comm?.name || '');
-    setFormServiceId(quote.serviceId || '');
-    const srv = services.find(s => s.id === quote.serviceId);
-    setFormServiceName(srv?.name || (createdServices.length > 0 ? createdServices[0].name : ''));
-    setFormCategory(quote.lines?.[0]?.description || '');
-    const today = new Date().toISOString().split('T')[0];
-    setFormDeliveryDate(today);
-    setFormPaymentDate('');
-    const totalToPay = quote.total || 0;
-    setFormAmountToPay(totalToPay);
-    const estimatedCost = (quote.lines || []).reduce((sum, l) => sum + ((l.costPrice || 0) * (l.quantity || 1)), 0);
-    setFormAmountUsed(estimatedCost);
-    const gross = Math.max(0, totalToPay - estimatedCost);
-    setFormCommissionAmount(comm?.name ? Math.round(gross * 0.1) : 0);
-    setFormCommissionRate(10);
-    setFormAmountPaid(0);
-    setFormNotes(quote.notes || `Devis N° ${quote.quoteNumber}`);
-    setIsCreateModalOpen(true);
-  };
-
+  // Ouverture création d'une nouvelle ligne de suivi
   const handleOpenNewTrackingRow = () => {
     setEditingInvoiceId(null);
     setFormPeriodYear(selectedYear);
@@ -1833,29 +1791,7 @@ export function Factures() {
                 </div>
               </div>
 
-              {/* Liaison Devis (Optionnelle) */}
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
-                  Liaison Devis (Optionnelle)
-                </label>
-                <select
-                  value={formQuoteId}
-                  onChange={e => setFormQuoteId(e.target.value)}
-                  className="table-input"
-                  style={{ width: '100%', padding: '6px 10px', fontSize: '0.8rem' }}
-                >
-                  <option value="">Aucun devis lié (Création directe)</option>
-                  {quotes.map(q => {
-                    const cl = clients.find(c => c.id === q.clientId);
-                    const clName = cl?.company || cl?.name || 'Client';
-                    return (
-                      <option key={q.id} value={q.id}>
-                        Devis N° {q.quoteNumber} - {clName} ({q.total?.toLocaleString('fr-FR')} FCFA)
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
+
 
               {/* Boutons d'action */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px', paddingTop: '14px', borderTop: '1px solid var(--color-border)' }}>

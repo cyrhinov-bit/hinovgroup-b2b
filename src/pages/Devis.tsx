@@ -25,20 +25,9 @@ import type { Quote } from '../context/AppContext';
 import { canViewAll, visibleTo, canManageOwned } from '../lib/scope';
 
 type PeriodFilter = 'ALL' | 'TODAY' | '7_DAYS' | 'THIS_MONTH' | 'THIS_QUARTER' | 'THIS_YEAR';
-type QuoteStatus = Quote['status'];
-
-// Workflow autorisé : Brouillon -> Envoyé -> Accepté/Refusé/Révision ; Révision -> Envoyé/Accepté/Refusé
-const ALLOWED_TRANSITIONS: Record<QuoteStatus, QuoteStatus[]> = {
-  'Brouillon': ['Envoyé'],
-  'Envoyé': ['Accepté', 'Refusé', 'Révision'],
-  'Révision': ['Envoyé', 'Accepté', 'Refusé'],
-  'Accepté': [],
-  'Refusé': [],
-};
 
 function isQuoteExpired(q: Quote): boolean {
   if (!q.validUntil) return false;
-  if (q.status === 'Accepté' || q.status === 'Refusé') return false;
   const today = new Date().toISOString().split('T')[0];
   return q.validUntil < today;
 }
@@ -47,7 +36,7 @@ export function Devis() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentUser: authUser } = useAuth();
-  const { quotes, clients, settings, updateQuoteStatus, deleteQuote, services, users, invoices } = useAppContext();
+  const { quotes, clients, settings, deleteQuote, services, users } = useAppContext();
   const currentUser = users.find(u => u.id === authUser?.id) || authUser;
   const { confirm } = useConfirm();
 
@@ -215,24 +204,7 @@ export function Devis() {
     return canManageOwned(q, currentUser?.role, currentUser?.id, x => [x.commercialId]);
   };
 
-  const canTransition = (q: Quote, next: QuoteStatus): boolean => {
-    if (!canManageQuote(q)) return false;
-    // La direction peut rouvrir un devis Accepté/Refusé vers Révision (correction)
-    if ((q.status === 'Accepté' || q.status === 'Refusé') && isDirector && next === 'Révision') return true;
-    return (ALLOWED_TRANSITIONS[q.status] || []).includes(next);
-  };
-
-  const handleStatusChange = (q: Quote, newStatus: Quote['status']) => {
-    if (!canTransition(q, newStatus)) return;
-    updateQuoteStatus(q.id, newStatus);
-  };
-
   const handleDelete = (q: Quote) => {
-    const existingInvoice = invoices.find(inv => inv.quoteId === q.id);
-    if (existingInvoice) {
-      alert(`Suppression impossible : une facture (${existingInvoice.invoiceNumber}) est liée à ce devis.`);
-      return;
-    }
     confirm({
       title: 'Supprimer le devis',
       message: `Voulez-vous vraiment supprimer le devis "${q.quoteNumber}" ? Cette action est irréversible.`,
@@ -445,7 +417,6 @@ export function Devis() {
             <tbody>
               {paginatedQuotes.map(q => {
                 const expired = isQuoteExpired(q);
-                const existingInvoice = invoices.find(inv => inv.quoteId === q.id);
                 return (
                 <tr key={q.id}>
                   <td data-label="N° Devis">
@@ -497,64 +468,11 @@ export function Devis() {
                           </span>
                         )}
                       </div>
-                      {existingInvoice && (isDirector || !!currentUser?.crmFacturationEnabled) && (
-                        <span
-                          style={{ cursor: 'pointer', background: '#E0F2FE', color: '#0284C7', padding: '2px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700, width: 'fit-content' }}
-                          onClick={() => navigate(`/factures?search=${existingInvoice.invoiceNumber}`)}
-                          title="Voir la facture associée"
-                        >
-                          📄 Facturé ({existingInvoice.invoiceNumber})
-                        </span>
-                      )}
                     </div>
                   </td>
                   <td data-label="Date d'émission">{q.date}</td>
                   <td data-label="Actions">
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center', justifyContent: 'center' }}>
-                      {/* Action Créer une facture pour devis Accepté */}
-                      {q.status === 'Accepté' && (isDirector || !!currentUser?.crmFacturationEnabled) && (
-                        <button
-                          className="icon-button"
-                          style={{ color: '#0284C7', background: '#E0F2FE', padding: '6px', borderRadius: '4px' }}
-                          onClick={() => navigate(`/factures?createFromQuoteId=${q.id}`)}
-                          title="Créer une facture pour ce devis"
-                        >
-                          <Receipt size={16} />
-                        </button>
-                      )}
-
-                      {/* Transitions de statut — uniquement les transitions autorisées */}
-                      {canTransition(q, 'Envoyé') && (
-                        <button
-                          className="icon-button"
-                          style={{ color: '#2563eb', background: '#EFF6FF', padding: '6px', borderRadius: '4px' }}
-                          onClick={() => handleStatusChange(q, 'Envoyé')}
-                          title="Marquer comme Envoyé"
-                        >
-                          <CheckCircle size={16} />
-                        </button>
-                      )}
-                      {canTransition(q, 'Accepté') && (
-                        <button
-                          className="icon-button"
-                          style={{ color: '#16a34a', background: '#f0fdf4', padding: '6px', borderRadius: '4px' }}
-                          onClick={() => handleStatusChange(q, 'Accepté')}
-                          title="Marquer comme Accepté"
-                        >
-                          <Check size={16} />
-                        </button>
-                      )}
-                      {canTransition(q, 'Refusé') && (
-                        <button
-                          className="icon-button"
-                          style={{ color: '#dc2626', background: '#fef2f2', padding: '6px', borderRadius: '4px' }}
-                          onClick={() => handleStatusChange(q, 'Refusé')}
-                          title="Marquer comme Refusé"
-                        >
-                          <X size={16} />
-                        </button>
-                      )}
-
                       {canManageQuote(q) && (
                         <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => navigate(`/devis/nouveau?editId=${q.id}`)} title="Modifier le devis">
                           <Edit2 size={16} />
@@ -570,7 +488,7 @@ export function Devis() {
                       }} title="Télécharger PDF">
                         <Download size={16} />
                       </button>
-                      <button className="icon-button" style={{ color: 'var(--color-error)' }} onClick={() => handleDelete(q)} title={existingInvoice ? 'Suppression bloquée : facture liée' : 'Supprimer'}>
+                      <button className="icon-button" style={{ color: 'var(--color-error)' }} onClick={() => handleDelete(q)} title="Supprimer le devis">
                         <Trash2 size={16} />
                       </button>
                     </div>

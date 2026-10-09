@@ -363,19 +363,14 @@ export function QuoteCreation() {
     return null;
   };
 
-  const handleSave = async (statusToSet: 'Brouillon' | 'Envoyé' = 'Brouillon', openPreviewModal: boolean = false) => {
+  const handleSave = async (openPreviewModal: boolean = false) => {
     const err = validateQuoteForm();
     if (err) {
       alert(err);
       return;
     }
-    // En création : Brouillon ou Envoyé uniquement (plus de passage direct à Accepté)
-    if (!sourceQuote && statusToSet !== 'Brouillon' && statusToSet !== 'Envoyé') {
-      alert('Un nouveau devis doit être enregistré en Brouillon ou Envoyé.');
-      return;
-    }
 
-    const quoteData = buildCurrentQuoteData(statusToSet);
+    const quoteData = buildCurrentQuoteData('Accepté');
 
     try {
       if (sourceQuote) {
@@ -845,13 +840,10 @@ export function QuoteCreation() {
           <button type="button" className="btn btn-secondary" onClick={handleInstantPreview} style={{ marginRight: '8px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <Eye size={16} /> Aperçu en direct
           </button>
-          <button className="btn btn-secondary" onClick={() => handleSave('Brouillon')}>
-            <Save size={16} style={{ marginRight: '8px' }} /> Enregistrer en brouillon
+          <button className="btn btn-primary" onClick={() => handleSave(false)}>
+            <Save size={16} style={{ marginRight: '8px' }} /> Enregistrer le devis
           </button>
-          <button className="btn btn-primary" onClick={() => handleSave('Envoyé')}>
-            <Save size={16} style={{ marginRight: '8px' }} /> Enregistrer & marquer Envoyé
-          </button>
-          <button className="btn btn-primary" onClick={() => handleSave('Brouillon', true)} style={{ marginLeft: '8px', background: '#0D9488', borderColor: '#0D9488' }}>
+          <button className="btn btn-primary" onClick={() => handleSave(true)} style={{ marginLeft: '8px', background: '#0D9488', borderColor: '#0D9488' }}>
             <FileText size={16} style={{ marginRight: '8px' }} /> Enregistrer & Prévisualiser PDF
           </button>
         </div>
