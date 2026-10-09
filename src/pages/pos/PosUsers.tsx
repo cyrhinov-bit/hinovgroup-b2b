@@ -5,11 +5,26 @@ import { Plus, Edit2, Trash2, ShieldAlert, Ghost } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 export default function PosUsers() {
-  const { users, addUser, updateUser, toggleUserStatus, deleteUser, refreshData } = useAppContext();
+  const { users: rawUsers, addUser, updateUser, toggleUserStatus, deleteUser, refreshData } = useAppContext();
+  const users = rawUsers;
+  const deduped = (() => {
+    const byId = new Map(users.map(u => [u.id, u]));
+    const seen = new Set<string>();
+    const out: typeof users = [];
+    for (const u of byId.values()) {
+      const k = (u.email || '').trim().toLowerCase();
+      if (k) {
+        if (seen.has(k)) continue;
+        seen.add(k);
+      }
+      out.push(u);
+    }
+    return out;
+  })();
+  const posUsers = deduped.filter(u => u.role === 'Gerant' || u.role === 'Caissier');
   const { currentUser } = useAuth();
   const [isCleaning, setIsCleaning] = useState(false);
   const canManage = !!currentUser && ['Directeur', 'SuperAdmin', 'Directeur adjoint', 'Gerant'].includes(currentUser.role);
-  const posUsers = users.filter(u => u.role === 'Gerant' || u.role === 'Caissier');
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [form, setForm] = useState({ name: '', email: '', pin: '', role: 'Caissier' as 'Gerant' | 'Caissier' });

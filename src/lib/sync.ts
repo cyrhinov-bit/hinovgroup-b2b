@@ -170,6 +170,27 @@ function sanitizeSaleLines<T extends { product_id?: string | null; description?:
   });
   return { lines, neutralized };
 }
+// CORRIGÉ : lecture paginée des IDs distants (PostgREST limite à 1000 lignes).
+// Sans pagination, la réconciliation croit à tort que tout id >1000 est manquant
+// et repousse en masse.
+async function fetchAllRemoteIds(table: string): Promise<Set<string>> {
+  const ids = new Set<string>();
+  const PAGE = 1000;
+  for (let guard = 0; guard < 100; guard++) {
+    const { data, error } = await supabase.from(table).select('id').range(ids.size, ids.size + PAGE - 1);
+    if (error) throw new Error(`[NetworkError] ${error.message}`);
+    const rows = (data || []) as any[];
+    for (const r of rows) if (r?.id) ids.add(String(r.id));
+    if (rows.length < PAGE) break;
+  }
+  return ids;
+}
+// Résout un productId local (legacy / fantôme remappé) vers l'UUID serveur.
+const resolveReconciledProductId = (raw?: string | null, reference?: string | null): string | null => {
+  const remapped = remapProductId(raw ?? undefined);
+  const resolved = resolveProductUuid(typeof remapped === 'string' ? remapped : undefined, reference ?? undefined);
+  return isUuid(resolved) ? resolved : null;
+};
 // Insertion des lignes une par une : une ligne en échec ne fait plus perdre
 // les autres. Sur violation FK produit, la ligne est rejouée détachée (product_id null).
 // Insertion des lignes de retour une par une : même blindage (une ligne au
@@ -180,8 +201,9 @@ async function upsertReturnLinesResilient(allLinesData: any[]): Promise<{ ok: bo
   for (const line of allLinesData) {
     const { error } = await supabase.from('pos_return_lines').upsert([line], { onConflict: 'id' });
     if (!error) continue;
+    if (isAuthError(error)) throw new Error(`[AuthError] ${error.message}`);
     if (isNetworkOrTransientError(error)) throw new Error(`[NetworkError] ${error.message}`);
-    if (/foreign key|product_id/i.test(error.message)) {
+    if (/foreign key|clé étrangère|violates foreign|product_id/i.test(error.message)) {
       const retry = { ...line, product_id: null };
       const { error: retryErr } = await supabase.from('pos_return_lines').upsert([retry], { onConflict: 'id' });
       if (!retryErr) {
@@ -189,6 +211,7 @@ async function upsertReturnLinesResilient(allLinesData: any[]): Promise<{ ok: bo
         console.warn('[Sync] Ligne retour détachée du produit inconnu (retour préservé) :', line.description, line.product_id);
         continue;
       }
+      if (isAuthError(retryErr)) throw new Error(`[AuthError] ${retryErr.message}`);
       if (isNetworkOrTransientError(retryErr)) throw new Error(`[NetworkError] ${retryErr.message}`);
       console.error('[Sync] Erreur insertion pos_return_lines :', retryErr.message);
       ok = false;
@@ -206,8 +229,9 @@ async function upsertSaleLinesResilient(p_lines: any[]): Promise<{ ok: boolean; 
   for (const line of p_lines) {
     const { error } = await supabase.from('pos_transaction_lines').upsert([line], { onConflict: 'id' });
     if (!error) continue;
+    if (isAuthError(error)) throw new Error(`[AuthError] ${error.message}`);
     if (isNetworkOrTransientError(error)) throw new Error(`[NetworkError] ${error.message}`);
-    if (/foreign key|product_id/i.test(error.message)) {
+    if (/foreign key|clé étrangère|violates foreign|product_id/i.test(error.message)) {
       const retry = { ...line, product_id: null };
       const { error: retryErr } = await supabase.from('pos_transaction_lines').upsert([retry], { onConflict: 'id' });
       if (!retryErr) {
@@ -215,6 +239,7 @@ async function upsertSaleLinesResilient(p_lines: any[]): Promise<{ ok: boolean; 
         console.warn('[Sync] Ligne vente détachée du produit inconnu (vente préservée) :', line.description, line.product_id);
         continue;
       }
+      if (isAuthError(retryErr)) throw new Error(`[AuthError] ${retryErr.message}`);
       if (isNetworkOrTransientError(retryErr)) throw new Error(`[NetworkError] ${retryErr.message}`);
       console.error('[Sync] Erreur insertion pos_transaction_lines :', retryErr.message);
       errors.push(retryErr.message);
@@ -289,8 +314,23 @@ export interface SyncAction {
   retryCount?: number;
 }
 
+export const isAuthError = (err: any): boolean => {
+  if (!err) return false;
+  const msg = (typeof err === 'string' ? err : err.message || err.error_description || JSON.stringify(err)).toLowerCase();
+  const code = String(err.code || err.status || '');
+  return code === '401' || code === 'PGRST301' ||
+    msg.includes('jwt expired') ||
+    msg.includes('auth session missing') ||
+    msg.includes('invalid claim: exp claim is in the past') ||
+    msg.includes('invalid jwt') ||
+    msg.includes('expired') && msg.includes('jwt');
+};
+
 export const isNetworkOrTransientError = (err: any): boolean => {
   if (!err) return false;
+  // Les erreurs d'auth (JWT expiré) ne sont PAS réseau : elles demandent un
+  // refresh de session (isAuthError), pas un skip silencieux.
+  if (isAuthError(err)) return false;
   const msg = (typeof err === 'string' ? err : err.message || err.error_description || JSON.stringify(err)).toLowerCase();
   const status = err.status || err.code || err.statusCode;
   
@@ -306,10 +346,7 @@ export const isNetworkOrTransientError = (err: any): boolean => {
     msg.includes('offline') ||
     msg.includes('gateway') ||
     msg.includes('load failed') ||
-    msg.includes('fetch error') ||
-    msg.includes('jwt expired') ||
-    msg.includes('auth session missing') ||
-    msg.includes('invalid claim: exp claim is in the past')
+    msg.includes('fetch error')
   ) return true;
 
   if (status === 502 || status === 503 || status === 504 || status === 520 || status === 521 || status === 522 || status === 524 || status === 408 || status === 429) {
@@ -384,7 +421,11 @@ const isMissingRpcError = (err: any): boolean => {
   if (!err) return false;
   const msg = (typeof err === 'string' ? err : err.message || err.details || JSON.stringify(err)).toLowerCase();
   const code = String(err.code || '');
-  return code === '42883' || code === 'PGRST202' || (msg.includes('function') && (msg.includes('does not exist') || msg.includes("n'existe pas") || msg.includes('could not find') || msg.includes('introuvable')));
+  // 42883/PGRST202 = fonction absente ; 42501/PGRST301/permission denied =
+  // GRANT manquant (fonction présente mais inexécutable) → même repli résilient.
+  return code === '42883' || code === 'PGRST202' || code === '42501' || code === 'PGRST301' ||
+    msg.includes('permission denied') || msg.includes('not authorized') ||
+    (msg.includes('function') && (msg.includes('does not exist') || msg.includes("n'existe pas") || msg.includes('could not find') || msg.includes('introuvable')));
 };
 
 const backfillLocalQuoteNumber = async (id: string, value: string) => {
@@ -471,6 +512,9 @@ const tryRpcQuoteUpsert = async (quoteData: any, lines: any[], tag: string): Pro
 // Vérifie si le retour Supabase est une erreur réseau (lance exception) ou logique (renvoie false)
 const checkResult = (error: any): boolean => {
   if (!error) return true;
+  if (isAuthError(error)) {
+    throw new Error(`[AuthError] ${error.message || JSON.stringify(error)}`);
+  }
   if (isNetworkOrTransientError(error)) {
     throw new Error(`[NetworkError] ${error.message || JSON.stringify(error)}`);
   }
@@ -546,14 +590,22 @@ const syncCrmDelete = async (table: string, id: string, tag: string): Promise<bo
 };
 
 // Ordre de priorité topologique pour respecter les dépendances de clés étrangères
+// Toute action non listée hérite de la priorité de sa famille (défaut 5) afin de
+// ne jamais passer APRÈS les suppressions (6) : un INSERT doit toujours précéder
+// le DELETE de son parent.
 const ACTION_PRIORITY: Record<string, number> = {
   // 1. Paramètres, Catégories, Marques, Fournisseurs, Dossiers CRM, Remises
   'UPDATE_SETTINGS': 1,
   'UPDATE_POS_SETTINGS': 1,
+  'UPDATE_PROFILE': 1,
+  'DELETE_PROFILE': 6,
   'INSERT_CATEGORY': 1,
+  'DELETE_CATEGORY': 6,
   'INSERT_SERVICE': 1,
+  'UPDATE_SERVICE': 1,
   'INSERT_CRM_FOLDER': 1,
   'UPDATE_CRM_FOLDER': 1,
+  'DELETE_CRM_FOLDER': 6,
   'INSERT_POS_CATEGORY': 1,
   'UPDATE_POS_CATEGORY': 1,
   'INSERT_POS_BRAND': 1,
@@ -562,13 +614,27 @@ const ACTION_PRIORITY: Record<string, number> = {
   'UPDATE_POS_SUPPLIER': 1,
   'INSERT_POS_DISCOUNT': 1,
   'UPDATE_POS_DISCOUNT': 1,
+  'UPDATE_SCORING_RULE': 1,
+  'UPSERT_CLASSEMENT': 1,
+  'INSERT_NOTIFICATION': 1,
+  'MARK_NOTIFICATION_READ': 5,
+  'MARK_ALL_NOTIFICATIONS_READ': 5,
   // 2. Profils, Clients, Produits, Prestations
   'INSERT_CLIENT': 2,
   'UPDATE_CLIENT': 2,
+  'DELETE_CLIENT': 6,
   'INSERT_POS_PRODUCT': 2,
   'UPDATE_POS_PRODUCT': 2,
   'INSERT_PRESTATION': 2,
   'UPDATE_PRESTATION': 2,
+  'DELETE_PRESTATION': 6,
+  'INSERT_PRODUCT_COMPLETION': 2,
+  'UPDATE_PRODUCT_COMPLETION': 2,
+  'DELETE_PRODUCT_COMPLETION': 6,
+  'INSERT_IMPORT_SESSION': 2,
+  'UPDATE_IMPORT_SESSION': 2,
+  'DELETE_IMPORT_SESSION': 6,
+  'INSERT_IMPORT_ERROR': 2,
   'INSERT_CRM_TIER': 2,
   'UPDATE_CRM_TIER': 2,
   'INSERT_CRM_COMMERCIAL': 2,
@@ -577,24 +643,66 @@ const ACTION_PRIORITY: Record<string, number> = {
   'UPDATE_CRM_ARTICLE': 2,
   'INSERT_CRM_TECHNICIEN': 2,
   'UPDATE_CRM_TECHNICIEN': 2,
+  'INSERT_DOCUMENT': 2,
+  'UPDATE_DOCUMENT': 2,
+  'DELETE_DOCUMENT': 6,
   // 3. Sessions de caisse (indispensable avant les transactions POS)
   'INSERT_POS_CASH_SESSION': 3,
   'UPDATE_POS_CASH_SESSION': 3,
   // 4. Affaires, Devis, Ventes, Transactions, Documents CRM
   'INSERT_AFFAIRE': 4,
   'UPDATE_AFFAIRE': 4,
+  'DELETE_AFFAIRE': 6,
   'INSERT_QUOTE': 4,
   'UPDATE_QUOTE': 4,
+  'DELETE_QUOTE': 6,
   'INSERT_SALE': 4,
   'UPDATE_SALE': 4,
+  'DELETE_SALE': 6,
   'INSERT_POS_TRANSACTION': 4,
   'UPDATE_POS_TRANSACTION': 4,
-  'INSERT_DOCUMENT': 4,
-  'UPDATE_DOCUMENT': 4,
   'INSERT_CRM_PRESTATION': 4,
   'UPDATE_CRM_PRESTATION': 4,
   'INSERT_CRM_INTERVENTION': 4,
   'UPDATE_CRM_INTERVENTION': 4,
+  'INSERT_PROSPECT': 4,
+  'UPDATE_PROSPECT': 4,
+  'DELETE_PROSPECT': 6,
+  'INSERT_PROSPECT_ACTIVITY': 4,
+  'DELETE_PROSPECT_ACTIVITY': 6,
+  'INSERT_PROSPECT_FOLLOW_UP': 4,
+  'UPDATE_PROSPECT_FOLLOW_UP': 4,
+  'DELETE_PROSPECT_FOLLOW_UP': 6,
+  'INSERT_ACTIVITY_REPORT': 4,
+  'UPDATE_ACTIVITY_REPORT': 4,
+  'DELETE_ACTIVITY_REPORT': 6,
+  'INSERT_WEEKLY_REPORT': 4,
+  'UPDATE_WEEKLY_REPORT': 4,
+  'INSERT_V2_DAILY_REPORT': 4,
+  'UPDATE_V2_DAILY_REPORT': 4,
+  'DELETE_V2_DAILY_REPORT': 6,
+  'INSERT_V2_WEEKLY_REPORT': 4,
+  'UPDATE_V2_WEEKLY_REPORT': 4,
+  'DELETE_V2_WEEKLY_REPORT': 6,
+  'INSERT_OBJECTIF': 4,
+  'UPDATE_OBJECTIF': 4,
+  'DELETE_OBJECTIF': 6,
+  'INSERT_PRIME': 4,
+  'UPDATE_PRIME_STATUS': 4,
+  'INSERT_PRIME_AUDIT_LOG': 4,
+  'INSERT_COUT': 4,
+  'UPDATE_COUT': 4,
+  'DELETE_COUT': 6,
+  'INSERT_COMMISSION': 4,
+  'UPDATE_COMMISSION': 4,
+  'DELETE_COMMISSION': 6,
+  'INSERT_INSTALLMENT': 4,
+  'UPDATE_INSTALLMENT': 4,
+  'DELETE_INSTALLMENT': 6,
+  'UPSERT_INVOICE': 4,
+  'DELETE_INVOICE': 6,
+  'UPSERT_INVOICE_PAYMENT': 5,
+  'DELETE_INVOICE_PAYMENT': 6,
   // 5. Paiements, Retours, Mouvements de stock, Entrées stock, Inventaires
   'INSERT_POS_PAYMENT': 5,
   'INSERT_FACTURE_PAIEMENT': 5,
@@ -749,6 +857,52 @@ let syncLock = false;
 // Chaîne de sérialisation des écritures file (read-modify-write atomique)
 let queueChain: Promise<void> = Promise.resolve();
 
+// ── Anti-boucle toasts (cause n°1 des messages en boucle) ────────────────────
+// Le store syncErrors est vidé à chaque rejeu (réconciliation), ce qui remettait
+// les compteurs `attempts` à zéro : backoff jamais atteint, rejeu + toast infinis.
+// 1) errorToastTrack suit les échecs par entité EN MÉMOIRE (indépendant du store) :
+//    au-delà de 3 échecs en 30 min, plus de toast — le badge d'erreurs reste la
+//    seule surface. 2) carriedAttempts transporte le compteur à travers le
+//    vide-remise-en-file pour que le backoff de réconciliation s'enclenche vraiment.
+const ERROR_TOAST_BACKOFF_ATTEMPTS = 3;
+const ERROR_TOAST_BACKOFF_MS = 30 * 60 * 1000;
+const errorToastTrack = new Map<string, { attempts: number; lastTried: number }>();
+const carriedAttempts = new Map<string, number>();
+const shouldToastError = (key: string): boolean => {
+  const t = errorToastTrack.get(key);
+  if (!t) return true;
+  return !(t.attempts >= ERROR_TOAST_BACKOFF_ATTEMPTS && Date.now() - t.lastTried < ERROR_TOAST_BACKOFF_MS);
+};
+const markErrorSeen = (key: string) => {
+  const now = Date.now();
+  if (errorToastTrack.size > 500) {
+    for (const [k, v] of errorToastTrack) {
+      if (now - v.lastTried > 24 * 60 * 60 * 1000) errorToastTrack.delete(k);
+    }
+  }
+  const t = errorToastTrack.get(key);
+  errorToastTrack.set(key, { attempts: (t?.attempts || 0) + 1, lastTried: now });
+};
+
+// ── Avertissements non bloquants (ex: flags UPDATE_PROFILE écartés) ──────────
+// Id stable → dédupliqués au lieu de s'empiler (`warn-<ts>` unique à chaque fois
+// créait une entrée neuve à chaque passage). Jamais remis en file, jamais toastés.
+const upsertSyncWarning = async (warnId: string, type: SyncActionType, payload: any, warning: string) => {
+  try {
+    const errors = (await db.syncErrors.getItem<any[]>('errors')) || [];
+    const entry = { action: { id: warnId, type, payload, timestamp: Date.now() }, failedAt: new Date().toISOString(), warning };
+    const idx = errors.findIndex(e => e?.action?.id === warnId);
+    if (idx >= 0) errors[idx] = entry;
+    else errors.push(entry);
+    await db.syncErrors.setItem('errors', errors);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: errors.length } }));
+    }
+  } catch { /* non bloquant */ }
+};
+const isSyncWarning = (e: any): boolean =>
+  !!e?.warning || String(e?.action?.id || '').startsWith('warn-') || !!e?.action?.payload?.droppedFlags;
+
 // Vider la file d'attente
 export const processSyncQueue = async () => {
   if (syncLock) return;
@@ -777,8 +931,8 @@ export const processSyncQueue = async () => {
 
     // Tri ordonné selon les dépendances (ex: configurations et sessions avant transactions)
     const sortedQueue = [...currentQueue].sort((a, b) => {
-      const pA = ACTION_PRIORITY[a.type] || 10;
-      const pB = ACTION_PRIORITY[b.type] || 10;
+      const pA = ACTION_PRIORITY[a.type] ?? 5;
+      const pB = ACTION_PRIORITY[b.type] ?? 5;
       if (pA !== pB) return pA - pB;
       return (a.timestamp || 0) - (b.timestamp || 0);
     });
@@ -2541,7 +2695,7 @@ export const processSyncQueue = async () => {
               const { error: oneErr } = await supabase.from('pos_stock_entry_lines').upsert([line], { onConflict: 'id' });
               if (!oneErr) continue;
               if (isNetworkOrTransientError(oneErr)) throw new Error(`[NetworkError] ${oneErr.message}`);
-              if (/foreign key|product_id/i.test(oneErr.message || '')) {
+              if (/foreign key|clé étrangère|violates foreign|product_id/i.test(oneErr.message || '')) {
                 const { error: retryErr } = await supabase.from('pos_stock_entry_lines').upsert([{ ...line, product_id: null }], { onConflict: 'id' });
                 if (!retryErr) {
                   console.warn('[Sync] Ligne entrée détachée du produit inconnu :', line.id);
@@ -2681,7 +2835,7 @@ export const processSyncQueue = async () => {
               const { error: oneErr } = await supabase.from('pos_inventory_lines').upsert([line], { onConflict: 'id' });
               if (!oneErr) continue;
               if (isNetworkOrTransientError(oneErr)) throw new Error(`[NetworkError] ${oneErr.message}`);
-              if (/foreign key|product_id/i.test(oneErr.message || '')) {
+              if (/foreign key|clé étrangère|violates foreign|product_id/i.test(oneErr.message || '')) {
                 const { error: retryErr } = await supabase.from('pos_inventory_lines').upsert([{ ...line, product_id: null }], { onConflict: 'id' });
                 if (!retryErr) {
                   console.warn('[Sync] Ligne inventaire détachée du produit inconnu :', line.id);
@@ -2726,7 +2880,7 @@ export const processSyncQueue = async () => {
               const { error: oneErr } = await supabase.from('pos_inventory_lines').upsert([line], { onConflict: 'id' });
               if (!oneErr) continue;
               if (isNetworkOrTransientError(oneErr)) throw new Error(`[NetworkError] ${oneErr.message}`);
-              if (/foreign key|product_id/i.test(oneErr.message || '')) {
+              if (/foreign key|clé étrangère|violates foreign|product_id/i.test(oneErr.message || '')) {
                 const { error: retryErr } = await supabase.from('pos_inventory_lines').upsert([{ ...line, product_id: null }], { onConflict: 'id' });
                 if (!retryErr) continue;
                 if (isNetworkOrTransientError(retryErr)) throw new Error(`[NetworkError] ${retryErr.message}`);
@@ -2932,6 +3086,10 @@ export const processSyncQueue = async () => {
             success = false;
             break;
           }
+          // CORRIGÉ : les actions couvertes par le wipe ne sont retirées de la file
+          // qu'APRÈS succès serveur (buffer local). En cas d'échec, elles sont
+          // conservées pour rejeu — plus de perte définitive sur wipe partiel.
+          const pendingWipeIds: string[] = [];
           try {
             const q: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
             // Périmètre complet : toute donnée POS antérieure au wipe est retirée
@@ -2939,7 +3097,7 @@ export const processSyncQueue = async () => {
             const wipeable = new Set(['INSERT_POS_TRANSACTION', 'UPDATE_POS_TRANSACTION', 'INSERT_POS_PAYMENT', 'INSERT_POS_RETURN', 'UPDATE_POS_RETURN', 'INSERT_POS_CASH_SESSION', 'UPDATE_POS_CASH_SESSION', 'INSERT_POS_STOCK_ENTRY', 'UPDATE_POS_STOCK_ENTRY', 'INSERT_POS_INVENTORY', 'UPDATE_POS_INVENTORY', 'INSERT_POS_STOCK_MOVEMENT']);
             for (const a of q) {
               if (a.id !== action.id && wipeable.has(a.type) && (a.timestamp || 0) <= (action.timestamp || 0)) {
-                processedIds.add(a.id);
+                pendingWipeIds.push(a.id);
               }
             }
           } catch {}
@@ -2960,6 +3118,7 @@ export const processSyncQueue = async () => {
             console.error('[Sync] CLEAR_POS_SALES_HISTORY partiel, rejeu programmé :', wipeErr.message);
             success = false;
           } else {
+            for (const wid of pendingWipeIds) processedIds.add(wid);
             success = true;
           }
           break;
@@ -2984,13 +3143,14 @@ export const processSyncQueue = async () => {
             const t = Date.parse(d.length === 10 ? `${d}T00:00:00.000Z` : d);
             return Number.isFinite(t) && t >= rangeStart && t <= rangeEnd;
           };
+          const pendingRangeWipeIds: string[] = [];
           try {
             const q: SyncAction[] = (await db.syncQueue.getItem('queue')) || [];
             const wipeableRange = new Set(['INSERT_POS_TRANSACTION', 'INSERT_POS_RETURN', 'INSERT_POS_PAYMENT', 'INSERT_POS_STOCK_ENTRY', 'INSERT_POS_INVENTORY', 'INSERT_POS_STOCK_MOVEMENT']);
             for (const a of q) {
               if (a.id === action.id) continue;
               if (wipeableRange.has(a.type) && inRange(a.payload?.date)) {
-                processedIds.add(a.id);
+                pendingRangeWipeIds.push(a.id);
               }
             }
           } catch {}
@@ -3070,6 +3230,7 @@ export const processSyncQueue = async () => {
             break;
           }
 
+          for (const wid of pendingRangeWipeIds) processedIds.add(wid);
           success = true;
           break;
         }
@@ -3494,15 +3655,9 @@ export const processSyncQueue = async () => {
             const retryRes = await supabase.from('profiles').update(fallbackMapped).eq('id', id);
             if (!retryRes.error) {
               error = null;
-              // B7 : ne jamais perdre silencieusement des flags — tracer une erreur visible
-              try {
-                const errors = await db.syncErrors.getItem<any[]>('errors') || [];
-                errors.push({ action: { id: `warn-${Date.now()}`, type: 'UPDATE_PROFILE', payload: { id, droppedFlags: ['crm_team_reports_enabled', 'crm_reports_enabled'] }, timestamp: Date.now() }, failedAt: new Date().toISOString(), warning: 'Permissions rapports non persistées (colonnes absentes côté serveur)' });
-                await db.syncErrors.setItem('errors', errors);
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: errors.length } }));
-                }
-              } catch {}
+              // B7 : ne jamais perdre silencieusement des flags — tracer un
+              // avertissement visible (id stable : pas d'empilement en boucle).
+              await upsertSyncWarning(`warn-UPDATE_PROFILE-${id}-reports`, 'UPDATE_PROFILE', { id, droppedFlags: ['crm_team_reports_enabled', 'crm_reports_enabled'] }, 'Permissions rapports non persistées (colonnes absentes côté serveur)');
             } else {
               // Ultime fallback: uniquement les colonnes de base standard de profiles
               console.warn('[Sync] Retrying UPDATE_PROFILE with base profile columns only:', retryRes.error.message);
@@ -3515,16 +3670,9 @@ export const processSyncQueue = async () => {
               if (!coreRes.error) {
                 error = null;
                 // Ne jamais perdre silencieusement des flags (cf. B7 ci-dessus) :
-                // tracer les flags ecartes par le fallback ultime.
-                try {
-                  const dropped = Object.keys(mapped).filter(k => !(k in coreMapped));
-                  const errors = await db.syncErrors.getItem<any[]>('errors') || [];
-                  errors.push({ action: { id: `warn-${Date.now()}`, type: 'UPDATE_PROFILE', payload: { id, droppedFlags: dropped }, timestamp: Date.now() }, failedAt: new Date().toISOString(), warning: 'Permissions non persistées (fallback colonnes de base) : ' + dropped.join(', ') });
-                  await db.syncErrors.setItem('errors', errors);
-                  if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: errors.length } }));
-                  }
-                } catch {}
+                // avertissement à id stable (pas d'empilement en boucle).
+                const droppedCore = Object.keys(mapped).filter(k => !(k in coreMapped));
+                await upsertSyncWarning(`warn-UPDATE_PROFILE-${id}-fallback`, 'UPDATE_PROFILE', { id, droppedFlags: droppedCore }, 'Permissions non persistées (fallback colonnes de base) : ' + droppedCore.join(', '));
               } else {
                 error = coreRes.error;
               }
@@ -3551,6 +3699,15 @@ export const processSyncQueue = async () => {
         success = await withSyncTimeout(executeAction(), actionTimeout);
         consecutiveNetworkErrors = 0;
       } catch (e: any) {
+        // CORRIGÉ : JWT expiré mid-run → refresh session puis conservation en file
+        // (pas de classement réseau, pas de bascule en erreur définitive).
+        if (isAuthError(e) || String(e?.message || '').includes('[AuthError]')) {
+          console.warn(`[Sync] Session expirée sur ${action.type}, rafraîchissement…`);
+          try { await ensureSupabaseAuth(); } catch {}
+          consecutiveNetworkErrors++;
+          if (consecutiveNetworkErrors >= 5) break;
+          continue;
+        }
         if (isNetworkOrTransientError(e) || e?.message?.includes('[NetworkError]')) {
           // Head-of-line : on saute l'action fautive (conservée en file) au lieu de
           // bloquer les centaines suivantes. Après 5 échecs réseau d'affilée, on
@@ -3599,7 +3756,11 @@ export const processSyncQueue = async () => {
           const dedupKey = (e: any) => `${e?.action?.type}::${(e?.action?.payload && (e.action.payload.id ?? e.action.payload.reference)) ?? ''}`;
           const incomingKey = `${action.type}::${entityId}`;
           const existingIdx = entityId === '' ? -1 : errors.findIndex(e => dedupKey(e) === incomingKey);
-          const prevAttempts = (existingIdx >= 0 ? (errors[existingIdx] as any)?.attempts : 0) || 0;
+          // Le compteur transporté depuis la réconciliation (le vide du store à
+          // chaque rejeu remettait attempts à zéro) : le backoff s'enclenche vraiment.
+          const carried = carriedAttempts.get(incomingKey) ?? 0;
+          if (carried > 0) carriedAttempts.delete(incomingKey);
+          const prevAttempts = Math.max((existingIdx >= 0 ? (errors[existingIdx] as any)?.attempts : 0) || 0, carried);
           const entry = {
             action,
             failedAt: new Date().toISOString(),
@@ -3618,7 +3779,14 @@ export const processSyncQueue = async () => {
           console.error('Impossible de sauvegarder dans syncErrors', err);
         }
         if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('sync-critical-error', { detail: { message, action } }));
+          // Anti-boucle : au-delà de 3 échecs en 30 min pour la même entité, plus
+          // de toast — le badge d'erreurs reste la seule surface (silencieux).
+          const toastKey = `${action.type}::${(action.payload && (action.payload.id ?? action.payload.reference)) ?? ''}`;
+          const toastAllowed = shouldToastError(toastKey);
+          markErrorSeen(toastKey);
+          if (toastAllowed) {
+            window.dispatchEvent(new CustomEvent('sync-critical-error', { detail: { message, action } }));
+          }
           window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: currentErrorsCount } }));
         }
       }
@@ -3728,6 +3896,12 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
     if (syncErrors.length > 0) {
       for (const errItem of syncErrors) {
         if (errItem?.action) {
+          // Les avertissements (flags écartés, jamais bloquants) ne sont jamais
+          // remis en file : ils restent visibles, sans rejeu ni toast en boucle.
+          if (isSyncWarning(errItem)) {
+            deferred.push(errItem);
+            continue;
+          }
           const attempts = Number((errItem as any)?.attempts || 0);
           const lastTried = Number((errItem as any)?.lastTried || 0);
           if (!force && attempts >= BACKOFF_ATTEMPTS && Date.now() - lastTried < BACKOFF_MS) {
@@ -3756,6 +3930,13 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
             }
             action.payload.productId = resolvedPid;
           }
+          // Transporte le compteur vers la file : sans cela, le vide du store
+          // (ci-dessous) remet attempts à zéro et le backoff ne s'enclenche jamais.
+          const carryKey = `${action.type}::${action.payload?.id ?? action.payload?.reference ?? ''}`;
+          if (attempts > 0) {
+            if (carriedAttempts.size > 1000) carriedAttempts.clear();
+            carriedAttempts.set(carryKey, attempts);
+          }
           await queueSyncAction(action.type, action.payload);
           errorsReplayed++;
         }
@@ -3779,17 +3960,18 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
     try {
       const localProducts = (await db.posProducts.getItem<any[]>('data')) || [];
       if (localProducts.length > 0) {
-        const { data: remoteProducts } = await supabase.from('pos_products').select('id');
-        const remoteIds = new Set((remoteProducts || []).map((p: any) => p.id));
-        const missing = localProducts.filter(
-          p => p?.id && !remoteIds.has(p.id) && isUuid(resolveProductUuid(p.id, p.reference))
-        );
+        const remoteIds = await fetchAllRemoteIds('pos_products').catch(() => null);
+        if (remoteIds) {
+          const missing = localProducts.filter(
+            p => p?.id && !remoteIds.has(p.id) && isUuid(resolveProductUuid(p.id, p.reference))
+          );
         for (const p of missing.slice(0, 100)) {
           await queueSyncAction('INSERT_POS_PRODUCT', p);
           productsQueued++;
         }
         if (missing.length > 100) {
           partials.push(`${missing.length - 100} produit(s) encore à pousser (prochain passage)`);
+        }
         }
       }
     } catch (e: any) {
@@ -3799,8 +3981,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
     // 3. Synchroniser les sessions de caisse locales manquantes
     const localSessions = (await db.posCashSessions.getItem<any[]>('data')) || [];
     if (localSessions.length > 0) {
-      const { data: remoteSessions } = await supabase.from('pos_cash_sessions').select('id');
-      const remoteSessionIds = new Set((remoteSessions || []).map((s: any) => s.id));
+      const remoteSessionIds = await fetchAllRemoteIds('pos_cash_sessions').catch(() => new Set<string>());
       const missingSessions = localSessions.filter(s => !remoteSessionIds.has(s.id));
 
       for (const s of missingSessions) {
@@ -3822,26 +4003,30 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
     // 4. Synchroniser les transactions locales manquantes
     const localTxs = (await db.posTransactions.getItem<any[]>('data')) || [];
     if (localTxs.length > 0) {
-      const { data: remoteTxs } = await supabase.from('pos_transactions').select('id');
-      const remoteTxIds = new Set((remoteTxs || []).map((t: any) => t.id));
+      const remoteTxIds = await fetchAllRemoteIds('pos_transactions').catch(() => new Set<string>());
       const missingTxs = localTxs.filter(t => !remoteTxIds.has(t.id));
 
       for (const tx of missingTxs) {
+        // CORRIGÉ : applique le remappage fantôme → gardien avant tout upsert,
+        // sinon les doublons locaux sont repoussés avec l'ancien UUID.
+        const remappedTx = applyProductRemapToAction('INSERT_POS_TRANSACTION', tx);
+        const txSrc = remappedTx.drop ? null : remappedTx.payload;
+        if (!txSrc) continue;
         const p_transaction = {
-          id: tx.id,
-          transaction_number: tx.transactionNumber,
-          cashier_id: isUuid(tx.cashierId) ? tx.cashierId : null,
-          session_id: isUuid(tx.sessionId) ? tx.sessionId : null,
-          date: tx.date,
-          subtotal: tx.subtotal,
-          discount_amount: tx.discountAmount || 0,
-          total: tx.total,
-          status: tx.status || 'Validée'
+          id: txSrc.id,
+          transaction_number: txSrc.transactionNumber,
+          cashier_id: isUuid(txSrc.cashierId) ? txSrc.cashierId : null,
+          session_id: isUuid(txSrc.sessionId) ? txSrc.sessionId : null,
+          date: txSrc.date,
+          subtotal: txSrc.subtotal,
+          discount_amount: txSrc.discountAmount || 0,
+          total: txSrc.total,
+          status: txSrc.status || 'Validée'
         };
-        const p_lines = (tx.lines || []).map((l: any) => ({
+        const p_lines = (txSrc.lines || []).map((l: any) => ({
           id: l.id || uuidv4(),
-          transaction_id: tx.id,
-          product_id: isUuid(l.productId) ? l.productId : null,
+          transaction_id: txSrc.id,
+          product_id: resolveReconciledProductId(l.productId ?? l.product_id, l.reference),
           description: l.description,
           quantity: l.quantity,
           unit_price: l.unitPrice,
@@ -3849,9 +4034,9 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
           discount_amount: l.discountAmount || 0,
           total: l.total
         }));
-        const p_payments = (tx.payments || []).map((p: any) => ({
+        const p_payments = (txSrc.payments || []).map((p: any) => ({
           id: p.id || uuidv4(),
-          transaction_id: tx.id,
+          transaction_id: txSrc.id,
           method: p.method,
           amount: p.amount,
           reference: p.reference || null
@@ -3889,10 +4074,21 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
             const { error: recPayErr } = p_payments.length > 0
               ? await supabase.from('pos_payments').upsert(p_payments, { onConflict: 'id' })
               : { error: null };
-            if (linesOk && !recPayErr) {
+            // CORRIGÉ : le repli réconciliation décrémentait jamais le stock
+            // (divergence nominal vs réconciliation). La tx étant absente du serveur,
+            // l'incrément est sûr (pas de double-comptage).
+            let stockOk = true;
+            if (linesOk && !recPayErr && p_transaction.status !== 'Annulée') {
+              for (const l of p_lines) {
+                if (!l.product_id || !(Number(l.quantity) > 0)) continue;
+                const { error: stErr } = await supabase.rpc('increment_pos_stock', { p_product_id: l.product_id, p_delta: -Number(l.quantity) });
+                if (stErr) { console.error('[Sync] Stock réconciliation non remonté :', stErr.message); stockOk = false; }
+              }
+            }
+            if (linesOk && !recPayErr && stockOk) {
               transactionsSynced++;
             } else {
-              console.error('[Sync] Reconciliation transaction partielle :', tx.id, linesOk ? 'lignes OK' : 'lignes en échec', recPayErr?.message);
+              console.error('[Sync] Reconciliation transaction partielle :', txSrc.id, linesOk ? 'lignes OK' : 'lignes en échec', recPayErr?.message);
             }
           }
         } else {
@@ -3904,19 +4100,17 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
     // 5. Synchroniser les mouvements de stock manquants
     const localMovements = (await db.posStockMovements.getItem<any[]>('data')) || [];
     if (localMovements.length > 0) {
-      const { data: remoteMovements } = await supabase.from('pos_stock_movements').select('id');
-      const remoteMovIds = new Set((remoteMovements || []).map((m: any) => m.id));
+      const remoteMovIds = await fetchAllRemoteIds('pos_stock_movements').catch(() => new Set<string>());
       const missingMovements = localMovements.filter(m => {
         if (remoteMovIds.has(m.id)) return false;
         if (isRetiredServicePayload('INSERT_POS_STOCK_MOVEMENT', m)) return false;
-        const resolvedPid = resolveProductUuid(m.productId, m.reference);
-        return isUuid(resolvedPid);
+        return isUuid(resolveReconciledProductId(m.productId, m.reference) ?? '');
       });
 
       if (missingMovements.length > 0) {
         const payload = missingMovements.map(m => ({
           id: m.id,
-          product_id: resolveProductUuid(m.productId, m.reference),
+          product_id: resolveReconciledProductId(m.productId, m.reference),
           type: m.type,
           quantity: m.quantity,
           reference: m.reference || null,
@@ -3932,8 +4126,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
     // 6. Synchroniser les retours manquants
     const localReturns = (await db.posReturns.getItem<any[]>('data')) || [];
     if (localReturns.length > 0) {
-      const { data: remoteReturns } = await supabase.from('pos_returns').select('id');
-      const remoteRetIds = new Set((remoteReturns || []).map((r: any) => r.id));
+      const remoteRetIds = await fetchAllRemoteIds('pos_returns').catch(() => new Set<string>());
       const missingReturns = localReturns.filter(r => !remoteRetIds.has(r.id));
 
       for (const ret of missingReturns) {
@@ -3957,7 +4150,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
               allLinesData.push({
                 id: l.id || uuidv4(),
                 return_id: ret.id,
-                product_id: isUuid(l.productId) ? l.productId : null,
+                product_id: resolveReconciledProductId(l.productId, l.reference),
                 description: l.description,
                 quantity: l.quantity,
                 unit_price: l.unitPrice,
@@ -3971,7 +4164,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
               allLinesData.push({
                 id: l.id || uuidv4(),
                 return_id: ret.id,
-                product_id: isUuid(l.productId) ? l.productId : null,
+                product_id: resolveReconciledProductId(l.productId, l.reference),
                 description: l.description,
                 quantity: l.quantity,
                 unit_price: l.unitPrice,
@@ -3992,6 +4185,16 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
               continue;
             }
           }
+          // CORRIGÉ : stock réintégré pour les retours Traités manquants
+          // (retours + / échanges −), comme le chemin nominal.
+          if (ret.status === 'Traité') {
+            for (const l of allLinesData) {
+              if (!l.product_id || !(Number(l.quantity) > 0)) continue;
+              const delta = l.reason === 'Échange' ? -Number(l.quantity) : Number(l.quantity);
+              const { error: stErr } = await supabase.rpc('increment_pos_stock', { p_product_id: l.product_id, p_delta: delta });
+              if (stErr) { partials.push(`retour ${ret.returnNumber || ret.id} : stock en échec`); break; }
+            }
+          }
           returnsSynced++;
         }
       }
@@ -4000,8 +4203,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
     // 7. Synchroniser les entrées de stock manquantes
     const localEntries = (await db.posStockEntries.getItem<any[]>('data')) || [];
     if (localEntries.length > 0) {
-      const { data: remoteEntries } = await supabase.from('pos_stock_entries').select('id');
-      const remoteEntryIds = new Set((remoteEntries || []).map((e: any) => e.id));
+      const remoteEntryIds = await fetchAllRemoteIds('pos_stock_entries').catch(() => new Set<string>());
       const missingEntries = localEntries.filter(e => !remoteEntryIds.has(e.id));
 
       for (const entry of missingEntries) {
@@ -4020,7 +4222,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
           const linesData = entry.lines.map((l: any) => ({
             id: l.id || uuidv4(),
             entry_id: entry.id,
-            product_id: isUuid(l.productId) ? l.productId : null,
+            product_id: resolveReconciledProductId(l.productId, l.reference),
             quantity: l.quantity,
             purchase_price: l.purchasePrice,
             total: l.total
@@ -4030,7 +4232,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
           for (const line of linesData) {
             const { error: oneErr } = await supabase.from('pos_stock_entry_lines').upsert([line], { onConflict: 'id' });
             if (!oneErr) continue;
-            if (/foreign key|product_id/i.test(oneErr.message || '')) {
+            if (/foreign key|clé étrangère|violates foreign|product_id/i.test(oneErr.message || '')) {
               const { error: retryErr } = await supabase.from('pos_stock_entry_lines').upsert([{ ...line, product_id: null }], { onConflict: 'id' });
               if (!retryErr) {
                 console.warn('[Sync] Ligne entrée détachée du produit inconnu :', line.id);
@@ -4041,6 +4243,14 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
             entryLinesOk = false;
           }
           if (!entryLinesOk) partials.push(`entrée ${entry.reference || entry.id} : lignes en échec`);
+          // CORRIGÉ : stock incrémenté pour les entrées Validées manquantes.
+          else if (entry.status === 'Validé') {
+            for (const line of linesData) {
+              if (!line.product_id || !(Number(line.quantity) > 0)) continue;
+              const { error: stErr } = await supabase.rpc('increment_pos_stock', { p_product_id: line.product_id, p_delta: Number(line.quantity) });
+              if (stErr) { partials.push(`entrée ${entry.reference || entry.id} : stock en échec`); break; }
+            }
+          }
         }
       }
     }
@@ -4048,8 +4258,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
     // 8. Synchroniser les inventaires manquants
     const localInventories = (await db.posInventories.getItem<any[]>('data')) || [];
     if (localInventories.length > 0) {
-      const { data: remoteInvs } = await supabase.from('pos_inventories').select('id');
-      const remoteInvIds = new Set((remoteInvs || []).map((i: any) => i.id));
+      const remoteInvIds = await fetchAllRemoteIds('pos_inventories').catch(() => new Set<string>());
       const missingInvs = localInventories.filter(i => !remoteInvIds.has(i.id));
 
       for (const inv of missingInvs) {
@@ -4066,7 +4275,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
           const linesData = inv.lines.map((l: any) => ({
             id: l.id || uuidv4(),
             inventory_id: inv.id,
-            product_id: isUuid(l.productId) ? l.productId : null,
+            product_id: resolveReconciledProductId(l.productId, l.reference),
             expected_qty: l.expectedQty,
             counted_qty: l.countedQty,
             difference: l.difference
@@ -4075,7 +4284,7 @@ export const reconcileLocalPosDataWithCloud = async (opts?: { force?: boolean })
           for (const line of linesData) {
             const { error: oneErr } = await supabase.from('pos_inventory_lines').upsert([line], { onConflict: 'id' });
             if (!oneErr) continue;
-            if (/foreign key|product_id/i.test(oneErr.message || '')) {
+            if (/foreign key|clé étrangère|violates foreign|product_id/i.test(oneErr.message || '')) {
               const { error: retryErr } = await supabase.from('pos_inventory_lines').upsert([{ ...line, product_id: null }], { onConflict: 'id' });
               if (!retryErr) {
                 console.warn('[Sync] Ligne inventaire détachée du produit inconnu :', line.id);

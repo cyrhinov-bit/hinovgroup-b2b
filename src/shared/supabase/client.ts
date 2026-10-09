@@ -12,5 +12,9 @@ export function getSupabaseConfigFromEnv(env: SharedSupabaseEnv) {
 }
 
 export function createSharedSupabaseClient(url: string, key: string): SharedSupabaseClient {
-  return createClient(url, key);
+  // CORRIGÉ : persistance + auto-refresh indispensables. Sans cela, getSession()
+  // est vide à chaque reload et chaque run sync retombait en re-login PIN.
+  return createClient(url, key, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  });
 }

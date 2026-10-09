@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import type { PosInventory as IPosInventory } from '../../context/AppContext';
 import { Plus, Eye, X, Search, Trash2, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { todayLocalKey } from '../../lib/dates';
+import { matchesProductSearch } from '../../lib/searchUtils';
+import { barcodeScannerService } from '../../features/products/services/BarcodeScannerService';
 
 export default function PosInventory() {
   const navigate = useNavigate();
@@ -12,6 +14,23 @@ export default function PosInventory() {
   const [showForm, setShowForm] = useState(false);
   const [viewingInventory, setViewingInventory] = useState<IPosInventory | null>(null);
   const [productSearch, setProductSearch] = useState('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  // Douchette : intercepte les rafales scanner même si le focus est dans un
+  // champ "Compté", puis filtre la liste sur le code scanné (code-barres /
+  // ISBN / référence). Si le focus est déjà dans le champ recherche, la
+  // douchette tape directement dedans (comportement clavier HID classique).
+  useEffect(() => {
+    if (!showForm) return;
+    barcodeScannerService.startKeyboardListener();
+    const unsubscribe = barcodeScannerService.subscribe((barcode: string) => {
+      const cleaned = (barcode || '').trim();
+      if (cleaned) setProductSearch(cleaned);
+    });
+    return () => {
+      unsubscribe();
+      barcodeScannerService.stopKeyboardListener();
+    };
+  }, [showForm]);
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; inventoryId: string | null }>({ isOpen: false, inventoryId: null });
   const [form, setForm] = useState({ 
     notes: '', 
@@ -202,10 +221,20 @@ export default function PosInventory() {
               <div style={{ position: 'relative' }}>
                 <Search size={16} color="var(--color-text-muted)" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
                 <input 
+                  ref={searchInputRef}
+                  data-barcode-target="true"
                   style={{ ...inputStyle, paddingLeft: '34px' }} 
-                  placeholder="Nom ou référence..." 
+                  placeholder="Nom, référence ou code-barres (douchette)..." 
                   value={productSearch} 
-                  onChange={e => setProductSearch(e.target.value)} 
+                  onChange={e => setProductSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      // Douchette : après scan, focus direct sur le 1er champ Compté filtré
+                      const firstInput = document.getElementById('counted-input-0');
+                      if (firstInput) firstInput.focus();
+                    }
+                  }}
                 />
               </div>
             </div>
@@ -220,13 +249,20 @@ export default function PosInventory() {
                   .filter(({ product }) => {
                     if (!productSearch) return true;
                     if (!product) return false;
-                    const q = productSearch.toLowerCase();
-                    return product.name.toLowerCase().includes(q) || (product.reference && product.reference.toLowerCase().includes(q));
+                    // Nom, référence, code-barres, ISBN (compatible douchette)
+                    return matchesProductSearch(product, productSearch);
                   })
                   .map(({ line, product }, index) => {
                   return (
                     <tr key={line.id} style={{ borderBottom: '1px solid var(--color-surface-alt)', background: line.difference !== 0 ? 'var(--color-error-tint)' : 'transparent' }}>
-                      <td style={{ padding: '8px', fontSize: '13px' }}>{product?.name || 'Inconnu'}</td>
+                      <td style={{ padding: '8px', fontSize: '13px' }}>
+                        <div>{product?.name || 'Inconnu'}</div>
+                        {(product?.barcode || product?.isbn || product?.reference) && (
+                          <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>
+                            {[product?.reference, product?.barcode, product?.isbn].filter(Boolean).join(' • ')}
+                          </div>
+                        )}
+                      </td>
                       <td style={{ padding: '8px', fontSize: '13px', textAlign: 'right' }}>{line.expectedQty}</td>
                       <td style={{ padding: '8px' }}>
                         <input 

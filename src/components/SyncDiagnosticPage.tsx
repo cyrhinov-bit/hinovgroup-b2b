@@ -1,19 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { platform } from '../platform';
+import { db } from '../lib/db';
 
 export default function SyncDiagnosticPage() {
   const [status, setStatus] = useState<any>({ isOnline: true, pendingCount: 0 });
+  const [realQueue, setRealQueue] = useState({ pending: 0, errors: 0 });
   const [events, setEvents] = useState<any[]>([]);
 
   useEffect(() => {
     loadStatus();
+    loadRealQueue();
+    const onErrors = () => loadRealQueue();
+    window.addEventListener('sync-errors-updated', onErrors);
     platform.sync.onEvent((payload) => {
       setEvents(prev => [...prev, payload]);
       if (['queueUpdated', 'networkStatusChanged', 'syncCompleted', 'syncFailed'].includes(payload.event)) {
         loadStatus();
+        loadRealQueue();
       }
     });
+    const timer = setInterval(loadRealQueue, 5000);
+    return () => {
+      window.removeEventListener('sync-errors-updated', onErrors);
+      clearInterval(timer);
+    };
   }, []);
+
+  const loadRealQueue = async () => {
+    try {
+      const q = (await db.syncQueue.getItem<any[]>('queue')) || [];
+      const e = (await db.syncErrors.getItem<any[]>('errors')) || [];
+      setRealQueue({ pending: q.length, errors: e.length });
+    } catch {}
+  };
 
   const loadStatus = async () => {
     try {
@@ -63,7 +82,14 @@ export default function SyncDiagnosticPage() {
           </div>
 
           <div style={{ marginBottom: '10px' }}>
-            <strong>Opérations en attente : </strong> {status.pendingCount}
+            <strong>Opérations en attente (moteur desktop) : </strong> {status.pendingCount}
+          </div>
+          <div style={{ marginBottom: '10px', background: '#fff3cd', padding: '8px', borderRadius: '4px' }}>
+            <strong>File réelle web (src/lib/sync.ts) : </strong> {realQueue.pending} en attente, {realQueue.errors} en erreur.
+            <br />
+            <span style={{ fontSize: '12px' }}>Le moteur desktop ci-dessus peut être vert alors que la file web déborde : seule cette ligne fait foi côté web.</span>
+            <br />
+            <button onClick={loadRealQueue} style={{ marginTop: '6px' }}>Rafraîchir la file réelle</button>
           </div>
 
           {platform.isDesktop && (

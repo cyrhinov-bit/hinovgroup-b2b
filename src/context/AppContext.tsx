@@ -14,6 +14,24 @@ import { platform } from '../platform';
 
 const isUuid = (value?: string) => !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
+const dedupeUsers = (list: User[]): User[] => {
+  const byId = new Map<string, User>();
+  for (const u of list) {
+    if (u?.id && !byId.has(u.id)) byId.set(u.id, u);
+  }
+  const seenEmail = new Set<string>();
+  const out: User[] = [];
+  for (const u of byId.values()) {
+    const k = (u.email || '').trim().toLowerCase();
+    if (k) {
+      if (seenEmail.has(k)) continue;
+      seenEmail.add(k);
+    }
+    out.push(u);
+  }
+  return out;
+};
+
 const mergeData = <T extends { id: string }>(oldData: T[] | null | undefined, newData: T[]): T[] => {
   if (!oldData || oldData.length === 0) return newData || [];
   if (!newData || newData.length === 0) return oldData;
@@ -859,7 +877,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         safeGet<InvoicePayment[]>(db.invoicePayments),
       ]);
 
-      if (cachedUsers) setUsers(cachedUsers);
+      if (cachedUsers) setUsers(dedupeUsers(cachedUsers));
       if (cachedClients) setClients(cachedClients);
       if (cachedAffaires) setAffaires(cachedAffaires);
       if (cachedFacturePaiements) setFacturePaiements(cachedFacturePaiements);
@@ -1150,7 +1168,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
               crmTeamReportsEnabled: resolveBool(p.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
             };
           });
-          const mergedUsers = mergeData(cachedUsers, parsedUsers);
+          const mergedUsers = dedupeUsers(parsedUsers);
+          // Profils = autorité serveur : on écrase le cache local pour épurer
+          // les comptes fantômes (supprimés côté serveur, jamais resynchronisés).
           setUsers(mergedUsers); await db.profiles.setItem('data', mergedUsers);
           if (currentUser) {
             const freshMe = mergedUsers.find((u: User) => u.id === currentUser.id);
@@ -4369,7 +4389,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       crmReportsEnabled: user.crmReportsEnabled ?? !isDirRole,
       crmTeamReportsEnabled: user.crmTeamReportsEnabled ?? isDirRole
     };
-    const newUsers = [...users, newUser];
+    const newUsers = dedupeUsers([...users.filter(u => u.id !== newUser.id && u.email.trim().toLowerCase() !== newUser.email.trim().toLowerCase()), newUser]);
     setUsers(newUsers);
     await db.profiles.setItem('data', newUsers);
   };

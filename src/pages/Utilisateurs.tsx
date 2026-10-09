@@ -6,7 +6,21 @@ import { useAuth } from '../context/AuthContext';
 import type { User } from '../context/AppContext';
 
 export function Utilisateurs() {
-  const { users, services, addUser, updateUser, toggleUserStatus, deleteUser } = useAppContext();
+  const { users: rawUsers, services, addUser, updateUser, toggleUserStatus, deleteUser } = useAppContext();
+  const users = React.useMemo(() => {
+    const byId = new Map(rawUsers.map(u => [u.id, u]));
+    const seen = new Set<string>();
+    const out: typeof rawUsers = [];
+    for (const u of byId.values()) {
+      const k = (u.email || '').trim().toLowerCase();
+      if (k) {
+        if (seen.has(k)) continue;
+        seen.add(k);
+      }
+      out.push(u);
+    }
+    return out;
+  }, [rawUsers]);
   const { currentUser } = useAuth();
   const { confirm } = useConfirm();
   const [showForm, setShowForm] = useState(false);
