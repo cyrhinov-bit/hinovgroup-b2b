@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { Sparkles, Download, Save, Send, Plus, Trash2, CheckCircle2, Clock, AlertCircle, ChevronLeft, ChevronRight, Calendar, Building, User as UserIcon, Key, Eye, RefreshCw } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAppContext, type V2WeeklyReport, type V2Task } from '../../../../context/AppContext';
@@ -46,8 +47,11 @@ export function WeeklyReportEditor() {
   const [newTaskDifficulty, setNewTaskDifficulty] = useState('');
 
   // Find or initialize weekly report for current user & week
+  // Comparaison normalisée (10 premiers caractères) : la base peut renvoyer
+  // week_start en DATE ou en ISO datetime selon les versions.
   const existingReport = useMemo(() => {
-    return v2WeeklyReports.find(r => r.authorId === currentUser?.id && r.weekStart === currentWeekStart);
+    const w = (currentWeekStart || '').slice(0, 10);
+    return v2WeeklyReports.find(r => r.authorId === currentUser?.id && (r.weekStart || '').slice(0, 10) === w);
   }, [v2WeeklyReports, currentUser, currentWeekStart]);
 
   // Form state
@@ -85,7 +89,7 @@ export function WeeklyReportEditor() {
       const dStr = d.toISOString().slice(0, 10);
       const dayName = daysList[i];
 
-      const daily = v2DailyReports?.find(r => r.authorId === currentUser?.id && r.date === dStr);
+      const daily = v2DailyReports?.find(r => r.authorId === currentUser?.id && (r.date || '').slice(0, 10) === dStr);
       if (daily) {
         if (daily.objectives) collectedObjectives.push(daily.objectives);
         if (daily.results) collectedResults.push(daily.results);
@@ -147,7 +151,9 @@ export function WeeklyReportEditor() {
       setNextWeekObjectives(existingReport.nextWeekObjectives || '');
       setStatus(existingReport.status || 'Brouillon');
     } else {
-      setReportId(Date.now().toString());
+      // UUID stable dès la création : un id Date.now() serait re-minté en UUID
+      // neuf à chaque save (doublons locaux + violation UNIQUE serveur).
+      setReportId(crypto.randomUUID ? crypto.randomUUID() : uuidv4());
       setWeeklyObjectives('');
       setTasksByDay({ Lundi: [], Mardi: [], Mercredi: [], Jeudi: [], Vendredi: [], Samedi: [], Dimanche: [] });
       setAiSummary('');
@@ -230,8 +236,10 @@ export function WeeklyReportEditor() {
 
   // Build current report object
   const getCurrentReportObject = (): V2WeeklyReport => {
+    // reportId est toujours un UUID stable (cf. useEffect ci-dessus) ; le
+    // fallback ne sert qu'au tout premier rendu avant initialisation.
     return {
-      id: reportId || Date.now().toString(),
+      id: reportId || uuidv4(),
       authorId: currentUser?.id || 'system',
       weekStart: currentWeekStart,
       weekEnd: getWeekEnd(currentWeekStart),

@@ -3188,9 +3188,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const reportId = isUuid(report.id) ? report.id : uuidv4();
     const existing = v2DailyReports.find(r => r.id === reportId);
     const newReport = { ...report, id: reportId, updatedAt: new Date().toISOString() };
-    const newReports = existing
+    // Dédupe par clé naturelle (author, jour, projet) : résorbe les doublons
+    // locaux hérités (ids Date.now() re-mintés) qui violaient l'UNIQUE serveur.
+    const natKey = (r: any) => `${r.authorId || ''}::${(r.date || '').slice(0, 10)}::${r.project || 'HINOV GROUP'}`;
+    const base = existing
       ? v2DailyReports.map(r => r.id === reportId ? newReport : r)
       : [...v2DailyReports, newReport];
+    const newReports = base.filter(r => r.id === reportId || natKey(r) !== natKey(newReport));
     setV2DailyReports(newReports);
     await db.v2DailyReports.setItem('data', newReports);
     await queueSyncAction(existing ? 'UPDATE_V2_DAILY_REPORT' : 'INSERT_V2_DAILY_REPORT', newReport);
@@ -3200,9 +3204,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const reportId = isUuid(report.id) ? report.id : uuidv4();
     const existing = v2WeeklyReports.find(r => r.id === reportId);
     const newReport = { ...report, id: reportId, updatedAt: new Date().toISOString() };
-    const newReports = existing
+    // Dédupe par clé naturelle (author, semaine, projet) : cf. saveV2DailyReport.
+    const natKey = (r: any) => `${r.authorId || ''}::${(r.weekStart || '').slice(0, 10)}::${r.project || 'HINOV GROUP'}`;
+    const base = existing
       ? v2WeeklyReports.map(r => r.id === reportId ? newReport : r)
       : [...v2WeeklyReports, newReport];
+    const newReports = base.filter(r => r.id === reportId || natKey(r) !== natKey(newReport));
     setV2WeeklyReports(newReports);
     await db.v2WeeklyReports.setItem('data', newReports);
     await queueSyncAction(existing ? 'UPDATE_V2_WEEKLY_REPORT' : 'INSERT_V2_WEEKLY_REPORT', newReport);
@@ -3227,9 +3234,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updatedAt: now
     };
     const existing = v2WeeklyReports.some(r => r.id === reportId);
-    const newReports = existing
+    // Dédupe par clé naturelle : la soumission garde UNE seule ligne locale
+    // par (auteur, semaine, projet) — sinon resoumissions fantômes + 23505.
+    const natKey = (r: any) => `${r.authorId || ''}::${(r.weekStart || '').slice(0, 10)}::${r.project || 'HINOV GROUP'}`;
+    const mergedBase = existing
       ? v2WeeklyReports.map(r => r.id === reportId ? updated : r)
       : [...v2WeeklyReports, updated];
+    const newReports = mergedBase.filter(r => r.id === reportId || natKey(r) !== natKey(updated));
     setV2WeeklyReports(newReports);
     await db.v2WeeklyReports.setItem('data', newReports);
     await queueSyncAction(existing ? 'UPDATE_V2_WEEKLY_REPORT' : 'INSERT_V2_WEEKLY_REPORT', updated);

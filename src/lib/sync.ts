@@ -438,6 +438,96 @@ const backfillLocalQuoteNumber = async (id: string, value: string) => {
   }
 };
 
+// Réparation 23505 rapports V2 : UNIQUE(author_id, week_start|date, project).
+// Deux brouillons locaux (ids Date.now() re-mintés en UUID à chaque save,
+// lookups désynchronisés entre écrans) désignent la même clé naturelle :
+// le 2e INSERT échoue en doublon. On adopte la ligne serveur existante
+// (UPDATE par son id) et on rabat le doublon local vers cet id — sinon
+// erreur permanente + doublons UI + resoumissions fantômes.
+// Garde : si le serveur a déjà tranché (Validé/Relu) et que l'entrant est un
+// brouillon, on ne l'écrase pas — on rabat juste le local.
+const backfillLocalReportId = async (store: any, dupId: string, serverId: string, patch: any, tag: string) => {
+  if (!store || !dupId || !serverId || dupId === serverId) return;
+  try {
+    const rows: any[] = (await store.getItem('data')) || [];
+    const next = rows.filter(rr => rr?.id !== dupId);
+    const merged = { ...patch, id: serverId };
+    const idx = next.findIndex(rr => rr?.id === serverId);
+    if (idx >= 0) next[idx] = { ...next[idx], ...merged };
+    else next.unshift(merged);
+    await store.setItem('data', next);
+  } catch (e) {
+    console.warn(`[Sync] backfill id ${tag} impossible :`, e);
+  }
+};
+
+const repairWeeklyUniqueAndUpdate = async (insertPayload: any, dupId: string): Promise<{ error: any }> => {
+  try {
+    const { data: srv } = await supabase.from('v2_weekly_reports')
+      .select('id,status').eq('author_id', insertPayload.author_id)
+      .eq('week_start', insertPayload.week_start).eq('project', insertPayload.project)
+      .limit(1).maybeSingle();
+    const serverId = (srv as any)?.id;
+    if (!serverId || !isUuid(String(serverId))) return { error: { message: 'doublon sans ligne serveur retrouvée' } };
+    const serverStatus = (srv as any)?.status;
+    const serverLocked = serverStatus === 'Validé' || serverStatus === 'Relu';
+    const incomingDraft = insertPayload.status === 'Brouillon';
+    let error: any = null;
+    if (!(serverLocked && incomingDraft)) {
+      const { id: _drop, ...fields } = insertPayload;
+      const upd = await supabase.from('v2_weekly_reports')
+        .update({ ...fields, updated_at: new Date().toISOString() }).eq('id', serverId);
+      error = upd.error;
+    } else {
+      console.warn('[Sync] INSERT_V2_WEEKLY_REPORT doublon sur rapport déjà tranché, rabattement local seul :', serverId);
+    }
+    if (!error) {
+      await backfillLocalReportId(
+        db.v2WeeklyReports, dupId, String(serverId),
+        { ...insertPayload, id: String(serverId), status: (serverLocked && incomingDraft) ? serverStatus : insertPayload.status },
+        'weekly'
+      );
+    }
+    return { error };
+  } catch (e: any) {
+    if (isNetworkOrTransientError(e) || isAuthError(e)) throw e;
+    return { error: e };
+  }
+};
+
+const repairDailyUniqueAndUpdate = async (insertFields: any, dupId: string): Promise<{ error: any }> => {
+  try {
+    const { data: srv } = await supabase.from('v2_daily_reports')
+      .select('id,status').eq('author_id', insertFields.author_id)
+      .eq('date', insertFields.date).eq('project', insertFields.project)
+      .limit(1).maybeSingle();
+    const serverId = (srv as any)?.id;
+    if (!serverId || !isUuid(String(serverId))) return { error: { message: 'doublon sans ligne serveur retrouvée' } };
+    const serverLocked = (srv as any)?.status === 'Validé';
+    const incomingDraft = insertFields.status === 'Brouillon';
+    let error: any = null;
+    if (!(serverLocked && incomingDraft)) {
+      const { id: _drop, ...fields } = insertFields;
+      const upd = await supabase.from('v2_daily_reports')
+        .update({ ...fields, updated_at: new Date().toISOString() }).eq('id', serverId);
+      error = upd.error;
+    } else {
+      console.warn('[Sync] INSERT_V2_DAILY_REPORT doublon sur rapport déjà tranché, rabattement local seul :', serverId);
+    }
+    if (!error) {
+      await backfillLocalReportId(
+        db.v2DailyReports, dupId, String(serverId),
+        { ...insertFields, id: String(serverId), status: (serverLocked && incomingDraft) ? (srv as any).status : insertFields.status },
+        'daily'
+      );
+    }
+    return { error };
+  } catch (e: any) {
+    if (isNetworkOrTransientError(e) || isAuthError(e)) throw e;
+    return { error: e };
+  }
+};
+
 const nextQuoteNumberCandidate = (base: string): string => {
   const m = String(base || '').match(/^(DV-\d{4}-)(\d+)$/);
   if (m) {
@@ -1822,6 +1912,26 @@ export const processSyncQueue = async () => {
             error = fallbackRes.error;
           }
 
+          // Auto-réparation 23505 : doublon naturel (author_id, date, project) —
+          // deux brouillons locaux pour le même jour (ids re-mintés à chaque save).
+          if (error && isUniqueViolationError(error)) {
+            console.warn('[Sync] INSERT_V2_DAILY_REPORT doublon naturel, rabattement sur la ligne serveur');
+            const rep = await repairDailyUniqueAndUpdate({
+              author_id: payload.authorId,
+              date: payload.date,
+              project: payload.project || 'HINOV GROUP',
+              objectives: payload.objectives || '',
+              tasks: payload.tasks || [],
+              results: payload.results || '',
+              difficulties: payload.difficulties || '',
+              observations: payload.observations || '',
+              status: payload.status || 'Brouillon',
+              is_locked: !!payload.isLocked,
+              category: payload.category || 'Opérationnel'
+            }, payload.id);
+            error = rep.error;
+          }
+
           if (error) console.error('[Sync] INSERT_V2_DAILY_REPORT échoué :', error.message);
           success = checkResult(error);
           break;
@@ -1918,6 +2028,15 @@ export const processSyncQueue = async () => {
             };
             const fallbackRes = await supabase.from('v2_weekly_reports').upsert([safeBaseInsert], { onConflict: 'id' });
             error = fallbackRes.error;
+          }
+
+          // Auto-réparation 3 : doublon naturel UNIQUE(author_id, week_start, project) —
+          // deux brouillons locaux pour la même semaine (ids re-mintés, lookups
+          // désynchronisés entre écrans). Rabattu sur la ligne serveur existante.
+          if (error && isUniqueViolationError(error)) {
+            console.warn('[Sync] INSERT_V2_WEEKLY_REPORT doublon naturel, rabattement sur la ligne serveur');
+            const rep = await repairWeeklyUniqueAndUpdate(insertPayload, r.id);
+            error = rep.error;
           }
 
           if (error) console.error('[Sync] INSERT_V2_WEEKLY_REPORT échoué après auto-réparation :', error.message);

@@ -152,8 +152,12 @@ export function CrmWeeklyReports() {
   }, [currentWeekStart]);
 
   // Trouver ou charger le rapport hebdomadaire de la semaine
+  // Comparaison normalisée (10 premiers caractères) : la base peut renvoyer
+  // week_start en DATE ou en ISO datetime selon les versions — un === strict
+  // ratait le brouillon et créait un doublon (UNIQUE serveur → erreur sync).
   const currentWeeklyReport = useMemo(() => {
-    return v2WeeklyReports.find(r => r.authorId === currentUser?.id && r.weekStart === currentWeekStart);
+    const w = (currentWeekStart || '').slice(0, 10);
+    return v2WeeklyReports.find(r => r.authorId === currentUser?.id && (r.weekStart || '').slice(0, 10) === w);
   }, [v2WeeklyReports, currentUser?.id, currentWeekStart]);
 
   const isWeekLocked = useMemo(() => {
@@ -177,10 +181,11 @@ export function CrmWeeklyReports() {
     }
   }, [currentWeeklyReport, currentWeekStart]);
 
-  // Récupérer les activités du jour sélectionné
+  // Récupérer les activités du jour sélectionné (date normalisée, cf. ci-dessus)
   const currentDayDate = weekDates[selectedDay];
   const currentDailyReport = useMemo(() => {
-    return v2DailyReports.find(d => d.authorId === currentUser?.id && d.date === currentDayDate);
+    const d = (currentDayDate || '').slice(0, 10);
+    return v2DailyReports.find(dd => dd.authorId === currentUser?.id && (dd.date || '').slice(0, 10) === d);
   }, [v2DailyReports, currentUser?.id, currentDayDate]);
 
   const dailyTasks = currentDailyReport?.tasks || [];
