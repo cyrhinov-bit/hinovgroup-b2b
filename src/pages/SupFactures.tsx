@@ -15,15 +15,32 @@ import {
   RotateCcw,
   Truck,
   Receipt,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
+import { MonthlyBars } from '../components/MonthlyBars';
 import { SupInvoiceProvider, useSupInvoices } from '../features/supplierInvoices/SupInvoiceContext';
 import type { SupInvoice, SupInvoiceStatus, SupSupplier } from '../features/supplierInvoices/types';
 import { SUP_INVOICE_STATUSES, SUP_PAYMENT_METHODS, SUP_ATTACHMENT_MAX_BYTES } from '../features/supplierInvoices/types';
 
 type Tab = 'invoices' | 'suppliers';
-type PeriodFilter = 'ALL' | 'THIS_MONTH' | 'THIS_YEAR' | 'OVERDUE';
+
+const MONTH_NAMES = [
+  { num: 1, name: 'Janvier', short: 'Jan' },
+  { num: 2, name: 'Février', short: 'Fév' },
+  { num: 3, name: 'Mars', short: 'Mar' },
+  { num: 4, name: 'Avril', short: 'Avr' },
+  { num: 5, name: 'Mai', short: 'Mai' },
+  { num: 6, name: 'Juin', short: 'Juin' },
+  { num: 7, name: 'Juillet', short: 'Juil' },
+  { num: 8, name: 'Août', short: 'Août' },
+  { num: 9, name: 'Septembre', short: 'Sept' },
+  { num: 10, name: 'Octobre', short: 'Oct' },
+  { num: 11, name: 'Novembre', short: 'Nov' },
+  { num: 12, name: 'Décembre', short: 'Déc' },
+];
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 
@@ -70,11 +87,18 @@ function SupFacturesInner() {
     paidForInvoice,
   } = useSupInvoices();
 
+  const nowRef = new Date();
+  const nowYear = nowRef.getFullYear();
+  const nowMonth = nowRef.getMonth() + 1;
+
   const [tab, setTab] = useState<Tab>('invoices');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [supplierFilter, setSupplierFilter] = useState('');
-  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('ALL');
+  // Organisation mois/année (miroir du Suivi factures clients) — rattachement = date d'émission
+  const [selectedYear, setSelectedYear] = useState(nowYear);
+  const [selectedMonth, setSelectedMonth] = useState(nowMonth);
+  const [showAnnual, setShowAnnual] = useState(true);
 
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<SupInvoice | null>(null);
@@ -124,20 +148,45 @@ function SupFacturesInner() {
     return inv.status;
   };
 
+  const issuePeriod = (issueDate?: string): { y: number; m: number } => {
+    const d = new Date(issueDate || '');
+    if (isNaN(d.getTime())) return { y: nowYear, m: nowMonth };
+    return { y: d.getFullYear(), m: d.getMonth() + 1 };
+  };
+
+  const availableYears = useMemo(() => {
+    const set = new Set<number>([nowYear]);
+    for (const inv of invoices) set.add(issuePeriod(inv.issueDate).y);
+    return Array.from(set).sort((a, b) => a - b);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoices]);
+
+  // Niveau 1 : exercice puis mois (rattachement = date d'émission)
+  const yearInvoices = useMemo(
+    () => invoices.filter((inv) => issuePeriod(inv.issueDate).y === selectedYear),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [invoices, selectedYear],
+  );
+
+  const monthCounts = useMemo(() => {
+    const counts = new Array(12).fill(0);
+    for (const inv of yearInvoices) counts[issuePeriod(inv.issueDate).m - 1] += 1;
+    return counts;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yearInvoices]);
+
+  const monthInvoices = useMemo(
+    () => yearInvoices.filter((inv) => issuePeriod(inv.issueDate).m === selectedMonth),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [yearInvoices, selectedMonth],
+  );
+
+  // Niveau 2 : filtres secondaires (recherche, fournisseur, statut)
   const filteredInvoices = useMemo(() => {
-    const now = new Date();
-    return invoices
+    return monthInvoices
       .filter((inv) => {
         if (supplierFilter && inv.supplierId !== supplierFilter) return false;
         if (statusFilter && effectiveStatus(inv) !== statusFilter) return false;
-        if (periodFilter === 'THIS_MONTH') {
-          const d = new Date(inv.issueDate);
-          if (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear()) return false;
-        }
-        if (periodFilter === 'THIS_YEAR') {
-          if (new Date(inv.issueDate).getFullYear() !== now.getFullYear()) return false;
-        }
-        if (periodFilter === 'OVERDUE' && effectiveStatus(inv) !== 'EN_RETARD') return false;
         if (search.trim()) {
           const q = search.toLowerCase();
           const hay = `${inv.invoiceNumber} ${inv.supplierName} ${inv.description || ''}`.toLowerCase();
@@ -147,8 +196,9 @@ function SupFacturesInner() {
       })
       .sort((a, b) => (b.issueDate || '').localeCompare(a.issueDate || ''));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoices, payments, supplierFilter, statusFilter, periodFilter, search]);
+  }, [monthInvoices, payments, supplierFilter, statusFilter, search]);
 
+  // KPIs du mois sélectionné
   const kpis = useMemo(() => {
     const active = filteredInvoices.filter((i) => i.status !== 'ANNULÉE');
     const totalTtc = active.reduce((s, i) => s + (Number(i.amountTtc) || 0), 0);
@@ -159,12 +209,58 @@ function SupFacturesInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredInvoices, payments]);
 
-  const hasActiveFilters = search !== '' || statusFilter !== '' || supplierFilter !== '' || periodFilter !== 'ALL';
+  // KPIs annuels globaux (exercice sélectionné, tous mois confondus)
+  const annual = useMemo(() => {
+    const active = yearInvoices.filter((i) => i.status !== 'ANNULÉE');
+    const total = active.reduce((s, i) => s + (Number(i.amountTtc) || 0), 0);
+    const paid = active.reduce((s, i) => s + paidForInvoice(i.id), 0);
+    const late = active.filter((i) => effectiveStatus(i) === 'EN_RETARD');
+    const lateAmount = late.reduce((s, i) => s + Math.max(0, (Number(i.amountTtc) || 0) - paidForInvoice(i.id)), 0);
+    const avg = active.length > 0 ? total / active.length : 0;
+    const series = MONTH_NAMES.map((m) => {
+      const inMonth = active.filter((i) => issuePeriod(i.issueDate).m === m.num);
+      const v1 = inMonth.reduce((s, i) => s + (Number(i.amountTtc) || 0), 0);
+      const prefix = `${selectedYear}-${String(m.num).padStart(2, '0')}`;
+      const v2 = payments
+        .filter((p) => (p.paymentDate || '').startsWith(prefix))
+        .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      return { label: m.short, v1, v2 };
+    });
+    const bySupplier = new Map<string, { name: string; total: number; paid: number; count: number }>();
+    for (const i of active) {
+      const key = i.supplierName || '—';
+      const cur = bySupplier.get(key) || { name: key, total: 0, paid: 0, count: 0 };
+      cur.total += Number(i.amountTtc) || 0;
+      cur.paid += paidForInvoice(i.id);
+      cur.count += 1;
+      bySupplier.set(key, cur);
+    }
+    const topSuppliers = Array.from(bySupplier.values())
+      .map((t) => ({ ...t, rest: Math.max(0, t.total - t.paid) }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+    return {
+      count: active.length,
+      total,
+      paid,
+      rest: Math.max(0, total - paid),
+      lateCount: late.length,
+      lateAmount,
+      avg,
+      series,
+      topSuppliers,
+      recoveryRate: total > 0 ? ((paid / total) * 100).toFixed(1) : '0',
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yearInvoices, payments, selectedYear]);
+
+  const selectedMonthName = MONTH_NAMES.find((m) => m.num === selectedMonth)?.name || '';
+
+  const hasActiveFilters = search !== '' || statusFilter !== '' || supplierFilter !== '';
   const resetFilters = () => {
     setSearch('');
     setStatusFilter('');
     setSupplierFilter('');
-    setPeriodFilter('ALL');
   };
 
   // ── Facture : ouvrir / enregistrer ──────────────────────────────────────────
@@ -172,7 +268,7 @@ function SupFacturesInner() {
     setEditingInvoice(null);
     setFSupplierId(supplierFilter || '');
     setFNumber('');
-    setFIssue(todayStr());
+    setFIssue(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`);
     setFDue('');
     setFAmount(0);
     setFStatus('REÇUE');
@@ -267,6 +363,12 @@ function SupFacturesInner() {
         createdAt: editingInvoice?.createdAt,
       });
       setShowInvoiceModal(false);
+      // Bascule la sélection sur le mois de la facture (miroir du Suivi clients)
+      const d = new Date(fIssue);
+      if (!isNaN(d.getTime())) {
+        setSelectedYear(d.getFullYear());
+        setSelectedMonth(d.getMonth() + 1);
+      }
     } finally {
       setSavingInvoice(false);
     }
@@ -438,7 +540,7 @@ function SupFacturesInner() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `factures_fournisseurs_${todayStr()}.csv`;
+    a.download = `FACTURES_FOURNISSEURS_${selectedMonthName.toUpperCase()}_${selectedYear}.csv`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   };
@@ -515,7 +617,77 @@ function SupFacturesInner() {
 
       {tab === 'invoices' && (
         <>
-          {/* KPIs */}
+          {/* ─── SÉLECTEUR D'ANNÉE ET ONGLETS MENSUELS (miroir Suivi clients) ─── */}
+          <div className="card" style={{ padding: '14px 18px', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px', paddingBottom: '10px', borderBottom: '1px solid var(--color-border)' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Exercice :</span>
+              <div style={{ display: 'flex', gap: '4px', background: 'var(--color-surface-alt)', padding: '3px', borderRadius: 'var(--radius-md)' }}>
+                {availableYears.map((yr) => (
+                  <button
+                    key={yr}
+                    onClick={() => setSelectedYear(yr)}
+                    style={{
+                      padding: '4px 12px',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      border: 'none',
+                      borderRadius: 'var(--radius-sm)',
+                      cursor: 'pointer',
+                      background: selectedYear === yr ? 'var(--color-primary)' : 'transparent',
+                      color: selectedYear === yr ? '#ffffff' : 'var(--color-text)',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {yr}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(75px, 1fr))', gap: '6px' }}>
+              {MONTH_NAMES.map((m) => {
+                const isSelected = selectedMonth === m.num;
+                const countInMonth = monthCounts[m.num - 1] || 0;
+                return (
+                  <button
+                    key={m.num}
+                    onClick={() => setSelectedMonth(m.num)}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '8px 4px',
+                      borderRadius: 'var(--radius-md)',
+                      border: isSelected ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                      background: isSelected ? 'rgba(60, 125, 175, 0.1)' : 'var(--color-surface)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <span style={{ fontSize: '0.8rem', fontWeight: isSelected ? 700 : 500, color: isSelected ? 'var(--color-primary)' : 'var(--color-text)' }}>
+                      {m.name}
+                    </span>
+                    <span style={{
+                      fontSize: '10px',
+                      marginTop: '3px',
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                      fontWeight: 600,
+                      background: countInMonth > 0 ? (isSelected ? 'var(--color-primary)' : 'var(--color-surface-alt)') : 'transparent',
+                      color: countInMonth > 0 ? (isSelected ? '#fff' : 'var(--color-text-muted)') : 'var(--color-text-muted)',
+                    }}>
+                      {countInMonth > 0 ? `${countInMonth}` : '-'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* KPIs du mois sélectionné */}
+          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>
+            KPIs — {selectedMonthName} {selectedYear}
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
             <div className="card" style={{ padding: '14px 18px', borderLeft: '4px solid #3B82F6' }}>
               <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Factures suivies</div>
@@ -535,6 +707,64 @@ function SupFacturesInner() {
               <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#DC2626' }}>{kpis.lateCount}</div>
               <div style={{ fontSize: '0.75rem', color: '#DC2626', fontWeight: 600 }}>{kpis.lateAmount.toLocaleString('fr-FR')} FCFA</div>
             </div>
+          </div>
+
+          {/* ─── VUE ANNUELLE GLOBALE ─── */}
+          <div className="card" style={{ marginBottom: '20px', padding: '16px 20px' }}>
+            <div
+              onClick={() => setShowAnnual(!showAnnual)}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', userSelect: 'none' }}
+              title={showAnnual ? 'Replier la vue annuelle' : 'Déplier la vue annuelle'}
+            >
+              {showAnnual ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              <span>Vue annuelle {selectedYear} — données globales ({annual.count} facture(s))</span>
+            </div>
+            {showAnnual && (
+              <div style={{ marginTop: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+                  <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'var(--color-surface-alt)' }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Facturé année</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{annual.total.toLocaleString('fr-FR')} F</div>
+                  </div>
+                  <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)' }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#059669', textTransform: 'uppercase' }}>Payé année ({annual.recoveryRate}%)</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#059669' }}>{annual.paid.toLocaleString('fr-FR')} F</div>
+                  </div>
+                  <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.08)' }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#D97706', textTransform: 'uppercase' }}>Reste dû année</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#D97706' }}>{annual.rest.toLocaleString('fr-FR')} F</div>
+                  </div>
+                  <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.08)' }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#DC2626', textTransform: 'uppercase' }}>En retard ({annual.lateCount})</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#DC2626' }}>{annual.lateAmount.toLocaleString('fr-FR')} F</div>
+                  </div>
+                  <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'var(--color-surface-alt)' }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Moyenne / facture</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{Math.round(annual.avg).toLocaleString('fr-FR')} F</div>
+                  </div>
+                </div>
+                <MonthlyBars data={annual.series} legend1="Facturé" legend2="Payé" color1="#EA580C" color2="#10B981" />
+                {annual.topSuppliers.length > 0 && (
+                  <div style={{ marginTop: '16px' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '8px' }}>Top 5 fournisseurs {selectedYear}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {annual.topSuppliers.map((t) => (
+                        <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.82rem' }}>
+                          <span style={{ flex: '0 0 180px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
+                          <div style={{ flex: 1, height: '10px', borderRadius: '5px', background: 'var(--color-surface-alt)', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${annual.total > 0 ? Math.round((t.total / annual.total) * 100) : 0}%`, background: '#EA580C', borderRadius: '5px' }} />
+                          </div>
+                          <span style={{ flex: '0 0 auto', fontWeight: 700 }}>{t.total.toLocaleString('fr-FR')} F</span>
+                          <span style={{ flex: '0 0 auto', color: t.rest > 0 ? '#D97706' : '#059669' }}>
+                            ({t.count}, reste {t.rest.toLocaleString('fr-FR')})
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Filtres */}
@@ -564,17 +794,14 @@ function SupFacturesInner() {
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
-              <select className="table-input" value={periodFilter} onChange={(e) => setPeriodFilter(e.target.value as PeriodFilter)}>
-                <option value="ALL">Toute période</option>
-                <option value="THIS_MONTH">Ce mois-ci</option>
-                <option value="THIS_YEAR">Cette année</option>
-                <option value="OVERDUE">En retard uniquement</option>
-              </select>
             </div>
           </div>
 
-          {/* Tableau */}
+          {/* Tableau — registre du mois */}
           <div className="card">
+            <div style={{ padding: '12px 20px 0', fontSize: '0.85rem', fontWeight: 700 }}>
+              Registre : {selectedMonthName} {selectedYear} <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}>— {filteredInvoices.length} facture(s)</span>
+            </div>
             <div className="table-responsive">
               <table className="data-table responsive-table">
                 <thead>
@@ -625,9 +852,20 @@ function SupFacturesInner() {
                     );
                   })}
                   {filteredInvoices.length === 0 && !loading && (
-                    <tr><td colSpan={9} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>Aucune facture pour ces critères.</td></tr>
+                    <tr><td colSpan={9} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>Aucune facture pour {selectedMonthName} {selectedYear}.</td></tr>
                   )}
                 </tbody>
+                {filteredInvoices.length > 0 && (
+                  <tfoot>
+                    <tr style={{ background: 'var(--color-surface-alt)', fontWeight: 800 }}>
+                      <td colSpan={4}>TOTAL DU MOIS ({selectedMonthName.toUpperCase()} {selectedYear})</td>
+                      <td style={{ textAlign: 'right' }}>{kpis.totalTtc.toLocaleString('fr-FR')} FCFA</td>
+                      <td style={{ textAlign: 'right' }}>{kpis.totalPaid.toLocaleString('fr-FR')} FCFA</td>
+                      <td style={{ textAlign: 'right' }}>{kpis.rest.toLocaleString('fr-FR')} FCFA</td>
+                      <td colSpan={2} />
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           </div>

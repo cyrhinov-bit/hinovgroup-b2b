@@ -21,6 +21,7 @@ import {
   DollarSign,
   User,
   ChevronDown,
+  ChevronUp,
   Check
 } from 'lucide-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -29,6 +30,7 @@ import { useAppContext } from '../context/AppContext';
 import { visibleTo } from '../lib/scope';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
+import { MonthlyBars } from '../components/MonthlyBars';
 import type { Invoice, InvoiceStatus } from '../types/crmModules';
 import toast from 'react-hot-toast';
 
@@ -82,6 +84,8 @@ export function Factures() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
+  // Vue annuelle globale (repliable)
+  const [showAnnual, setShowAnnual] = useState(true);
 
   // Form State for Invoice / Tracking row
   const [formPeriodYear, setFormPeriodYear] = useState<number>(2026);
@@ -791,6 +795,68 @@ export function Factures() {
 
   const selectedMonthName = MONTH_NAMES.find(m => m.num === selectedMonth)?.name || 'Septembre';
 
+  // Période de rattachement d'une facture (priorité au mois comptable saisi,
+  // repli sur livraison puis émission) — même règle que monthInvoices.
+  const getInvoicePeriod = (inv: Invoice): { y: number; m: number } => {
+    const yRaw = inv.periodYear || (inv.deliveryDate ? new Date(inv.deliveryDate).getFullYear() : (inv.issueDate ? new Date(inv.issueDate).getFullYear() : 2026));
+    const mRaw = inv.periodMonth || (inv.deliveryDate ? new Date(inv.deliveryDate).getMonth() + 1 : (inv.issueDate ? new Date(inv.issueDate).getMonth() + 1 : 9));
+    return {
+      y: Number.isFinite(yRaw) ? (yRaw as number) : 2026,
+      m: mRaw >= 1 && mRaw <= 12 ? mRaw : 9,
+    };
+  };
+
+  // Totaux annuels globaux (exercice sélectionné, tous mois confondus)
+  const annualTotals = useMemo(() => {
+    const yearList = allowedInvoices.filter(inv => getInvoicePeriod(inv).y === selectedYear);
+    let totalToPay = 0;
+    let totalPaid = 0;
+    let totalRemaining = 0;
+    let totalGrossMargin = 0;
+    let totalCommission = 0;
+    let totalHinovMargin = 0;
+
+    yearList.forEach(inv => {
+      const toPay = inv.totalAmount || 0;
+      const used = inv.costAmount || 0;
+      const grossMargin = inv.grossMargin !== undefined ? inv.grossMargin : Math.max(0, toPay - used);
+      const commission = inv.commissionAmount !== undefined ? inv.commissionAmount : (inv.commercialName || inv.commercialId ? Math.round(grossMargin * 0.1) : 0);
+      const hinovMargin = inv.hinovMargin !== undefined ? inv.hinovMargin : (grossMargin - commission);
+      const paid = inv.amountPaid || 0;
+      const remaining = inv.remainingAmount !== undefined ? inv.remainingAmount : Math.max(0, toPay - paid);
+      totalToPay += toPay;
+      totalPaid += paid;
+      totalRemaining += remaining;
+      totalGrossMargin += grossMargin;
+      totalCommission += commission;
+      totalHinovMargin += hinovMargin;
+    });
+
+    const series = MONTH_NAMES.map(m => {
+      const inMonth = yearList.filter(inv => getInvoicePeriod(inv).m === m.num);
+      return {
+        label: m.short,
+        v1: inMonth.reduce((s, inv) => s + (inv.totalAmount || 0), 0),
+        v2: inMonth.reduce((s, inv) => s + (inv.amountPaid || 0), 0),
+      };
+    });
+
+    return {
+      count: yearList.length,
+      totalToPay,
+      totalPaid,
+      totalRemaining,
+      totalGrossMargin,
+      totalCommission,
+      totalHinovMargin,
+      avg: yearList.length > 0 ? totalToPay / yearList.length : 0,
+      marginRate: totalToPay > 0 ? ((totalGrossMargin / totalToPay) * 100).toFixed(1) : '0',
+      recoveryRate: totalToPay > 0 ? ((totalPaid / totalToPay) * 100).toFixed(1) : '0',
+      series,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allowedInvoices, selectedYear]);
+
   // Permission Check
   if (!isDirector && currentUser?.crmFacturationEnabled === false) {
     return (
@@ -1028,6 +1094,53 @@ export function Factures() {
             À recouvrer
           </div>
         </div>
+      </div>
+
+      {/* ─── VUE ANNUELLE GLOBALE ─────────────────────────────── */}
+      <div className="card" style={{ padding: '16px 20px', marginBottom: '20px' }}>
+        <div
+          onClick={() => setShowAnnual(!showAnnual)}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', userSelect: 'none' }}
+          title={showAnnual ? 'Replier la vue annuelle' : 'Déplier la vue annuelle'}
+        >
+          {showAnnual ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          <span>Vue annuelle {selectedYear} — données globales ({annualTotals.count} dossier(s))</span>
+        </div>
+        {showAnnual && (
+          <div style={{ marginTop: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+              <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'var(--color-surface-alt)' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Facturé année</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{annualTotals.totalToPay.toLocaleString('fr-FR')} F</div>
+              </div>
+              <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(13, 148, 136, 0.08)' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#0D9488', textTransform: 'uppercase' }}>Encaissé ({annualTotals.recoveryRate}%)</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0D9488' }}>{annualTotals.totalPaid.toLocaleString('fr-FR')} F</div>
+              </div>
+              <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(225, 29, 72, 0.06)' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#E11D48', textTransform: 'uppercase' }}>Reste à recouvrer</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#E11D48' }}>{annualTotals.totalRemaining.toLocaleString('fr-FR')} F</div>
+              </div>
+              <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.06)' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#059669', textTransform: 'uppercase' }}>Marge brute ({annualTotals.marginRate}%)</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#059669' }}>{annualTotals.totalGrossMargin.toLocaleString('fr-FR')} F</div>
+              </div>
+              <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.08)' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#8B5CF6', textTransform: 'uppercase' }}>Commissions</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#8B5CF6' }}>{annualTotals.totalCommission.toLocaleString('fr-FR')} F</div>
+              </div>
+              <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(60, 125, 175, 0.08)' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase' }}>Marge HINOV</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--color-primary)' }}>{annualTotals.totalHinovMargin.toLocaleString('fr-FR')} F</div>
+              </div>
+              <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'var(--color-surface-alt)' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Moyenne / dossier</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{Math.round(annualTotals.avg).toLocaleString('fr-FR')} F</div>
+              </div>
+            </div>
+            <MonthlyBars data={annualTotals.series} legend1="Facturé" legend2="Encaissé" color1="#0284C7" color2="#0D9488" />
+          </div>
+        )}
       </div>
 
       {/* ─── FILTRES & BARRE DE RECHERCHE ───────────────────────── */}
