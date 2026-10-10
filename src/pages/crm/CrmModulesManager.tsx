@@ -19,7 +19,8 @@ import {
   Filter,
   Receipt,
   ClipboardList,
-  ClipboardCheck
+  ClipboardCheck,
+  Truck
 } from 'lucide-react';
 
 interface ModuleDef {
@@ -32,6 +33,7 @@ interface ModuleDef {
     'crmCommerciauxEnabled' | 
     'crmCommissionsEnabled' |
     'crmFacturationEnabled' |
+    'crmSupFacturesEnabled' |
     'crmReportsEnabled' |
     'crmTeamReportsEnabled'
   >;
@@ -106,6 +108,14 @@ const CRM_MODULES: ModuleDef[] = [
     icon: <Receipt size={18} />,
     color: '#0284C7',
     badge: 'Module 8'
+  },
+  {
+    key: 'crmSupFacturesEnabled',
+    label: 'Factures Fournisseurs',
+    shortDesc: 'Suivi autonome des factures fournisseurs, paiements et pièces jointes',
+    icon: <Truck size={18} />,
+    color: '#EA580C',
+    badge: 'Module 11'
   },
   {
     key: 'crmReportsEnabled',
@@ -191,6 +201,7 @@ export default function CrmModulesManager() {
         crmCommerciauxEnabled: state,
         crmCommissionsEnabled: state,
         crmFacturationEnabled: state,
+        crmSupFacturesEnabled: state,
         crmReportsEnabled: isDir ? false : state,
         crmTeamReportsEnabled: isDir ? state : false
       });

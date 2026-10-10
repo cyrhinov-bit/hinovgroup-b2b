@@ -171,6 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           crmCommerciauxEnabled: resolveBool(data.crm_commerciaux_enabled, cachedUser?.crmCommerciauxEnabled, crmDefault),
           crmCommissionsEnabled: resolveBool(data.crm_commissions_enabled, cachedUser?.crmCommissionsEnabled, crmDefault),
           crmFacturationEnabled: resolveBool(data.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, crmDefault),
+          crmSupFacturesEnabled: resolveBool(data.crm_sup_factures_enabled, cachedUser?.crmSupFacturesEnabled, isDir),
           crmReportsEnabled: resolveBool(data.crm_reports_enabled, cachedUser?.crmReportsEnabled, !isDir),
           crmTeamReportsEnabled: resolveBool(data.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
         };
@@ -356,6 +357,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           crmCommerciauxEnabled: resolveBool(profile.crm_commerciaux_enabled, cachedUser?.crmCommerciauxEnabled, crmDefault),
           crmCommissionsEnabled: resolveBool(profile.crm_commissions_enabled, cachedUser?.crmCommissionsEnabled, crmDefault),
           crmFacturationEnabled: resolveBool(profile.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, crmDefault),
+          crmSupFacturesEnabled: resolveBool(profile.crm_sup_factures_enabled, cachedUser?.crmSupFacturesEnabled, isDir),
           crmReportsEnabled: resolveBool(profile.crm_reports_enabled, cachedUser?.crmReportsEnabled, !isDir),
           crmTeamReportsEnabled: resolveBool(profile.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
         };
@@ -410,6 +412,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       crmCommerciauxEnabled: crmDefault,
       crmCommissionsEnabled: crmDefault,
       crmFacturationEnabled: crmDefault,
+      crmSupFacturesEnabled: isDir,
       crmReportsEnabled: !isDir,
       crmTeamReportsEnabled: isDir,
     };

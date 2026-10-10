@@ -60,11 +60,12 @@ serve(async (req: Request) => {
       crmCommerciauxEnabled?: boolean;
       crmCommissionsEnabled?: boolean;
       crmFacturationEnabled?: boolean;
+      crmSupFacturesEnabled?: boolean;
       crmReportsEnabled?: boolean;
       crmTeamReportsEnabled?: boolean;
     }
 
-    const { email, pin, name, role, posRole, serviceId, posReturnsEnabled, posCatalogueEnabled, posSupplyEnabled, posInventoryEnabled, posStockEnabled, crmPrestationsEnabled, crmCaisseEnabled, crmMaintenanceEnabled, crmStocksEnabled, crmTiersEnabled, crmCommerciauxEnabled, crmCommissionsEnabled, crmFacturationEnabled, crmReportsEnabled, crmTeamReportsEnabled } = await req.json() as CreateUserPayload
+    const { email, pin, name, role, posRole, serviceId, posReturnsEnabled, posCatalogueEnabled, posSupplyEnabled, posInventoryEnabled, posStockEnabled, crmPrestationsEnabled, crmCaisseEnabled, crmMaintenanceEnabled, crmStocksEnabled, crmTiersEnabled, crmCommerciauxEnabled, crmCommissionsEnabled, crmFacturationEnabled, crmSupFacturesEnabled, crmReportsEnabled, crmTeamReportsEnabled } = await req.json() as CreateUserPayload
 
     // Autorisations
     if (role === 'SuperAdmin') throw new Error('Impossible de créer un SuperAdmin')
@@ -114,6 +115,7 @@ serve(async (req: Request) => {
         crm_commerciaux_enabled: crmCommerciauxEnabled === true,
         crm_commissions_enabled: crmCommissionsEnabled === true,
         crm_facturation_enabled: crmFacturationEnabled === true,
+        crm_sup_factures_enabled: crmSupFacturesEnabled === true,
         crm_reports_enabled: crmReportsEnabled === true,
         crm_team_reports_enabled: crmTeamReportsEnabled === true
       }])
@@ -125,7 +127,7 @@ serve(async (req: Request) => {
     }
 
     return new Response(
-      JSON.stringify({ id: newUserId, name, email, role, posRole, serviceId, posReturnsEnabled, posCatalogueEnabled, posSupplyEnabled, posInventoryEnabled, posStockEnabled, crmPrestationsEnabled, crmCaisseEnabled, crmMaintenanceEnabled, crmStocksEnabled, crmTiersEnabled, crmCommerciauxEnabled, crmCommissionsEnabled, crmFacturationEnabled, crmReportsEnabled, crmTeamReportsEnabled }),
+      JSON.stringify({ id: newUserId, name, email, role, posRole, serviceId, posReturnsEnabled, posCatalogueEnabled, posSupplyEnabled, posInventoryEnabled, posStockEnabled, crmPrestationsEnabled, crmCaisseEnabled, crmMaintenanceEnabled, crmStocksEnabled, crmTiersEnabled, crmCommerciauxEnabled, crmCommissionsEnabled, crmFacturationEnabled, crmSupFacturesEnabled, crmReportsEnabled, crmTeamReportsEnabled }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error: any) {

@@ -3771,6 +3771,8 @@ export const processSyncQueue = async () => {
           if (data.crm_commissions_enabled !== undefined) mapped.crm_commissions_enabled = data.crm_commissions_enabled;
           if (data.crmFacturationEnabled !== undefined) mapped.crm_facturation_enabled = data.crmFacturationEnabled;
           if (data.crm_facturation_enabled !== undefined) mapped.crm_facturation_enabled = data.crm_facturation_enabled;
+          if (data.crmSupFacturesEnabled !== undefined) mapped.crm_sup_factures_enabled = data.crmSupFacturesEnabled;
+          if (data.crm_sup_factures_enabled !== undefined) mapped.crm_sup_factures_enabled = data.crm_sup_factures_enabled;
           if (data.crmReportsEnabled !== undefined) mapped.crm_reports_enabled = data.crmReportsEnabled;
           if (data.crm_reports_enabled !== undefined) mapped.crm_reports_enabled = data.crm_reports_enabled;
           if (data.crmTeamReportsEnabled !== undefined) mapped.crm_team_reports_enabled = data.crmTeamReportsEnabled;

@@ -63,12 +63,14 @@ export function Utilisateurs() {
         ? {
             crmPrestationsEnabled: false, crmCaisseEnabled: false, crmMaintenanceEnabled: false,
             crmStocksEnabled: false, crmTiersEnabled: false, crmCommerciauxEnabled: false,
-            crmCommissionsEnabled: false, crmFacturationEnabled: false
+            crmCommissionsEnabled: false, crmFacturationEnabled: false, crmSupFacturesEnabled: false
           }
         : {
             crmPrestationsEnabled: true, crmCaisseEnabled: true, crmMaintenanceEnabled: true,
             crmStocksEnabled: true, crmTiersEnabled: true, crmCommerciauxEnabled: true,
-            crmCommissionsEnabled: true, crmFacturationEnabled: true
+            crmCommissionsEnabled: true, crmFacturationEnabled: true,
+            // Factures Fournisseurs : actif par défaut pour la Direction uniquement
+            crmSupFacturesEnabled: ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(newUser.role)
           })
     });
     setShowForm(false);

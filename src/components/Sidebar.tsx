@@ -123,6 +123,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     // Modules CRM Standard
     { label: 'Devis', icon: FileText, path: '/devis', color: '#D97706', bg: '#FFFBEB', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Suivi des factures', icon: Receipt, path: '/factures', color: '#0284C7', bg: '#F0F9FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmFacturationEnabled' },
+    { label: 'Factures Fournisseurs', icon: Truck, path: '/fournisseurs-factures', color: '#EA580C', bg: '#FFF7ED', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmSupFacturesEnabled' },
     { label: 'Rapports Hebdo', icon: ClipboardList, path: '/crm/rapports', color: '#059669', bg: '#ECFDF5', roles: ['Responsable', 'Commercial', 'Directeur', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmReportsEnabled' },
     { label: 'Rapports Equipe', icon: ClipboardCheck, path: '/crm/rapports-equipe', color: '#7C3AED', bg: '#FAF5FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin', 'Responsable', 'Commercial'], permissionKey: 'crmTeamReportsEnabled' },
     { label: 'Clients', icon: Users, path: '/clients', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
@@ -187,7 +188,8 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
                      location.pathname.startsWith('/devis') || 
                      location.pathname.startsWith('/clients') || 
                      location.pathname.startsWith('/documents') || 
-                     location.pathname.startsWith('/factures') ||
+                      location.pathname.startsWith('/factures') ||
+                      location.pathname.startsWith('/fournisseurs-factures') ||
                      location.pathname.startsWith('/services') ||
                      location.pathname.startsWith('/prestations') ||
                      location.pathname.startsWith('/utilisateurs') ||

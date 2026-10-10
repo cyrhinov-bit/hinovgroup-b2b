@@ -172,6 +172,7 @@ export interface User {
   crmCommerciauxEnabled?: boolean;
   crmCommissionsEnabled?: boolean;
   crmFacturationEnabled?: boolean;
+  crmSupFacturesEnabled?: boolean;
   crmReportsEnabled?: boolean;
   crmTeamReportsEnabled?: boolean;
 }
@@ -1194,6 +1195,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               crmCommerciauxEnabled: resolveBool(p.crm_commerciaux_enabled, cachedUser?.crmCommerciauxEnabled, crmDefault),
               crmCommissionsEnabled: resolveBool(p.crm_commissions_enabled, cachedUser?.crmCommissionsEnabled, crmDefault),
               crmFacturationEnabled: resolveBool(p.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, crmDefault),
+              crmSupFacturesEnabled: resolveBool(p.crm_sup_factures_enabled, cachedUser?.crmSupFacturesEnabled, isDir),
               crmReportsEnabled: resolveBool(p.crm_reports_enabled, cachedUser?.crmReportsEnabled, !isDir),
               crmTeamReportsEnabled: resolveBool(p.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
             };
@@ -4414,6 +4416,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           crmCommerciauxEnabled: user.crmCommerciauxEnabled ?? crmDefaultNew,
           crmCommissionsEnabled: user.crmCommissionsEnabled ?? crmDefaultNew,
           crmFacturationEnabled: user.crmFacturationEnabled ?? crmDefaultNew,
+          crmSupFacturesEnabled: user.crmSupFacturesEnabled ?? isDirRole,
           crmReportsEnabled: user.crmReportsEnabled ?? !isDirRole,
           crmTeamReportsEnabled: user.crmTeamReportsEnabled ?? isDirRole
         }),
@@ -4451,6 +4454,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       crmCommerciauxEnabled: user.crmCommerciauxEnabled ?? crmDefaultNew,
       crmCommissionsEnabled: user.crmCommissionsEnabled ?? crmDefaultNew,
       crmFacturationEnabled: user.crmFacturationEnabled ?? crmDefaultNew,
+      crmSupFacturesEnabled: user.crmSupFacturesEnabled ?? isDirRole,
       crmReportsEnabled: user.crmReportsEnabled ?? !isDirRole,
       crmTeamReportsEnabled: user.crmTeamReportsEnabled ?? isDirRole
     };
@@ -4481,6 +4485,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (data.crmCommerciauxEnabled !== undefined) payload.crm_commerciaux_enabled = data.crmCommerciauxEnabled;
     if (data.crmCommissionsEnabled !== undefined) payload.crm_commissions_enabled = data.crmCommissionsEnabled;
     if (data.crmFacturationEnabled !== undefined) payload.crm_facturation_enabled = data.crmFacturationEnabled;
+    if (data.crmSupFacturesEnabled !== undefined) payload.crm_sup_factures_enabled = data.crmSupFacturesEnabled;
     if (data.crmReportsEnabled !== undefined) payload.crm_reports_enabled = data.crmReportsEnabled;
     if (data.crmTeamReportsEnabled !== undefined) payload.crm_team_reports_enabled = data.crmTeamReportsEnabled;
     if (currentUser && currentUser.id === id) {

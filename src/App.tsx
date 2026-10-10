@@ -59,6 +59,7 @@ const PosTerminal = lazy(() => import('./pages/pos/PosTerminal'));
 const PosTransactions = lazy(() => import('./pages/pos/PosTransactions'));
 const PosCash = lazy(() => import('./pages/pos/PosCash'));
 const DataExport = lazy(() => import('./pages/DataExport'));
+const SupFactures = lazy(() => import('./pages/SupFactures'));
 
 // Diagnostic pages (lazy loaded)
 const DiagnosticPage = lazy(() => import('./components/DiagnosticPage'));
@@ -150,7 +151,7 @@ function RequirePosModule({ roles, moduleKey = null, children }: { roles: Role[]
 }
 // Garde de module CRM : Caissier/Gerant jamais admis, autres rôles selon le flag
 // (miroir des gardes in-page ; défaut cohérent Sidebar opt-out : seul `false` explicite bloque)
-type CrmModuleKey = 'crmPrestationsEnabled' | 'crmCaisseEnabled' | 'crmMaintenanceEnabled' | 'crmStocksEnabled' | 'crmTiersEnabled' | 'crmCommerciauxEnabled' | 'crmCommissionsEnabled' | 'crmFacturationEnabled' | 'crmReportsEnabled' | 'crmTeamReportsEnabled';
+type CrmModuleKey = 'crmPrestationsEnabled' | 'crmCaisseEnabled' | 'crmMaintenanceEnabled' | 'crmStocksEnabled' | 'crmTiersEnabled' | 'crmCommerciauxEnabled' | 'crmCommissionsEnabled' | 'crmFacturationEnabled' | 'crmSupFacturesEnabled' | 'crmReportsEnabled' | 'crmTeamReportsEnabled';
 function RequireCrmModule({ moduleKey, children }: { moduleKey: CrmModuleKey; children: ReactNode }) {
   const { currentUser } = useAuth();
   if (!currentUser) return <Navigate to="/login" replace />;
@@ -200,6 +201,7 @@ function App() {
                     <Route path="devis" element={<RequireRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><Devis /></RequireRole>} />
                     <Route path="devis/nouveau" element={<RequireRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><QuoteCreation /></RequireRole>} />
                     <Route path="factures" element={<RequireCrmModule moduleKey="crmFacturationEnabled"><Factures /></RequireCrmModule>} />
+                    <Route path="fournisseurs-factures" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireCrmModule moduleKey="crmSupFacturesEnabled"><SupFactures /></RequireCrmModule></Suspense>} />
                     <Route path="documents" element={<RequireRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><Documents /></RequireRole>} />
                     <Route path="export" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'Responsable', 'Gerant', 'SuperAdmin']}><DataExport /></RequireRole></Suspense>} />
                     <Route path="utilisateurs" element={<RequireRole roles={['Directeur', 'SuperAdmin']}><Utilisateurs /></RequireRole>} />
