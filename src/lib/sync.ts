@@ -3771,7 +3771,8 @@ export const processSyncQueue = async () => {
           const { error } = await supabase.from('invoice_payments').upsert(payment, { onConflict: 'id' });
           let invOk = !error;
           if (!error && invoiceUpdate?.id) {
-            const { error: invErr } = await supabase.from('invoices').update(invoiceUpdate).eq('id', invoiceUpdate.id);
+            const { id: _omitId, created_at: _omitCreated, ...invoicePatch } = invoiceUpdate;
+            const { error: invErr } = await supabase.from('invoices').update(invoicePatch).eq('id', invoiceUpdate.id);
             if (invErr) {
               if (isNetworkOrTransientError(invErr)) throw new Error(`[NetworkError] ${invErr.message}`);
               console.error('[Sync] UPSERT_INVOICE_PAYMENT statut échoué :', invErr.message);
@@ -3787,7 +3788,8 @@ export const processSyncQueue = async () => {
           const { error } = await supabase.from('invoice_payments').delete().eq('id', id);
           let invOk = !error;
           if (!error && invoiceUpdate?.id) {
-            const { error: invErr } = await supabase.from('invoices').update(invoiceUpdate).eq('id', invoiceUpdate.id);
+            const { id: _omitId, created_at: _omitCreated, ...invoicePatch } = invoiceUpdate;
+            const { error: invErr } = await supabase.from('invoices').update(invoicePatch).eq('id', invoiceUpdate.id);
             if (invErr) {
               if (isNetworkOrTransientError(invErr)) throw new Error(`[NetworkError] ${invErr.message}`);
               console.error('[Sync] DELETE_INVOICE_PAYMENT statut échoué :', invErr.message);

@@ -55,6 +55,7 @@ export function Factures() {
   const { currentUser: authUser } = useAuth();
   const { 
     invoices, 
+    invoicePayments,
     clients, 
     services, 
     users, 
@@ -62,7 +63,8 @@ export function Factures() {
     addInvoice, 
     updateInvoice, 
     deleteInvoice, 
-    addInvoicePayment
+    addInvoicePayment,
+    deleteInvoicePayment
   } = useAppContext();
 
   const currentUser = users.find(u => u.id === authUser?.id) || authUser;
@@ -285,7 +287,7 @@ export function Factures() {
 
     const grossMargin = Math.max(0, formAmountToPay - formAmountUsed);
     const commissionAmount = Number(formCommissionAmount) || 0;
-    const hinovMargin = grossMargin - commissionAmount;
+    const hinovMargin = Math.max(0, grossMargin - commissionAmount);
     const remainingAmount = Math.max(0, formAmountToPay - formAmountPaid);
     const commissionRate = grossMargin > 0 ? Math.round((commissionAmount / grossMargin) * 100) : 0;
 
@@ -399,36 +401,30 @@ export function Factures() {
       toast.error('Veuillez saisir un montant supérieur à zéro.');
       return;
     }
+    // Facture « live » (le state a pu évoluer si un encaissement vient d'être supprimé
+    // dans cette même modale) pour une garde anti-surpaiement toujours juste.
+    const live = invoices.find(i => i.id === selectedInvoice.id) ?? selectedInvoice;
     // Garde anti-surpaiement : le modèle n'a pas de notion d'avoir/trop-perçu ;
     // tout excédent serait silencieusement absorbé (statut PAYÉE, reste 0).
-    const remainingBefore = selectedInvoice.remainingAmount !== undefined
-      ? selectedInvoice.remainingAmount
-      : Math.max(0, selectedInvoice.totalAmount - (selectedInvoice.amountPaid || 0));
+    const remainingBefore = live.remainingAmount !== undefined
+      ? live.remainingAmount
+      : Math.max(0, live.totalAmount - (live.amountPaid || 0));
     if (payAmount > remainingBefore) {
       toast.error(`Montant supérieur au reste dû (${remainingBefore.toLocaleString('fr-FR')} FCFA). Ajustez d'abord le total de la facture si c'est un avoir.`);
       return;
     }
 
-    const currentPaid = selectedInvoice.amountPaid || 0;
-    const newPaid = currentPaid + payAmount;
-    const newRemaining = Math.max(0, selectedInvoice.totalAmount - newPaid);
-
     try {
+      // Écriture unique : addInvoicePayment enregistre la ligne datée ET met à jour
+      // les totaux / le statut / la date de dernier règlement en une action synchro.
       await addInvoicePayment({
-        invoiceId: selectedInvoice.id,
+        invoiceId: live.id,
         amount: payAmount,
         paymentDate: payDate,
         paymentMethod: payMethod,
         reference: payRef || undefined,
         notes: payNotes || undefined,
         createdBy: currentUser?.id
-      });
-
-      await updateInvoice(selectedInvoice.id, {
-        amountPaid: newPaid,
-        remainingAmount: newRemaining,
-        paymentDate: payDate,
-        status: newRemaining === 0 ? 'PAYÉE' : 'PARTIELLEMENT_PAYÉE'
       });
 
       toast.success(`Paiement de ${payAmount.toLocaleString('fr-FR')} FCFA enregistré !`);
@@ -514,8 +510,10 @@ export function Factures() {
 
             if (amountToPay > 0 || clientName.length > 1) {
               const grossMargin = Math.max(0, amountToPay - amountUsed);
-              const commissionAmount = commercialName ? Math.round(grossMargin * 0.1) : 0;
-              const hinovMargin = grossMargin - commissionAmount;
+              const hasCommercial = commercialName.trim() !== '';
+              const commissionRate = hasCommercial ? 10 : 0;
+              const commissionAmount = hasCommercial ? Math.round(grossMargin * 0.1) : 0;
+              const hinovMargin = Math.max(0, grossMargin - commissionAmount);
               const remainingAmount = Math.max(0, amountToPay - amountPaid);
 
               await addInvoice({
@@ -536,7 +534,7 @@ export function Factures() {
                 discountAmount: 0,
                 totalAmount: amountToPay,
                 costAmount: amountUsed,
-                commissionRate: 10,
+                commissionRate,
                 commissionAmount,
                 grossMargin,
                 hinovMargin,
@@ -602,8 +600,10 @@ export function Factures() {
     try {
       for (const item of defaultData) {
         const grossMargin = Math.max(0, item.amountToPay - item.amountUsed);
-        const commissionAmount = item.commercialName ? Math.round(grossMargin * 0.1) : 0;
-        const hinovMargin = grossMargin - commissionAmount;
+        const hasCommercial = item.commercialName.trim() !== '';
+        const commissionRate = hasCommercial ? 10 : 0;
+        const commissionAmount = hasCommercial ? Math.round(grossMargin * 0.1) : 0;
+        const hinovMargin = Math.max(0, grossMargin - commissionAmount);
         const remainingAmount = Math.max(0, item.amountToPay - item.amountPaid);
 
         await addInvoice({
@@ -623,7 +623,7 @@ export function Factures() {
           discountAmount: 0,
           totalAmount: item.amountToPay,
           costAmount: item.amountUsed,
-          commissionRate: 10,
+          commissionRate,
           commissionAmount,
           grossMargin,
           hinovMargin,
@@ -710,8 +710,13 @@ export function Factures() {
 
   const monthInvoices = useMemo(() => {
     return allowedInvoices.filter(inv => {
-      const year = inv.periodYear || (inv.deliveryDate ? new Date(inv.deliveryDate).getFullYear() : (inv.issueDate ? new Date(inv.issueDate).getFullYear() : 2026));
-      const month = inv.periodMonth || (inv.deliveryDate ? new Date(inv.deliveryDate).getMonth() + 1 : (inv.issueDate ? new Date(inv.issueDate).getMonth() + 1 : 9));
+      // Même règle que getInvoicePeriod : période comptable saisie en priorité,
+      // repli sur livraison puis émission, avec garde anti-dates invalides.
+      const d = inv.deliveryDate || inv.issueDate;
+      const parsed = d ? new Date(d) : new Date(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`);
+      const fallbackValid = !isNaN(parsed.getTime());
+      const year = inv.periodYear || (fallbackValid ? parsed.getFullYear() : selectedYear);
+      const month = inv.periodMonth || (fallbackValid ? parsed.getMonth() + 1 : selectedMonth);
       return year === selectedYear && month === selectedMonth;
     });
   }, [allowedInvoices, selectedYear, selectedMonth]);
@@ -974,8 +979,11 @@ export function Factures() {
           {MONTH_NAMES.map(m => {
             const isSelected = selectedMonth === m.num;
             const countInMonth = allowedInvoices.filter(i => {
-              const y = i.periodYear || (i.deliveryDate ? new Date(i.deliveryDate).getFullYear() : 2026);
-              const mon = i.periodMonth || (i.deliveryDate ? new Date(i.deliveryDate).getMonth() + 1 : 9);
+              const d = i.deliveryDate || i.issueDate;
+              const parsed = d ? new Date(d) : null;
+              const valid = parsed && !isNaN(parsed.getTime());
+              const y = i.periodYear || (valid ? (parsed as Date).getFullYear() : selectedYear);
+              const mon = i.periodMonth || (valid ? (parsed as Date).getMonth() + 1 : m.num);
               return y === selectedYear && mon === m.num;
             }).length;
 
@@ -1950,12 +1958,64 @@ export function Factures() {
               <div style={{ background: 'var(--color-surface-alt)', padding: '12px', borderRadius: 'var(--radius-md)' }}>
                 <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block' }}>Client :</span>
                 <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--color-primary)' }}>
-                  {getClientDisplayName(selectedInvoice)}
+                  {getClientDisplayName(invoices.find(i => i.id === selectedInvoice.id) ?? selectedInvoice)}
                 </span>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid var(--color-border)', fontSize: '0.8rem' }}>
-                  <span>Total : <b>{selectedInvoice.totalAmount.toLocaleString('fr-FR')} F</b></span>
-                  <span style={{ color: '#E11D48' }}>Reste : <b>{(selectedInvoice.remainingAmount ?? (selectedInvoice.totalAmount - (selectedInvoice.amountPaid || 0))).toLocaleString('fr-FR')} F</b></span>
+                  <span>Total : <b>{(invoices.find(i => i.id === selectedInvoice.id) ?? selectedInvoice).totalAmount.toLocaleString('fr-FR')} F</b></span>
+                  <span style={{ color: '#E11D48' }}>Reste : <b>{(() => {
+                    const live = invoices.find(i => i.id === selectedInvoice.id) ?? selectedInvoice;
+                    return (live.remainingAmount ?? (live.totalAmount - (live.amountPaid || 0))).toLocaleString('fr-FR');
+                  })()} F</b></span>
                 </div>
+              </div>
+
+              {/* ── Historique daté des encaissements de cette facture ── */}
+              <div>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px', color: '#0D9488' }}>
+                  Encaissements enregistrés ({invoicePayments.filter(p => p.invoiceId === selectedInvoice.id).length})
+                </div>
+                {invoicePayments
+                  .filter(p => p.invoiceId === selectedInvoice.id)
+                  .sort((a, b) => (a.paymentDate || '').localeCompare(b.paymentDate || ''))
+                  .map(p => (
+                    <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid var(--color-border)', fontSize: '0.82rem' }}>
+                      <span>
+                        <strong style={{ fontFamily: 'monospace' }}>{p.paymentDate}</strong>
+                        {' — '}<strong>{(Number(p.amount) || 0).toLocaleString('fr-FR')} F</strong>
+                        {` (${p.paymentMethod || '-'})`}{p.reference ? ` — ${p.reference}` : ''}
+                      </span>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        style={{ color: 'var(--color-error)' }}
+                        title="Supprimer cet encaissement"
+                        onClick={() => {
+                          confirm({
+                            title: "Supprimer l'encaissement",
+                            message: `Supprimer l'encaissement du ${p.paymentDate} de ${(Number(p.amount) || 0).toLocaleString('fr-FR')} FCFA ? Les totaux de la facture seront recalculés.`,
+                            confirmLabel: 'Supprimer',
+                            cancelLabel: 'Annuler',
+                            variant: 'danger',
+                            onConfirm: async () => {
+                              try {
+                                await deleteInvoicePayment(p.id);
+                                toast.success('Encaissement supprimé.');
+                              } catch {
+                                toast.error("Erreur lors de la suppression.");
+                              }
+                            }
+                          });
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                {invoicePayments.filter(p => p.invoiceId === selectedInvoice.id).length === 0 && (
+                  <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
+                    Aucun encaissement enregistré — seul le champ « Total Déjà Payé » fait foi pour l'instant.
+                  </p>
+                )}
               </div>
 
               <div>

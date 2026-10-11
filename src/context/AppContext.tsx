@@ -2065,7 +2065,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               discountAmount: Number(inv.discount_amount) || 0,
               totalAmount: Number(inv.total_amount) || 0,
               costAmount: Number(inv.cost_amount) || 0,
-              commissionRate: Number(inv.commission_rate) || 10,
+              commissionRate: inv.commission_rate === undefined || inv.commission_rate === null || inv.commission_rate === '' ? 10 : (Number(inv.commission_rate) || 0),
               commissionAmount: Number(inv.commission_amount) || 0,
               grossMargin: Number(inv.gross_margin) || 0,
               hinovMargin: Number(inv.hinov_margin) || 0,
@@ -5486,7 +5486,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     discount_amount: inv.discountAmount || 0,
     total_amount: inv.totalAmount,
     cost_amount: inv.costAmount || 0,
-    commission_rate: inv.commissionRate || 10,
+    commission_rate: inv.commissionRate ?? 10,
     commission_amount: inv.commissionAmount || 0,
     gross_margin: inv.grossMargin || 0,
     hinov_margin: inv.hinovMargin || 0,
@@ -5575,7 +5575,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const totalAmount = data.totalAmount !== undefined ? Number(data.totalAmount) : (existing.totalAmount || 0);
     const costAmount = data.costAmount !== undefined ? Number(data.costAmount) : (existing.costAmount || 0);
     const grossMargin = Math.max(0, totalAmount - costAmount);
-    const commissionRate = data.commissionRate !== undefined ? Number(data.commissionRate) : (existing.commissionRate || 10);
+    const commissionRate = data.commissionRate !== undefined ? Number(data.commissionRate) : (existing.commissionRate ?? 10);
     const commissionAmount = grossMargin > 0 ? Math.round(grossMargin * (commissionRate / 100)) : 0;
     const hinovMargin = Math.max(0, grossMargin - commissionAmount);
     const amountPaid = data.amountPaid !== undefined ? Number(data.amountPaid) : (existing.amountPaid || 0);
@@ -5651,7 +5651,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const targetInvoice = invoices.find(i => i.id === paymentData.invoiceId);
     const existingPaymentsForInvoice = invoicePayments.filter(p => p.invoiceId === paymentData.invoiceId);
     const totalPaidBefore = existingPaymentsForInvoice.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-    const newTotalPaid = totalPaidBefore + (Number(paymentData.amount) || 0);
+    // Base = max(somme des lignes, montant déjà suivi) : préserve un « Total Déjà Payé »
+    // saisi manuellement (import Excel / seed) qui n'a pas encore de lignes de règlement.
+    const paidBase = Math.max(totalPaidBefore, Number(targetInvoice?.amountPaid) || 0);
+    const newTotalPaid = paidBase + (Number(paymentData.amount) || 0);
 
     const seq = (invoicePayments.length + 1).toString().padStart(4, '0');
     const paymentNumber = paymentData.paymentNumber || `PAY-${new Date().getFullYear()}-${seq}`;
@@ -5671,7 +5674,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setInvoicePayments(nextPayments);
     await db.invoicePayments.setItem('data', nextPayments);
 
-    // Mise à jour automatique du statut ET des montants de la facture (source unique : somme des paiements)
+    // Mise à jour automatique du statut ET des montants de la facture (source unique).
+    // La date de paiement affichée (colonne DATE PAIEM.) suit le dernier encaissement.
     if (targetInvoice) {
       const newStatus = computeInvoiceStatus(targetInvoice.totalAmount, newTotalPaid, targetInvoice.dueDate, targetInvoice.status);
       const updatedInvoice: Invoice = {
@@ -5679,13 +5683,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         status: newStatus,
         amountPaid: newTotalPaid,
         remainingAmount: Math.max(0, (targetInvoice.totalAmount || 0) - newTotalPaid),
+        paymentDate: newPayment.paymentDate,
         updatedAt: now
       };
       const nextInvoices = invoices.map(i => i.id === targetInvoice.id ? updatedInvoice : i);
       setInvoices(nextInvoices);
       await db.invoices.setItem('data', nextInvoices);
-
-      await queueSyncAction('UPSERT_INVOICE', { invoice: buildDbInvoice(updatedInvoice) });
     }
 
     const dbPayment = {
@@ -5700,7 +5703,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       created_by: newPayment.createdBy || null,
       created_at: newPayment.createdAt
     };
-    await queueSyncAction('UPSERT_INVOICE_PAYMENT', { payment: dbPayment });
+    // Action unique : le règlement + la mise à jour des totaux voyagent ensemble,
+    // le worker ne valide que si les deux écritures cloud réussissent (rejeu sinon).
+    await queueSyncAction('UPSERT_INVOICE_PAYMENT', {
+      payment: dbPayment,
+      invoiceUpdate: targetInvoice ? buildDbInvoice({
+        ...targetInvoice,
+        status: computeInvoiceStatus(targetInvoice.totalAmount, newTotalPaid, targetInvoice.dueDate, targetInvoice.status),
+        amountPaid: newTotalPaid,
+        remainingAmount: Math.max(0, (targetInvoice.totalAmount || 0) - newTotalPaid),
+        paymentDate: newPayment.paymentDate,
+        updatedAt: now
+      }) : undefined
+    });
 
     return newPayment;
   };
@@ -5713,6 +5728,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     if (payment) {
       const targetInvoice = invoices.find(i => i.id === payment.invoiceId);
+      let invoiceUpdate: any = undefined;
       if (targetInvoice) {
         const remainingPayments = nextPayments.filter(p => p.invoiceId === targetInvoice.id);
         const totalPaid = remainingPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
@@ -5723,16 +5739,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
           status: newStatus,
           amountPaid: totalPaid,
           remainingAmount: Math.max(0, (targetInvoice.totalAmount || 0) - totalPaid),
+          // Dernier encaissement supprimé : plus aucune date de règlement avérée.
+          paymentDate: remainingPayments.length === 0 ? undefined : targetInvoice.paymentDate,
           updatedAt: now
         };
         const nextInvoices = invoices.map(i => i.id === targetInvoice.id ? updatedInvoice : i);
         setInvoices(nextInvoices);
         await db.invoices.setItem('data', nextInvoices);
 
-        await queueSyncAction('UPSERT_INVOICE', { invoice: buildDbInvoice(updatedInvoice) });
+        invoiceUpdate = buildDbInvoice(updatedInvoice);
       }
 
-      await queueSyncAction('DELETE_INVOICE_PAYMENT', { id: paymentId });
+      await queueSyncAction('DELETE_INVOICE_PAYMENT', { id: paymentId, invoiceUpdate });
     }
   };
 
