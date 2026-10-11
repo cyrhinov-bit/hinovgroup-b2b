@@ -865,6 +865,12 @@ export const queueSyncAction = async (type: SyncActionType, payload: any) => {
     return;
   }
 
+  // Notifications : ne jamais enfiler un payload insynchronisable (échec 22P02/23503 garanti).
+  if (type === 'INSERT_NOTIFICATION' && (!isUuid(payload?.id) || !isUuid(payload?.user_id))) {
+    console.warn('[Sync] INSERT_NOTIFICATION non enfilée (id/user_id non-UUID).', { id: payload?.id, user_id: payload?.user_id });
+    return;
+  }
+
   // Remappage catalogue fantôme : réécrit les UUID locaux vers les gardiens
   // serveur, abandonne les upserts de fantômes (jamais de doublon recréé).
   const remapped = applyProductRemapToAction(type, payload);
@@ -1014,14 +1020,37 @@ export const processSyncQueue = async () => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
 
     // Purge automatique des anciennes erreurs liées aux services retirés
+    // + purge des erreurs notifications déjà stockées (non-critiques : le toast
+    // "Échec de synchronisation : INSERT_NOTIFICATION" ne doit plus réapparaître).
     try {
       const storedErrors = (await db.syncErrors.getItem<any[]>('errors')) || [];
-      const cleanErrors = storedErrors.filter(e => !isRetiredServicePayload(e.action?.type, e.action?.payload));
+      const cleanErrors = storedErrors.filter(e => !isRetiredServicePayload(e.action?.type, e.action?.payload)
+        && e.action?.type !== 'INSERT_NOTIFICATION'
+        && e.action?.type !== 'MARK_NOTIFICATION_READ'
+        && e.action?.type !== 'MARK_ALL_NOTIFICATIONS_READ');
       if (cleanErrors.length !== storedErrors.length) {
         await db.syncErrors.setItem('errors', cleanErrors);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: cleanErrors.length } }));
         }
+      }
+    } catch {}
+
+    // Purge file : jette les notifications invalides déjà enfilées (id/user_id
+    // non-UUID → échec Postgres garanti). Évite de rejouer en boucle.
+    try {
+      const invalidNotifIds = new Set(
+        currentQueue
+          .filter(a => a.type === 'INSERT_NOTIFICATION' && (!isUuid(a.payload?.id) || !isUuid(a.payload?.user_id)))
+          .map(a => a.id)
+      );
+      if (invalidNotifIds.size > 0) {
+        console.warn(`[Sync] Purge file : ${invalidNotifIds.size} notification(s) invalide(s) jetée(s).`);
+        const nextQueue = currentQueue.filter(a => !invalidNotifIds.has(a.id));
+        await db.syncQueue.setItem('queue', nextQueue);
+        // Recharge la file nettoyée pour la suite du run.
+        currentQueue.length = 0;
+        currentQueue.push(...nextQueue);
       }
     } catch {}
 
@@ -2429,28 +2458,66 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_NOTIFICATION': {
-          const { error } = await supabase.from('notifications').upsert([{
-            id: action.payload.id,
-            user_id: action.payload.user_id,
-            title: action.payload.title,
-            message: action.payload.message,
-            type: action.payload.type,
-            is_read: !!action.payload.is_read,
-            link: action.payload.link || null,
-            created_at: action.payload.created_at || new Date().toISOString()
-          }], { onConflict: 'id' });
-          if (error) console.error('[Sync] INSERT_NOTIFICATION échoué :', error.message);
+          const p = action.payload || {};
+          // Notifications = non-critiques : un échec ne doit jamais produire
+          // de toast "Échec de synchronisation" ni bloquer la file.
+          // Causes vues en prod : user_id non-UUID, destinataire absent de
+          // profiles (FK 23503), RLS 42501, rejeu (doublon 23505).
+          // Dans tous ces cas permanents → on jette silencieusement (succès).
+          if (!isUuid(p.id) || !isUuid(p.user_id)) {
+            console.warn('[Sync] INSERT_NOTIFICATION ignorée : id/user_id non-UUID.', { id: p.id, user_id: p.user_id });
+            success = true;
+            break;
+          }
+          // NOTE : on utilise insert() et non upsert() : un upsert exige les droits
+          // RLS INSERT + UPDATE. La politique UPDATE est limitée à ses propres
+          // notifications (auth.uid() = user_id), donc notifier un autre utilisateur
+          // (cas Direction) échouait en 42501. L'id est un uuidv4 frais, le doublon
+          // ne peut venir que d'un rejeu → traité comme succès (idempotent).
+          const { error } = await supabase.from('notifications').insert([{
+            id: p.id,
+            user_id: p.user_id,
+            title: p.title || 'Notification',
+            message: p.message || '',
+            type: p.type || 'info',
+            is_read: !!p.is_read,
+            link: p.link || null,
+            created_at: p.created_at || new Date().toISOString()
+          }]);
+          if (error && isUniqueViolationError(error)) {
+            success = true;
+            break;
+          }
+          if (error && (isForeignKeyError(error) || (error as any).code === '42501' ||
+            /row.?level|policy|permission|not found|schema cache|PGRST/i.test(error.message || ''))) {
+            console.warn('[Sync] INSERT_NOTIFICATION ignorée (destinataire inconnu ou droits insuffisants) :', error.message);
+            success = true;
+            break;
+          }
+          if (error) console.error('[Sync] INSERT_NOTIFICATION échoué :', error.message, error);
           success = checkResult(error);
           break;
         }
         case 'MARK_NOTIFICATION_READ': {
           const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', action.payload.id);
+          if (error && ((error as any).code === '42501' || /row.?level|policy|permission|PGRST/i.test(error.message || ''))) {
+            // Marquer comme lue la notif d'un autre utilisateur est refusé par RLS :
+            // non-critique → on jette silencieusement.
+            console.warn('[Sync] MARK_NOTIFICATION_READ ignorée (RLS) :', error.message);
+            success = true;
+            break;
+          }
           if (error) console.error('[Sync] MARK_NOTIFICATION_READ échoué :', error.message);
           success = checkResult(error);
           break;
         }
         case 'MARK_ALL_NOTIFICATIONS_READ': {
           const { error } = await supabase.from('notifications').update({ is_read: true }).eq('user_id', action.payload.user_id).eq('is_read', false);
+          if (error && ((error as any).code === '42501' || /row.?level|policy|permission|PGRST/i.test(error.message || ''))) {
+            console.warn('[Sync] MARK_ALL_NOTIFICATIONS_READ ignorée (RLS) :', error.message);
+            success = true;
+            break;
+          }
           if (error) console.error('[Sync] MARK_ALL_NOTIFICATIONS_READ échoué :', error.message);
           success = checkResult(error);
           break;
@@ -3859,7 +3926,12 @@ export const processSyncQueue = async () => {
         processedIds.add(action.id);
 
         // Ne jamais enregistrer en erreur ni notifier les actions des services retirés
+        // ni les notifications (non-critiques : pas de toast "Échec de synchronisation").
         if (isRetiredServicePayload(action.type, action.payload)) {
+          continue;
+        }
+        if (action.type === 'INSERT_NOTIFICATION' || action.type === 'MARK_NOTIFICATION_READ' || action.type === 'MARK_ALL_NOTIFICATIONS_READ') {
+          console.warn(`[Sync] Notification ${action.type} rejetée par le serveur, jetée sans erreur visible.`);
           continue;
         }
 

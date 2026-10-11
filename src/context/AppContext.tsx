@@ -3275,8 +3275,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const authorName = author?.name || 'Un collaborateur';
     const authorService = services.find(s => s.id === author?.serviceId)?.name || '';
     const serviceSuffix = authorService ? ` (${authorService})` : '';
-    const directionUsers = users.filter(u => 
-      ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(u.role)
+    const directionUsers = users.filter(u =>
+      ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(u.role) && isUuid(u.id)
     );
     if (directionUsers.length > 0) {
       const newNotifs: AppNotification[] = directionUsers.map(d => ({
@@ -3311,10 +3311,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const sendWeeklyReportReminder = async (userIds: string[], weekStart: string) => {
-    if (!userIds || userIds.length === 0) return;
+    const validIds = (userIds || []).filter(uid => isUuid(uid));
+    if (validIds.length === 0) return;
     const now = new Date().toISOString();
     const weekDateStr = new Date(weekStart + 'T00:00:00').toLocaleDateString('fr-FR');
-    const newNotifs: AppNotification[] = userIds.map(uid => ({
+    const newNotifs: AppNotification[] = validIds.map(uid => ({
       id: uuidv4(),
       user_id: uid,
       title: 'Rappel Direction : Rapport Hebdo en attente',
@@ -3350,7 +3351,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await queueSyncAction('UPDATE_V2_WEEKLY_REPORT', updated);
 
     // Notify the author (lien valide vers le module existant + synchro cloud)
-    if (report.authorId && report.authorId !== currentUser?.id) {
+    // user_id est FK vers profiles(id) : seuls les UUID sont synchronisables.
+    if (report.authorId && isUuid(report.authorId) && report.authorId !== currentUser?.id) {
       const authorNotif: AppNotification = {
         id: uuidv4(),
         user_id: report.authorId,
