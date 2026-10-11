@@ -15,7 +15,8 @@
     {
       "provider": "github",
       "owner": "cyrhinov-bit",
-      "repo": "hinovgroup-b2b"
+      "repo": "hinovgroup-b2b",
+      "releaseType": "release"
     }
   ],
   "win": {
