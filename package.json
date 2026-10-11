@@ -15,12 +15,14 @@
     "electron:prepare": "node -e \"import('fs').then(fs => { if(!fs.existsSync('dist-electron')) fs.mkdirSync('dist-electron'); fs.writeFileSync('dist-electron/package.json', JSON.stringify({type:'commonjs'})); })\"",
     "electron:dev": "npm run electron:prepare && concurrently \"cross-env ELECTRON=true npm run dev\" \"tsc -p tsconfig.electron.json -w\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
     "electron:start": "npm run electron:prepare && tsc -p tsconfig.electron.json && electron .",
-    "electron:build": "npm run electron:prepare && cross-env ELECTRON=true CSC_IDENTITY_AUTO_DISCOVERY=false npm run build && tsc -p tsconfig.electron.json && electron-builder --win"
+    "electron:build": "npm run electron:prepare && cross-env ELECTRON=true CSC_IDENTITY_AUTO_DISCOVERY=false npm run build && tsc -p tsconfig.electron.json && electron-builder --win",
+    "electron:publish": "npm run electron:prepare && cross-env ELECTRON=true CSC_IDENTITY_AUTO_DISCOVERY=false npm run build && tsc -p tsconfig.electron.json && electron-builder --win --publish always"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.9",
     "@tanstack/react-query": "^5.101.4",
     "date-fns": "^4.4.0",
+    "electron-updater": "^6.8.9",
     "html2canvas": "^1.4.1",
     "html2pdf.js": "^0.14.0",
     "jspdf": "^4.2.1",

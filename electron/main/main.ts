@@ -3,6 +3,7 @@ import { registerIpcHandlers } from '../ipc/index.js';
 import { ErrorManager } from '../errors/ErrorManager.js';
 import { MenuManager } from '../menu/MenuManager.js';
 import { WindowManager } from '../windows/WindowManager.js';
+import { UpdaterManager } from '../services/updater/UpdaterManager.js';
 
 // Empêcher plusieurs instances concurrentes de verrouiller les caches et bases de données SQLite/IndexedDB
 const gotTheLock = app.requestSingleInstanceLock();
@@ -39,6 +40,9 @@ if (!gotTheLock) {
 
     // Création du Splash Screen et de la Fenêtre Principale
     WindowManager.init();
+
+    // Mises à jour auto (GitHub Releases via electron-updater)
+    UpdaterManager.init();
 
     // Gestion spécifique macOS
     app.on('activate', () => {

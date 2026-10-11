@@ -3,7 +3,7 @@ import { UpdaterConfig } from './UpdaterTypes.js';
 export class UpdateConfiguration {
   private static config: UpdaterConfig = {
     autoCheck: true,
-    autoDownload: false,
+    autoDownload: true,
     channel: 'stable'
   };
 
