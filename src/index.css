@@ -149,6 +149,7 @@ a:hover {
 /* Styles d'impression pour Ticket de caisse */
 .receipt-print-zone {
   display: none;
+  box-sizing: border-box;
 }
 
 @media print {

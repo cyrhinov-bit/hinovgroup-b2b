@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import ReceiptTicket from '../../components/pos/ReceiptTicket';
 import type { ReceiptData } from '../../components/pos/ReceiptTicket';
+import { printReceiptViaIframe } from '../../lib/receiptHtml';
 import type { PosTransaction } from '../../context/AppContext';
 import { matchesSearchQuery } from '../../lib/searchUtils';
 import { getWeekKey, formatWeekLabel, isCurrentWeek, todayLocalKey, toLocalDayKey } from '../../lib/dates';
@@ -296,7 +297,12 @@ export default function PosTransactions() {
         toast.error("Erreur d'impression: " + (err.message || err));
       }
     } else {
-      window.print();
+      // Iframe dédiée (hors DOM React) : pas de page blanche liée aux re-renders.
+      try {
+        await printReceiptViaIframe({ ...selectedReceiptData, settings: posSettings, crmSettings });
+      } catch (err: any) {
+        toast.error("Erreur d'impression: " + (err.message || err));
+      }
     }
   };
 

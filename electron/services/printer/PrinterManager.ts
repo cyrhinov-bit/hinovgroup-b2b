@@ -111,26 +111,42 @@ export class PrinterManager {
       });
 
       win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
-        .then(() => {
-          setTimeout(() => {
-            win.webContents.print(
-              {
-                silent: true,
-                printBackground: true,
-                deviceName: job.printerName,
-                margins: { marginType: 'none' },
-                scaleFactor: 100,
-                pageSize: { width: 80000, height: 297000 } // 80mm x 297mm in microns
-              },
-              (success, failureReason) => {
-                if (success) {
-                  finish('completed');
-                } else {
-                  finish('failed', failureReason || "Échec de l'impression.");
-                }
+        .then(async () => {
+          // Anti ticket blanc : print() 150ms après did-finish-load pouvait partir
+          // avant le premier paint (page blanche avec success=true, donc sans erreur
+          // remontée). On attend ici un frame réellement peint, avec repli temporisé.
+          try {
+            await Promise.race([
+              win.webContents.executeJavaScript(
+                'new Promise((r) => requestAnimationFrame(() => setTimeout(r, 80)))',
+                true,
+              ),
+              new Promise((r) => setTimeout(r, 2500)),
+            ]);
+          } catch {
+            await new Promise((r) => setTimeout(r, 150));
+          }
+          if (win.isDestroyed()) {
+            finish('failed', "Fenêtre d'impression fermée avant envoi.");
+            return;
+          }
+          win.webContents.print(
+            {
+              silent: true,
+              printBackground: true,
+              deviceName: job.printerName,
+              margins: { marginType: 'none' },
+              scaleFactor: 100,
+              pageSize: { width: 80000, height: 297000 } // 80mm x 297mm in microns
+            },
+            (success, failureReason) => {
+              if (success) {
+                finish('completed');
+              } else {
+                finish('failed', failureReason || "Échec de l'impression.");
               }
-            );
-          }, 150);
+            }
+          );
         })
         .catch(err => finish('failed', String(err)));
     });

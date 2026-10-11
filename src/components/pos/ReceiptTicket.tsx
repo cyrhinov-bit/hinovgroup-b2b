@@ -66,7 +66,7 @@ export default function ReceiptTicket({ data, settings, crmSettings, preview = f
   const incomplete = (cartFromFallback && cart.length === 0) || paymentsFromFallback;
 
   return (
-    <div className={preview ? "" : "receipt-print-zone"} style={{ width: '80mm', padding: '10px', fontSize: '12px', fontFamily: 'monospace', color: '#000', margin: '0 auto', background: '#fff' }}>
+    <div className={preview ? "" : "receipt-print-zone"} style={{ width: '80mm', boxSizing: 'border-box', padding: '10px', fontSize: '12px', fontFamily: 'monospace', color: '#000', margin: '0 auto', background: '#fff' }}>
       {incomplete && (
         <div style={{ border: '2px solid #000', padding: '6px', marginBottom: '10px', textAlign: 'center', fontWeight: 700 }}>
           ⚠ DONNÉES INCOMPLÈTES — CONTRÔLE REQUIS

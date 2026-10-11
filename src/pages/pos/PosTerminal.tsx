@@ -8,6 +8,7 @@ import { barcodeScannerService } from '../../features/products/services/BarcodeS
 import ProductImage from '../../features/products/images/ProductImage';
 import ReceiptTicket from '../../components/pos/ReceiptTicket';
 import type { ReceiptData } from '../../components/pos/ReceiptTicket';
+import { printReceiptViaIframe } from '../../lib/receiptHtml';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { toast } from 'react-hot-toast';
@@ -502,8 +503,10 @@ export default function PosTerminal() {
             ...receiptData,
             settings: posSettings
           }).catch((err: any) => toast.error("Erreur d'impression: " + (err.message || err)));
-        } else {
-          setTimeout(() => { window.print(); }, 100);
+        } else if (receiptData) {
+          // Iframe dédiée (hors DOM React) : pas de page blanche liée aux re-renders.
+          printReceiptViaIframe({ ...receiptData, settings: posSettings, crmSettings })
+            .catch((err: any) => toast.error("Erreur d'impression: " + (err.message || err)));
         }
         setShowPreviewModal(false);
         return;
@@ -1087,8 +1090,13 @@ export default function PosTerminal() {
                 } catch (e: any) {
                   toast.error("Erreur d'impression: " + (e.message || e));
                 }
-              } else {
-                setTimeout(() => { window.print(); }, 100); 
+              } else if (receiptData) {
+                // Iframe dédiée (hors DOM React) : pas de page blanche liée aux re-renders.
+                try {
+                  await printReceiptViaIframe({ ...receiptData, settings: posSettings, crmSettings });
+                } catch (e: any) {
+                  toast.error("Erreur d'impression: " + (e.message || e));
+                }
               }
               setShowPreviewModal(false); 
             }}>
