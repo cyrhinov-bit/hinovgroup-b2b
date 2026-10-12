@@ -668,16 +668,14 @@ function fitText(doc: jsPDF, text: string, maxW: number, baseSize: number, minSi
   return { text: t, size };
 }
 
-// ====================== DEVIS PDF — modèle officiel HINOV (devi.pdf) ======================
-// Reproduction fidèle du modèle : bannière, titre + client, bandeau
-// Date/Client/Devis, tableau 6 colonnes à filets noirs, totaux HT / TVA 18% / TTC,
-// montant en toutes lettres, cadre signature + cachet, mini-tableau Échéance /
-// Montant, CGV + IBAN, pied de page bleu. Style unique pour tous les devis
-// (remplace Classique / Moderne / Minimaliste).
-import devisBannerUrl from '../assets/devis_banner.jpg';
-import devisCachetUrl from '../assets/devis_cachet.jpg';
+// ====================== DEVIS PDF — design moderne HINOV (devis.jpeg) ======================
+// Reproduction du visuel couleur : bannière photo, titre + badge client navy,
+// barre d'infos à pastilles, tableau 6 colonnes aux filets couleur, cartes de
+// totaux, signature en pointillés, 3 blocs bas à icônes, pied de page navy.
+// Style unique pour tous les devis.
+import devisHeaderUrl from '../assets/devis_header.jpg';
 
-const devisPdfAssets: { banner?: string; cachet?: string } = {};
+const devisPdfAssets: { header?: string } = {};
 let devisPdfAssetsPromise: Promise<void> | null = null;
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -693,18 +691,14 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-/** Précharge (une fois) bannière + cachet de secours. À appeler avant generateQuotePdf. */
+/** Précharge (une fois) la bannière d'en-tête. À appeler avant generateQuotePdf. */
 export function ensureDevisPdfAssets(): Promise<void> {
   if (!devisPdfAssetsPromise) {
     devisPdfAssetsPromise = (async () => {
       try {
-        const res = await fetch(devisBannerUrl);
-        if (res.ok) devisPdfAssets.banner = await blobToDataUrl(await res.blob());
+        const res = await fetch(devisHeaderUrl);
+        if (res.ok) devisPdfAssets.header = await blobToDataUrl(await res.blob());
       } catch { /* bannière ignorée si inaccessible */ }
-      try {
-        const res = await fetch(devisCachetUrl);
-        if (res.ok) devisPdfAssets.cachet = await blobToDataUrl(await res.blob());
-      } catch { /* cachet ignoré si inaccessible */ }
     })();
   }
   return devisPdfAssetsPromise;
@@ -756,17 +750,82 @@ function nombreEnLettres(n: number): string {
   return parts.join(' ');
 }
 
+// ---- Palette du modèle ----
+const DV_NAVY: [number, number, number] = [31, 58, 95];
+const DV_GREEN: [number, number, number] = [34, 160, 107];
+const DV_PURPLE: [number, number, number] = [124, 58, 237];
+const DV_ORANGE: [number, number, number] = [245, 158, 11];
+const DV_BLUE: [number, number, number] = [37, 99, 235];
+const DV_BG: [number, number, number] = [241, 245, 249];
+const DV_GRAY: [number, number, number] = [100, 116, 139];
+const DV_LINE: [number, number, number] = [226, 232, 240];
+const DV_DARK: [number, number, number] = [30, 34, 42];
+const DV_WHITE: [number, number, number] = [255, 255, 255];
+
+/** Pastille couleur + glyphe blanc simplifié. */
+function dvBadge(doc: jsPDF, cx: number, cy: number, r: number, color: [number, number, number], glyph: 'cal' | 'user' | 'receipt' | 'coins' | 'pct' | 'doc' | 'bank', glyphColor: [number, number, number] = DV_WHITE) {
+  doc.setFillColor(...color);
+  doc.circle(cx, cy, r, 'F');
+  doc.setDrawColor(...glyphColor);
+  doc.setFillColor(...glyphColor);
+  doc.setLineWidth(0.5);
+  const u = r / 5; // unité
+  if (glyph === 'cal') {
+    doc.rect(cx - 2 * u, cy - 1.2 * u, 4 * u, 3.4 * u, 'F');
+    doc.setFillColor(...color);
+    doc.rect(cx - 2 * u, cy - 1.2 * u, 4 * u, 1 * u, 'F');
+    doc.setFillColor(...glyphColor);
+    doc.rect(cx - 1.2 * u, cy - 1.8 * u, 0.7 * u, 1.4 * u, 'F');
+    doc.rect(cx + 0.5 * u, cy - 1.8 * u, 0.7 * u, 1.4 * u, 'F');
+  } else if (glyph === 'user') {
+    doc.circle(cx, cy - 1 * u, 1.3 * u, 'F');
+    doc.ellipse(cx, cy + 1.8 * u, 2.1 * u, 1.5 * u, 'F');
+  } else if (glyph === 'receipt') {
+    doc.rect(cx - 1.7 * u, cy - 2.2 * u, 3.4 * u, 4.4 * u, 'F');
+    doc.setFillColor(...color);
+    doc.triangle(cx + 0.2 * u, cy - 2.2 * u, cx + 1.7 * u, cy - 2.2 * u, cx + 1.7 * u, cy - 0.7 * u, 'F');
+    doc.setDrawColor(...color);
+    doc.setLineWidth(0.4);
+    doc.line(cx - 1 * u, cy - 0.5 * u, cx + 1 * u, cy - 0.5 * u);
+    doc.line(cx - 1 * u, cy + 0.6 * u, cx + 1 * u, cy + 0.6 * u);
+  } else if (glyph === 'coins') {
+    doc.ellipse(cx, cy - 1.3 * u, 1.9 * u, 0.9 * u, 'F');
+    doc.ellipse(cx, cy, 1.9 * u, 0.9 * u, 'F');
+    doc.ellipse(cx, cy + 1.3 * u, 1.9 * u, 0.9 * u, 'F');
+  } else if (glyph === 'pct') {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(r * 1.15);
+    doc.setTextColor(...glyphColor);
+    doc.text('%', cx, cy + r * 0.42, { align: 'center' });
+  } else if (glyph === 'doc') {
+    doc.rect(cx - 1.7 * u, cy - 2.2 * u, 3.4 * u, 4.4 * u, 'F');
+    doc.setFillColor(...color);
+    doc.triangle(cx + 0.2 * u, cy - 2.2 * u, cx + 1.7 * u, cy - 2.2 * u, cx + 1.7 * u, cy - 0.7 * u, 'F');
+    doc.setDrawColor(...color);
+    doc.setLineWidth(0.4);
+    doc.line(cx - 1 * u, cy - 0.6 * u, cx + 0.4 * u, cy - 0.6 * u);
+    doc.line(cx - 1 * u, cy + 0.5 * u, cx + 0.4 * u, cy + 0.5 * u);
+    doc.line(cx - 1 * u, cy + 1.6 * u, cx - 0.2 * u, cy + 1.6 * u);
+  } else if (glyph === 'bank') {
+    doc.triangle(cx - 2.4 * u, cy - 0.6 * u, cx + 2.4 * u, cy - 0.6 * u, cx, cy - 2.4 * u, 'F');
+    doc.setLineWidth(0.55);
+    doc.line(cx - 1.6 * u, cy + 0.2 * u, cx - 1.6 * u, cy + 1.8 * u);
+    doc.line(cx, cy + 0.2 * u, cx, cy + 1.8 * u);
+    doc.line(cx + 1.6 * u, cy + 0.2 * u, cx + 1.6 * u, cy + 1.8 * u);
+    doc.line(cx - 2.4 * u, cy + 2.2 * u, cx + 2.4 * u, cy + 2.2 * u);
+  }
+}
+
 export function generateQuotePdf(
   quote: Quote,
   client: Client | undefined,
   settings: AppSettings,
-  prestations?: Array<{ id: string; code?: string }>
+  _prestations?: Array<{ id: string; code?: string }>
 ): Blob {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const black: [number, number, number] = [0, 0, 0];
-  const hinovBlue: [number, number, number] = [0, 112, 191];
   const companyName = (settings.companyName || 'HINOV GROUP').toUpperCase();
   const clientName = client?.company || client?.name || 'Client comptant';
+  const upClient = cleanPdfText(clientName.toUpperCase());
   const dateFr = formatDateFr(quote.date);
   const validUntilFr = quote.validUntil ? formatDateFr(quote.validUntil) : '';
   const validityText = quote.validUntil
@@ -789,7 +848,7 @@ export function generateQuotePdf(
       : Array.isArray((quote as any).items)
         ? (quote as any).items
         : [];
-  const lines = rawLines.map((line: any, idx: number) => {
+  const lines = rawLines.map((line: any) => {
     const descRaw = line.description || line.designation || line.name || line.prestation_name || line.label || 'Article sans désignation';
     const qty = Number(line.quantity ?? line.qte ?? line.qty ?? 1);
     const unitPrice = Number(line.unitPrice ?? line.unit_price ?? line.price ?? line.pu ?? 0);
@@ -803,9 +862,7 @@ export function generateQuotePdf(
         totalVal = Math.max(0, rawTotal - Math.round((rawTotal * disc) / 100));
       }
     }
-    const prestaId = line.prestationId ?? line.prestation_id;
-    const ref = (prestations || []).find(p => p.id === prestaId)?.code || '';
-    return { ref, desc: cleanPdfText(descRaw) || 'Article sans désignation', qty, unitPrice, disc, total: totalVal || 0, key: idx };
+    return { desc: cleanPdfText(descRaw) || 'Article sans désignation', qty, unitPrice, disc, total: totalVal || 0 };
   });
 
   // ---- Coordonnées entreprise (paramètres, sinon valeurs du modèle) ----
@@ -815,298 +872,351 @@ export function generateQuotePdf(
   const email = settings.companyEmail || 'hinovgroup@hinovgroup.com';
   const rccm = settings.companySiret || 'CI-ABJ-03-2024-B13-02088';
   const ibanFull = (settings.bankIban || 'CI93 CI16 6010 0701 1527 1241 0180').replace(/\s+/g, ' ').trim();
-  const iban1 = ibanFull.slice(0, 20).trim();
-  const iban2 = ibanFull.slice(20).trim();
+  const iban1 = ibanFull.slice(0, 24).trim();
+  const iban2 = ibanFull.slice(24).trim();
 
-  const setBlack = () => doc.setTextColor(...black);
-  const rule = (x1: number, y1: number, x2: number, y2: number, w = 0.25) => {
-    doc.setDrawColor(...black);
-    doc.setLineWidth(w);
-    doc.line(x1, y1, x2, y2);
-  };
+  const setNavy = () => doc.setTextColor(...DV_NAVY);
+  const setGray = () => doc.setTextColor(...DV_GRAY);
+  const setDark = () => doc.setTextColor(...DV_DARK);
 
-  // ---- Cadre page + pied de page (chaque page) ----
-  const drawFrame = () => {
-    doc.setDrawColor(...black);
-    doc.setLineWidth(0.3);
-    doc.rect(3.4, 3, 203.2, 289, 'S');
-  };
+  // ---- Pied de page (chaque page) ----
   const drawFooter = (pageNum: number, totalPages: number) => {
-    rule(9.8, 248.8, 200.4, 248.8, 0.3);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(5.5);
-    doc.setTextColor(...hinovBlue);
-    doc.text(cleanPdfText(` ${companyName} au capital de ${capital} FCFA`), 105, 250.9, { align: 'center' });
-    doc.text(cleanPdfText(`Siège social: ${address} - ${phone}`), 105, 254, { align: 'center' });
-    doc.text(cleanPdfText(`${email} ; N° RCCM : ${rccm}`), 105, 257.2, { align: 'center' });
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(7);
-    setBlack();
-    doc.text(`Page ${pageNum} de ${totalPages}`, 192.7, 290.9, { align: 'right' });
+    doc.setFontSize(8);
+    setNavy();
+    doc.text(cleanPdfText(`${companyName} au capital de ${capital} FCFA`), 105, 280.5, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    setNavy();
+    doc.text(cleanPdfText(`Siège social: ${address} - ${phone}`), 105, 284.5, { align: 'center' });
+    doc.text(cleanPdfText(`${email} ; N° RCCM : ${rccm}`), 105, 288, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    setGray();
+    doc.text(`Page ${pageNum} de ${totalPages}`, 200, 288, { align: 'right' });
   };
 
-  // ---- Colonnes du tableau (mm, relevé du modèle) ----
-  const CX = [9.57, 48.5, 135.5, 147.4, 166.4, 177.8, 200.4];
+  // ---- Tableau : colonnes (mm) ----
+  const CX = [10, 42, 128, 142, 163, 178, 200];
+  const COL_ACCENTS: Array<[number, number, number]> = [DV_GREEN, DV_PURPLE, DV_ORANGE, DV_BLUE, DV_GREEN, DV_NAVY];
   const drawTableHead = (top: number): number => {
-    doc.setDrawColor(...black);
-    doc.setLineWidth(0.4);
-    doc.rect(CX[0], top, CX[6] - CX[0], 9, 'S');
-    for (let i = 1; i < 6; i++) doc.line(CX[i], top, CX[i], top + 9);
+    doc.setFillColor(252, 253, 255);
+    doc.setDrawColor(...DV_LINE);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(CX[0], top, CX[6] - CX[0], 9, 1.5, 1.5, 'FD');
+    doc.setLineWidth(1.2);
+    for (let i = 0; i < 6; i++) {
+      doc.setDrawColor(...COL_ACCENTS[i]);
+      doc.line(CX[i] + 0.5, top + 0.4, CX[i + 1] - 0.5, top + 0.4);
+    }
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.8);
-    setBlack();
+    doc.setFontSize(8);
+    setNavy();
     const ty = top + 6;
-    doc.text('Référence', (CX[0] + CX[1]) / 2, ty, { align: 'center' });
-    doc.text('Désignation', (CX[1] + CX[2]) / 2, ty, { align: 'center' });
-    doc.text('Qté', (CX[2] + CX[3]) / 2, ty, { align: 'center' });
-    doc.text('P. Unitaire', CX[4] - 1.5, ty, { align: 'right' });
-    doc.text('Remise', (CX[4] + CX[5]) / 2, ty, { align: 'center' });
-    doc.text('Montant H.T.', CX[6] - 1.5, ty, { align: 'right' });
+    const heads = ['Référence', 'Désignation', 'Qté', 'P. Unitaire', 'Remise', 'Montant H.T.'];
+    for (let i = 0; i < 6; i++) doc.text(heads[i], (CX[i] + CX[i + 1]) / 2, ty, { align: 'center' });
     return top + 9;
   };
 
-  const drawRow = (ln: { ref: string; desc: string; qty: number; unitPrice: number; disc: number; total: number }, top: number, h: number, singleDesignation: boolean) => {
-    doc.setDrawColor(...black);
+  const drawRow = (ln: { desc: string; qty: number; unitPrice: number; disc: number; total: number }, ref: string, top: number, h: number) => {
+    doc.setDrawColor(...DV_LINE);
     doc.setLineWidth(0.25);
     for (let i = 0; i < 7; i++) doc.line(CX[i], top, CX[i], top + h);
     doc.line(CX[0], top + h, CX[6], top + h);
-    const baseY = top + 5.5;
+    const baseY = top + 6.5;
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    setBlack();
-    if (ln.ref) doc.text(cleanPdfText(ln.ref), (CX[0] + CX[1]) / 2, baseY, { align: 'center' });
-    if (singleDesignation) {
-      doc.setFont('times', 'bold');
-      const dFit = fitText(doc, ln.desc, CX[2] - CX[1] - 8, 12.5, 6);
-      doc.setFontSize(dFit.size);
-      setBlack();
-      doc.text(dFit.text, (CX[1] + CX[2]) / 2, baseY + 2, { align: 'center' });
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-    } else {
-      // Désignation sur une seule ligne : police réduite si longue
-      doc.setFont('helvetica', 'normal');
-      const rFit = fitText(doc, ln.desc, CX[2] - CX[1] - 3, 7.8, 6);
-      doc.setFontSize(rFit.size);
-      setBlack();
-      doc.text(rFit.text, CX[1] + 1.5, baseY);
-    }
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.8);
-    setBlack();
+    doc.setFontSize(9);
+    setDark();
+    doc.text(ref, (CX[0] + CX[1]) / 2, baseY, { align: 'center' });
+    // Désignation sur une seule ligne : police réduite si longue
+    const rFit = fitText(doc, ln.desc, CX[2] - CX[1] - 3, 9, 6);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(rFit.size);
+    setDark();
+    doc.text(rFit.text, CX[1] + 2, baseY);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    setDark();
     doc.text(String(ln.qty), (CX[2] + CX[3]) / 2, baseY, { align: 'center' });
-    doc.text(formatMontant(ln.unitPrice), CX[4] - 1.5, baseY, { align: 'right' });
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.8);
-    setBlack();
-    doc.text(String(ln.disc || 0), (CX[4] + CX[5]) / 2, baseY, { align: 'center' });
+    doc.text(formatMontant(ln.unitPrice), (CX[3] + CX[4]) / 2, baseY, { align: 'center' });
+    doc.text(ln.disc > 0 ? `${ln.disc}%` : '—', (CX[4] + CX[5]) / 2, baseY, { align: 'center' });
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.8);
-    setBlack();
-    doc.text(formatMontant(ln.total), CX[6] - 1.5, baseY, { align: 'right' });
+    doc.setFontSize(10);
+    setNavy();
+    doc.text(formatMontant(ln.total), (CX[5] + CX[6]) / 2, baseY, { align: 'center' });
   };
 
-  // ============================ PAGE 1 : fixe ============================
-  drawFrame();
-  // Bannière pleine largeur (asset extrait du modèle)
-  if (devisPdfAssets.banner) {
+  // ============================ PAGE 1 ============================
+  // Bannière photo pleine largeur
+  if (devisPdfAssets.header) {
     try {
-      doc.addImage(devisPdfAssets.banner, 'JPEG', -7, 3, 223.7, 55.5);
+      doc.addImage(devisPdfAssets.header, 'JPEG', 0, 0, 210, 52.9);
     } catch { /* sans bannière si illisible */ }
-  }
-  // Titre à gauche (jamais de débordement sur le client), client à droite
-  doc.setFont('helvetica', 'bold');
-  const titleFit = fitText(doc, `DEVIS ${quote.subject || ''}`.trim(), 108, 14, 8);
-  doc.setFontSize(titleFit.size);
-  setBlack();
-  doc.text(titleFit.text, 32.4, 73);
-  doc.setFont('helvetica', 'bold');
-  const upName = cleanPdfText(clientName.toUpperCase());
-  doc.setFontSize(22);
-  if (doc.getTextWidth(upName) <= 52) {
-    setBlack();
-    doc.text(upName, 200.2, 76, { align: 'right' });
   } else {
-    // Nom long : 2 lignes alignées à droite, taille réduite si besoin — nom toujours complet
-    let cSize = 14;
-    let cLines: string[] = [];
-    while (cSize >= 9) {
-      doc.setFontSize(cSize);
-      cLines = doc.splitTextToSize(upName, 60) as string[];
-      if (cLines.length <= 2) break;
-      cSize -= 1;
+    doc.setFillColor(...DV_NAVY);
+    doc.rect(0, 0, 210, 30, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(...DV_WHITE);
+    doc.text(companyName, 10, 18);
+  }
+
+  // Titre : icône doc + DEVIS (navy) + objet (dark), soulignement 4 couleurs
+  const titleY = 64;
+  doc.setDrawColor(...DV_GREEN);
+  doc.setLineWidth(0.8);
+  doc.roundedRect(10, titleY - 8, 10, 10, 2, 2, 'S');
+  doc.setDrawColor(...DV_GREEN);
+  doc.setLineWidth(0.6);
+  doc.line(12.5, titleY - 5, 17.5, titleY - 5);
+  doc.line(12.5, titleY - 3, 17.5, titleY - 3);
+  doc.line(12.5, titleY - 1, 15.5, titleY - 1);
+  const titleFit = fitText(doc, `DEVIS ${quote.subject || ''}`.trim() || 'DEVIS', 96, 20, 11);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(titleFit.size);
+  const wDevis = doc.getTextWidth('DEVIS ');
+  setNavy();
+  doc.text('DEVIS', 24, titleY);
+  doc.setTextColor(...DV_DARK);
+  doc.text(titleFit.text.slice(6), 24 + wDevis, titleY);
+  doc.setLineWidth(1.1);
+  const ulSegs: Array<[number, number, number]> = [DV_GREEN, DV_PURPLE, DV_ORANGE, DV_BLUE];
+  const ulW = 72;
+  ulSegs.forEach((c, i) => {
+    doc.setDrawColor(...c);
+    doc.line(24 + (ulW / 4) * i, titleY + 3, 24 + (ulW / 4) * (i + 1) - 0.8, titleY + 3);
+  });
+
+  // Badge client navy
+  const badgeY = titleY - 11;
+  doc.setFillColor(...DV_NAVY);
+  doc.roundedRect(128, badgeY, 72, 17, 3, 3, 'F');
+  doc.setFillColor(...DV_WHITE);
+  doc.circle(139, badgeY + 8.5, 5.5, 'F');
+  dvBadge(doc, 139, badgeY + 8.5, 5.5, DV_WHITE, 'bank', DV_NAVY);
+  // Nom client entier : 1 ligne si ça tient, sinon 2 lignes (jamais tronqué sauf extrême)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  const badgeLines = doc.splitTextToSize(upClient, 44) as string[];
+  if (badgeLines.length <= 1) {
+    const badgeFit = fitText(doc, upClient, 44, 12, 8);
+    doc.setFontSize(badgeFit.size);
+    doc.setTextColor(...DV_WHITE);
+    doc.text(badgeFit.text, 172, badgeY + 10.5, { align: 'center' });
+    doc.setDrawColor(...DV_WHITE);
+    doc.setLineWidth(0.6);
+    doc.line(150, badgeY + 13.5, 194, badgeY + 13.5);
+  } else {
+    let bSize = 9;
+    doc.setFontSize(bSize);
+    let two = doc.splitTextToSize(upClient, 44) as string[];
+    if (two.length > 2) {
+      bSize = 8;
+      doc.setFontSize(bSize);
+      two = doc.splitTextToSize(upClient, 44) as string[];
     }
-    doc.setFontSize(cSize);
-    if (cLines.length > 2) {
-      cLines = [cLines[0], cLines[1]];
-      while (cLines[1].length > 7 && doc.getTextWidth(cLines[1]) > 60) cLines[1] = cLines[1].slice(0, -4) + '...';
+    if (two.length > 2) {
+      two = [two[0], two[1]];
+      while (two[1].length > 7 && doc.getTextWidth(two[1]) > 44) two[1] = two[1].slice(0, -4) + '...';
     }
-    setBlack();
-    if (cLines.length > 1) {
-      doc.text(cLines[0], 200.2, 67.2, { align: 'right' });
-      doc.text(cLines[1], 200.2, 73.5, { align: 'right' });
+    doc.setFontSize(bSize);
+    doc.setTextColor(...DV_WHITE);
+    doc.text(two[0], 172, badgeY + 7, { align: 'center' });
+    if (two[1]) doc.text(two[1], 172, badgeY + 13, { align: 'center' });
+    doc.setDrawColor(...DV_WHITE);
+    doc.setLineWidth(0.6);
+    doc.line(150, badgeY + 15.5, 194, badgeY + 15.5);
+  }
+
+  // Barre d'infos à pastilles
+  const infoY = 80;
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(10, infoY, 190, 13, 2, 2, 'F');
+  doc.setDrawColor(...DV_LINE);
+  doc.setLineWidth(0.25);
+  doc.line(73, infoY + 2, 73, infoY + 11);
+  doc.line(137, infoY + 2, 137, infoY + 11);
+  const infoGroups: Array<{ icon: 'cal' | 'user' | 'receipt'; color: [number, number, number]; label: string; value: string; cx: number }> = [
+    { icon: 'cal', color: DV_GREEN, label: 'Date', value: dateFr, cx: 24 },
+    { icon: 'user', color: DV_PURPLE, label: 'Client', value: upClient, cx: 87 },
+    { icon: 'receipt', color: DV_ORANGE, label: 'Devis', value: quote.quoteNumber, cx: 151 },
+  ];
+  infoGroups.forEach(g => {
+    dvBadge(doc, g.cx, infoY + 6.5, 4.5, g.color, g.icon);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    setGray();
+    doc.text(g.label, g.cx + 7, infoY + 4.8);
+    // Valeur : 1 ligne si ça tient, sinon 2 lignes (nom client toujours complet)
+    doc.setFont('helvetica', 'bold');
+    const vLines = doc.splitTextToSize(g.value, 52) as string[];
+    if (vLines.length <= 1) {
+      const vFit = fitText(doc, g.value, 48, 9, 7);
+      doc.setFontSize(vFit.size);
+      setNavy();
+      doc.text(vFit.text, g.cx + 7, infoY + 10);
     } else {
-      doc.text(cLines[0], 200.2, 76, { align: 'right' });
+      doc.setFontSize(7.5);
+      setNavy();
+      const two = vLines.slice(0, 2);
+      while (two[1] && two[1].length > 7 && doc.getTextWidth(two[1]) > 52) two[1] = two[1].slice(0, -4) + '...';
+      doc.text(two[0], g.cx + 7, infoY + 8);
+      if (two[1]) doc.text(two[1], g.cx + 7, infoY + 11.8);
     }
-  }
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(22);
-  setBlack();
-
-  // Bandeau Date / Client / Devis + valeurs
-  doc.setDrawColor(...black);
-  doc.setLineWidth(0.4);
-  doc.rect(4.7, 75.8, 200.9, 5.6, 'S');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.8);
-  setBlack();
-  doc.text('Date', 55.2, 79.6);
-  doc.text('Client', 74.1, 79.6);
-  doc.text('Devis', 95.5, 79.6);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.8);
-  setBlack();
-  doc.text(cleanPdfText(dateFr), 51.3, 85.4);
-  doc.setFont('helvetica', 'bold');
-  const bandFit = fitText(doc, clientName, 16, 7.8);
-  doc.setFontSize(bandFit.size);
-  setBlack();
-  doc.text(bandFit.text, 73.8, 85.4);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.8);
-  setBlack();
-  doc.text(cleanPdfText(quote.quoteNumber), 92, 85.4);
-
-  // Désignation centrée (devis à 1 ligne, comme le modèle ; jamais de débordement)
-  const singleLine = lines.length === 1;
-  if (singleLine) {
-    doc.setFont('times', 'bold');
-    const dFit = fitText(doc, lines[0].desc, CX[2] - CX[1] - 8, 12.5, 6);
-    doc.setFontSize(dFit.size);
-    setBlack();
-    doc.text(dFit.text, 105, 110.7, { align: 'center' });
-  }
+  });
 
   // Tableau : en-tête + lignes (pagination si long)
-  let y = drawTableHead(91.3);
-  const rowLimit = 232;
+  let y = drawTableHead(100);
+  const rowH = 10;
+  const rowLimit = 222;
   const newTablePage = () => {
     doc.addPage();
-    drawFrame();
     y = drawTableHead(14);
   };
-  lines.forEach((ln) => {
-    const h = singleLine ? 17.7 : 10;
-    if (y + h > rowLimit) newTablePage();
-    drawRow(ln, y, h, singleLine);
-    y += h;
+  lines.forEach((ln, idx) => {
+    if (y + rowH > rowLimit) newTablePage();
+    drawRow(ln, String(idx + 1), y, rowH);
+    y += rowH;
   });
   if (lines.length === 0) {
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(8);
-    setBlack();
+    setGray();
     doc.text('Aucune prestation spécifiée dans ce devis.', CX[0] + 3, y + 6);
     y += 10;
-    rule(CX[0], y, CX[6], y);
+    doc.setDrawColor(...DV_LINE);
+    doc.setLineWidth(0.25);
+    doc.line(CX[0], y, CX[6], y);
   }
 
-  // ---- Totaux (droite) + montant en lettres (gauche) ----
-  // Seul le bloc de gauche peut toucher le cadre signature (fixe dès 137.5) :
-  // on saute de page si les lignes du montant en lettres débordent.
-  const wordsTitle = doc.splitTextToSize('Soit le présent devis arrêté à la somme de :', 125) as string[];
-  const words = doc.splitTextToSize(`${nombreEnLettres(ttc)} FRANCS CFA`, 125) as string[];
-  // Totaux + zone basse : on reste sur la page si les lignes finissent assez haut
-  // et que les mots tiennent avant le cadre signature (fixe à 137.5) ; sinon
-  // page fraîche avec totaux en haut et zone basse en positions absolues.
-  const wordsEndY = y + 5 + 4.5 + (wordsTitle.length + words.length) * 4.2;
-  if (y > 118 || wordsEndY > 136.5) {
+  // ---- Cartes de totaux ----
+  const totRows: Array<{ icon: 'coins' | 'pct' | null; color: [number, number, number]; label: string; value: string; bar: boolean }> = [
+    { icon: 'coins', color: DV_BLUE, label: 'Total H.T. :', value: formatMontant(netHt), bar: false },
+  ];
+  if (hasDiscount) totRows.push({ icon: null, color: DV_BLUE, label: `Remise (${discountPercent}%) :`, value: `-${formatMontant(discountAmount)}`, bar: false });
+  totRows.push({ icon: 'pct', color: DV_GREEN, label: 'TVA 18% :', value: formatMontant(tva), bar: false });
+  totRows.push({ icon: null, color: DV_GREEN, label: 'Total H.T. :', value: formatMontant(ttc), bar: true });
+  const cardH = 12 + totRows.length * 9;
+  if (y + cardH + 8 > 232) {
     doc.addPage();
-    drawFrame();
-    y = 30;
+    y = 20;
   }
-  y += 5;
-  const totX = 147.7;
-  const totW = 52.5;
-  const totValX = totX + totW - 1;
-  let ty = y + 4.5;
-  const totRow = (label: string, value: string, size = 7.5) => {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
-    setBlack();
-    doc.text(label, totX + 1, ty);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(size);
-    setBlack();
-    doc.text(value, totValX, ty, { align: 'right' });
-    ty += 5.2;
-  };
-  totRow('Total H.T. :', formatMontant(netHt));
-  if (hasDiscount) totRow(`Remise (${discountPercent}%) :`, `-${formatMontant(discountAmount)}`);
-  totRow('TVA 18% :', formatMontant(tva));
-  totRow('Total TTC :', formatMontant(ttc), 8.5);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.8);
-  setBlack();
-  doc.text(wordsTitle, 9.8, y + 4.5);
-  doc.text(words, 9.8, y + 4.5 + wordsTitle.length * 4.2);
-
-  // ---- Zone basse (positions absolues du modèle, dernière page) ----
-  // Cadre signature
-  doc.setDrawColor(...black);
-  doc.setLineWidth(0.4);
-  doc.rect(25.3, 137.5, 63, 29.8, 'S');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.6);
-  setBlack();
-  doc.text(cleanPdfText(`Signature ${companyName}`), 38.6, 141.7);
-  // Cachet : paramètre entreprise, sinon celui du modèle
-  const stampSrc = settings.companyStampBase64 || devisPdfAssets.cachet;
-  if (stampSrc) {
-    try {
-      const fmt = stampSrc.includes('image/png') ? 'PNG' : 'JPEG';
-      doc.addImage(stampSrc, fmt, 43.3, 145.5, 22.3, 19.8);
-    } catch {
-      try { doc.addImage(stampSrc, 'JPEG', 43.3, 145.5, 22.3, 19.8); } catch { /* sans cachet */ }
-    }
-  }
-
-  // Bandeau Échéance / Montant / CGV / Banque
-  doc.setDrawColor(...black);
-  doc.setLineWidth(0.4);
-  doc.rect(9.8, 171.9, 190.6, 5, 'S');
-  doc.rect(9.8, 176.9, 190.6, 15.1, 'S');
-  [25, 48.5, 147.7].forEach(x => doc.line(x, 171.9, x, 192));
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.8);
-  setBlack();
-  doc.text('Échéance', 11.3, 175.4);
-  doc.text('Montant', 31.8, 175.4);
-  doc.text('Conditions générales de vente', 78.4, 175.4);
-  doc.text('Coordonnées bancaires', 158.4, 175.4);
-  // Corps
+  y += 6;
+  // Carte gauche : montant en lettres
+  doc.setFillColor(...DV_BG);
+  doc.roundedRect(10, y, 100, cardH, 2, 2, 'F');
+  dvBadge(doc, 21, y + cardH / 2, 6, DV_GREEN, 'coins');
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  setBlack();
-  doc.text(cleanPdfText(validUntilFr || '-'), 11.3, 181.5);
-  doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
-  setBlack();
-  doc.text(formatMontant(ttc), 47.5, 185.2, { align: 'right' });
+  setGray();
+  const wordsTitle = doc.splitTextToSize('Soit la présente facture arrêtée à la somme de :', 84) as string[];
+  doc.text(wordsTitle, 31, y + 7);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  setNavy();
+  const words = doc.splitTextToSize(`${nombreEnLettres(ttc)} FRANCS CFA`, 84) as string[];
+  doc.text(words.slice(0, 4), 31, y + 7 + wordsTitle.length * 4 + 5);
+  // Carte droite : lignes de totaux
+  doc.setFillColor(...DV_BG);
+  doc.roundedRect(116, y, 84, cardH, 2, 2, 'F');
+  let try_ = y + 9;
+  totRows.forEach(r => {
+    if (r.bar) {
+      doc.setFillColor(...DV_GREEN);
+      doc.rect(116, try_ - 5.5, 2.5, 9, 'F');
+    }
+    if (r.icon) dvBadge(doc, 125, try_ - 1.5, 3.5, r.color, r.icon);
+    doc.setFont('helvetica', r.bar ? 'bold' : 'normal');
+    doc.setFontSize(r.bar ? 9.5 : 8.5);
+    setNavy();
+    doc.text(cleanPdfText(r.label), 132, try_);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(r.bar ? 11 : 10);
+    setNavy();
+    doc.text(r.value, 196, try_, { align: 'right' });
+    try_ += 9;
+  });
+  y += cardH;
+
+  // ---- Signature (pointillés) ----
+  y += 12;
+  if (y + 40 > 232) {
+    doc.addPage();
+    y = 20;
+  }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  setNavy();
+  doc.text(cleanPdfText(`Signature ${companyName}`), 105, y, { align: 'center' });
+  doc.setDrawColor(...DV_GRAY);
+  doc.setLineWidth(0.4);
+  doc.setLineDashPattern([2, 2], 0);
+  doc.roundedRect(50, y + 4, 110, 26, 3, 3, 'S');
+  doc.setLineDashPattern([], 0);
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(9);
+  setGray();
+  doc.text('Cachet et signature', 105, y + 19, { align: 'center' });
+  y += 34;
+
+  // ---- 3 blocs bas à icônes ----
+  if (y + 34 > 262) {
+    doc.addPage();
+    y = 20;
+  }
+  doc.setDrawColor(...DV_LINE);
+  doc.setLineWidth(0.3);
+  doc.line(72, y, 72, y + 32);
+  doc.line(140, y, 140, y + 32);
+  // 1. Échéance
+  dvBadge(doc, 18, y + 5, 5, DV_PURPLE, 'cal');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(...DV_PURPLE);
+  doc.text('Échéance', 27, y + 6.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  setGray();
+  doc.text('Montant', 10, y + 15);
+  doc.setFillColor(229, 231, 235);
+  doc.roundedRect(10, y + 18, 56, 9, 2, 2, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  setNavy();
+  doc.text(formatMontant(ttc), 38, y + 24.5, { align: 'center' });
+  // 2. CGV
+  dvBadge(doc, 80, y + 5, 5, DV_GREEN, 'doc');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  setNavy();
+  const cgvTitleFit = fitText(doc, 'Conditions générales de vente', 52, 9, 7.5);
+  doc.setFontSize(cgvTitleFit.size);
+  doc.text(cgvTitleFit.text, 89, y + 6.5);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.8);
-  setBlack();
+  doc.setFontSize(8);
+  setGray();
   const cgvLines: string[] = [cleanPdfText(validityText)];
   if (quote.paymentTerms) cgvLines.push(cleanPdfText(`Paiement : ${quote.paymentTerms}`));
   if (quote.notes) cgvLines.push(cleanPdfText(quote.notes));
   const cgvWrapped: string[] = [];
-  cgvLines.forEach(l => (doc.splitTextToSize(l, 94) as string[]).slice(0, 3 - cgvWrapped.length).forEach(w => cgvWrapped.push(w)));
-  cgvWrapped.slice(0, 3).forEach((wl, i) => doc.text(wl, 50, 181.5 + i * 4));
+  cgvLines.forEach(l => (doc.splitTextToSize(l, 58) as string[]).slice(0, 3 - cgvWrapped.length).forEach(w => cgvWrapped.push(w)));
+  cgvWrapped.slice(0, 3).forEach((wl, i) => doc.text(wl, 78, y + 13 + i * 4.2));
+  // 3. Banque
+  dvBadge(doc, 148, y + 5, 5, DV_BLUE, 'bank', DV_WHITE);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  setBlack();
-  doc.text(cleanPdfText(`IBAN: ${iban1}`.trim()), 149, 183.4);
-  if (iban2) doc.text(cleanPdfText(iban2), 149, 187.2);
+  doc.setFontSize(9);
+  setNavy();
+  doc.text('Coordonnées bancaires', 157, y + 6.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  setDark();
+  doc.text('IBAN:', 148, y + 14);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  setDark();
+  const ibanWrapped = doc.splitTextToSize(`${iban1}${iban2 ? ' ' + iban2 : ''}`.trim(), 50) as string[];
+  ibanWrapped.slice(0, 2).forEach((wl, i) => doc.text(wl, 148, y + 14 + (i + 1) * 4.2));
+  y += 36;
 
   // ---- Pied de page + numérotation (toutes pages) ----
   const totalPages = doc.getNumberOfPages();
