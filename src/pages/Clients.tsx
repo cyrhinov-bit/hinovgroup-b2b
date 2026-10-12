@@ -4,6 +4,7 @@ import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
 import type { Client } from '../context/AppContext';
+import { canReadAllClients } from '../lib/scope';
 import toast from 'react-hot-toast';
 
 export function Clients() {
@@ -13,6 +14,7 @@ export function Clients() {
   const { confirm } = useConfirm();
 
   const isDirector = currentUser?.role === 'Directeur' || currentUser?.role === 'SuperAdmin' || currentUser?.role === 'Directeur adjoint';
+  const canSeeAllClients = canReadAllClients(currentUser?.role);
 
   const [showForm, setShowForm] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -28,11 +30,12 @@ export function Clients() {
     return users.filter(u => (u.role === 'Commercial' || u.role === 'Responsable' || u.role === 'Directeur') && u.active);
   }, [users]);
 
-  // Restrict clients list: Director sees everything; other users only see their own created/assigned clients
+  // Lecture partagée : Direction + Responsable voient tous les clients (sélection
+  // dans Affaires / Devis / Factures / Documents). Gestion reste propriétaire.
   const allowedClients = useMemo(() => {
-    if (isDirector) return clients;
+    if (canSeeAllClients) return clients;
     return clients.filter(c => c.commercialId === currentUser?.id);
-  }, [clients, isDirector, currentUser]);
+  }, [clients, canSeeAllClients, currentUser]);
 
   const filteredClients = useMemo(() => {
     return allowedClients.filter(c => {
@@ -168,7 +171,7 @@ export function Clients() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <h2 style={{ margin: 0 }}>
-              {isDirector ? 'Supervision de Tous les Clients' : 'Mes Clients Créés'}
+              {canSeeAllClients ? (isDirector ? 'Supervision de Tous les Clients' : 'Tous les Clients') : 'Mes Clients Créés'}
             </h2>
             <span className="badge-status bg-primary" style={{ fontSize: '0.8rem', padding: '3px 8px' }}>
               {filteredClients.length} {filteredClients.length > 1 ? 'clients' : 'client'}
@@ -177,7 +180,9 @@ export function Clients() {
           <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>
             {isDirector 
               ? 'Supervision globale de l\'ensemble du portefeuille client de tous les collaborateurs.' 
-              : 'Vous avez uniquement accès aux clients que vous avez créés et qui vous sont attribués.'}
+              : canSeeAllClients
+                ? 'Vous pouvez sélectionner tous les clients dans les modules (Affaires, Devis, Factures...). Seuls vos clients attribués sont modifiables.'
+                : 'Vous avez uniquement accès aux clients que vous avez créés et qui vous sont attribués.'}
           </p>
         </div>
 

@@ -6,6 +6,9 @@
  *   cree_par, beneficiaire_id, authorId, ...).
  * Les référentiels partagés (catalogues, services, utilisateurs) restent
  * visibles par tous (nécessaires à la saisie).
+ * Les clients sont aussi en lecture partagée : tout rôle authentifié peut
+ * sélectionner un client existant (Affaires / Devis / Factures / Documents).
+ * La gestion (création / modification / suppression) reste propriétaire.
  */
 
 export const DIRECTOR_ROLES = ['Directeur', 'Directeur adjoint', 'SuperAdmin'] as const;
@@ -41,4 +44,13 @@ export function isOwnerOf<T>(item: T, userId: string | undefined, ownersOf: (ite
 export function canManageOwned<T>(item: T, role: string | undefined, userId: string | undefined, ownersOf: (item: T) => Array<string | undefined | null>): boolean {
   if (canViewAll(role)) return true;
   return isOwnerOf(item, userId, ownersOf);
+}
+
+/**
+ * Lecture partagée du référentiel clients : Direction + Responsable voient
+ * tous les clients (sélections Affaires / Devis / Factures / Documents).
+ * Les autres rôles (Commercial, ...) restent scopés à leurs propres clients.
+ */
+export function canReadAllClients(role?: string | null): boolean {
+  return canViewAll(role) || role === 'Responsable';
 }

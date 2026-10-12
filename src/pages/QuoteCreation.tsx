@@ -7,6 +7,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import type { QuoteLine } from '../context/AppContext';
+import { canReadAllClients } from '../lib/scope';
 import { generateQuotePdf, downloadBlob } from '../lib/pdfUtils';
 import { ReportPdfPreview, type ReportPdfPreviewData } from '../components/ReportPdfPreview';
 import './QuoteCreation.css';
@@ -50,7 +51,7 @@ export function QuoteCreation() {
   const sourceQuote = editId ? quotes.find(q => q.id === editId) : null;
 
   const allowedClients = useMemo(() => {
-    if (isDirector) return clients;
+    if (canReadAllClients(currentUser?.role)) return clients;
     return clients.filter(c => c.commercialId === currentUser?.id || c.id === (sourceQuote?.clientId || clientIdParam));
   }, [clients, isDirector, currentUser, sourceQuote, clientIdParam]);
 
