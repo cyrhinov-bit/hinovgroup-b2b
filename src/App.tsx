@@ -123,7 +123,8 @@ function RoleBasedDashboard() {
 // Garde de route par rôle
 type Role = 'SuperAdmin' | 'Directeur' | 'Directeur adjoint' | 'Responsable' | 'Commercial' | 'Gerant' | 'Caissier';
 function RequireRole({ roles, children }: { roles: Role[]; children: ReactNode }) {
-  const { currentUser } = useAuth();
+  const { currentUser, loading } = useAuth();
+  if (loading) return null;
   if (!currentUser) return <Navigate to="/login" replace />;
   
   const hasRole = roles.includes(currentUser.role as Role);
@@ -137,7 +138,8 @@ function RequireRole({ roles, children }: { roles: Role[]; children: ReactNode }
 // (miroir du filtrage Sidebar : seul `false` explicite bloque un caissier)
 type PosModuleKey = 'posCatalogueEnabled' | 'posReturnsEnabled' | 'posSupplyEnabled' | 'posInventoryEnabled' | 'posStockEnabled' | null;
 function RequirePosModule({ roles, moduleKey = null, children }: { roles: Role[]; moduleKey?: PosModuleKey; children: ReactNode }) {
-  const { currentUser } = useAuth();
+  const { currentUser, loading } = useAuth();
+  if (loading) return null;
   if (!currentUser) return <Navigate to="/login" replace />;
   const allowedByRole = roles.includes(currentUser.role as Role)
     || (currentUser.posRole ? roles.includes(currentUser.posRole as Role) : false)
@@ -153,7 +155,8 @@ function RequirePosModule({ roles, moduleKey = null, children }: { roles: Role[]
 // (miroir des gardes in-page ; défaut cohérent Sidebar opt-out : seul `false` explicite bloque)
 type CrmModuleKey = 'crmPrestationsEnabled' | 'crmCaisseEnabled' | 'crmMaintenanceEnabled' | 'crmStocksEnabled' | 'crmTiersEnabled' | 'crmCommerciauxEnabled' | 'crmCommissionsEnabled' | 'crmFacturationEnabled' | 'crmSupFacturesEnabled' | 'crmReportsEnabled' | 'crmTeamReportsEnabled';
 function RequireCrmModule({ moduleKey, children }: { moduleKey: CrmModuleKey; children: ReactNode }) {
-  const { currentUser } = useAuth();
+  const { currentUser, loading } = useAuth();
+  if (loading) return null;
   if (!currentUser) return <Navigate to="/login" replace />;
   if (currentUser.role === 'Caissier' || currentUser.role === 'Gerant') return <Navigate to="/" replace />;
   if (['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser.role)) return <>{children}</>;

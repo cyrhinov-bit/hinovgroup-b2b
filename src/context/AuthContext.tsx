@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { isValidPin, normalizeEmail } from '@/shared';
 import { supabase } from '../lib/supabase';
@@ -56,6 +56,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   });
 
+  // Déconnexion explicite demandée par l'utilisateur (bouton logout).
+  // Tant qu'elle n'est pas demandée, un événement SIGNED_OUT Supabase (ex :
+  // refresh token expiré après fermeture prolongée de la PWA mobile) ne doit
+  // PAS effacer le cache local ni renvoyer vers /login : on reste connecté
+  // en mode dégradé/hors-ligne jusqu'à la prochaine connexion réussie.
+  const logoutRequestedRef = useRef(false);
+
   // Appliquer automatiquement le thème de l'utilisateur connecté
   useEffect(() => {
     const userColor = getUserThemeColor(currentUser?.id);
@@ -104,8 +111,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {}
         await fetchUserProfile(session.user.id);
       } else if (event === 'SIGNED_OUT') {
-        localStorage.removeItem(AUTH_STORAGE_KEY);
-        setCurrentUser(null);
+        if (logoutRequestedRef.current) {
+          // Déconnexion explicite : on efface tout et on laisse les guards
+          // rediriger vers /login.
+          logoutRequestedRef.current = false;
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+          setCurrentUser(null);
+        } else {
+          // SIGNED_OUT subi (session expirée, refresh rejeté...) : on garde
+          // l'utilisateur en cache pour ne pas le renvoyer au login.
+          console.warn('[AuthContext] Session perdue sans déconnexion explicite, conservation du cache local.');
+        }
         setLoading(false);
       }
     });
@@ -250,6 +266,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (matchedUser.pin && matchedUser.pin === cleanPin) {
             console.log('[AuthContext] Connexion hors-ligne réussie pour :', matchedUser.name);
+            logoutRequestedRef.current = false;
             setCurrentUser(matchedUser);
             localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(matchedUser));
             setLoading(false);
@@ -361,6 +378,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           crmReportsEnabled: resolveBool(profile.crm_reports_enabled, cachedUser?.crmReportsEnabled, !isDir),
           crmTeamReportsEnabled: resolveBool(profile.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
         };
+        logoutRequestedRef.current = false;
         setCurrentUser(userObj);
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userObj));
       }
@@ -422,6 +440,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    logoutRequestedRef.current = true;
     localStorage.removeItem(AUTH_STORAGE_KEY);
     setCurrentUser(null);
     try {
