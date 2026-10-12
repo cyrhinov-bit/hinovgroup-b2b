@@ -262,6 +262,22 @@ export function Parametres() {
               <label>Adresse siège social</label>
               <input type="text" className="table-input" value={localSettings.companyAddress} onChange={e => { isDirtyRef.current = true; setLocalSettings({...localSettings, companyAddress: e.target.value}); }} />
             </div>
+            <div className="form-group">
+              <label>Capital social (ex : 2.000.000)</label>
+              <input type="text" className="table-input" value={localSettings.companyCapital || ''} onChange={e => { isDirtyRef.current = true; setLocalSettings({...localSettings, companyCapital: e.target.value}); }} />
+            </div>
+            <div className="form-group">
+              <label>Téléphone (ex : (225) 27 23 22 79 92)</label>
+              <input type="text" className="table-input" value={localSettings.companyPhone || ''} onChange={e => { isDirtyRef.current = true; setLocalSettings({...localSettings, companyPhone: e.target.value}); }} />
+            </div>
+            <div className="form-group">
+              <label>Email de contact</label>
+              <input type="text" className="table-input" value={localSettings.companyEmail || ''} onChange={e => { isDirtyRef.current = true; setLocalSettings({...localSettings, companyEmail: e.target.value}); }} />
+            </div>
+            <div className="form-group">
+              <label>IBAN (coordonnées bancaires du devis)</label>
+              <input type="text" className="table-input" value={localSettings.bankIban || ''} onChange={e => { isDirtyRef.current = true; setLocalSettings({...localSettings, bankIban: e.target.value}); }} />
+            </div>
           </div>
         </section>
 

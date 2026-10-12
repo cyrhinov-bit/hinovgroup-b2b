@@ -19,7 +19,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
-import { generateQuotePdf, downloadBlob } from '../lib/pdfUtils';
+import { generateQuotePdf, downloadBlob, ensureDevisPdfAssets } from '../lib/pdfUtils';
 import { ReportPdfPreview, type ReportPdfPreviewData } from '../components/ReportPdfPreview';
 import type { Quote } from '../context/AppContext';
 import { canViewAll, visibleTo, canManageOwned } from '../lib/scope';
@@ -36,7 +36,7 @@ export function Devis() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentUser: authUser } = useAuth();
-  const { quotes, clients, settings, deleteQuote, services, users } = useAppContext();
+  const { quotes, clients, settings, deleteQuote, services, users, prestations } = useAppContext();
   const currentUser = users.find(u => u.id === authUser?.id) || authUser;
   const { confirm } = useConfirm();
 
@@ -187,9 +187,10 @@ export function Devis() {
     }
   };
 
-  const handlePreview = (q: Quote) => {
+  const handlePreview = async (q: Quote) => {
     const client = clients.find(c => c.id === q.clientId);
-    const blob = generateQuotePdf(q, client, settings);
+    await ensureDevisPdfAssets();
+    const blob = generateQuotePdf(q, client, settings, prestations);
     const blobUrl = URL.createObjectURL(blob);
     setPreview({
       blobUrl,
@@ -481,9 +482,10 @@ export function Devis() {
                       <button className="icon-button" style={{ color: '#0D9488' }} onClick={() => handlePreview(q)} title="Aperçu PDF direct">
                         <Eye size={16} />
                       </button>
-                      <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={() => {
+                      <button className="icon-button" style={{ color: 'var(--color-primary)' }} onClick={async () => {
                         const client = clients.find(c => c.id === q.clientId);
-                        const blob = generateQuotePdf(q, client, settings);
+                        await ensureDevisPdfAssets();
+                        const blob = generateQuotePdf(q, client, settings, prestations);
                         downloadBlob(blob, `Devis_${q.quoteNumber}.pdf`);
                       }} title="Télécharger PDF">
                         <Download size={16} />

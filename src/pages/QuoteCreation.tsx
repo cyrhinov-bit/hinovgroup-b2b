@@ -8,7 +8,7 @@ import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import type { QuoteLine } from '../context/AppContext';
 import { canReadAllClients } from '../lib/scope';
-import { generateQuotePdf, downloadBlob } from '../lib/pdfUtils';
+import { generateQuotePdf, downloadBlob, ensureDevisPdfAssets } from '../lib/pdfUtils';
 import { ReportPdfPreview, type ReportPdfPreviewData } from '../components/ReportPdfPreview';
 import './QuoteCreation.css';
 
@@ -320,14 +320,15 @@ export function QuoteCreation() {
     };
   };
 
-  const handleInstantPreview = () => {
+  const handleInstantPreview = async () => {
     if (lines.length === 0) {
       alert("Veuillez ajouter au moins une ligne d'article ou prestation pour prévisualiser le devis.");
       return;
     }
     const quoteData = buildCurrentQuoteData(sourceQuote?.status || 'Brouillon');
     const client = clients.find(c => c.id === clientId);
-    const pdfBlob = generateQuotePdf(quoteData, client, settings);
+    await ensureDevisPdfAssets();
+    const pdfBlob = generateQuotePdf(quoteData, client, settings, prestations);
     const blobUrl = URL.createObjectURL(pdfBlob);
     setPreview({
       blobUrl,
@@ -379,7 +380,8 @@ export function QuoteCreation() {
 
       if (openPreviewModal) {
         const client = clients.find(c => c.id === clientId);
-        const pdfBlob = generateQuotePdf(quoteData, client, settings);
+        await ensureDevisPdfAssets();
+        const pdfBlob = generateQuotePdf(quoteData, client, settings, prestations);
         const blobUrl = URL.createObjectURL(pdfBlob);
         setPreview({
           blobUrl,

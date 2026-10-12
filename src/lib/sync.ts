@@ -1785,6 +1785,10 @@ export const processSyncQueue = async () => {
             default_validity: action.payload.defaultValidity ?? null,
             site_url: action.payload.siteUrl ?? null,
             commission_rate: action.payload.commissionRate ?? null,
+            company_capital: action.payload.companyCapital ?? null,
+            company_phone: action.payload.companyPhone ?? null,
+            company_email: action.payload.companyEmail ?? null,
+            bank_iban: action.payload.bankIban ?? null,
           });
           if (error) console.error('[Sync] UPDATE_SETTINGS échoué :', error.message);
           success = checkResult(error);
