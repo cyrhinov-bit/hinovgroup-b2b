@@ -32,7 +32,6 @@ export default function DataExport() {
       crmMaintenance: own(ctx.crmMaintenance, m => [m.cree_par]),
       invoices: own(ctx.invoices, i => [i.commercialId, (i as any).commercial_id]),
       clients: own(ctx.clients, c => [c.commercialId]),
-      affaires: own(ctx.affaires, a => [a.commercialId]),
       quotes: own(ctx.quotes, q => [q.commercialId]),
       sales: own(ctx.sales, s => [s.commercialId]),
     };
@@ -57,7 +56,6 @@ export default function DataExport() {
     crm_techniciens: ctx.crmTechniciens.length,
     crm_factures: scoped.invoices.length,
     crm_clients: scoped.clients.length,
-    crm_affaires: scoped.affaires.length,
     crm_devis: scoped.quotes.length,
     crm_ventes: scoped.sales.length,
   }), [ctx, scoped]);
@@ -95,7 +93,6 @@ export default function DataExport() {
         crmTechniciens: ctx.crmTechniciens,
         invoices: scoped.invoices,
         clients: scoped.clients,
-        affaires: scoped.affaires,
         quotes: scoped.quotes,
         sales: scoped.sales,
       }, keys);

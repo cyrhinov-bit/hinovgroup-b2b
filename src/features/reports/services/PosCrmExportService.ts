@@ -3,7 +3,7 @@ import type {
   PosProduct, PosTransaction, PosPayment, PosReturn, PosStockMovement,
   PosCashSession, PosSupplier, ClientFournisseur, AgentCommercial,
   PrestationCommande, MouvementCaisse, CommissionPrestation, CatalogueArticle,
-  InterventionMaintenance, TechnicienMaintenance, Invoice, Client, Affaire, Quote, Sale,
+  InterventionMaintenance, TechnicienMaintenance, Invoice, Client, Quote, Sale,
 } from '../../../context/AppContext';
 
 export type ExportKey =
@@ -25,7 +25,6 @@ export type ExportKey =
   | 'crm_techniciens'
   | 'crm_factures'
   | 'crm_clients'
-  | 'crm_affaires'
   | 'crm_devis'
   | 'crm_ventes';
 
@@ -47,7 +46,6 @@ export interface PosCrmExportData {
   crmTechniciens: TechnicienMaintenance[];
   invoices: Invoice[];
   clients: Client[];
-  affaires: Affaire[];
   quotes: Quote[];
   sales: Sale[];
   productNameById?: Map<string, string>;
@@ -72,7 +70,6 @@ export const EXPORT_LABELS: Record<ExportKey, { label: string; group: 'POS' | 'C
   crm_techniciens: { label: 'Techniciens', group: 'CRM', sheet: 'CRM_Techniciens' },
   crm_factures: { label: 'Factures clients', group: 'CRM', sheet: 'CRM_Factures' },
   crm_clients: { label: 'Clients (CRM classique)', group: 'CRM', sheet: 'CRM_Clients' },
-  crm_affaires: { label: 'Affaires', group: 'CRM', sheet: 'CRM_Affaires' },
   crm_devis: { label: 'Devis', group: 'CRM', sheet: 'CRM_Devis' },
   crm_ventes: { label: 'Ventes', group: 'CRM', sheet: 'CRM_Ventes' },
 };
@@ -212,11 +209,6 @@ export function buildPosCrmWorkbook(data: PosCrmExportData, keys: ExportKey[]): 
     addSheet(wb, EXPORT_LABELS.crm_clients.sheet,
       ['Nom', 'Société', 'Contact', 'Téléphone', 'Email', 'Adresse', 'Statut', 'Créé le'],
       (data.clients || []).map(c => [fmt(c.name), fmt(c.company), fmt(c.contact), fmt(c.phone), fmt(c.email), fmt(c.address), fmt(c.status), fmtDate(c.createdAt)]));
-  }
-  if (set.has('crm_affaires')) {
-    addSheet(wb, EXPORT_LABELS.crm_affaires.sheet,
-      ['Référence', 'Titre', 'Client', 'Statut', 'Montant estimé HT', 'Probabilité %', 'Début prévu', 'Fin prévue', 'Créée le'],
-      (data.affaires || []).map(a => [fmt(a.reference), fmt(a.title), fmt(a.clientId), fmt(a.status), a.estimatedAmountHt ?? 0, a.probability ?? 0, fmtDate(a.startDatePlanned), fmtDate(a.endDatePlanned), fmtDate(a.createdAt)]));
   }
   if (set.has('crm_devis')) {
     addSheet(wb, EXPORT_LABELS.crm_devis.sheet,

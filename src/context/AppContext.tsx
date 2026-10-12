@@ -176,34 +176,14 @@ export interface User {
   crmReportsEnabled?: boolean;
   crmTeamReportsEnabled?: boolean;
 }
-export type AffaireStatus = 'PROSPECTION' | 'QUALIFIEE' | 'PROPOSITION' | 'NEGOCIATION' | 'GAGNEE' | 'EN_COURS' | 'CLOTUREE' | 'PERDUE' | 'ANNULEE';
-export interface Affaire {
-  id: string;
-  reference: string;
-  title: string;
-  clientId: string;
-  serviceId: string;
-  commercialId: string;
-  description?: string;
-  status: AffaireStatus;
-  estimatedAmountHt: number;
-  probability: number;
-  source?: string;
-  startDatePlanned?: string;
-  endDatePlanned?: string;
-  endDateReal?: string;
-  notes?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
 export interface Client { id: string; name: string; email: string; phone: string; contact: string; company: string; address: string; status?: string; commercialId?: string; serviceId?: string; createdAt?: string; }
 export interface Service { id: string; name: string; description: string; members?: number; managerId?: string; commissionRate?: number; }
 export interface Category { id: string; serviceId: string; name: string; }
 export interface Prestation { id: string; code: string; name: string; description: string; price: number; serviceId: string; unit?: string; costPrice?: number; }
 export interface QuoteLine { id: string; prestationId: string; description: string; quantity: number; unit?: string; unitPrice: number; total: number; discountPercent?: number; costPrice?: number; }
-export interface Quote { id: string; quoteNumber: string; clientId: string; commercialId: string; serviceId?: string; affaireId?: string; subject: string; lines: QuoteLine[]; subtotal: number; total: number; status: 'Brouillon' | 'Envoyé' | 'Accepté' | 'Refusé' | 'Révision'; date: string; validUntil?: string; paymentTerms?: string; notes?: string; signatoryName?: string; signatoryRole?: string; style?: 'Classique' | 'Moderne' | 'Minimaliste'; accentColor?: string; discountPercent?: number; discountAmount?: number; clientComment?: string; }
+export interface Quote { id: string; quoteNumber: string; clientId: string; commercialId: string; serviceId?: string; subject: string; lines: QuoteLine[]; subtotal: number; total: number; status: 'Brouillon' | 'Envoyé' | 'Accepté' | 'Refusé' | 'Révision'; date: string; validUntil?: string; paymentTerms?: string; notes?: string; signatoryName?: string; signatoryRole?: string; style?: 'Classique' | 'Moderne' | 'Minimaliste'; accentColor?: string; discountPercent?: number; discountAmount?: number; clientComment?: string; }
 export interface SaleLine { id: string; description: string; quantity: number; unitPrice: number; costPrice?: number; total: number; }
-export interface Sale { id: string; saleNumber: string; quoteId?: string; affaireId?: string; clientId: string; serviceId?: string; commercialId?: string; dueDate?: string; lines: SaleLine[]; subtotal: number; total: number; status: 'Enregistrée' | 'Payée' | 'Annulée'; date: string; notes?: string; }
+export interface Sale { id: string; saleNumber: string; quoteId?: string; clientId: string; serviceId?: string; commercialId?: string; dueDate?: string; lines: SaleLine[]; subtotal: number; total: number; status: 'Enregistrée' | 'Payée' | 'Annulée'; date: string; notes?: string; }
 export interface Installment { id: string; saleId: string; amount: number; dueDate: string; paidAmount: number; status: 'En attente' | 'Payée'; paidAt?: string; }
 export type InstallmentInput = { id?: string; amount: number; dueDate: string };
 
@@ -338,7 +318,6 @@ export interface PrimeAuditLog {
 export interface Commission {
   id: string;
   saleId?: string;
-  affaireId?: string;
   clientId?: string;
   commercialId?: string;
   serviceId?: string;
@@ -463,7 +442,6 @@ export interface CrmDocument {
   filePath: string;
   uploaderId?: string;
   folderId?: string;
-  affaireId?: string;
   clientId?: string;
   category?: 'Contrat / Devis signé' | 'Bon de Commande' | 'BAT / Maquette' | 'Facture / Reçu' | 'Rapport' | 'Autre';
   isShared?: boolean;
@@ -497,7 +475,7 @@ export interface PosSettings {
 export interface PosWorkspace { active: boolean; }
 
 interface AppState {
-  users: User[]; clients: Client[]; affaires: Affaire[]; quotes: Quote[]; sales: Sale[]; facturePaiements: FacturePaiement[]; couts: Cout[]; commissions: Commission[]; installments: Installment[];
+  users: User[]; clients: Client[]; quotes: Quote[]; sales: Sale[]; facturePaiements: FacturePaiement[]; couts: Cout[]; commissions: Commission[]; installments: Installment[];
   scoringRules: ScoringRule[]; objectifs: Objectif[]; classements: Classement[]; primes: Prime[]; primeAuditLogs: PrimeAuditLog[];
   prospects: Prospect[]; prospectActivities: ProspectActivity[]; prospectFollowUps: ProspectFollowUp[]; categories: Category[]; settings: AppSettings; services: Service[]; prestations: Prestation[]; loading: boolean; activityReports: ActivityReport[]; weeklyReports: WeeklyReport[]; crmDocuments: CrmDocument[]; crmFolders: CrmFolder[]; v2DailyReports: V2DailyReport[]; v2WeeklyReports: V2WeeklyReport[]; notifications: AppNotification[];
   // POS
@@ -513,10 +491,6 @@ interface AppState {
   addClient: (client: Client) => Promise<void>;
   updateClient: (id: string, client: Client) => Promise<void>;
   deleteClient: (id: string) => Promise<void>;
-  addAffaire: (affaireData: Omit<Affaire, 'id' | 'reference' | 'createdAt' | 'updatedAt'> | Affaire) => Promise<Affaire>;
-  updateAffaire: (id: string, data: Partial<Affaire>) => Promise<void>;
-  updateAffaireStatus: (id: string, status: AffaireStatus) => Promise<void>;
-  deleteAffaire: (id: string) => Promise<void>;
   recordPayment: (paymentData: Omit<FacturePaiement, 'id' | 'paymentNumber' | 'createdAt'> | FacturePaiement) => Promise<FacturePaiement>;
   addCout: (coutData: Omit<Cout, 'id' | 'reference' | 'vatAmount' | 'amountTtc' | 'createdAt' | 'updatedAt'> | Cout) => Promise<Cout>;
   updateCout: (id: string, data: Partial<Cout>) => Promise<void>;
@@ -545,7 +519,7 @@ interface AppState {
   addProspect: (prospect: Prospect) => Promise<void>;
   updateProspect: (id: string, data: Partial<Prospect>) => Promise<void>;
   deleteProspect: (id: string) => Promise<void>;
-  convertProspect: (prospectId: string, createAffaire?: boolean) => Promise<{ clientId: string; affaireId?: string }>;
+  convertProspect: (prospectId: string) => Promise<{ clientId: string }>;
   addProspectActivity: (activity: ProspectActivity) => Promise<void>;
   deleteProspectActivity: (id: string) => Promise<void>;
   addProspectFollowUp: (followUp: ProspectFollowUp) => Promise<void>;
@@ -566,7 +540,7 @@ interface AppState {
   deleteV2WeeklyReport: (id: string) => Promise<void>;
   deleteV2DailyReport: (id: string) => Promise<void>;
   updateMyProfile: (data: Partial<Pick<User, 'photo' | 'name'>>) => Promise<void>;
-  addCrmDocument: (file: File, options?: { uploaderId?: string; folderId?: string; affaireId?: string; clientId?: string; category?: CrmDocument['category']; isShared?: boolean } | string, folderIdParam?: string) => Promise<CrmDocument>;
+  addCrmDocument: (file: File, options?: { uploaderId?: string; folderId?: string; clientId?: string; category?: CrmDocument['category']; isShared?: boolean } | string, folderIdParam?: string) => Promise<CrmDocument>;
   updateCrmDocument: (id: string, updates: Partial<CrmDocument>, newFileBlob?: Blob) => Promise<void>;
   deleteCrmDocument: (id: string) => Promise<void>;
   downloadCrmDocument: (doc: CrmDocument) => Promise<void>;
@@ -747,7 +721,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const { currentUser, updateCurrentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [affaires, setAffaires] = useState<Affaire[]>([]);
+  // Module Affaires retiré : ni état, ni cache, ni fetch, ni CRUD.
   const [facturePaiements, setFacturePaiements] = useState<FacturePaiement[]>([]);
   const [couts, setCouts] = useState<Cout[]>([]);
   const [scoringRules, setScoringRules] = useState<ScoringRule[]>([]);
@@ -830,7 +804,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await ensureDbHealth().catch(() => {});
       try {
         const [
-        cachedUsers, cachedClients, cachedAffaires, cachedFacturePaiements, cachedCouts,
+        cachedUsers, cachedClients, cachedFacturePaiements, cachedCouts,
         cachedScoringRules, cachedObjectifs, cachedClassements, cachedPrimes, cachedPrimeAuditLogs,
         cachedQuotes, cachedSales, cachedCommissions, cachedInstallments, cachedProspects,
         cachedProspectActivities, cachedProspectFollowUps, cachedActivityReports, cachedWeeklyReports,
@@ -846,7 +820,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ] = await Promise.all([
         safeGet<User[]>(db.profiles),
         safeGet<Client[]>(db.clients),
-        safeGet<Affaire[]>(db.affaires),
         safeGet<FacturePaiement[]>(db.facturePaiements),
         safeGet<Cout[]>(db.couts),
         safeGet<ScoringRule[]>(db.scoringRules),
@@ -902,7 +875,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (cachedUsers) setUsers(dedupeUsers(cachedUsers));
       if (cachedClients) setClients(cachedClients);
-      if (cachedAffaires) setAffaires(cachedAffaires);
       if (cachedFacturePaiements) setFacturePaiements(cachedFacturePaiements);
       if (cachedCouts) setCouts(cachedCouts);
       if (cachedInvoices) setInvoices(cachedInvoices);
@@ -1086,7 +1058,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           () => currentUser ? safeFetchAll('ventes', '*, vente_lines(*)') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('commissions') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('vente_echeances') : Promise.resolve(null),
-          () => currentUser ? safeFetchAll('affaires') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('facture_paiements') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('couts') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('scoring_rules') : Promise.resolve(null),
@@ -1140,7 +1111,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           profilesData, clientsData, servicesData,
           prestationsData, settingsData, quotesData,
           salesData, commissionsData, installmentsData,
-          affairesData, facturePaiementsData, coutsData,
+          facturePaiementsData, coutsData,
           scoringRulesData, objectifsData, classementsData, primesData, primeAuditLogsData,
           prospectsData, prospectActivitiesData,
           prospectFollowUpsData, categoriesData,
@@ -1221,7 +1192,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
             filePath: d.file_path || d.filePath,
             uploaderId: d.uploader_id || d.uploaderId,
             folderId: d.folder_id || d.folderId || undefined,
-            affaireId: d.affaire_id || d.affaireId || undefined,
             clientId: d.client_id || d.clientId || undefined,
             category: d.category || 'Autre',
             isShared: d.is_shared !== undefined ? !!d.is_shared : !!d.isShared,
@@ -1257,29 +1227,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }));
           const merged = mergeData(cachedClients, parsedClients);
           setClients(merged); await db.clients.setItem('data', merged);
-        }
-        if (affairesData && affairesData.length > 0) {
-          const parsedAffaires = affairesData.map((a: any) => ({
-            id: a.id,
-            reference: a.reference,
-            title: a.title,
-            clientId: a.client_id,
-            serviceId: a.service_id,
-            commercialId: a.commercial_id,
-            description: a.description || undefined,
-            status: (a.status as AffaireStatus) || 'QUALIFIEE',
-            estimatedAmountHt: Number(a.estimated_amount_ht) || 0,
-            probability: a.probability !== undefined ? Number(a.probability) : 50,
-            source: a.source || undefined,
-            startDatePlanned: a.start_date_planned || undefined,
-            endDatePlanned: a.end_date_planned || undefined,
-            endDateReal: a.end_date_real || undefined,
-            notes: a.notes || undefined,
-            createdAt: a.created_at,
-            updatedAt: a.updated_at
-          }));
-          const merged = mergeData(cachedAffaires, parsedAffaires);
-          setAffaires(merged); await db.affaires.setItem('data', merged);
         }
         if (facturePaiementsData && facturePaiementsData.length > 0) {
           const parsedPaiements = facturePaiementsData.map((p: any) => ({
@@ -1447,7 +1394,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         if (quotesData && quotesData.length > 0) {
           const parsedQuotes = quotesData.map((q: any) => ({
-            id: q.id, quoteNumber: q.quote_number, clientId: q.client_id, commercialId: q.commercial_id, serviceId: q.service_id, affaireId: q.affaire_id || undefined, subject: q.subject, subtotal: q.subtotal, total: q.total, status: q.status, date: q.date,
+            id: q.id, quoteNumber: q.quote_number, clientId: q.client_id, commercialId: q.commercial_id, serviceId: q.service_id, subject: q.subject, subtotal: q.subtotal, total: q.total, status: q.status, date: q.date,
             validUntil: q.valid_until || undefined, paymentTerms: q.payment_terms || undefined, notes: q.notes || undefined, signatoryName: q.signatory_name || undefined, signatoryRole: q.signatory_role || undefined,
             style: q.style, accentColor: q.accent_color,
             discountPercent: q.discount_percent || 0, discountAmount: q.discount_amount || 0, clientComment: q.client_comment,
@@ -1460,7 +1407,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         if (salesData && salesData.length > 0) {
           const parsedSales = salesData.map((s: any) => ({
-            id: s.id, saleNumber: s.sale_number, quoteId: s.quote_id, affaireId: s.affaire_id || undefined, clientId: s.client_id, serviceId: s.service_id, commercialId: s.commercial_id || undefined, dueDate: s.due_date || undefined,
+            id: s.id, saleNumber: s.sale_number, quoteId: s.quote_id, clientId: s.client_id, serviceId: s.service_id, commercialId: s.commercial_id || undefined, dueDate: s.due_date || undefined,
             subtotal: s.subtotal, total: s.total, status: s.status, date: s.date, notes: s.notes,
             lines: (s.vente_lines || []).map((l: any) => ({ id: l.id, description: l.description, quantity: l.quantity, unitPrice: l.unit_price, costPrice: l.cost_price || 0, total: l.total }))
           }));
@@ -1473,7 +1420,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const parsedCommissions = commissionsData.map((c: any) => ({
             id: c.id,
             saleId: c.vente_id || c.sale_id,
-            affaireId: c.affaire_id || undefined,
             clientId: c.client_id,
             commercialId: c.commercial_id,
             serviceId: c.service_id,
@@ -2310,12 +2256,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.clients.setItem('data', newClients);
     await queueSyncAction('DELETE_CLIENT', { id });
 
-    const newAffaires = affaires.filter(a => a.clientId !== id);
-    if (newAffaires.length !== affaires.length) {
-      setAffaires(newAffaires);
-      await db.affaires.setItem('data', newAffaires);
-    }
-
     const newQuotes = quotes.filter(q => q.clientId !== id);
     if (newQuotes.length !== quotes.length) {
       setQuotes(newQuotes);
@@ -2340,45 +2280,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCommissions(newCommissions);
       await db.commissions.setItem('data', newCommissions);
     }
-  };
-
-  const addAffaire = async (affaireData: Omit<Affaire, 'id' | 'reference' | 'createdAt' | 'updatedAt'> | Affaire): Promise<Affaire> => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const seq = (affaires.length + 1).toString().padStart(4, '0');
-    const reference = 'reference' in affaireData && (affaireData as any).reference ? (affaireData as any).reference : `AFF-${year}-${seq}`;
-    const id = 'id' in affaireData && (affaireData as any).id ? (affaireData as any).id : uuidv4();
-    const newAffaire: Affaire = {
-      ...affaireData,
-      id,
-      reference,
-      createdAt: ('createdAt' in affaireData && (affaireData as any).createdAt) || now.toISOString(),
-      updatedAt: ('updatedAt' in affaireData && (affaireData as any).updatedAt) || now.toISOString()
-    };
-    const newAffaires = [...affaires, newAffaire];
-    setAffaires(newAffaires);
-    await db.affaires.setItem('data', newAffaires);
-    await queueSyncAction('INSERT_AFFAIRE', newAffaire);
-    return newAffaire;
-  };
-
-  const updateAffaire = async (id: string, data: Partial<Affaire>) => {
-    const now = new Date().toISOString();
-    const newAffaires = affaires.map(a => a.id === id ? { ...a, ...data, updatedAt: now } : a);
-    setAffaires(newAffaires);
-    await db.affaires.setItem('data', newAffaires);
-    await queueSyncAction('UPDATE_AFFAIRE', { id, ...data, updatedAt: now });
-  };
-
-  const updateAffaireStatus = async (id: string, status: AffaireStatus) => {
-    await updateAffaire(id, { status });
-  };
-
-  const deleteAffaire = async (id: string) => {
-    const newAffaires = affaires.filter(a => a.id !== id);
-    setAffaires(newAffaires);
-    await db.affaires.setItem('data', newAffaires);
-    await queueSyncAction('DELETE_AFFAIRE', { id });
   };
 
   const recordPayment = async (paymentData: Omit<FacturePaiement, 'id' | 'paymentNumber' | 'createdAt'> | FacturePaiement): Promise<FacturePaiement> => {
@@ -2747,13 +2648,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const buildCommission = (sale: Sale): Commission => {
-    // 1. Direct costs: Check table couts first if linked to affaire, otherwise sum of lines
-    const affaireCouts = sale.affaireId
-      ? couts.filter(c => c.affaireId === sale.affaireId && c.status !== 'ANNULE')
-      : [];
-    const directCostsFromTable = affaireCouts.reduce((sum, c) => sum + (c.amountHt || 0), 0);
+    // 1. Coûts : somme des lignes (module Affaires retiré)
     const linesCost = (sale.lines || []).reduce((sum, l) => sum + (l.costPrice || 0) * (l.quantity || 0), 0);
-    const costTotal = directCostsFromTable > 0 ? directCostsFromTable : linesCost;
+    const costTotal = linesCost;
 
     const totalHt = sale.subtotal || 0;
     const marginAmount = Math.max(0, totalHt - costTotal);
@@ -2770,8 +2667,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // 3. Commercial
     const clientCommercial = clients.find(c => c.id === sale.clientId)?.commercialId;
     const quoteCommercial = sale.quoteId ? quotes.find(q => q.id === sale.quoteId)?.commercialId : undefined;
-    const affaireCommercial = sale.affaireId ? affaires.find(a => a.id === sale.affaireId)?.commercialId : undefined;
-    const commercialId = sale.commercialId || clientCommercial || quoteCommercial || affaireCommercial || '';
+    const commercialId = sale.commercialId || clientCommercial || quoteCommercial || '';
 
     // 4. Initial eligible amount based on payments
     const payments = facturePaiements.filter(p => p.venteId === sale.id && p.status === 'VALIDE');
@@ -2783,7 +2679,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return {
       id: uuidv4(),
       saleId: sale.id,
-      affaireId: sale.affaireId,
       clientId: sale.clientId,
       commercialId,
       serviceId: sale.serviceId,
@@ -3062,7 +2957,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const convertProspect = async (prospectId: string, createAffaire: boolean = true): Promise<{ clientId: string; affaireId?: string }> => {
+  const convertProspect = async (prospectId: string): Promise<{ clientId: string }> => {
     const prospect = prospects.find(p => p.id === prospectId);
     if (!prospect) return { clientId: '' };
     const clientId = uuidv4();
@@ -3081,23 +2976,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await addClient(newClient);
     await updateProspect(prospectId, { status: 'Converti' });
 
-    let affaireId: string | undefined;
-    if (createAffaire) {
-      const initialAffaire = await addAffaire({
-        title: prospect.need ? `Projet : ${prospect.need.slice(0, 60)}` : `Affaire - ${prospect.name}`,
-        clientId: clientId,
-        serviceId: prospect.serviceId || (services[0]?.id || ''),
-        commercialId: prospect.commercialId,
-        description: prospect.comments || prospect.need || '',
-        status: 'QUALIFIEE',
-        estimatedAmountHt: prospect.budget || 0,
-        probability: prospect.interestLevel === 'Très élevé' ? 80 : prospect.interestLevel === 'Élevé' ? 60 : 40,
-        source: prospect.source || 'Prospection'
-      });
-      affaireId = initialAffaire.id;
-    }
-
-    return { clientId, affaireId };
+    return { clientId };
   };
 
   const addProspectActivity = async (activity: ProspectActivity) => {
@@ -4538,13 +4417,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addCrmDocument = async (
     file: File,
-    optionsOrUploaderId?: { uploaderId?: string; folderId?: string; affaireId?: string; clientId?: string; category?: CrmDocument['category']; isShared?: boolean } | string,
+    optionsOrUploaderId?: { uploaderId?: string; folderId?: string; clientId?: string; category?: CrmDocument['category']; isShared?: boolean } | string,
     folderIdParam?: string
   ): Promise<CrmDocument> => {
     const id = uuidv4();
     let uploaderId: string | undefined = currentUser?.id;
     let folderId: string | undefined = undefined;
-    let affaireId: string | undefined = undefined;
     let clientId: string | undefined = undefined;
     let category: CrmDocument['category'] = 'Autre';
     let isShared: boolean = false;
@@ -4555,7 +4433,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } else if (optionsOrUploaderId && typeof optionsOrUploaderId === 'object') {
       uploaderId = optionsOrUploaderId.uploaderId || currentUser?.id;
       folderId = optionsOrUploaderId.folderId;
-      affaireId = optionsOrUploaderId.affaireId;
       clientId = optionsOrUploaderId.clientId;
       category = optionsOrUploaderId.category || 'Autre';
       isShared = !!optionsOrUploaderId.isShared;
@@ -4569,7 +4446,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       filePath: `${uploaderId || 'shared'}/${id}_${file.name}`,
       uploaderId,
       folderId,
-      affaireId,
       clientId,
       category,
       isShared,
@@ -5756,7 +5632,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      users, clients, affaires, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, addAffaire, updateAffaire, updateAffaireStatus, deleteAffaire, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, sendWeeklyReportReminder, reviewV2WeeklyReport, deleteV2WeeklyReport, deleteV2DailyReport, updateMyProfile, addCrmDocument, updateCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, mergePosProducts, repairLocalCatalog, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData, reconcilePosData: (opts?: { force?: boolean }) => reconcileLocalPosDataWithCloud(opts),
+      users, clients, quotes, sales, facturePaiements, couts, commissions, installments, scoringRules, objectifs, classements, primes, primeAuditLogs, prospects, prospectActivities, prospectFollowUps, categories, settings, services, prestations, loading, activityReports, weeklyReports, v2DailyReports, v2WeeklyReports, notifications, crmDocuments, crmFolders, posCategories, posBrands, posSuppliers, posProducts, posStockEntries, posStockMovements, posInventories, posCashSessions, posTransactions, posPayments, posDiscounts, posSettings, posReturns, posWorkspace, setPosWorkspace, suspendedCarts, addSuspendedCart, removeSuspendedCart, addClient, updateClient, deleteClient, recordPayment, addCout, updateCout, deleteCout, addObjectif, updateObjectif, deleteObjectif, proposePrime, validatePrime, rejectPrime, payPrime, updateScoringRule, addQuote, updateQuote, updateQuoteStatus, deleteQuote, addSale, updateSaleStatus, updateSale, deleteSale, recordInstallmentPayment, saveInstallmentsForSale, addCommission, updateCommissionStatus, deleteCommission, addProspect, updateProspect, deleteProspect, convertProspect, addProspectActivity, deleteProspectActivity, addProspectFollowUp, updateProspectFollowUp, deleteProspectFollowUp, upsertActivityReport, deleteActivityReport, saveWeeklyReport, markWeeklyReportSent, markWeeklyReportRead, markNotificationAsRead, markAllNotificationsAsRead, saveV2DailyReport, saveV2WeeklyReport, submitV2WeeklyReport, sendWeeklyReportReminder, reviewV2WeeklyReport, deleteV2WeeklyReport, deleteV2DailyReport, updateMyProfile, addCrmDocument, updateCrmDocument, deleteCrmDocument, downloadCrmDocument, getCrmDocumentBlob, addCrmFolder, updateCrmFolder, deleteCrmFolder, addCategory, deleteCategory, updateSettings, addUser, updateUser, toggleUserStatus, deleteUser, addPrestation, updatePrestation, deletePrestation, addService, updateService, deleteService, addPosCategory, updatePosCategory, deletePosCategory, addPosBrand, updatePosBrand, deletePosBrand, addPosSupplier, updatePosSupplier, deletePosSupplier, addPosProduct, updatePosProduct, deletePosProduct, mergePosProducts, repairLocalCatalog, findProductByBarcode, findProductByReference, searchProducts, getIncompleteProducts, updateProductBarcode, updateProductImage, importProducts, addPosStockEntry, updatePosStockEntry, deletePosStockEntry, addPosStockMovement, addPosInventory, updatePosInventory, deletePosInventory, addPosCashSession, updatePosCashSession, addPosTransaction, updatePosTransaction, voidPosTransaction, clearPosSalesHistory, deletePosMovementsByDateRange, addPosDiscount, updatePosDiscount, deletePosDiscount, updatePosSettings, addPosReturn, updatePosReturn, cancelPosReturn, productCompletions, importSessions, addProductCompletion, updateProductCompletion, deleteProductCompletion, addImportSession, updateImportSession, deleteImportSession, addImportError, completeProduct, refreshData, reconcilePosData: (opts?: { force?: boolean }) => reconcileLocalPosDataWithCloud(opts),
       // CRM Modules Responsables
       crmTiers, crmCommerciaux, crmPrestations, crmCaisse, crmCommissions, crmArticles, crmStockMouvements, crmMaintenance, crmTechniciens,
       addCrmTier, updateCrmTier, deleteCrmTier,

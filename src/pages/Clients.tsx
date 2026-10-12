@@ -31,7 +31,7 @@ export function Clients() {
   }, [users]);
 
   // Lecture partagée : Direction + Responsable voient tous les clients (sélection
-  // dans Affaires / Devis / Factures / Documents). Gestion reste propriétaire.
+  // dans Devis / Factures / Documents). Gestion reste propriétaire.
   const allowedClients = useMemo(() => {
     if (canSeeAllClients) return clients;
     return clients.filter(c => c.commercialId === currentUser?.id);
@@ -181,7 +181,7 @@ export function Clients() {
             {isDirector 
               ? 'Supervision globale de l\'ensemble du portefeuille client de tous les collaborateurs.' 
               : canSeeAllClients
-                ? 'Vous pouvez sélectionner tous les clients dans les modules (Affaires, Devis, Factures...). Seuls vos clients attribués sont modifiables.'
+                ? 'Vous pouvez sélectionner tous les clients dans les modules (Devis, Factures...). Seuls vos clients attribués sont modifiables.'
                 : 'Vous avez uniquement accès aux clients que vous avez créés et qui vous sont attribués.'}
           </p>
         </div>

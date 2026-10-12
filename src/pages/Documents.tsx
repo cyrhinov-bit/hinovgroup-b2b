@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { Upload, FileText, Download, Trash2, Folder, FolderPlus, ChevronRight, Eye, Edit2, Edit3, Settings, Search, Filter, Share2, Briefcase, User as UserIcon, Building, Image as ImageIcon, Table as TableIcon, Code } from 'lucide-react';
+import { Upload, FileText, Download, Trash2, Folder, FolderPlus, ChevronRight, Eye, Edit2, Edit3, Settings, Search, Filter, Share2, User as UserIcon, Building, Image as ImageIcon, Table as TableIcon, Code } from 'lucide-react';
 import { useConfirm } from '../components/ConfirmModal';
 import { useAppContext, type CrmDocument, type CrmFolder } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -30,11 +30,11 @@ const CATEGORIES: Array<NonNullable<CrmDocument['category']>> = [
 
 export function Documents() {
   const { confirm } = useConfirm();
-  const { crmDocuments, crmFolders, affaires, clients, addCrmDocument, deleteCrmDocument, downloadCrmDocument, addCrmFolder, updateCrmFolder, deleteCrmFolder, users } = useAppContext();
+  const { crmDocuments, crmFolders, clients, addCrmDocument, deleteCrmDocument, downloadCrmDocument, addCrmFolder, updateCrmFolder, deleteCrmFolder, users } = useAppContext();
   const { currentUser } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeTab, setActiveTab] = useState<'MY_DOCS' | 'SHARED' | 'AFFAIRES'>('MY_DOCS');
+  const [activeTab, setActiveTab] = useState<'MY_DOCS' | 'SHARED'>('MY_DOCS');
   const [currentFolderId, setCurrentFolderId] = useState<string | undefined>(undefined);
   const [selectedUserId, setSelectedUserId] = useState<string>(currentUser?.id || '');
   const [searchQuery, setSearchQuery] = useState('');
@@ -54,7 +54,6 @@ export function Documents() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadCategory, setUploadCategory] = useState<CrmDocument['category']>('Autre');
-  const [uploadAffaireId, setUploadAffaireId] = useState('');
   const [uploadClientId, setUploadClientId] = useState('');
   const [uploadIsShared, setUploadIsShared] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -78,9 +77,6 @@ export function Documents() {
     if (activeTab === 'SHARED') {
       return crmFolders.filter(f => f.isShared);
     }
-    if (activeTab === 'AFFAIRES') {
-      return []; // Flat view for business files
-    }
     if (isAdmin && !displayedUserId) {
       return crmFolders.filter(f => !f.isShared);
     }
@@ -91,13 +87,10 @@ export function Documents() {
     if (activeTab === 'SHARED') {
       return crmDocuments.filter(d => d.isShared);
     }
-    if (activeTab === 'AFFAIRES') {
-      return crmDocuments.filter(d => d.affaireId || d.clientId);
-    }
     if (isAdmin && !displayedUserId) {
-      return crmDocuments.filter(d => !d.isShared && !d.affaireId);
+      return crmDocuments.filter(d => !d.isShared);
     }
-    return crmDocuments.filter(d => (d.uploaderId === displayedUserId || (!d.uploaderId && (!displayedUserId || displayedUserId === currentUser?.id))) && !d.isShared && !d.affaireId);
+    return crmDocuments.filter(d => (d.uploaderId === displayedUserId || (!d.uploaderId && (!displayedUserId || displayedUserId === currentUser?.id))) && !d.isShared);
   }, [crmDocuments, displayedUserId, isAdmin, currentUser, activeTab]);
 
   // Current level folders & files
@@ -109,7 +102,7 @@ export function Documents() {
   }, [scopedFolders, currentFolderId, searchQuery]);
 
   const currentLevelDocuments = useMemo(() => {
-    let docs = activeTab === 'AFFAIRES' ? scopedDocuments : scopedDocuments.filter(d => (searchQuery.trim() ? true : d.folderId === currentFolderId));
+    let docs = scopedDocuments.filter(d => (searchQuery.trim() ? true : d.folderId === currentFolderId));
     if (searchQuery.trim()) {
       docs = docs.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()));
     }
@@ -117,7 +110,7 @@ export function Documents() {
       docs = docs.filter(d => d.category === categoryFilter);
     }
     return docs;
-  }, [scopedDocuments, currentFolderId, searchQuery, categoryFilter, activeTab]);
+  }, [scopedDocuments, currentFolderId, searchQuery, categoryFilter]);
 
   // Breadcrumbs
   const breadcrumbs = useMemo(() => {
@@ -132,7 +125,7 @@ export function Documents() {
         break;
       }
     }
-    const rootName = activeTab === 'SHARED' ? 'Documents Partagés' : activeTab === 'AFFAIRES' ? 'Pièces Affaires & Clients' : 'Mes Documents';
+    const rootName = activeTab === 'SHARED' ? 'Documents Partagés' : 'Mes Documents';
     return [{ id: undefined, name: rootName }, ...crumbs];
   }, [currentFolderId, scopedFolders, activeTab]);
 
@@ -204,14 +197,12 @@ export function Documents() {
       await addCrmDocument(uploadFile, {
         uploaderId: displayedUserId || currentUser?.id,
         folderId: currentFolderId,
-        affaireId: uploadAffaireId || undefined,
         clientId: uploadClientId || undefined,
         category: uploadCategory,
         isShared: activeTab === 'SHARED' || uploadIsShared
       });
       setShowUploadModal(false);
       setUploadFile(null);
-      setUploadAffaireId('');
       setUploadClientId('');
       setUploadCategory('Autre');
       setUploadIsShared(false);
@@ -240,7 +231,6 @@ export function Documents() {
   };
 
   const getClientName = (id?: string) => clients.find(c => c.id === id)?.name;
-  const getAffaireRef = (id?: string) => affaires.find(a => a.id === id)?.reference;
 
   return (
     <div className="dashboard">
@@ -248,7 +238,7 @@ export function Documents() {
         <div>
           <h2>Gestion Électronique des Documents (GED)</h2>
           <p style={{ color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
-            Classement sécurisé, dossiers personnalisés et pièces jointes des affaires & clients
+            Classement sécurisé, dossiers personnalisés et pièces jointes des clients
           </p>
         </div>
 
@@ -267,11 +257,9 @@ export function Documents() {
             </select>
           )}
 
-          {activeTab !== 'AFFAIRES' && (
-            <button className="btn-new-folder" onClick={() => setShowFolderModal(true)}>
-              <FolderPlus size={16} /> Nouveau dossier
-            </button>
-          )}
+          <button className="btn-new-folder" onClick={() => setShowFolderModal(true)}>
+            <FolderPlus size={16} /> Nouveau dossier
+          </button>
 
           <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
             <Upload size={16} style={{ marginRight: '6px' }} /> {isUploading ? 'Upload en cours...' : 'Ajouter un document'}
@@ -294,13 +282,6 @@ export function Documents() {
           onClick={() => { setActiveTab('SHARED'); setCurrentFolderId(undefined); }}
         >
           <Share2 size={16} /> Documents Partagés Entreprise
-        </button>
-
-        <button
-          className={`doc-tab-btn ${activeTab === 'AFFAIRES' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('AFFAIRES'); setCurrentFolderId(undefined); }}
-        >
-          <Briefcase size={16} /> Pièces d'Affaires & Clients
         </button>
       </div>
 
@@ -332,25 +313,23 @@ export function Documents() {
       </div>
 
       {/* Breadcrumbs Navigation */}
-      {activeTab !== 'AFFAIRES' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px', fontSize: '0.875rem', flexWrap: 'wrap' }}>
-          {breadcrumbs.map((crumb, idx) => (
-            <React.Fragment key={crumb.id || 'root'}>
-              <span
-                onClick={() => setCurrentFolderId(crumb.id)}
-                style={{
-                  cursor: 'pointer',
-                  color: idx === breadcrumbs.length - 1 ? '#0F172A' : (crumb.color || 'var(--color-primary)'),
-                  fontWeight: idx === breadcrumbs.length - 1 ? 700 : 500
-                }}
-              >
-                {crumb.name}
-              </span>
-              {idx < breadcrumbs.length - 1 && <ChevronRight size={14} color="#94A3B8" />}
-            </React.Fragment>
-          ))}
-        </div>
-      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px', fontSize: '0.875rem', flexWrap: 'wrap' }}>
+        {breadcrumbs.map((crumb, idx) => (
+          <React.Fragment key={crumb.id || 'root'}>
+            <span
+              onClick={() => setCurrentFolderId(crumb.id)}
+              style={{
+                cursor: 'pointer',
+                color: idx === breadcrumbs.length - 1 ? '#0F172A' : (crumb.color || 'var(--color-primary)'),
+                fontWeight: idx === breadcrumbs.length - 1 ? 700 : 500
+              }}
+            >
+              {crumb.name}
+            </span>
+            {idx < breadcrumbs.length - 1 && <ChevronRight size={14} color="#94A3B8" />}
+          </React.Fragment>
+        ))}
+      </div>
 
       {/* Main Files & Folders Table */}
       <div className="card">
@@ -433,7 +412,6 @@ export function Documents() {
               {/* Documents */}
               {currentLevelDocuments.map(doc => {
                 const clientName = getClientName(doc.clientId);
-                const affaireRef = getAffaireRef(doc.affaireId);
                 const fileName = doc.name.toLowerCase();
                 const fileType = doc.type.toLowerCase();
                 const isPdf = fileType.includes('pdf') || fileName.endsWith('.pdf');
@@ -503,19 +481,13 @@ export function Documents() {
 
                     <td data-label="Rattachement">
                       <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        {affaireRef && (
-                          <span style={{ color: '#0D9488', fontWeight: 600 }}>
-                            <Briefcase size={12} style={{ display: 'inline', marginRight: '3px' }} />
-                            {affaireRef}
-                          </span>
-                        )}
                         {clientName && (
                           <span style={{ color: '#64748B' }}>
                             <Building size={12} style={{ display: 'inline', marginRight: '3px' }} />
                             {clientName}
                           </span>
                         )}
-                        {!affaireRef && !clientName && <span style={{ color: '#94A3B8' }}>-</span>}
+                        {!clientName && <span style={{ color: '#94A3B8' }}>-</span>}
                       </div>
                     </td>
 
@@ -733,24 +705,6 @@ export function Documents() {
                   >
                     {CATEGORIES.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="report-field-label">Rattacher à une Affaire (optionnel)</label>
-                  <select
-                    className="table-input"
-                    value={uploadAffaireId}
-                    onChange={e => {
-                      setUploadAffaireId(e.target.value);
-                      const aff = affaires.find(a => a.id === e.target.value);
-                      if (aff?.clientId) setUploadClientId(aff.clientId);
-                    }}
-                  >
-                    <option value="">Aucune affaire rattachée</option>
-                    {affaires.map(a => (
-                      <option key={a.id} value={a.id}>{a.reference} — {a.title}</option>
                     ))}
                   </select>
                 </div>

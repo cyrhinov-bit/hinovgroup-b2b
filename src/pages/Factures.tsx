@@ -273,7 +273,7 @@ export function Factures() {
     e.preventDefault();
 
     if (!formClientName.trim()) {
-      toast.error('Veuillez renseigner le Client / Affaire.');
+      toast.error('Veuillez renseigner le Client.');
       return;
     }
 
@@ -647,7 +647,7 @@ export function Factures() {
     const fileName = `SUIVI_FACTURES_CLIENTS_${monthLabel.toUpperCase()}_${selectedYear}.xlsx`;
 
     const headers = [
-      'CLIENT/AFFAIRES',
+      'CLIENT',
       'COMMERCIAL',
       'DATE LIVRAISON',
       'DATE DE PAYEMENT',
@@ -1227,7 +1227,7 @@ export function Factures() {
           <table style={{ width: '100%', minWidth: '1450px', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
               <tr style={{ background: 'linear-gradient(180deg, #1F4363 0%, #152E46 100%)', color: '#FFFFFF', borderBottom: '2px solid #152E46' }}>
-                <th style={{ minWidth: '150px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>CLIENT / AFFAIRES</th>
+                <th style={{ minWidth: '150px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>CLIENT</th>
                 <th style={{ minWidth: '110px', padding: '12px 10px', color: '#F8FAFC', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>COMMERCIAL</th>
                 <th style={{ minWidth: '95px', padding: '12px 8px', color: '#E0F2FE', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>DATE LIVR.</th>
                 <th style={{ minWidth: '95px', padding: '12px 8px', color: '#E0F2FE', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderRight: '1px solid rgba(255,255,255,0.1)' }}>DATE PAIEM.</th>
@@ -1278,7 +1278,7 @@ export function Factures() {
                         transition: 'background-color 0.15s ease'
                       }}
                     >
-                      {/* 1. Client / Affaires */}
+ {/* 1. Client */}
                       <td style={{ padding: '10px', borderRight: '1px solid #F1F5F9' }}>
                         <div style={{ fontWeight: 700, color: 'var(--color-primary)', fontSize: '0.88rem' }}>{clientName}</div>
                         {inv.quoteId && (
@@ -1507,7 +1507,7 @@ export function Factures() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
-                    Client / Affaires *
+                    Client *
                   </label>
                   <input
                     type="text"

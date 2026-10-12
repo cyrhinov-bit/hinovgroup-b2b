@@ -22,7 +22,6 @@ export const db = {
   sales: createStore('sales'),
   commissions: createStore('commissions'),
   installments: createStore('installments'),
-  affaires: createStore('affaires'),
   facturePaiements: createStore('facturePaiements'),
   couts: createStore('couts'),
   scoringRules: createStore('scoringRules'),

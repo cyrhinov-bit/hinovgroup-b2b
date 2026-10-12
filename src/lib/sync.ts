@@ -253,9 +253,8 @@ async function upsertSaleLinesResilient(p_lines: any[]): Promise<{ ok: boolean; 
   return { ok, neutralized, errors };
 }
 
-export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT' | 
-                             'INSERT_AFFAIRE' | 'UPDATE_AFFAIRE' | 'DELETE_AFFAIRE' |
-                             'INSERT_FACTURE_PAIEMENT' |
+export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT' |
+                              'INSERT_FACTURE_PAIEMENT' |
                              'INSERT_COUT' | 'UPDATE_COUT' | 'DELETE_COUT' |
                              'INSERT_OBJECTIF' | 'UPDATE_OBJECTIF' | 'DELETE_OBJECTIF' |
                              'INSERT_PRIME' | 'UPDATE_PRIME_STATUS' |
@@ -544,7 +543,7 @@ const buildQuoteRpcPayload = (quoteData: any, lines: any[]) => ({
     client_id: isUuid(quoteData.clientId) ? quoteData.clientId : null,
     commercial_id: isUuid(quoteData.commercialId) ? quoteData.commercialId : null,
     service_id: isUuid(quoteData.serviceId) ? quoteData.serviceId : null,
-    affaire_id: isUuid(quoteData.affaireId) ? quoteData.affaireId : null,
+    affaire_id: null,
     subject: quoteData.subject,
     subtotal: quoteData.subtotal,
     vat: quoteData.vat ?? 0,
@@ -740,10 +739,7 @@ const ACTION_PRIORITY: Record<string, number> = {
   // 3. Sessions de caisse (indispensable avant les transactions POS)
   'INSERT_POS_CASH_SESSION': 3,
   'UPDATE_POS_CASH_SESSION': 3,
-  // 4. Affaires, Devis, Ventes, Transactions, Documents CRM
-  'INSERT_AFFAIRE': 4,
-  'UPDATE_AFFAIRE': 4,
-  'DELETE_AFFAIRE': 6,
+  // 4. Devis, Ventes, Transactions, Documents CRM
   'INSERT_QUOTE': 4,
   'UPDATE_QUOTE': 4,
   'DELETE_QUOTE': 6,
@@ -1115,59 +1111,6 @@ export const processSyncQueue = async () => {
           success = checkResult(error);
           break;
         }
-        case 'INSERT_AFFAIRE': {
-          const affaireData = action.payload;
-          const { error } = await supabase.from('affaires').upsert([{
-            id: affaireData.id,
-            reference: affaireData.reference,
-            title: affaireData.title,
-            client_id: isUuid(affaireData.clientId) ? affaireData.clientId : null,
-            service_id: isUuid(affaireData.serviceId) ? affaireData.serviceId : null,
-            commercial_id: isUuid(affaireData.commercialId) ? affaireData.commercialId : null,
-            description: affaireData.description || null,
-            status: affaireData.status || 'QUALIFIEE',
-            estimated_amount_ht: affaireData.estimatedAmountHt || 0,
-            probability: affaireData.probability !== undefined ? affaireData.probability : 50,
-            source: affaireData.source || null,
-            start_date_planned: affaireData.startDatePlanned || null,
-            end_date_planned: affaireData.endDatePlanned || null,
-            end_date_real: affaireData.endDateReal || null,
-            notes: affaireData.notes || null,
-            created_at: affaireData.createdAt || new Date().toISOString(),
-            updated_at: affaireData.updatedAt || new Date().toISOString()
-          }], { onConflict: 'id' });
-          if (error) console.error('[Sync] INSERT_AFFAIRE échoué :', error.message);
-          success = checkResult(error);
-          break;
-        }
-        case 'UPDATE_AFFAIRE': {
-          const { id, ...data } = action.payload;
-          const mappedData: any = {};
-          if (data.title !== undefined) mappedData.title = data.title;
-          if (data.clientId !== undefined) mappedData.client_id = isUuid(data.clientId) ? data.clientId : null;
-          if (data.serviceId !== undefined) mappedData.service_id = isUuid(data.serviceId) ? data.serviceId : null;
-          if (data.commercialId !== undefined) mappedData.commercial_id = isUuid(data.commercialId) ? data.commercialId : null;
-          if (data.description !== undefined) mappedData.description = data.description;
-          if (data.status !== undefined) mappedData.status = data.status;
-          if (data.estimatedAmountHt !== undefined) mappedData.estimated_amount_ht = data.estimatedAmountHt;
-          if (data.probability !== undefined) mappedData.probability = data.probability;
-          if (data.source !== undefined) mappedData.source = data.source;
-          if (data.startDatePlanned !== undefined) mappedData.start_date_planned = data.startDatePlanned;
-          if (data.endDatePlanned !== undefined) mappedData.end_date_planned = data.endDatePlanned;
-          if (data.endDateReal !== undefined) mappedData.end_date_real = data.endDateReal;
-          if (data.notes !== undefined) mappedData.notes = data.notes;
-          mappedData.updated_at = new Date().toISOString();
-          const { error } = await supabase.from('affaires').update(mappedData).eq('id', id);
-          if (error) console.error('[Sync] UPDATE_AFFAIRE échoué :', error.message);
-          success = checkResult(error);
-          break;
-        }
-        case 'DELETE_AFFAIRE': {
-          const { error } = await supabase.from('affaires').delete().eq('id', action.payload.id);
-          if (error) console.error('[Sync] DELETE_AFFAIRE échoué :', error.message);
-          success = checkResult(error);
-          break;
-        }
         case 'INSERT_FACTURE_PAIEMENT': {
           const payment = action.payload;
           const { error } = await supabase.from('facture_paiements').upsert([{
@@ -1382,7 +1325,7 @@ export const processSyncQueue = async () => {
             client_id: isUuid(quoteData.clientId) ? quoteData.clientId : null,
             commercial_id: isUuid(quoteData.commercialId) ? quoteData.commercialId : null,
             service_id: isUuid(quoteData.serviceId) ? quoteData.serviceId : null,
-            affaire_id: isUuid(quoteData.affaireId) ? quoteData.affaireId : null,
+            affaire_id: null,
             subject: quoteData.subject,
             subtotal: quoteData.subtotal,
             vat: quoteData.vat ?? 0,
@@ -1410,7 +1353,7 @@ export const processSyncQueue = async () => {
               client_id: isUuid(quoteData.clientId) ? quoteData.clientId : null,
               commercial_id: isUuid(quoteData.commercialId) ? quoteData.commercialId : null,
               service_id: isUuid(quoteData.serviceId) ? quoteData.serviceId : null,
-              affaire_id: isUuid(quoteData.affaireId) ? quoteData.affaireId : null,
+              affaire_id: null,
               subject: quoteData.subject,
               subtotal: quoteData.subtotal,
               vat: quoteData.vat ?? 0,
@@ -1469,7 +1412,7 @@ export const processSyncQueue = async () => {
             client_id: isUuid(quoteData.clientId) ? quoteData.clientId : null,
             commercial_id: isUuid(quoteData.commercialId) ? quoteData.commercialId : null,
             service_id: isUuid(quoteData.serviceId) ? quoteData.serviceId : null,
-            affaire_id: isUuid(quoteData.affaireId) ? quoteData.affaireId : null,
+            affaire_id: null,
             subject: quoteData.subject,
             subtotal: quoteData.subtotal,
             vat: quoteData.vat ?? 0,
@@ -1542,7 +1485,7 @@ export const processSyncQueue = async () => {
             id: saleData.id,
             sale_number: saleData.saleNumber,
             quote_id: isUuid(saleData.quoteId) ? saleData.quoteId : null,
-            affaire_id: isUuid(saleData.affaireId) ? saleData.affaireId : null,
+            affaire_id: null,
             client_id: isUuid(saleData.clientId) ? saleData.clientId : null,
             service_id: isUuid(saleData.serviceId) ? saleData.serviceId : null,
             commercial_id: isUuid(saleData.commercialId) ? saleData.commercialId : null,
@@ -1582,7 +1525,7 @@ export const processSyncQueue = async () => {
           const { error } = await supabase.from('ventes').update({
             sale_number: saleData.saleNumber,
             quote_id: isUuid(saleData.quoteId) ? saleData.quoteId : null,
-            affaire_id: isUuid(saleData.affaireId) ? saleData.affaireId : null,
+            affaire_id: null,
             client_id: isUuid(saleData.clientId) ? saleData.clientId : null,
             service_id: isUuid(saleData.serviceId) ? saleData.serviceId : null,
             commercial_id: isUuid(saleData.commercialId) ? saleData.commercialId : null,
@@ -1643,7 +1586,7 @@ export const processSyncQueue = async () => {
           const { error } = await supabase.from('commissions').upsert([{
             id: action.payload.id,
             vente_id: isUuid(action.payload.saleId) ? action.payload.saleId : null,
-            affaire_id: isUuid(action.payload.affaireId) ? action.payload.affaireId : null,
+            affaire_id: null,
             client_id: isUuid(action.payload.clientId) ? action.payload.clientId : null,
             commercial_id: isUuid(action.payload.commercialId) ? action.payload.commercialId : null,
             service_id: isUuid(action.payload.serviceId) ? action.payload.serviceId : null,
@@ -1671,7 +1614,6 @@ export const processSyncQueue = async () => {
           if (updateData.commissionAmount !== undefined) mappedData.commission_amount = updateData.commissionAmount;
           if (updateData.status !== undefined) mappedData.status = updateData.status;
           if (updateData.paidAmount !== undefined) mappedData.paid_amount = updateData.paidAmount;
-          if (updateData.affaireId !== undefined) mappedData.affaire_id = isUuid(updateData.affaireId) ? updateData.affaireId : null;
           const { error } = await supabase.from('commissions').update(mappedData).eq('id', id);
           if (error) console.error('[Sync] UPDATE_COMMISSION échoué :', error.message);
           success = checkResult(error);
@@ -2345,7 +2287,7 @@ export const processSyncQueue = async () => {
           break;
         }
         case 'INSERT_DOCUMENT': {
-          const { id, name, type, sizeBytes, filePath, uploaderId, folderId, affaireId, clientId, category, isShared } = action.payload;
+          const { id, name, type, sizeBytes, filePath, uploaderId, folderId, clientId, category, isShared } = action.payload;
           const fileData: Blob | null = await db.documentFiles.getItem(id);
           
           if (fileData && filePath) {
@@ -2371,7 +2313,7 @@ export const processSyncQueue = async () => {
             file_path: filePath,
             uploader_id: isUuid(uploaderId) ? uploaderId : null,
             folder_id: isUuid(folderId) ? folderId : null,
-            affaire_id: isUuid(affaireId) ? affaireId : null,
+            affaire_id: null,
             client_id: isUuid(clientId) ? clientId : null,
             category: category || 'Autre',
             is_shared: !!isShared
@@ -2420,7 +2362,6 @@ export const processSyncQueue = async () => {
           if (updates.type !== undefined) dbUpdates.type = updates.type;
           if (updates.sizeBytes !== undefined) dbUpdates.size_bytes = updates.sizeBytes;
           if (updates.folderId !== undefined) dbUpdates.folder_id = isUuid(updates.folderId) ? updates.folderId : null;
-          if (updates.affaireId !== undefined) dbUpdates.affaire_id = isUuid(updates.affaireId) ? updates.affaireId : null;
           if (updates.clientId !== undefined) dbUpdates.client_id = isUuid(updates.clientId) ? updates.clientId : null;
           if (updates.category !== undefined) dbUpdates.category = updates.category || 'Autre';
           if (updates.isShared !== undefined) dbUpdates.is_shared = !!updates.isShared;

@@ -7,7 +7,7 @@
  * Les référentiels partagés (catalogues, services, utilisateurs) restent
  * visibles par tous (nécessaires à la saisie).
  * Les clients sont aussi en lecture partagée : tout rôle authentifié peut
- * sélectionner un client existant (Affaires / Devis / Factures / Documents).
+ * sélectionner un client existant (Devis / Factures / Documents).
  * La gestion (création / modification / suppression) reste propriétaire.
  */
 
@@ -48,7 +48,7 @@ export function canManageOwned<T>(item: T, role: string | undefined, userId: str
 
 /**
  * Lecture partagée du référentiel clients : Direction + Responsable voient
- * tous les clients (sélections Affaires / Devis / Factures / Documents).
+ * tous les clients (sélections Devis / Factures / Documents).
  * Les autres rôles (Commercial, ...) restent scopés à leurs propres clients.
  */
 export function canReadAllClients(role?: string | null): boolean {

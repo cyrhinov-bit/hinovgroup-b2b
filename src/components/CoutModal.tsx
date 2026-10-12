@@ -8,7 +8,6 @@ interface CoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   coutToEdit?: Cout | null;
-  defaultAffaireId?: string;
   defaultServiceId?: string;
 }
 
@@ -16,14 +15,12 @@ export const CoutModal: React.FC<CoutModalProps> = ({
   isOpen,
   onClose,
   coutToEdit,
-  defaultAffaireId,
   defaultServiceId
 }) => {
-  const { affaires, services, addCout, updateCout } = useAppContext();
+  const { services, addCout, updateCout } = useAppContext();
   const { currentUser } = useAuth();
 
-  const [costType, setCostType] = useState<CostType>(coutToEdit?.costType || (defaultAffaireId ? 'DIRECT' : 'DIRECT'));
-  const [affaireId, setAffaireId] = useState<string>(coutToEdit?.affaireId || defaultAffaireId || '');
+  const [costType, setCostType] = useState<CostType>(coutToEdit?.costType || 'DIRECT');
   const [serviceId, setServiceId] = useState<string>(coutToEdit?.serviceId || defaultServiceId || '');
   const [category, setCategory] = useState<CostCategory>(coutToEdit?.category || 'SOUS_TRAITANCE');
   const [amountHt, setAmountHt] = useState<number>(coutToEdit?.amountHt || 0);
@@ -40,7 +37,6 @@ export const CoutModal: React.FC<CoutModalProps> = ({
   useEffect(() => {
     if (coutToEdit) {
       setCostType(coutToEdit.costType);
-      setAffaireId(coutToEdit.affaireId || '');
       setServiceId(coutToEdit.serviceId || '');
       setCategory(coutToEdit.category);
       setAmountHt(coutToEdit.amountHt);
@@ -51,8 +47,7 @@ export const CoutModal: React.FC<CoutModalProps> = ({
       setDescription(coutToEdit.description);
       setStatus(coutToEdit.status);
     } else {
-      setCostType(defaultAffaireId ? 'DIRECT' : 'DIRECT');
-      setAffaireId(defaultAffaireId || '');
+      setCostType('DIRECT');
       setServiceId(defaultServiceId || (currentUser?.role === 'Responsable' ? currentUser.serviceId || '' : ''));
       setCategory('SOUS_TRAITANCE');
       setAmountHt(0);
@@ -63,17 +58,7 @@ export const CoutModal: React.FC<CoutModalProps> = ({
       setDescription('');
       setStatus('VALIDE');
     }
-  }, [coutToEdit, defaultAffaireId, defaultServiceId, currentUser]);
-
-  // If costType is DIRECT and affaireId is chosen, auto-resolve serviceId
-  useEffect(() => {
-    if (costType === 'DIRECT' && affaireId) {
-      const selectedAffaire = affaires.find(a => a.id === affaireId);
-      if (selectedAffaire && selectedAffaire.serviceId) {
-        setServiceId(selectedAffaire.serviceId);
-      }
-    }
-  }, [costType, affaireId, affaires]);
+  }, [coutToEdit, defaultServiceId, currentUser]);
 
   const vatAmount = Math.round(amountHt * (vatRate / 100));
   const amountTtc = amountHt + vatAmount;
@@ -88,10 +73,6 @@ export const CoutModal: React.FC<CoutModalProps> = ({
     }
     if (!amountHt || amountHt <= 0) {
       setError('Le montant HT doit être strictement supérieur à 0.');
-      return;
-    }
-    if (costType === 'DIRECT' && !affaireId) {
-      setError('Un coût direct doit obligatoirement être rattaché à une Affaire.');
       return;
     }
     if (!serviceId) {
@@ -112,7 +93,7 @@ export const CoutModal: React.FC<CoutModalProps> = ({
           vatAmount,
           amountTtc,
           date,
-          affaireId: costType === 'DIRECT' ? affaireId : undefined,
+          affaireId: undefined,
           serviceId,
           supplierName: supplierName.trim() || undefined,
           invoiceRef: invoiceRef.trim() || undefined,
@@ -126,7 +107,7 @@ export const CoutModal: React.FC<CoutModalProps> = ({
           amountHt: Number(amountHt),
           vatRate: Number(vatRate),
           date,
-          affaireId: costType === 'DIRECT' ? affaireId : undefined,
+          affaireId: undefined,
           serviceId,
           supplierName: supplierName.trim() || undefined,
           invoiceRef: invoiceRef.trim() || undefined,
@@ -182,10 +163,10 @@ export const CoutModal: React.FC<CoutModalProps> = ({
                 >
                   <div className="cout-type-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Briefcase size={15} color={costType === 'DIRECT' ? '#0D9488' : '#64748B'} />
-                    Coût Direct d'Affaire
+                    Coût Direct
                   </div>
                   <div className="cout-type-desc">
-                    Affecté directement à une affaire client spécifique (impacte sa marge brute).
+                    Affecté directement au service (impacte sa marge brute).
                   </div>
                 </div>
 
@@ -193,7 +174,6 @@ export const CoutModal: React.FC<CoutModalProps> = ({
                   className={`cout-type-card ${costType === 'INDIRECT' ? 'selected-indirect' : ''}`}
                   onClick={() => {
                     setCostType('INDIRECT');
-                    setAffaireId('');
                   }}
                 >
                   <div className="cout-type-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -207,30 +187,8 @@ export const CoutModal: React.FC<CoutModalProps> = ({
               </div>
             </div>
 
-            {/* Affectation Affaire / Service */}
-            <div style={{ display: 'grid', gridTemplateColumns: costType === 'DIRECT' ? '1fr 1fr' : '1fr', gap: '1rem' }}>
-              {costType === 'DIRECT' && (
-                <div className="form-group">
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                    Affaire rattachée *
-                  </label>
-                  <select
-                    className="table-input"
-                    style={{ width: '100%' }}
-                    value={affaireId}
-                    onChange={e => setAffaireId(e.target.value)}
-                    required
-                  >
-                    <option value="">Sélectionner l'affaire...</option>
-                    {affaires.map(a => (
-                      <option key={a.id} value={a.id}>
-                        {a.reference} - {a.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
+            {/* Affectation Service */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
               <div className="form-group">
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
                   Service / Département *
@@ -240,7 +198,6 @@ export const CoutModal: React.FC<CoutModalProps> = ({
                   style={{ width: '100%' }}
                   value={serviceId}
                   onChange={e => setServiceId(e.target.value)}
-                  disabled={costType === 'DIRECT' && !!affaireId}
                   required
                 >
                   <option value="">Sélectionner un service...</option>

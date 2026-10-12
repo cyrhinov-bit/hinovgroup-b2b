@@ -19,14 +19,13 @@ const CATEGORIES: Array<NonNullable<CrmDocument['category']>> = [
 ];
 
 export function DocumentEditorModal({ document: doc, onClose, onSaved }: DocumentEditorModalProps) {
-  const { crmFolders, affaires, clients, updateCrmDocument } = useAppContext();
+  const { crmFolders, clients, updateCrmDocument } = useAppContext();
   const { currentUser } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState(doc.name);
   const [category, setCategory] = useState<CrmDocument['category']>(doc.category || 'Autre');
   const [folderId, setFolderId] = useState<string>(doc.folderId || '');
-  const [affaireId, setAffaireId] = useState<string>(doc.affaireId || '');
   const [clientId, setClientId] = useState<string>(doc.clientId || '');
   const [isShared, setIsShared] = useState<boolean>(Boolean(doc.isShared));
 
@@ -64,7 +63,6 @@ export function DocumentEditorModal({ document: doc, onClose, onSaved }: Documen
         name: name.trim(),
         category,
         folderId: folderId || undefined,
-        affaireId: affaireId || undefined,
         clientId: clientId || undefined,
         isShared
       };
@@ -173,25 +171,8 @@ export function DocumentEditorModal({ document: doc, onClose, onSaved }: Documen
             </div>
           </div>
 
-          {/* Liaison Affaire & Client */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '6px', display: 'block' }}>
-                Lier à une Affaire
-              </label>
-              <select
-                className="form-select"
-                value={affaireId}
-                onChange={e => setAffaireId(e.target.value)}
-                style={{ width: '100%' }}
-              >
-                <option value="">(Aucune affaire)</option>
-                {affaires.map(a => (
-                  <option key={a.id} value={a.id}>{a.reference} - {a.title}</option>
-                ))}
-              </select>
-            </div>
-
+          {/* Liaison Client */}
+          <div>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label" style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '6px', display: 'block' }}>
                 Lier à un Client

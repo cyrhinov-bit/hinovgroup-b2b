@@ -39,10 +39,9 @@ export function QuoteCreation() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const editId = searchParams.get('editId');
-  const affaireIdParam = searchParams.get('affaireId');
   const clientIdParam = searchParams.get('clientId');
   const serviceIdParam = searchParams.get('serviceId');
-  const { clients, prestations, addQuote, updateQuote, services, quotes, settings, affaires, users } = useAppContext();
+  const { clients, prestations, addQuote, updateQuote, services, quotes, settings, users } = useAppContext();
   const { currentUser: authUser } = useAuth();
   const currentUser = users.find(u => u.id === authUser?.id) || authUser;
 
@@ -94,7 +93,6 @@ export function QuoteCreation() {
 
   // Form states
   const [clientId, setClientId] = useState(sourceQuote?.clientId || clientIdParam || '');
-  const [affaireId, setAffaireId] = useState(sourceQuote?.affaireId || affaireIdParam || '');
   const [subject, setSubject] = useState(sourceQuote?.subject || '');
   const [serviceId, setServiceId] = useState(sourceQuote?.serviceId || serviceIdParam || (currentUser?.role === 'Responsable' ? (currentUser?.serviceId || '') : ''));
   const [style, setStyle] = useState<'Classique' | 'Moderne' | 'Minimaliste'>(sourceQuote?.style as any || 'Classique');
@@ -150,7 +148,6 @@ export function QuoteCreation() {
       const draft = loadDraft();
       if (draft) {
         setClientId(draft.clientId || '');
-        setAffaireId(draft.affaireId || '');
         setSubject(draft.subject || '');
         setServiceId(draft.serviceId || '');
         setStyle(draft.style || 'Classique');
@@ -175,7 +172,6 @@ export function QuoteCreation() {
     if (draftLoaded) {
       const draft = {
         clientId,
-        affaireId,
         subject,
         serviceId,
         style,
@@ -195,7 +191,7 @@ export function QuoteCreation() {
         localStorage.setItem(draftKey, JSON.stringify(draft));
       } catch {}
     }
-  }, [clientId, affaireId, subject, serviceId, style, accentColor, discountPercent, quoteDate, validityDays, validUntil, paymentTerms, notes, signatoryName, signatoryRole, lines, lineCosts, draftLoaded]);
+  }, [clientId, subject, serviceId, style, accentColor, discountPercent, quoteDate, validityDays, validUntil, paymentTerms, notes, signatoryName, signatoryRole, lines, lineCosts, draftLoaded]);
 
   const handleValidityPreset = (days: number) => {
     setValidityDays(days);
@@ -298,7 +294,6 @@ export function QuoteCreation() {
       clientId,
       commercialId: sourceQuote?.commercialId || currentUser?.id || '',
       serviceId: resolvedServiceId,
-      affaireId: affaireId || undefined,
       subject: subject.trim(),
       lines: lines.map((l, idx) => ({
         ...l,
@@ -401,8 +396,6 @@ export function QuoteCreation() {
     }
   };
 
-  const clientAffaires = affaires.filter(a => a.clientId === clientId);
-
   return (
     <div className="quote-creation">
       <div className="page-header">
@@ -433,25 +426,9 @@ export function QuoteCreation() {
               <label>Client *</label>
               <select className="form-control" value={clientId} onChange={e => {
                 setClientId(e.target.value);
-                setAffaireId('');
               }}>
                 <option value="">Sélectionner un client...</option>
                 {allowedClients.map(c => <option key={c.id} value={c.id}>{c.name || c.contact}</option>)}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Affaire rattachée (Optionnel)</label>
-              <select 
-                className="form-control" 
-                value={affaireId} 
-                onChange={e => setAffaireId(e.target.value)}
-                disabled={!clientId}
-              >
-                <option value="">-- Aucune affaire rattachée --</option>
-                {clientAffaires.map(a => (
-                  <option key={a.id} value={a.id}>{a.reference} - {a.title}</option>
-                ))}
               </select>
             </div>
 
@@ -818,7 +795,6 @@ export function QuoteCreation() {
           <button className="btn btn-outline" onClick={() => {
             if (confirm("Réinitialiser tous les champs du devis ?")) {
               setClientId('');
-              setAffaireId('');
               setSubject('');
               setServiceId('');
               setStyle('Classique');

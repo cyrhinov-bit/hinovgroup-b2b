@@ -10,7 +10,7 @@ interface CommissionDetailModalProps {
 }
 
 export function CommissionDetailModal({ commission, onClose }: CommissionDetailModalProps) {
-  const { clients, users, services, sales, affaires, couts, facturePaiements, updateCommissionStatus } = useAppContext();
+  const { clients, users, services, sales, facturePaiements, updateCommissionStatus } = useAppContext();
   const { currentUser } = useAuth();
 
   const isDirection = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
@@ -19,10 +19,9 @@ export function CommissionDetailModal({ commission, onClose }: CommissionDetailM
   const commercial = users.find(u => u.id === commission.commercialId);
   const service = services.find(s => s.id === commission.serviceId);
   const sale = sales.find(s => s.id === commission.saleId);
-  const affaire = affaires.find(a => a.id === (commission.affaireId || sale?.affaireId));
 
-  // Direct costs linked to affaire
-  const linkedCouts = (affaire?.id ? couts.filter(c => c.affaireId === affaire.id && c.status !== 'ANNULE') : []);
+  // Historique : les coûts directs étaient liés via les affaires (module retiré) — conservés en base mais non affichés.
+  const linkedCouts: any[] = [];
   const directCostsFromTable = linkedCouts.reduce((sum, c) => sum + (c.amountHt || 0), 0);
   const linesCost = (sale?.lines || []).reduce((sum, l) => sum + ((l.costPrice || 0) * (l.quantity || 0)), 0);
   const totalCosts = directCostsFromTable > 0 ? directCostsFromTable : (commission.costTotal || linesCost);
@@ -142,36 +141,6 @@ export function CommissionDetailModal({ commission, onClose }: CommissionDetailM
               </span>
             </div>
           </div>
-
-          {/* Affaire & Coûts Details */}
-          {affaire && (
-            <div className="commission-section-card">
-              <div className="commission-section-header">
-                <span>Affaire Rattachée</span>
-                <span className="badge-status bg-primary">{affaire.reference}</span>
-              </div>
-              <div className="commission-row-item">
-                <span style={{ color: '#64748B' }}>Titre</span>
-                <span style={{ fontWeight: 600 }}>{affaire.title}</span>
-              </div>
-              <div className="commission-row-item">
-                <span style={{ color: '#64748B' }}>Statut de l'Affaire</span>
-                <span style={{ fontWeight: 600 }}>{affaire.status}</span>
-              </div>
-              {linkedCouts.length > 0 && (
-                <div style={{ marginTop: '8px', fontSize: '0.8rem', color: '#64748B' }}>
-                  <strong>Dépenses directes déduites de l'affaire ({linkedCouts.length}) :</strong>
-                  <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
-                    {linkedCouts.map(c => (
-                      <li key={c.id}>
-                        {c.reference} — {c.description} : {formatMoney(c.amountHt)} ({c.category})
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         <div className="commission-modal-footer">
