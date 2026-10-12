@@ -966,17 +966,16 @@ export function generateQuotePdf(
     doc.text(companyName, 10, 18);
   }
 
-  // Titre : icône doc + DEVIS (navy) + objet (dark), soulignement 4 couleurs
-  const titleY = 64;
+  // Titre + date + numéro (sans fond, style d'origine avec icônes)
+  const titleY = 68;
   doc.setDrawColor(...DV_GREEN);
   doc.setLineWidth(0.8);
   doc.roundedRect(10, titleY - 8, 10, 10, 2, 2, 'S');
-  doc.setDrawColor(...DV_GREEN);
   doc.setLineWidth(0.6);
   doc.line(12.5, titleY - 5, 17.5, titleY - 5);
   doc.line(12.5, titleY - 3, 17.5, titleY - 3);
   doc.line(12.5, titleY - 1, 15.5, titleY - 1);
-  const titleFit = fitText(doc, `DEVIS ${quote.subject || ''}`.trim() || 'DEVIS', 96, 20, 11);
+  const titleFit = fitText(doc, `DEVIS ${quote.subject || ''}`.trim() || 'DEVIS', 92, 12, 8.5);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(titleFit.size);
   const wDevis = doc.getTextWidth('DEVIS ');
@@ -991,14 +990,25 @@ export function generateQuotePdf(
     doc.setDrawColor(...c);
     doc.line(24 + (ulW / 4) * i, titleY + 3, 24 + (ulW / 4) * (i + 1) - 0.8, titleY + 3);
   });
-
-  // Badge client navy
-  const badgeY = titleY - 11;
-  doc.setFillColor(...DV_NAVY);
+  // Date + numéro avec pastilles (uniquement ici)
+  dvBadge(doc, 15, titleY + 12, 3, DV_GREEN, 'cal');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  setDark();
+  doc.text(cleanPdfText(`Date : ${dateFr}`), 21, titleY + 13.5);
+  dvBadge(doc, 15, titleY + 20, 3, DV_ORANGE, 'receipt');
+  doc.setFont('helvetica', 'bold');
+  const numFit = fitText(doc, `N° ${quote.quoteNumber}`, 92, 9.5, 7);
+  doc.setFontSize(numFit.size);
+  setNavy();
+  doc.text(numFit.text, 21, titleY + 21.5);
+  // Badge client vert (droite)
+  const badgeY = titleY - 9;
+  doc.setFillColor(...DV_GREEN);
   doc.roundedRect(128, badgeY, 72, 17, 3, 3, 'F');
   doc.setFillColor(...DV_WHITE);
   doc.circle(139, badgeY + 8.5, 5.5, 'F');
-  dvBadge(doc, 139, badgeY + 8.5, 5.5, DV_WHITE, 'bank', DV_NAVY);
+  dvBadge(doc, 139, badgeY + 8.5, 5.5, DV_WHITE, 'user', DV_NAVY);
   // Nom client entier : 1 ligne si ça tient, sinon 2 lignes (jamais tronqué sauf extrême)
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
@@ -1033,45 +1043,8 @@ export function generateQuotePdf(
     doc.line(150, badgeY + 15.5, 194, badgeY + 15.5);
   }
 
-  // Barre d'infos à pastilles
-  const infoY = 80;
-  doc.setFillColor(248, 250, 252);
-  doc.roundedRect(10, infoY, 190, 13, 2, 2, 'F');
-  doc.setDrawColor(...DV_LINE);
-  doc.setLineWidth(0.25);
-  doc.line(73, infoY + 2, 73, infoY + 11);
-  doc.line(137, infoY + 2, 137, infoY + 11);
-  const infoGroups: Array<{ icon: 'cal' | 'user' | 'receipt'; color: [number, number, number]; label: string; value: string; cx: number }> = [
-    { icon: 'cal', color: DV_GREEN, label: 'Date', value: dateFr, cx: 24 },
-    { icon: 'user', color: DV_PURPLE, label: 'Client', value: upClient, cx: 87 },
-    { icon: 'receipt', color: DV_ORANGE, label: 'Devis', value: quote.quoteNumber, cx: 151 },
-  ];
-  infoGroups.forEach(g => {
-    dvBadge(doc, g.cx, infoY + 6.5, 4.5, g.color, g.icon);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    setGray();
-    doc.text(g.label, g.cx + 7, infoY + 4.8);
-    // Valeur : 1 ligne si ça tient, sinon 2 lignes (nom client toujours complet)
-    doc.setFont('helvetica', 'bold');
-    const vLines = doc.splitTextToSize(g.value, 52) as string[];
-    if (vLines.length <= 1) {
-      const vFit = fitText(doc, g.value, 48, 9, 7);
-      doc.setFontSize(vFit.size);
-      setNavy();
-      doc.text(vFit.text, g.cx + 7, infoY + 10);
-    } else {
-      doc.setFontSize(7.5);
-      setNavy();
-      const two = vLines.slice(0, 2);
-      while (two[1] && two[1].length > 7 && doc.getTextWidth(two[1]) > 52) two[1] = two[1].slice(0, -4) + '...';
-      doc.text(two[0], g.cx + 7, infoY + 8);
-      if (two[1]) doc.text(two[1], g.cx + 7, infoY + 11.8);
-    }
-  });
-
   // Tableau : en-tête + lignes (pagination si long)
-  let y = drawTableHead(100);
+  let y = drawTableHead(98);
   const rowH = 10;
   const rowLimit = 222;
   const newTablePage = () => {
@@ -1145,7 +1118,7 @@ export function generateQuotePdf(
 
   // ---- Signature (pointillés) ----
   y += 12;
-  if (y + 40 > 232) {
+  if (y + 48 > 232) {
     doc.addPage();
     y = 20;
   }
@@ -1153,26 +1126,26 @@ export function generateQuotePdf(
   doc.setFontSize(10);
   setNavy();
   doc.text(cleanPdfText(`Signature ${companyName}`), 105, y, { align: 'center' });
-  doc.setDrawColor(...DV_GRAY);
-  doc.setLineWidth(0.4);
-  doc.setLineDashPattern([2, 2], 0);
-  doc.roundedRect(50, y + 4, 110, 26, 3, 3, 'S');
-  doc.setLineDashPattern([], 0);
   doc.setFont('helvetica', 'italic');
   doc.setFontSize(9);
   setGray();
-  doc.text('Cachet et signature', 105, y + 19, { align: 'center' });
-  // Cachet : paramètre entreprise, sinon celui du modèle (devis_cachet.jpg)
+  doc.text('Cachet et signature', 105, y + 6, { align: 'center' });
+  doc.setDrawColor(...DV_GRAY);
+  doc.setLineWidth(0.4);
+  doc.setLineDashPattern([2, 2], 0);
+  doc.roundedRect(50, y + 9, 110, 30, 3, 3, 'S');
+  doc.setLineDashPattern([], 0);
+  // Cachet centré dans le rectangle, taille augmentée (paramètre entreprise sinon modèle)
   const stampSrc = settings.companyStampBase64 || devisPdfAssets.cachet;
   if (stampSrc) {
     try {
       const fmt = stampSrc.includes('image/png') ? 'PNG' : 'JPEG';
-      doc.addImage(stampSrc, fmt, 54, y + 7, 20, 19.5);
+      doc.addImage(stampSrc, fmt, 91, y + 10.3, 28, 27.4);
     } catch {
-      try { doc.addImage(stampSrc, 'JPEG', 54, y + 7, 20, 19.5); } catch { /* sans cachet */ }
+      try { doc.addImage(stampSrc, 'JPEG', 91, y + 10.3, 28, 27.4); } catch { /* sans cachet */ }
     }
   }
-  y += 34;
+  y += 43;
 
   // ---- 3 blocs bas à icônes ----
   if (y + 34 > 262) {
