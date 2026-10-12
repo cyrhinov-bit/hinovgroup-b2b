@@ -652,6 +652,22 @@ function drawAutoText(doc: jsPDF, text: string, x: number, y: number, maxWidth: 
   doc.text(clean, x, y, { align });
 }
 
+/** Texte garanti sans débordement : réduit la taille puis tronque avec "...". */
+function fitText(doc: jsPDF, text: string, maxW: number, baseSize: number, minSize = 6.5): { text: string; size: number } {
+  const clean = cleanPdfText(text);
+  let size = baseSize;
+  doc.setFontSize(size);
+  while (size > minSize && doc.getTextWidth(clean) > maxW) {
+    size -= 0.5;
+    doc.setFontSize(size);
+  }
+  let t = clean;
+  while (t.length > 7 && doc.getTextWidth(t) > maxW) {
+    t = t.slice(0, -4) + '...';
+  }
+  return { text: t, size };
+}
+
 // ====================== DEVIS PDF — modèle officiel HINOV (devi.pdf) ======================
 // Reproduction fidèle du modèle : bannière, titre + client, bandeau
 // Date/Client/Devis, tableau 6 colonnes à filets noirs, totaux HT / TVA 18% / TTC,
@@ -757,12 +773,12 @@ export function generateQuotePdf(
     ? `Valable jusqu'au ${validUntilFr}`
     : `Valable ${settings.defaultValidity || 30} jours`;
 
-  // ---- Montants : Total H.T. (net remisé), TVA 18%, Total TTC ----
+  // ---- Montants : Total H.T. net, TVA 0, Total = H.T. (comme le modèle) ----
   const netHt = Math.round(quote.total || 0);
   const discountAmount = Math.round(quote.discountAmount || 0);
   const discountPercent = quote.discountPercent || 0;
-  const tva = Math.round(netHt * 0.18);
-  const ttc = netHt + tva;
+  const tva = 0;
+  const ttc = netHt;
   const hasDiscount = discountPercent > 0 && discountAmount > 0;
 
   // ---- Lignes normalisées (mêmes alias que l'ancien générateur) ----
@@ -799,8 +815,8 @@ export function generateQuotePdf(
   const email = settings.companyEmail || 'hinovgroup@hinovgroup.com';
   const rccm = settings.companySiret || 'CI-ABJ-03-2024-B13-02088';
   const ibanFull = (settings.bankIban || 'CI93 CI16 6010 0701 1527 1241 0180').replace(/\s+/g, ' ').trim();
-  const iban1 = ibanFull.slice(0, 27).trim();
-  const iban2 = ibanFull.slice(27).trim();
+  const iban1 = ibanFull.slice(0, 20).trim();
+  const iban2 = ibanFull.slice(20).trim();
 
   const setBlack = () => doc.setTextColor(...black);
   const rule = (x1: number, y1: number, x2: number, y2: number, w = 0.25) => {
@@ -861,14 +877,19 @@ export function generateQuotePdf(
     if (ln.ref) doc.text(cleanPdfText(ln.ref), (CX[0] + CX[1]) / 2, baseY, { align: 'center' });
     if (singleDesignation) {
       doc.setFont('times', 'bold');
-      doc.setFontSize(12.5);
+      const dFit = fitText(doc, ln.desc, CX[2] - CX[1] - 8, 12.5, 6);
+      doc.setFontSize(dFit.size);
       setBlack();
-      doc.text(ln.desc, (CX[1] + CX[2]) / 2, baseY + 2, { align: 'center' });
+      doc.text(dFit.text, (CX[1] + CX[2]) / 2, baseY + 2, { align: 'center' });
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
     } else {
-      const wrapped = doc.splitTextToSize(ln.desc, CX[2] - CX[1] - 3) as string[];
-      wrapped.slice(0, 3).forEach((wl, i) => doc.text(wl, CX[1] + 1.5, baseY + i * 4.2));
+      // Désignation sur une seule ligne : police réduite si longue
+      doc.setFont('helvetica', 'normal');
+      const rFit = fitText(doc, ln.desc, CX[2] - CX[1] - 3, 7.8, 6);
+      doc.setFontSize(rFit.size);
+      setBlack();
+      doc.text(rFit.text, CX[1] + 1.5, baseY);
     }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.8);
@@ -893,12 +914,41 @@ export function generateQuotePdf(
       doc.addImage(devisPdfAssets.banner, 'JPEG', -7, 3, 223.7, 55.5);
     } catch { /* sans bannière si illisible */ }
   }
-  // Titre à gauche, client à droite
+  // Titre à gauche (jamais de débordement sur le client), client à droite
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
+  const titleFit = fitText(doc, `DEVIS ${quote.subject || ''}`.trim(), 108, 14, 8);
+  doc.setFontSize(titleFit.size);
   setBlack();
-  doc.text(cleanPdfText(`DEVIS ${quote.subject || ''}`.trim()), 32.4, 73);
-  drawAutoText(doc, clientName.toUpperCase(), 200.2, 76, 52, 22, 'right');
+  doc.text(titleFit.text, 32.4, 73);
+  doc.setFont('helvetica', 'bold');
+  const upName = cleanPdfText(clientName.toUpperCase());
+  doc.setFontSize(22);
+  if (doc.getTextWidth(upName) <= 52) {
+    setBlack();
+    doc.text(upName, 200.2, 76, { align: 'right' });
+  } else {
+    // Nom long : 2 lignes alignées à droite, taille réduite si besoin — nom toujours complet
+    let cSize = 14;
+    let cLines: string[] = [];
+    while (cSize >= 9) {
+      doc.setFontSize(cSize);
+      cLines = doc.splitTextToSize(upName, 60) as string[];
+      if (cLines.length <= 2) break;
+      cSize -= 1;
+    }
+    doc.setFontSize(cSize);
+    if (cLines.length > 2) {
+      cLines = [cLines[0], cLines[1]];
+      while (cLines[1].length > 7 && doc.getTextWidth(cLines[1]) > 60) cLines[1] = cLines[1].slice(0, -4) + '...';
+    }
+    setBlack();
+    if (cLines.length > 1) {
+      doc.text(cLines[0], 200.2, 67.2, { align: 'right' });
+      doc.text(cLines[1], 200.2, 73.5, { align: 'right' });
+    } else {
+      doc.text(cLines[0], 200.2, 76, { align: 'right' });
+    }
+  }
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(22);
   setBlack();
@@ -917,16 +967,24 @@ export function generateQuotePdf(
   doc.setFontSize(7.8);
   setBlack();
   doc.text(cleanPdfText(dateFr), 51.3, 85.4);
-  doc.text(cleanPdfText(clientName), 73.8, 85.4);
+  doc.setFont('helvetica', 'bold');
+  const bandFit = fitText(doc, clientName, 16, 7.8);
+  doc.setFontSize(bandFit.size);
+  setBlack();
+  doc.text(bandFit.text, 73.8, 85.4);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.8);
+  setBlack();
   doc.text(cleanPdfText(quote.quoteNumber), 92, 85.4);
 
-  // Désignation centrée (devis à 1 ligne, comme le modèle)
+  // Désignation centrée (devis à 1 ligne, comme le modèle ; jamais de débordement)
   const singleLine = lines.length === 1;
   if (singleLine) {
     doc.setFont('times', 'bold');
-    doc.setFontSize(12.5);
+    const dFit = fitText(doc, lines[0].desc, CX[2] - CX[1] - 8, 12.5, 6);
+    doc.setFontSize(dFit.size);
     setBlack();
-    doc.text(lines[0].desc, 105, 110.7, { align: 'center' });
+    doc.text(dFit.text, 105, 110.7, { align: 'center' });
   }
 
   // Tableau : en-tête + lignes (pagination si long)
@@ -953,11 +1011,18 @@ export function generateQuotePdf(
   }
 
   // ---- Totaux (droite) + montant en lettres (gauche) ----
-  // La zone basse est en positions absolues dès 137.5 : les totaux doivent finir avant.
-  if (y + 18 > 137.5) {
+  // Seul le bloc de gauche peut toucher le cadre signature (fixe dès 137.5) :
+  // on saute de page si les lignes du montant en lettres débordent.
+  const wordsTitle = doc.splitTextToSize('Soit le présent devis arrêté à la somme de :', 125) as string[];
+  const words = doc.splitTextToSize(`${nombreEnLettres(ttc)} FRANCS CFA`, 125) as string[];
+  // Totaux + zone basse : on reste sur la page si les lignes finissent assez haut
+  // et que les mots tiennent avant le cadre signature (fixe à 137.5) ; sinon
+  // page fraîche avec totaux en haut et zone basse en positions absolues.
+  const wordsEndY = y + 5 + 4.5 + (wordsTitle.length + words.length) * 4.2;
+  if (y > 118 || wordsEndY > 136.5) {
     doc.addPage();
     drawFrame();
-    y = 95;
+    y = 30;
   }
   y += 5;
   const totX = 147.7;
@@ -976,16 +1041,14 @@ export function generateQuotePdf(
     ty += 5.2;
   };
   totRow('Total H.T. :', formatMontant(netHt));
-  if (hasDiscount) totRow(`Remise globale (${discountPercent}%) :`, `-${formatMontant(discountAmount)}`);
+  if (hasDiscount) totRow(`Remise (${discountPercent}%) :`, `-${formatMontant(discountAmount)}`);
   totRow('TVA 18% :', formatMontant(tva));
   totRow('Total TTC :', formatMontant(ttc), 8.5);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.8);
   setBlack();
-  const wordsTitle = doc.splitTextToSize('Soit le présent devis arrêté à la somme de :', 125) as string[];
   doc.text(wordsTitle, 9.8, y + 4.5);
-  const words = doc.splitTextToSize(`${nombreEnLettres(ttc)} FRANCS CFA`, 125) as string[];
   doc.text(words, 9.8, y + 4.5 + wordsTitle.length * 4.2);
 
   // ---- Zone basse (positions absolues du modèle, dernière page) ----
@@ -1027,7 +1090,7 @@ export function generateQuotePdf(
   setBlack();
   doc.text(cleanPdfText(validUntilFr || '-'), 11.3, 181.5);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.8);
+  doc.setFontSize(7.5);
   setBlack();
   doc.text(formatMontant(ttc), 47.5, 185.2, { align: 'right' });
   doc.setFont('helvetica', 'normal');
@@ -1040,7 +1103,7 @@ export function generateQuotePdf(
   cgvLines.forEach(l => (doc.splitTextToSize(l, 94) as string[]).slice(0, 3 - cgvWrapped.length).forEach(w => cgvWrapped.push(w)));
   cgvWrapped.slice(0, 3).forEach((wl, i) => doc.text(wl, 50, 181.5 + i * 4));
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.6);
+  doc.setFontSize(8);
   setBlack();
   doc.text(cleanPdfText(`IBAN: ${iban1}`.trim()), 149, 183.4);
   if (iban2) doc.text(cleanPdfText(iban2), 149, 187.2);
