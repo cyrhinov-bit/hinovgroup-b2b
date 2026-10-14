@@ -4,8 +4,11 @@ import type { User, V2WeeklyReport, V2DailyReport, V2Task, AppSettings } from '.
 /**
  * Nettoyage et assainissement strict des textes pour les polices standards jsPDF (Helvetica / WinAnsi).
  * Élimine tous les caractères Unicode corrupteurs (apostrophes courbes, puces non standards, emojis, symboles exotiques).
+ *
+ * @param preserveLineBreaks Quand true, les retours à la ligne (paragraphes) sont conservés (`\n`)
+ *        afin d'être restitués tels quels dans le PDF. Sinon tout est ramené sur une seule ligne.
  */
-export function cleanPdfText(text?: string | null): string {
+export function cleanPdfText(text?: string | null, preserveLineBreaks = false): string {
   if (!text) return '';
   let str = String(text);
 
@@ -15,15 +18,16 @@ export function cleanPdfText(text?: string | null): string {
     .replace(/[\u201C\u201D\u201E\u201F\u00AB\u00BB]/g, '"') // Guillemets courbes & français
     .replace(/[\u2013\u2014\u2015\u2212]/g, '-') // Tirets cadratin / demi-cadratin
     .replace(/\u2026/g, '...') // Points de suspension
-    .replace(/[\u2022\u2023\u25E6\u2043\u2219\u25AA\u25CF\u25CB]/g, '-') // Puces
+    .replace(/[\u2022\u2023\u25E6\u2043\u2219\u25AA\u25CF\u25CB]/g, preserveLineBreaks ? '\n- ' : '-') // Puces
     .replace(/[\u00A0\u202F\u2007\u200B\uFEFF]/g, ' ') // Espaces insécables & zéro-largeur
     .replace(/\u20AC/g, 'EUR') // Symbole Euro
     .replace(/[\u2713\u2714\u2705]/g, 'OK') // Checkmarks
     .replace(/[\u274C\u274E\u2716]/g, 'X') // Croix
-    .replace(/[\r\n]+/g, ' ') // Retours à la ligne normalisés en espace pour les segments
+    .replace(/\r\n?/g, '\n') // Normalisation des fins de ligne (CRLF / CR -> LF)
     .normalize('NFC');
 
   // 2. Suppression des emojis et caractères Unicode hors table WinAnsi (0x00 - 0xFF)
+  const forbidden = preserveLineBreaks ? /[^\x20-\x7E\xA0-\xFF\n]/g : /[^\x20-\x7E\xA0-\xFF]/g;
   str = str
     .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '') // Emojis surrogate pairs
     .replace(/[\uFE00-\uFE0F]/g, '') // Variation selectors
@@ -31,9 +35,21 @@ export function cleanPdfText(text?: string | null): string {
     .replace(/[\u2300-\u23FF]/g, '') // Symboles techniques
     .replace(/[\u2600-\u27BF]/g, '') // Symboles divers
     .replace(/[\u2B50-\u2B55]/g, '') // Étoiles
-    .replace(/[^\x20-\x7E\xA0-\xFF]/g, ' '); // Conserver uniquement ASCII imprimable + Latin-1 standard
+    .replace(forbidden, ' '); // Conserver ASCII imprimable + Latin-1 (+ retours à la ligne si demandé)
 
-  return str.replace(/\s+/g, ' ').trim();
+  if (!preserveLineBreaks) {
+    return str.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  // Mise en forme multi-paragraphes : on compresse les espaces internes mais on
+  // conserve les sauts de ligne saisis (un saut = nouvelle ligne, deux = paragraphe).
+  return str
+    .split('\n')
+    .map(line => line.replace(/[^\S\n]+/g, ' ').trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/^\n+|\n+$/g, '')
+    .trim();
 }
 
 /**
@@ -560,7 +576,8 @@ export function buildV2WeeklyReportPdf(
         let taskTitle = cleanPdfText(rawTitle) || 'Activite enregistree';
         // Supprimer d'éventuels préfixes de catégorie résiduels (ex: [Opérationnel], [Operationnel])
         taskTitle = taskTitle.replace(/^\[(?:Op[eé]rationnel|Operationnel)\]\s*(?::\s*)?/i, '');
-        const taskDesc = cleanPdfText(rawDesc).replace(/^\[(?:Op[eé]rationnel|Operationnel)\]\s*(?::\s*)?/i, '');
+        // On conserve les retours à la ligne / paragraphes saisis dans la description.
+        const taskDesc = cleanPdfText(rawDesc, true).replace(/^\[(?:Op[eé]rationnel|Operationnel)\]\s*(?::\s*)?/i, '');
 
         // 1. TITRE DE L'ACTIVITÉ : Ligne dédiée, en couleur spécifique du jour et SOULIGNÉ
         doc.setFont('helvetica', 'bold');
@@ -579,16 +596,27 @@ export function buildV2WeeklyReportPdf(
           y += 5.8;
         });
 
-        // 2. DESCRIPTION DÉTAILLÉE : Positionnée en dessous, texte normal non souligné
+        // 2. DESCRIPTION DÉTAILLÉE : Positionnée en dessous, texte normal non souligné.
+        //    Les retours à la ligne (paragraphes) saisis par l'utilisateur sont restitués fidèlement.
         if (taskDesc && taskDesc.toLowerCase().trim() !== cleanPdfText(rawTitle).toLowerCase().trim()) {
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(9.5); // Police augmentée
           doc.setTextColor(51, 65, 85); // Slate-700
-          const descLines = doc.splitTextToSize(taskDesc, pageW - 56);
-          descLines.forEach((dLine: string) => {
-            checkNewPage(5.5);
-            doc.text(dLine, 28, y);
-            y += 5.2;
+          const descParagraphs = taskDesc.split('\n');
+          descParagraphs.forEach((paragraph: string, pIdx: number) => {
+            // Ligne vide => saut de paragraphe visible dans le PDF
+            if (!paragraph.trim()) {
+              y += 3.2;
+              return;
+            }
+            const descLines = doc.splitTextToSize(paragraph, pageW - 56);
+            descLines.forEach((dLine: string) => {
+              checkNewPage(5.5);
+              doc.text(dLine, 28, y);
+              y += 5.2;
+            });
+            // Léger interligne entre deux lignes saisies distinctement
+            if (pIdx < descParagraphs.length - 1) y += 0.6;
           });
         }
 
