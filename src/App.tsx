@@ -58,6 +58,9 @@ const PosInventory = lazy(() => import('./pages/pos/PosInventory'));
 const PosTerminal = lazy(() => import('./pages/pos/PosTerminal'));
 const PosTransactions = lazy(() => import('./pages/pos/PosTransactions'));
 const PosCash = lazy(() => import('./pages/pos/PosCash'));
+const VersementsEncaisseur = lazy(() => import('./pages/pos/VersementsEncaisseur'));
+const VersementsCaissier = lazy(() => import('./pages/pos/VersementsCaissier'));
+const VersementsAdmin = lazy(() => import('./pages/pos/VersementsAdmin'));
 const DataExport = lazy(() => import('./pages/DataExport'));
 const SupFactures = lazy(() => import('./pages/SupFactures'));
 
@@ -116,12 +119,13 @@ function RoleBasedDashboard() {
   if (currentUser.role === 'Commercial') return <Navigate to="/commercial" replace />;
   if (currentUser.role === 'Gerant') return <Navigate to="/pos" replace />;
   if (currentUser.role === 'Caissier') return <Navigate to="/pos/terminal" replace />;
+  if (currentUser.role === 'Encaisseur') return <Navigate to="/pos/versements" replace />;
   
   return <DashboardDirecteur />;
 }
 
 // Garde de route par rôle
-type Role = 'SuperAdmin' | 'Directeur' | 'Directeur adjoint' | 'Responsable' | 'Commercial' | 'Gerant' | 'Caissier';
+type Role = 'SuperAdmin' | 'Directeur' | 'Directeur adjoint' | 'Responsable' | 'Commercial' | 'Gerant' | 'Caissier' | 'Encaisseur';
 function RequireRole({ roles, children }: { roles: Role[]; children: ReactNode }) {
   const { currentUser, loading } = useAuth();
   if (loading) return null;
@@ -255,6 +259,9 @@ function App() {
                     <Route path="pos/terminal" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']}><PosTerminal /></RequirePosModule></Suspense>} />
                     <Route path="pos/transactions" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']}><PosTransactions /></RequirePosModule></Suspense>} />
                     <Route path="pos/cash" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']}><PosCash /></RequirePosModule></Suspense>} />
+                    <Route path="pos/versements" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Encaisseur']}><VersementsEncaisseur /></RequireRole></Suspense>} />
+                    <Route path="pos/versements/caissier" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']}><VersementsCaissier /></RequirePosModule></Suspense>} />
+                    <Route path="pos/versements/admin" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'SuperAdmin']}><VersementsAdmin /></RequireRole></Suspense>} />
                     <Route path="pos/parametres-ia" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant', 'Caissier']}><GeminiSettings /></RequireRole></Suspense>} />
                     
                     <Route path="*" element={<div style={{ padding: '20px' }}><h1>Page introuvable</h1></div>} />

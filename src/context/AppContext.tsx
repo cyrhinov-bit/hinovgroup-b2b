@@ -150,7 +150,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'Directeur' | 'Directeur adjoint' | 'Responsable' | 'Commercial' | 'Caissier' | 'Gerant' | 'SuperAdmin';
+  role: 'Directeur' | 'Directeur adjoint' | 'Responsable' | 'Commercial' | 'Caissier' | 'Gerant' | 'Encaisseur' | 'SuperAdmin';
   posRole?: 'Directeur' | 'Gerant' | 'Caissier' | null;
   serviceId?: string;
   pin: string;

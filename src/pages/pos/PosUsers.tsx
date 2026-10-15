@@ -21,13 +21,13 @@ export default function PosUsers() {
     }
     return out;
   })();
-  const posUsers = deduped.filter(u => u.role === 'Gerant' || u.role === 'Caissier');
+  const posUsers = deduped.filter(u => u.role === 'Gerant' || u.role === 'Caissier' || u.role === 'Encaisseur');
   const { currentUser } = useAuth();
   const [isCleaning, setIsCleaning] = useState(false);
   const canManage = !!currentUser && ['Directeur', 'SuperAdmin', 'Directeur adjoint', 'Gerant'].includes(currentUser.role);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
-  const [form, setForm] = useState({ name: '', email: '', pin: '', role: 'Caissier' as 'Gerant' | 'Caissier' });
+  const [form, setForm] = useState({ name: '', email: '', pin: '', role: 'Caissier' as 'Gerant' | 'Caissier' | 'Encaisseur' });
 
   const handleSave = async () => {
     // F23 : validation stricte (nom, email unique/format, PIN exactement 6 chiffres).
@@ -114,7 +114,7 @@ export default function PosUsers() {
             <div><div style={{ fontSize: '13px', marginBottom: '4px', fontWeight: 500 }}>Nom</div><input style={inputStyle} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
             <div><div style={{ fontSize: '13px', marginBottom: '4px', fontWeight: 500 }}>Email</div><input style={inputStyle} type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} disabled={!!editingUser} /></div>
             {!editingUser && <div><div style={{ fontSize: '13px', marginBottom: '4px', fontWeight: 500 }}>PIN (6 chiffres)</div><input style={inputStyle} maxLength={6} value={form.pin} onChange={e => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} /></div>}
-            <div><div style={{ fontSize: '13px', marginBottom: '4px', fontWeight: 500 }}>Rôle</div><select style={inputStyle} value={form.role} onChange={e => setForm({ ...form, role: e.target.value as any })}><option value="Caissier">Caissier</option><option value="Gerant">Gérant</option></select></div>
+            <div><div style={{ fontSize: '13px', marginBottom: '4px', fontWeight: 500 }}>Rôle</div><select style={inputStyle} value={form.role} onChange={e => setForm({ ...form, role: e.target.value as any })}><option value="Caissier">Caissier</option><option value="Gerant">Gérant</option>{(['Directeur', 'SuperAdmin'].includes(currentUser?.role || '') || form.role === 'Encaisseur') && (<option value="Encaisseur">Encaisseur</option>)}</select></div>
           </div>
           <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
             <button onClick={handleSave} style={{ padding: '8px 16px', backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>Enregistrer</button>

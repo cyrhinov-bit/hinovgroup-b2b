@@ -152,8 +152,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {}
 
         const isDir = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(data.role);
-        // Défaut modules CRM : jamais pour Caissier/Gerant (rôles POS), sinon activé sauf désactivation explicite
-        const crmDefault = !['Caissier', 'Gerant'].includes(data.role);
+        // Défaut modules CRM : jamais pour Caissier/Gerant/Encaisseur (rôles POS), sinon activé sauf désactivation explicite
+        const crmDefault = !['Caissier', 'Gerant', 'Encaisseur'].includes(data.role);
         const resolveBool = (dbVal: any, localVal: any, defaultVal: boolean) => {
           if (dbVal === true) return true;
           if (dbVal === false) return false;

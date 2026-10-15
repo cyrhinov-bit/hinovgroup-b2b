@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Calendar, CheckCircle, Clock, AlertCircle, FileText, Send, Download, 
-  Eye, Plus, Trash2, ChevronLeft, ChevronRight, Bell, Shield, 
+  Eye, Plus, Trash2, ChevronLeft, ChevronRight, ChevronDown, Bell, Shield, 
   Filter, Search, User as UserIcon, Users, Building, MessageSquare, Lock, ClipboardCheck,
   Sparkles, Tag, CheckCircle2, RotateCcw, AlignLeft, AlertTriangle, Layers, Zap
 } from 'lucide-react';
@@ -24,6 +24,58 @@ const QUICK_SUGGESTIONS = [
   { label: '📞 Relance', prefix: 'Relance commerciale ' },
   { label: '🤝 Réunion', prefix: 'Réunion d\'équipe ' }
 ];
+
+// Bloc d'archive repliable : en-tête de semaine (avec badges) + contenu dépliable.
+// Utilisé pour l'archive équipe (supervision) et l'historique personnel.
+function WeekArchiveBlock({ week, isCurrent, isArchived, expanded, onToggle, badges, children }: {
+  week: string;
+  isCurrent: boolean;
+  isArchived: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  badges?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div style={{ border: '1px solid var(--color-border)', borderRadius: '10px', overflow: 'hidden', background: 'var(--color-background)' }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        title={expanded ? 'Replier cette semaine' : 'Déplier cette semaine'}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+          padding: '12px 14px', border: 'none', cursor: 'pointer', textAlign: 'left',
+          background: isCurrent ? 'rgba(124,58,237,0.08)' : 'var(--color-card)'
+        }}
+      >
+        {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+        <Calendar size={16} color="#7C3AED" />
+        <strong style={{ fontSize: '0.95rem' }}>
+          Semaine du {new Date(week + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+        </strong>
+        {isArchived && (
+          <span className="badge-status bg-warning" style={{ padding: '3px 9px', fontSize: '0.75rem' }}>
+            📦 Archivée
+          </span>
+        )}
+        {isCurrent && (
+          <span className="badge-status bg-primary" style={{ padding: '3px 9px', fontSize: '0.75rem' }}>
+            Semaine courante
+          </span>
+        )}
+        {badges}
+        <span style={{ marginLeft: 'auto', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+          {expanded ? 'Replier' : 'Déplier'}
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="table-responsive">{children}</div>
+      )}
+    </div>
+  );
+}
 
 export function CrmWeeklyReports() {
   const { currentUser } = useAuth();
@@ -61,6 +113,25 @@ export function CrmWeeklyReports() {
     return formatYMD(mon);
   };
 
+  // Comparaison normalisée des semaines (10 premiers caractères) : la base peut
+  // renvoyer week_start en DATE (YYYY-MM-DD) ou en ISO datetime selon les versions.
+  const normWeek = (s?: string) => (s || '').slice(0, 10);
+
+  // Archivage automatique : une semaine est close dès le lundi suivant son dimanche.
+  // Les rapports d'une semaine close sont considérés comme archivés (dérivé des
+  // dates → aucun changement de statut en base, la workflow Soumis/Validé reste intacte).
+  const isWeekClosed = (weekKey?: string) => {
+    const w = normWeek(weekKey);
+    if (!w) return false;
+    const start = new Date(w + 'T00:00:00');
+    if (Number.isNaN(start.getTime())) return false;
+    const sunday = new Date(start);
+    sunday.setDate(sunday.getDate() + 6);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return sunday.getTime() < today.getTime();
+  };
+
   const currentMondayStr = useMemo(() => getMondayOf(new Date()), []);
   const initialWeek = searchParams.get('week') || currentMondayStr;
   const initialTab = showSupervision ? 'supervision' : (searchParams.get('tab') || 'daily');
@@ -95,11 +166,13 @@ export function CrmWeeklyReports() {
   const [searchQuery, setSearchQuery] = useState('');
   const [serviceFilter, setServiceFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  // Pagination du flux des rapports soumis (évite les rendus lourds à grand effectif)
-  const SUBMITTED_PAGE_SIZE = 10;
-  const [submittedPage, setSubmittedPage] = useState(1);
+  // Pagination des semaines d'archive (évite les rendus lourds à grand effectif)
+  const ARCHIVE_WEEKS_PAGE_SIZE = 8;
+  const [archivePage, setArchivePage] = useState(1);
   // Archive par semaine : 'ALL' = toutes les semaines, sinon weekStart normalisé (YYYY-MM-DD)
   const [weekFilter, setWeekFilter] = useState('ALL');
+  // Semaines d'archive dépliées (une semaine = un bloc repliable dans la supervision)
+  const [expandedWeeks, setExpandedWeeks] = useState<Record<string, boolean>>(() => ({ [currentMondayStr]: true }));
 
   // Synchroniser paramètres URL et routes
   useEffect(() => {
@@ -118,6 +191,12 @@ export function CrmWeeklyReports() {
       setCurrentWeekStart(pWeek);
     }
   }, [searchParams, location.pathname, showSupervision]);
+
+  // Ouvrir automatiquement dans l'archive la semaine sélectionnée (navigation précédent/suivant)
+  useEffect(() => {
+    const key = normWeek(currentWeekStart);
+    setExpandedWeeks(prev => (prev[key] ? prev : { ...prev, [key]: true }));
+  }, [currentWeekStart]);
 
   // Marquer automatiquement les notifications de rapports comme lues lorsque la supervision est consultée
   useEffect(() => {
@@ -536,10 +615,7 @@ export function CrmWeeklyReports() {
       });
   }, [v2WeeklyReports]);
 
-  // Rapports pour la semaine active sélectionnée
-  // Normalisation défensive : la base peut renvoyer week_start en DATE (YYYY-MM-DD)
-  // ou en ISO datetime — on compare toujours sur les 10 premiers caractères.
-  const normWeek = (s?: string) => (s || '').slice(0, 10);
+  // Rapports pour la semaine active sélectionnée (normalisation via normWeek ci-dessus)
   const weeklyReportsForSelectedWeek = useMemo(() => {
     return v2WeeklyReports.filter(r => normWeek(r.weekStart) === normWeek(currentWeekStart));
   }, [v2WeeklyReports, currentWeekStart]);
@@ -607,17 +683,135 @@ export function CrmWeeklyReports() {
     });
   }, [activeStaff, searchQuery, serviceFilter, statusFilter, submittedStaffIds]);
 
-  // Pagination du flux soumis + reset auto quand les filtres changent
+  // Regroupement des rapports soumis par semaine d'archive (lundi → dimanche),
+  // semaines les plus récentes en premier — une semaine = un bloc repliable.
+  const submittedByWeek = useMemo(() => {
+    const map = new Map<string, V2WeeklyReport[]>();
+    for (const r of filteredSubmittedReports) {
+      const w = normWeek(r.weekStart);
+      if (!w) continue;
+      const list = map.get(w);
+      if (list) list.push(r);
+      else map.set(w, [r]);
+    }
+    const currentKey = normWeek(currentWeekStart);
+    return Array.from(map.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([week, reports]) => ({
+        week,
+        reports,
+        isCurrent: week === currentKey,
+        pendingCount: reports.filter(r => r.status === 'Soumis' || r.status === 'Relu').length,
+        validatedCount: reports.filter(r => r.status === 'Validé').length
+      }));
+  }, [filteredSubmittedReports, currentWeekStart]);
+
+  // Historique personnel regroupé par semaine (une semaine = un bloc repliable),
+  // avec archivage automatique des semaines closes.
+  const myReportsByWeek = useMemo(() => {
+    const map = new Map<string, V2WeeklyReport[]>();
+    for (const r of v2WeeklyReports) {
+      if (r.authorId !== currentUser?.id) continue;
+      const w = normWeek(r.weekStart);
+      if (!w) continue;
+      const list = map.get(w);
+      if (list) list.push(r);
+      else map.set(w, [r]);
+    }
+    const currentKey = normWeek(currentWeekStart);
+    return Array.from(map.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([week, reports]) => ({
+        week,
+        reports,
+        isCurrent: week === currentKey,
+        isArchived: isWeekClosed(week)
+      }));
+  }, [v2WeeklyReports, currentUser?.id, currentWeekStart]);
+
+  const toggleWeek = (weekKey: string) => {
+    setExpandedWeeks(prev => ({ ...prev, [weekKey]: !prev[weekKey] }));
+  };
+
+  const expandAllWeeks = () => {
+    const next: Record<string, boolean> = {};
+    submittedByWeek.forEach(w => { next[w.week] = true; });
+    setExpandedWeeks(next);
+  };
+
+  const collapseAllWeeks = () => setExpandedWeeks({});
+
+  // Pagination par semaine d'archive + reset auto quand les filtres changent
   useEffect(() => {
-    setSubmittedPage(1);
+    setArchivePage(1);
   }, [searchQuery, serviceFilter, statusFilter, weekFilter, currentWeekStart]);
 
-  const submittedTotalPages = Math.max(1, Math.ceil(filteredSubmittedReports.length / SUBMITTED_PAGE_SIZE));
-  const safeSubmittedPage = Math.min(submittedPage, submittedTotalPages);
-  const paginatedSubmittedReports = useMemo(() => {
-    const start = (safeSubmittedPage - 1) * SUBMITTED_PAGE_SIZE;
-    return filteredSubmittedReports.slice(start, start + SUBMITTED_PAGE_SIZE);
-  }, [filteredSubmittedReports, safeSubmittedPage]);
+  const archiveTotalPages = Math.max(1, Math.ceil(submittedByWeek.length / ARCHIVE_WEEKS_PAGE_SIZE));
+  const safeArchivePage = Math.min(archivePage, archiveTotalPages);
+  const paginatedWeekGroups = useMemo(() => {
+    const start = (safeArchivePage - 1) * ARCHIVE_WEEKS_PAGE_SIZE;
+    return submittedByWeek.slice(start, start + ARCHIVE_WEEKS_PAGE_SIZE);
+  }, [submittedByWeek, safeArchivePage]);
+
+  // Ligne d'archive : un rapport soumis par collaborateur pour la semaine groupée
+  const renderArchiveRow = (report: V2WeeklyReport) => {
+    const author = users.find(u => u.id === report.authorId);
+    const serviceName = services.find(s => s.id === author?.serviceId)?.name || 'Général';
+    const isValide = report.status === 'Validé';
+    const isRelu = report.status === 'Relu';
+
+    return (
+      <tr key={report.id}>
+        <td data-label="Collaborateur">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {author?.photo ? (
+              <img src={author.photo} alt={author.name} style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
+            ) : (
+              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--color-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                {(author?.name || '?').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div>
+              <strong>{author?.name || 'Inconnu'}</strong>
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{author?.email || author?.role || ''}</div>
+            </div>
+          </div>
+        </td>
+        <td data-label="Département">{serviceName}</td>
+        <td data-label="Semaine concernée">
+          <strong>Semaine du {new Date(normWeek(report.weekStart) + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
+        </td>
+        <td data-label="Date de soumission">
+          {report.submittedAt ? new Date(report.submittedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
+        </td>
+        <td data-label="Statut">
+          <span className={`badge-status ${isValide ? 'bg-success' : isRelu ? 'bg-warning' : 'bg-info'}`}>
+            {isValide ? '✅ Validé' : isRelu ? '👁️ Relu (À valider)' : '📩 Reçu (À valider)'}
+          </span>
+        </td>
+        <td data-label="Actions">
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button 
+              className="btn btn-secondary" 
+              style={{ fontSize: '0.8rem', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+              onClick={() => handlePreviewPdf(report)}
+              title="Consulter / Télécharger le PDF officiel"
+            >
+              <Eye size={14} /> PDF
+            </button>
+            <button 
+              className="btn btn-primary" 
+              style={{ fontSize: '0.8rem', padding: '5px 10px', background: '#7C3AED', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+              onClick={() => { setReviewingReport(report); setReviewComment(report.directorComment || ''); }}
+              title="Annoter et Valider ce rapport"
+            >
+              <MessageSquare size={14} /> Annoter / Valider
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
 
   // Relancer tous les retardataires
   const handleRemindAllPending = () => {
@@ -1278,103 +1472,114 @@ export function CrmWeeklyReports() {
       {/* ================= ONGLET 3 : MES RAPPORTS SOUMIS (HISTORIQUE) ================= */}
       {!showSupervision && activeTab === 'history' && (
         <div className="card" style={{ padding: '20px' }}>
-          <h3 style={{ margin: '0 0 16px', fontSize: '1.05rem' }}>
-            Historique de mes rapports hebdomadaires
-          </h3>
-
-          <div className="table-responsive">
-            <table className="data-table responsive-table">
-              <thead>
-                <tr>
-                  <th>Semaine</th>
-                  <th>Date de soumission</th>
-                  <th>Statut</th>
-                  <th>Retour Direction</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {v2WeeklyReports
-                  .filter(r => r.authorId === currentUser?.id)
-                  .sort((a, b) => b.weekStart.localeCompare(a.weekStart))
-                  .map(rep => (
-                    <tr key={rep.id}>
-                      <td data-label="Semaine">
-                        <strong>Semaine du {new Date(rep.weekStart + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</strong>
-                      </td>
-                      <td data-label="Date de soumission">
-                        {rep.submittedAt ? new Date(rep.submittedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Non soumis'}
-                      </td>
-                      <td data-label="Statut">
-                        <span className={`badge-status ${rep.status === 'Validé' ? 'bg-success' : rep.status === 'Soumis' ? 'bg-info' : 'bg-warning'}`}>
-                          {rep.status}
-                        </span>
-                      </td>
-                      <td data-label="Retour Direction">
-                        {rep.directorComment ? (
-                          <span style={{ fontSize: '0.85rem', color: '#1E40AF' }}>💬 {rep.directorComment}</span>
-                        ) : (
-                          <span style={{ color: 'var(--color-text-muted)' }}>-</span>
-                        )}
-                      </td>
-                      <td data-label="Actions">
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button 
-                            className="btn btn-secondary" 
-                            style={{ fontSize: '0.8rem', padding: '4px 8px' }}
-                            onClick={() => handlePreviewPdf(rep)}
-                            title="Aperçu / Télécharger PDF"
-                          >
-                            <Eye size={14} style={{ marginRight: '4px' }} /> PDF
-                          </button>
-                          {rep.status === 'Brouillon' && (
-                            <button
-                              className="btn btn-secondary"
-                              style={{ fontSize: '0.8rem', padding: '4px 8px', color: '#DC2626' }}
-                              onClick={() => {
-                                confirm({
-                                  title: 'Supprimer ce brouillon',
-                                  message: `Supprimer définitivement le brouillon de la semaine du ${new Date(rep.weekStart + 'T00:00:00').toLocaleDateString('fr-FR')} ?`,
-                                  confirmLabel: 'Supprimer',
-                                  onConfirm: async () => {
-                                    await deleteV2WeeklyReport(rep.id);
-                                    toast.success('Brouillon supprimé.');
-                                  }
-                                });
-                              }}
-                              title="Supprimer ce brouillon"
-                            >
-                              <Trash2 size={14} style={{ marginRight: '4px' }} /> Supprimer
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                {v2WeeklyReports.filter(r => r.authorId === currentUser?.id).length === 0 && (
-                  <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'var(--color-text-muted)' }}>
-                      Aucun rapport soumis pour le moment.
-                    </td>
-                  </tr>
-                )}
-                </tbody>
-              </table>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.05rem' }}>
+                Historique de mes rapports hebdomadaires
+              </h3>
+              <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
+                Archivage automatique par semaine : les semaines closes sont marquées « 📦 Archivée » et repliées par défaut.
+              </p>
             </div>
-            {submittedTotalPages > 1 && (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: '14px', flexWrap: 'wrap' }}>
-                <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '4px 10px' }} disabled={safeSubmittedPage <= 1} onClick={() => setSubmittedPage(p => Math.max(1, p - 1))}>
-                  ← Précédent
-                </button>
-                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-                  Page {safeSubmittedPage} / {submittedTotalPages} — {filteredSubmittedReports.length} rapport(s)
-                </span>
-                <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '4px 10px' }} disabled={safeSubmittedPage >= submittedTotalPages} onClick={() => setSubmittedPage(p => Math.min(submittedTotalPages, p + 1))}>
-                  Suivant →
-                </button>
-              </div>
-            )}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span className="badge-status bg-primary" style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
+                {myReportsByWeek.length} semaine(s)
+              </span>
+              <span className="badge-status bg-warning" style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
+                📦 {myReportsByWeek.filter(w => w.isArchived).length} archivée(s)
+              </span>
+            </div>
           </div>
+
+          {myReportsByWeek.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '30px 16px', color: 'var(--color-text-muted)', border: '1px dashed var(--color-border)', borderRadius: '10px' }}>
+              <FileText size={36} color="var(--color-text-muted)" style={{ margin: '0 auto 8px', opacity: 0.6 }} />
+              <div>Aucun rapport soumis pour le moment.</div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {myReportsByWeek.map(group => (
+                <WeekArchiveBlock
+                  key={group.week}
+                  week={group.week}
+                  isCurrent={group.isCurrent}
+                  isArchived={group.isArchived}
+                  expanded={!!expandedWeeks[group.week]}
+                  onToggle={() => toggleWeek(group.week)}
+                  badges={(
+                    <span className="badge-status bg-info" style={{ padding: '3px 9px', fontSize: '0.75rem' }}>
+                      {group.reports.length} rapport(s)
+                    </span>
+                  )}
+                >
+                  <table className="data-table responsive-table">
+                    <thead>
+                      <tr>
+                        <th>Date de soumission</th>
+                        <th>Statut</th>
+                        <th>Retour Direction</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.reports.map(rep => (
+                        <tr key={rep.id}>
+                          <td data-label="Date de soumission">
+                            {rep.submittedAt ? new Date(rep.submittedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Non soumis'}
+                          </td>
+                          <td data-label="Statut">
+                            <span className={`badge-status ${rep.status === 'Validé' ? 'bg-success' : rep.status === 'Soumis' ? 'bg-info' : 'bg-warning'}`}>
+                              {rep.status}
+                            </span>
+                          </td>
+                          <td data-label="Retour Direction">
+                            {rep.directorComment ? (
+                              <span style={{ fontSize: '0.85rem', color: '#1E40AF' }}>💬 {rep.directorComment}</span>
+                            ) : (
+                              <span style={{ color: 'var(--color-text-muted)' }}>-</span>
+                            )}
+                          </td>
+                          <td data-label="Actions">
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button 
+                                className="btn btn-secondary" 
+                                style={{ fontSize: '0.8rem', padding: '4px 8px' }}
+                                onClick={() => handlePreviewPdf(rep)}
+                                title="Aperçu / Télécharger PDF"
+                              >
+                                <Eye size={14} style={{ marginRight: '4px' }} /> PDF
+                              </button>
+                              {rep.status === 'Brouillon' && (
+                                <button
+                                  className="btn btn-secondary"
+                                  style={{ fontSize: '0.8rem', padding: '4px 8px', color: '#DC2626' }}
+                                  onClick={() => {
+                                    confirm({
+                                      title: 'Supprimer ce brouillon',
+                                      message: `Supprimer définitivement le brouillon de la semaine du ${new Date(normWeek(rep.weekStart) + 'T00:00:00').toLocaleDateString('fr-FR')} ?`,
+                                      confirmLabel: 'Supprimer',
+                                      onConfirm: async () => {
+                                        await deleteV2WeeklyReport(rep.id);
+                                        toast.success('Brouillon supprimé.');
+                                      }
+                                    });
+                                  }}
+                                  title="Supprimer ce brouillon"
+                                >
+                                  <Trash2 size={14} style={{ marginRight: '4px' }} /> Supprimer
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </WeekArchiveBlock>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ================= COCKPIT SUPERVISION DIRECTION : RAPPORTS ÉQUIPE ================= */}
@@ -1468,8 +1673,8 @@ export function CrmWeeklyReports() {
                 </h3>
                 <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
                   {weekFilter === 'ALL'
-                    ? "Historique complet des comptes-rendus transmis à la Direction, toutes semaines confondues"
-                    : `Consultation de l'archive : semaine du ${new Date(weekFilter + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}`}
+                    ? "Historique des comptes-rendus transmis à la Direction, archivé et regroupé par semaine — cliquez sur une semaine pour déplier son contenu"
+                    : `Consultation de l'archive : semaine du ${new Date(normWeek(weekFilter) + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}`}
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1486,103 +1691,107 @@ export function CrmWeeklyReports() {
                 >
                   📅 Semaine affichée ci-dessus
                 </button>
+                {submittedByWeek.length > 1 && (
+                  <>
+                    <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '4px 10px' }} onClick={expandAllWeeks} title="Déplier toutes les semaines d'archive">
+                      ⬇️ Tout déplier
+                    </button>
+                    <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '4px 10px' }} onClick={collapseAllWeeks} title="Replier toutes les semaines d'archive">
+                      ⬆️ Tout replier
+                    </button>
+                  </>
+                )}
                 <span className="badge-status bg-primary" style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
                   {allSubmittedReports.filter(r => r.status === 'Soumis' || r.status === 'Relu').length} en attente de validation
+                </span>
+                <span className="badge-status bg-warning" style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
+                  📦 {submittedByWeek.filter(g => isWeekClosed(g.week)).length} semaine(s) archivée(s)
                 </span>
               </div>
             </div>
 
-            <div className="table-responsive">
-              <table className="data-table responsive-table">
-                <thead>
-                  <tr>
-                    <th>Collaborateur</th>
-                    <th>Département</th>
-                    <th>Semaine concernée</th>
-                    <th>Date de soumission</th>
-                    <th>Statut</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedSubmittedReports.map(report => {
-                    const author = users.find(u => u.id === report.authorId);
-                    const serviceName = services.find(s => s.id === author?.serviceId)?.name || 'Général';
-                    const isValide = report.status === 'Validé';
-                    const isRelu = report.status === 'Relu';
-
-                    return (
-                      <tr key={report.id}>
-                        <td data-label="Collaborateur">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {author?.photo ? (
-                              <img src={author.photo} alt={author.name} style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
-                            ) : (
-                              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--color-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                                {(author?.name || '?').charAt(0).toUpperCase()}
-                              </div>
-                            )}
-                            <div>
-                              <strong>{author?.name || 'Inconnu'}</strong>
-                              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{author?.email || author?.role || ''}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td data-label="Département">{serviceName}</td>
-                        <td data-label="Semaine concernée">
-                          <strong>Semaine du {new Date(report.weekStart + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
-                        </td>
-                        <td data-label="Date de soumission">
-                          {report.submittedAt ? new Date(report.submittedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
-                        </td>
-                        <td data-label="Statut">
-                          <span className={`badge-status ${isValide ? 'bg-success' : isRelu ? 'bg-warning' : 'bg-info'}`}>
-                            {isValide ? '✅ Validé' : isRelu ? '👁️ Relu (À valider)' : '📩 Reçu (À valider)'}
+            {paginatedWeekGroups.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--color-text-muted)', border: '1px dashed var(--color-border)', borderRadius: '10px' }}>
+                <FileText size={36} color="var(--color-text-muted)" style={{ margin: '0 auto 8px', opacity: 0.6 }} />
+                <div>Aucun rapport soumis trouvé pour ces critères{weekFilter !== 'ALL' ? ' pour cette semaine d\'archive' : ''}.</div>
+                {(searchQuery || serviceFilter !== 'ALL' || statusFilter !== 'ALL' || weekFilter !== 'ALL') && (
+                  <button
+                    className="btn btn-secondary"
+                    style={{ fontSize: '0.8rem', padding: '4px 12px', marginTop: '10px' }}
+                    onClick={() => { setSearchQuery(''); setServiceFilter('ALL'); setStatusFilter('ALL'); setWeekFilter('ALL'); }}
+                  >
+                    Réinitialiser les filtres
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {paginatedWeekGroups.map(group => (
+                  <WeekArchiveBlock
+                    key={group.week}
+                    week={group.week}
+                    isCurrent={group.isCurrent}
+                    isArchived={isWeekClosed(group.week)}
+                    expanded={!!expandedWeeks[group.week]}
+                    onToggle={() => toggleWeek(group.week)}
+                    badges={(
+                      <>
+                        <span className="badge-status bg-primary" style={{ padding: '3px 9px', fontSize: '0.75rem' }}>
+                          {group.reports.length} rapport(s)
+                        </span>
+                        {group.pendingCount > 0 && (
+                          <span className="badge-status bg-info" style={{ padding: '3px 9px', fontSize: '0.75rem' }}>
+                            📩 {group.pendingCount} à valider
                           </span>
-                        </td>
-                        <td data-label="Actions">
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <button 
-                              className="btn btn-secondary" 
-                              style={{ fontSize: '0.8rem', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                              onClick={() => handlePreviewPdf(report)}
-                              title="Consulter / Télécharger le PDF officiel"
-                            >
-                              <Eye size={14} /> PDF
-                            </button>
-                            <button 
-                              className="btn btn-primary" 
-                              style={{ fontSize: '0.8rem', padding: '5px 10px', background: '#7C3AED', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                              onClick={() => { setReviewingReport(report); setReviewComment(report.directorComment || ''); }}
-                              title="Annoter et Valider ce rapport"
-                            >
-                              <MessageSquare size={14} /> Annoter / Valider
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {filteredSubmittedReports.length === 0 && (
-                    <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--color-text-muted)' }}>
-                        <FileText size={36} color="var(--color-text-muted)" style={{ margin: '0 auto 8px', opacity: 0.6 }} />
-                        <div>Aucun rapport soumis trouvé pour ces critères{weekFilter !== 'ALL' ? ' pour cette semaine d\'archive' : ''}.</div>
-                        {(searchQuery || serviceFilter !== 'ALL' || statusFilter !== 'ALL' || weekFilter !== 'ALL') && (
-                          <button
-                            className="btn btn-secondary"
-                            style={{ fontSize: '0.8rem', padding: '4px 12px', marginTop: '10px' }}
-                            onClick={() => { setSearchQuery(''); setServiceFilter('ALL'); setStatusFilter('ALL'); setWeekFilter('ALL'); }}
-                          >
-                            Réinitialiser les filtres
-                          </button>
                         )}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                        {group.validatedCount > 0 && (
+                          <span className="badge-status bg-success" style={{ padding: '3px 9px', fontSize: '0.75rem' }}>
+                            ✅ {group.validatedCount} validé(s)
+                          </span>
+                        )}
+                      </>
+                    )}
+                  >
+                    <table className="data-table responsive-table">
+                      <thead>
+                        <tr>
+                          <th>Collaborateur</th>
+                          <th>Département</th>
+                          <th>Semaine concernée</th>
+                          <th>Date de soumission</th>
+                          <th>Statut</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {group.reports.map(renderArchiveRow)}
+                        {group.reports.length === 0 && (
+                          <tr>
+                            <td colSpan={6} style={{ textAlign: 'center', padding: '20px', color: 'var(--color-text-muted)' }}>
+                              Aucun rapport pour cette semaine.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </WeekArchiveBlock>
+                ))}
+              </div>
+            )}
+
+            {archiveTotalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: '14px', flexWrap: 'wrap' }}>
+                <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '4px 10px' }} disabled={safeArchivePage <= 1} onClick={() => setArchivePage(p => Math.max(1, p - 1))}>
+                  ← Précédent
+                </button>
+                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                  Page {safeArchivePage} / {archiveTotalPages} — {submittedByWeek.length} semaine(s) archivée(s), {filteredSubmittedReports.length} rapport(s)
+                </span>
+                <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '4px 10px' }} disabled={safeArchivePage >= archiveTotalPages} onClick={() => setArchivePage(p => Math.min(archiveTotalPages, p + 1))}>
+                  Suivant →
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 2. SECTION SUIVI DE COMPLÉTION & RELANCES HEBDOMADAIRES */}
@@ -1590,10 +1799,17 @@ export function CrmWeeklyReports() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Users size={18} color="var(--color-primary)" /> Suivi de Complétion — Semaine du {new Date(currentWeekStart + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  <Users size={18} color="var(--color-primary)" /> Suivi de Complétion — Semaine du {new Date(normWeek(currentWeekStart) + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  {isWeekClosed(currentWeekStart) && (
+                    <span className="badge-status bg-warning" style={{ padding: '4px 10px', fontSize: '0.78rem' }}>
+                      📦 Semaine close (archivée)
+                    </span>
+                  )}
                 </h3>
                 <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
-                  État de soumission collaborateur par collaborateur pour la semaine en cours
+                  {isWeekClosed(currentWeekStart)
+                    ? 'Semaine archivée automatiquement : les rapports de cette semaine sont conservés dans l\'archive et sortent du suivi en cours.'
+                    : 'État de soumission collaborateur par collaborateur pour la semaine en cours'}
                 </p>
               </div>
             </div>

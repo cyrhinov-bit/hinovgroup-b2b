@@ -58,8 +58,8 @@ export function Utilisateurs() {
       pin: newUser.pin,
       lastLogin: 'Jamais',
       active: true,
-      // Défaut par rôle (Caissier/Gerant : pas de CRM) — addUser applique la même règle en repli
-      ...((newUser.role === 'Caissier' || newUser.role === 'Gerant')
+      // Défaut par rôle (Caissier/Gerant/Encaisseur : pas de CRM) — addUser applique la même règle en repli
+      ...((newUser.role === 'Caissier' || newUser.role === 'Gerant' || newUser.role === 'Encaisseur')
         ? {
             crmPrestationsEnabled: false, crmCaisseEnabled: false, crmMaintenanceEnabled: false,
             crmStocksEnabled: false, crmTiersEnabled: false, crmCommerciauxEnabled: false,
@@ -168,6 +168,7 @@ export function Utilisateurs() {
               <select className="table-input" required value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value as User['role'] })}>
                 <option value="Caissier">Caissier</option>
                 <option value="Gerant">Gérant</option>
+                <option value="Encaisseur">Encaisseur</option>
                 <option value="Commercial">Commercial</option>
                 <option value="Responsable">Responsable</option>
                 {['Directeur', 'SuperAdmin'].includes(currentUser?.role || '') && (
@@ -221,6 +222,7 @@ export function Utilisateurs() {
               <select className="table-input" required value={editForm.role} onChange={e => setEditForm({ ...editForm, role: e.target.value as User['role'] })}>
                 <option value="Caissier">Caissier</option>
                 <option value="Gerant">Gérant</option>
+                <option value="Encaisseur">Encaisseur</option>
                 <option value="Commercial">Commercial</option>
                 <option value="Responsable">Responsable</option>
                 {['Directeur', 'SuperAdmin'].includes(currentUser?.role || '') && (

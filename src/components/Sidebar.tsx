@@ -20,7 +20,7 @@ interface NavItemConfig {
   path: string;
   color: string;
   bg: string;
-  roles: Array<'Directeur' | 'Responsable' | 'Commercial' | 'Directeur adjoint' | 'SuperAdmin' | 'Gerant' | 'Caissier'>;
+  roles: Array<'Directeur' | 'Responsable' | 'Commercial' | 'Directeur adjoint' | 'SuperAdmin' | 'Gerant' | 'Caissier' | 'Encaisseur'>;
   permissionKey?: keyof User;
 }
 
@@ -147,12 +147,15 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Mouvements Stock', icon: Package, path: '/pos/stock-movements', color: '#6366F1', bg: '#EEF2FF', roles: ['Directeur', 'Gerant', 'Caissier'] },
     { label: 'Retours', icon: RotateCcw, path: '/pos/returns', color: '#F43F5E', bg: '#FFF1F2', roles: ['Directeur', 'Gerant', 'Caissier'] },
     { label: 'Gestion de caisse', icon: Wallet, path: '/pos/cash', color: '#059669', bg: '#ECFDF5', roles: ['Caissier'] },
+    { label: 'Mes Versements', icon: Receipt, path: '/pos/versements/caissier', color: '#0891B2', bg: '#ECFEFF', roles: ['Caissier'] },
     { label: 'Historique', icon: Receipt, path: '/pos/transactions', color: '#0284C7', bg: '#F0F9FF', roles: ['Directeur', 'Caissier'] },
     { label: 'Paramètres IA Gemini', icon: Bot, path: '/pos/parametres-ia', color: '#D946EF', bg: '#FDF4FF', roles: ['Directeur', 'Gerant', 'Caissier'] },
+    { label: 'Versements', icon: Receipt, path: '/pos/versements', color: '#0891B2', bg: '#ECFEFF', roles: ['Encaisseur'] },
     // Administration Directeur
     { label: 'Paramètres', icon: Settings, path: '/pos/settings', color: '#64748B', bg: '#F1F5F9', roles: ['Directeur'] },
     { label: 'Utilisateurs', icon: Shield, path: '/pos/users', color: '#475569', bg: '#F8FAFC', roles: ['Directeur', 'Gerant'] },
     { label: 'Modules Caissier', icon: ToggleRight, path: '/pos/cashier-modules', color: '#3B82F6', bg: '#EFF6FF', roles: ['Directeur', 'Gerant'] },
+    { label: 'Versements', icon: Receipt, path: '/pos/versements/admin', color: '#0891B2', bg: '#ECFEFF', roles: ['Directeur', 'SuperAdmin'] },
     { label: 'Erreurs Sync', icon: Shield, path: '/pos/sync-errors', color: '#DC2626', bg: '#FEF2F2', roles: ['Directeur', 'Gerant', 'Caissier'] },
     { label: 'Remises', icon: Tag, path: '/pos/discounts', color: '#D97706', bg: '#FFFBEB', roles: ['Directeur'] },
     { label: 'Rapports', icon: BarChart3, path: '/pos/reports', color: '#06B6D4', bg: '#ECFEFF', roles: ['Directeur'] },
@@ -175,6 +178,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     if (r.includes('superadmin') || r.includes('admin')) return 'SuperAdmin';
     if (r.includes('caissier')) return 'Caissier';
     if (r.includes('gerant') || r.includes('gérant')) return 'Gerant';
+    if (r.includes('encaisseur')) return 'Encaisseur';
     return role;
   };
 
@@ -196,7 +200,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
                      location.pathname.startsWith('/parametres');
 
   // Le mode POS ne s'active que pour les rôles autorisés et jamais pour un commercial pur ou sur route CRM
-  const canAccessPos = isDirection || userRole === 'Caissier' || userRole === 'Gerant' || !!userPosRole;
+  const canAccessPos = isDirection || userRole === 'Caissier' || userRole === 'Gerant' || userRole === 'Encaisseur' || !!userPosRole;
   const isPos = canAccessPos && !isCommercial && !isCrmRoute && (location.pathname.startsWith('/pos') || posWorkspace.active);
   const navItems = isPos ? posNavItems : crmNavItems;
   const effectiveRole = (isPos && userPosRole) ? userPosRole : userRole;

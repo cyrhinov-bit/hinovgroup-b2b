@@ -72,6 +72,9 @@ serve(async (req: Request) => {
     if (role === 'Directeur' && callerRole !== 'SuperAdmin') {
       throw new Error('Seul un SuperAdmin peut créer un Directeur')
     }
+    if (role === 'Encaisseur' && callerRole !== 'SuperAdmin' && callerRole !== 'Directeur') {
+      throw new Error('Seul le Directeur ou le SuperAdmin peut créer un Encaisseur')
+    }
     if (callerRole === 'Gerant' && role !== 'Caissier') {
       throw new Error('Un Gérant ne peut créer que des Caissiers')
     }
