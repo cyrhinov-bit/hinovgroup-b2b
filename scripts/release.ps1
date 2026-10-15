@@ -31,8 +31,10 @@
     powershell -ExecutionPolicy Bypass -File scripts\release.ps1 -Version 1.0.3 -Commit -Yes
 
 .NOTES
-    Pre-requis : variable d'environnement GH_TOKEN (PAT GitHub avec le scope "repo").
-        $env:GH_TOKEN = 'ghp_...'
+    Le token GitHub est d'abord lu dans la variable d'environnement GH_TOKEN.
+    S'il est absent, le script tente de le recuperer automatiquement via la GitHub CLI
+    ('gh auth token'), a condition d'etre deja connecte ('gh auth login').
+    Sinon, definis-le manuellement :  $env:GH_TOKEN = 'ghp_...'   (scope 'repo')
 #>
 [CmdletBinding()]
 param(
@@ -88,9 +90,20 @@ Step 'Verification des pre-requis'
 if (-not (Test-Path (Join-Path $Root 'package.json'))) { Die 'package.json introuvable (mauvais dossier ?).' }
 
 if (-not $env:GH_TOKEN) {
-    Die "GH_TOKEN introuvable. Definissez-le d'abord :`n         `$env:GH_TOKEN = 'ghp_...'   (PAT GitHub, scope 'repo')"
+    # Tentative de recuperation automatique via la GitHub CLI (si installee et connectee)
+    $ghCmd = Get-Command gh -ErrorAction SilentlyContinue
+    if ($ghCmd) {
+        $ghToken = (& gh auth token 2>$null | Out-String).Trim()
+        if ($ghToken) {
+            $env:GH_TOKEN = $ghToken
+            Ok "GH_TOKEN recupere automatiquement via 'gh auth token'."
+        }
+    }
 }
-if ($env:GH_TOKEN -notmatch '^(ghp_|github_pat_)') { Warn 'GH_TOKEN ne ressemble pas a un PAT GitHub.' }
+if (-not $env:GH_TOKEN) {
+    Die "GH_TOKEN introuvable. Connecte-toi avec 'gh auth login', ou definis :`n         `$env:GH_TOKEN = 'ghp_...'   (PAT GitHub, scope 'repo')"
+}
+if ($env:GH_TOKEN -notmatch '^(ghp_|github_pat_|gho_|ghu_|ghs_)') { Warn 'GH_TOKEN ne ressemble pas a un token GitHub.' }
 
 $who = (& curl.exe -s -H "Authorization: Bearer $env:GH_TOKEN" 'https://api.github.com/user' 2>$null | ConvertFrom-Json)
 if (-not $who -or -not $who.login) { Die 'GH_TOKEN invalide, expire ou sans droits.' }
