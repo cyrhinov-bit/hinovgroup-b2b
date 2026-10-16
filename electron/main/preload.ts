@@ -32,6 +32,17 @@ const electronAPI = {
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
   showItemInFolder: (path: string) => ipcRenderer.invoke('shell:showItemInFolder', path),
 
+  // Mail (Outlook natif)
+  composeOutlookMail: (input: any) => ipcRenderer.invoke('mail:composeOutlook', input),
+  openDefaultMailClient: (input: any) => ipcRenderer.invoke('mail:openDefault', input),
+  // Mail (SMTP)
+  smtpMailStatus: () => ipcRenderer.invoke('mail:smtpStatus'),
+  smtpMailSetConfig: (cfg: any) => ipcRenderer.invoke('mail:smtpSetConfig', cfg),
+  smtpMailClear: () => ipcRenderer.invoke('mail:smtpClear'),
+  smtpMailVerify: () => ipcRenderer.invoke('mail:smtpVerify'),
+  smtpMailSendTest: (to: any) => ipcRenderer.invoke('mail:smtpSendTest', to),
+  smtpMailSend: (input: any) => ipcRenderer.invoke('mail:smtpSend', input),
+
   // Clipboard
   readClipboardText: () => ipcRenderer.invoke('clipboard:readText'),
   writeClipboardText: (text: string) => ipcRenderer.invoke('clipboard:writeText', text),

@@ -29,6 +29,81 @@ export interface ShellInterface {
   showItemInFolder(path: string): Promise<void>;
 }
 
+export interface MailAttachment {
+  filename: string;
+  /** Contenu du fichier encodé en base64 (sans préfixe data:). */
+  base64: string;
+  mimeType?: string;
+}
+
+export interface MailComposeOptions {
+  to?: string | string[];
+  cc?: string | string[];
+  bcc?: string | string[];
+  subject: string;
+  /** Corps en texte brut (utilisé en secours du HTML et par le mode mailto). */
+  body?: string;
+  htmlBody?: string;
+  attachments?: MailAttachment[];
+  /** true = envoi direct ; false/omis = ouvre la fenêtre de composition pour relecture. */
+  send?: boolean;
+}
+
+export interface MailComposeResult {
+  ok: boolean;
+  /** 'outlook' = Outlook classique via COM ; 'mailto' = messagerie par défaut ; 'smtp' = envoi direct. */
+  mode?: 'outlook' | 'mailto' | 'smtp';
+  /** Code d'erreur exploitable (ex : 'ELEVATED', 'NO_PROFILE', 'NOT_CONFIGURED', 'SMTP_AUTH'). */
+  errorCode?: string;
+  error?: string;
+  /** Chemin du PDF enregistré sur disque (mode 'mailto'). */
+  filePath?: string;
+  /** true si le PDF a été copié dans le presse-papiers (mode 'mailto'). */
+  copiedToClipboard?: boolean;
+  /** Identifiant du message envoyé (mode 'smtp'). */
+  webLink?: string;
+}
+
+export interface SmtpStatus {
+  configured: boolean;
+  host?: string;
+  port?: number;
+  secure?: boolean;
+  user?: string;
+  fromName?: string;
+  replyTo?: string;
+}
+
+export interface SmtpConfigInput {
+  host?: string;
+  port?: number;
+  secure?: boolean;
+  user?: string;
+  fromName?: string;
+  replyTo?: string;
+  /** Laisser vide pour conserver le mot de passe déjà enregistré. */
+  password?: string;
+}
+
+/** Envoi direct par SMTP (boîte IMAP/SMTP classique, ex. hébergement LWS). */
+export interface SmtpMailInterface {
+  getStatus(): Promise<SmtpStatus>;
+  setConfig(config: SmtpConfigInput): Promise<SmtpStatus>;
+  clear(): Promise<void>;
+  verify(): Promise<MailComposeResult>;
+  sendTest(to: string): Promise<MailComposeResult>;
+  send(options: MailComposeOptions): Promise<MailComposeResult>;
+}
+
+export interface MailInterface {
+  /** Ouvre un e-mail pré-rempli. Sous Windows/Electron : Outlook natif avec pièces jointes. */
+  compose(options: MailComposeOptions): Promise<MailComposeResult>;
+  /** Ouvre l'application de messagerie par défaut (nouvel Outlook, etc.) via un lien mailto. */
+  openInDefaultMailApp(options: MailComposeOptions): Promise<MailComposeResult>;
+  /** Envoi direct par SMTP, avec pièce jointe (boîte IMAP/SMTP classique). */
+  smtp: SmtpMailInterface;
+}
+
 export interface ClipboardInterface {
   readText(): Promise<string>;
   writeText(text: string): Promise<void>;
@@ -206,6 +281,7 @@ export interface PlatformBridge {
   dialog: DialogInterface;
   files: FileInterface;
   shell: ShellInterface;
+  mail: MailInterface;
   clipboard: ClipboardInterface;
   notifications: NotificationInterface;
   network: NetworkInterface;

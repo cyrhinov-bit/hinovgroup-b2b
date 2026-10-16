@@ -31,6 +31,18 @@ export const electronBridge: PlatformBridge = {
     openExternal: async (url) => electron.openExternal(url),
     showItemInFolder: async (path) => electron.showItemInFolder(path),
   },
+  mail: {
+    compose: async (options) => electron.composeOutlookMail(options),
+    openInDefaultMailApp: async (options) => electron.openDefaultMailClient(options),
+    smtp: {
+      getStatus: async () => electron.smtpMailStatus(),
+      setConfig: async (config) => electron.smtpMailSetConfig(config),
+      clear: async () => electron.smtpMailClear(),
+      verify: async () => electron.smtpMailVerify(),
+      sendTest: async (to) => electron.smtpMailSendTest(to),
+      send: async (options) => electron.smtpMailSend(options),
+    },
+  },
   clipboard: {
     readText: async () => electron.readClipboardText(),
     writeText: async (text) => electron.writeClipboardText(text),

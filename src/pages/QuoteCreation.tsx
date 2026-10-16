@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Plus, Save, FileText, Trash2, Percent, ArrowLeft, TrendingUp, 
-  Calendar, ShieldCheck, CreditCard, Clock, FileCheck2, UserCheck, Eye
+  Calendar, ShieldCheck, CreditCard, Clock, FileCheck2, UserCheck, Eye, Mail
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import type { QuoteLine } from '../context/AppContext';
 import { canReadAllClients } from '../lib/scope';
 import { generateQuotePdf, downloadBlob, ensureDevisPdfAssets } from '../lib/pdfUtils';
+import { sendQuoteByMail } from '../lib/mailUtils';
 import { ReportPdfPreview, type ReportPdfPreviewData } from '../components/ReportPdfPreview';
 import './QuoteCreation.css';
 
@@ -48,6 +49,12 @@ export function QuoteCreation() {
   const isDirector = currentUser?.role === 'Directeur' || currentUser?.role === 'SuperAdmin' || currentUser?.role === 'Directeur adjoint';
 
   const sourceQuote = editId ? quotes.find(q => q.id === editId) : null;
+
+  // Conserve l'identité du devis après un premier enregistrement : évite de créer un
+  // doublon (nouvel id / nouveau numéro) si l'on enregistre ou envoie plusieurs fois.
+  const persistedRef = useRef<{ id: string; quoteNumber: string } | null>(
+    sourceQuote ? { id: sourceQuote.id, quoteNumber: sourceQuote.quoteNumber } : null
+  );
 
   const allowedClients = useMemo(() => {
     if (canReadAllClients(currentUser?.role)) return clients;
@@ -281,7 +288,7 @@ export function QuoteCreation() {
 
   const buildCurrentQuoteData = (statusOverride?: any) => {
     const newId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
-    const quoteNumber = sourceQuote?.quoteNumber || nextSequentialNumber;
+    const quoteNumber = sourceQuote?.quoteNumber || persistedRef.current?.quoteNumber || nextSequentialNumber;
     // En édition on conserve le commercial d'origine (pas de vol de propriété)
     const resolvedServiceId =
       currentUser?.role === 'Directeur' || currentUser?.role === 'SuperAdmin' || currentUser?.role === 'Directeur adjoint'
@@ -289,7 +296,7 @@ export function QuoteCreation() {
         : (currentUser?.serviceId || serviceId || '');
 
     return {
-      id: sourceQuote?.id || newId,
+      id: sourceQuote?.id || persistedRef.current?.id || newId,
       quoteNumber,
       clientId,
       commercialId: sourceQuote?.commercialId || currentUser?.id || '',
@@ -334,8 +341,38 @@ export function QuoteCreation() {
       blobUrl,
       filename: `Devis_${quoteData.quoteNumber}.pdf`,
       title: `Aperçu en direct : Devis N° ${quoteData.quoteNumber}`,
-      onDownload: () => downloadBlob(pdfBlob, `Devis_${quoteData.quoteNumber}.pdf`)
+      onDownload: () => downloadBlob(pdfBlob, `Devis_${quoteData.quoteNumber}.pdf`),
+      onSendByMail: () => handleSendByMail()
     });
+  };
+
+  const persistQuote = async (status: 'Brouillon' | 'Envoyé' | 'Accepté') => {
+    const quoteData = buildCurrentQuoteData(status);
+    const isUpdate = !!sourceQuote || !!persistedRef.current;
+    if (isUpdate) {
+      await updateQuote(quoteData.id, quoteData);
+    } else {
+      await addQuote(quoteData);
+    }
+    persistedRef.current = { id: quoteData.id, quoteNumber: quoteData.quoteNumber };
+    localStorage.removeItem(draftKey);
+    return quoteData;
+  };
+
+  const handleSendByMail = async () => {
+    const err = validateQuoteForm();
+    if (err) {
+      alert(err);
+      return;
+    }
+    try {
+      const quoteData = await persistQuote('Envoyé');
+      const client = clients.find(c => c.id === clientId);
+      await sendQuoteByMail(quoteData, client, settings, prestations);
+    } catch (e) {
+      console.error("Erreur lors de l'envoi du devis:", e);
+      alert("Une erreur est survenue lors de l'envoi du devis.");
+    }
   };
 
   const validateQuoteForm = (): string | null => {
@@ -367,16 +404,8 @@ export function QuoteCreation() {
       return;
     }
 
-    const quoteData = buildCurrentQuoteData('Accepté');
-
     try {
-      if (sourceQuote) {
-        await updateQuote(sourceQuote.id, quoteData);
-      } else {
-        await addQuote(quoteData);
-      }
-
-      localStorage.removeItem(draftKey);
+      const quoteData = await persistQuote('Accepté');
 
       if (openPreviewModal) {
         const client = clients.find(c => c.id === clientId);
@@ -387,7 +416,8 @@ export function QuoteCreation() {
           blobUrl,
           filename: `Devis_${quoteData.quoteNumber}.pdf`,
           title: `Devis enregistré N° ${quoteData.quoteNumber}`,
-          onDownload: () => downloadBlob(pdfBlob, `Devis_${quoteData.quoteNumber}.pdf`)
+          onDownload: () => downloadBlob(pdfBlob, `Devis_${quoteData.quoteNumber}.pdf`),
+          onSendByMail: () => handleSendByMail()
         });
       } else {
         navigate('/devis');
@@ -824,6 +854,15 @@ export function QuoteCreation() {
           </button>
           <button className="btn btn-primary" onClick={() => handleSave(true)} style={{ marginLeft: '8px', background: '#0D9488', borderColor: '#0D9488' }}>
             <FileText size={16} style={{ marginRight: '8px' }} /> Enregistrer & Prévisualiser PDF
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleSendByMail}
+            style={{ marginLeft: '8px', background: '#2563EB', borderColor: '#2563EB', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            title="Enregistrer le devis et ouvrir votre messagerie (PDF copié pour pièce jointe)"
+          >
+            <Mail size={16} /> Enregistrer & Envoyer par mail
           </button>
         </div>
       </div>

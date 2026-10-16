@@ -1,5 +1,5 @@
 import { DesktopOnlyFeatureError } from '../errors';
-import type { PlatformBridge } from '../types';
+import type { MailComposeOptions, MailComposeResult, PlatformBridge } from '../types';
 import { requestWebPrint } from '../../lib/webPrintBus';
 
 export const browserBridge: PlatformBridge = {
@@ -49,6 +49,21 @@ export const browserBridge: PlatformBridge = {
   shell: {
     openExternal: async (url) => { window.open(url, '_blank'); },
     showItemInFolder: async () => { throw new DesktopOnlyFeatureError('shell.showItemInFolder'); },
+  },
+  mail: {
+    // Repli navigateur : ouvre le client mail par défaut via un lien mailto.
+    // Les pièces jointes ne peuvent pas être ajoutées automatiquement dans ce mode.
+    compose: async (options) => openMailtoInBrowser(options),
+    openInDefaultMailApp: async (options) => openMailtoInBrowser(options),
+    smtp: {
+      // L'envoi SMTP direct est disponible uniquement dans l'application de bureau.
+      getStatus: async () => ({ configured: false }),
+      setConfig: async () => { throw new DesktopOnlyFeatureError('mail.smtp.setConfig'); },
+      clear: async () => { /* rien */ },
+      verify: async () => ({ ok: false, mode: 'smtp' as const, errorCode: 'NOT_CONFIGURED', error: 'Disponible uniquement dans l’application de bureau.' }),
+      sendTest: async () => ({ ok: false, mode: 'smtp' as const, errorCode: 'NOT_CONFIGURED', error: 'Disponible uniquement dans l’application de bureau.' }),
+      send: async () => ({ ok: false, mode: 'smtp' as const, errorCode: 'NOT_CONFIGURED', error: 'Disponible uniquement dans l’application de bureau.' }),
+    },
   },
   clipboard: {
     readText: async () => navigator.clipboard.readText(),
@@ -233,3 +248,21 @@ export const browserBridge: PlatformBridge = {
 };
 
 let webMaintenanceCallback: ((active: boolean) => void) | null = null;
+
+/** Ouvre le client de messagerie par défaut du navigateur via un lien mailto. */
+function openMailtoInBrowser(options: MailComposeOptions): MailComposeResult {
+  try {
+    const to = (Array.isArray(options.to) ? options.to : [options.to])
+      .map(v => String(v || '').trim())
+      .filter(Boolean)
+      .join(',');
+    const params: string[] = [];
+    if (options.subject) params.push(`subject=${encodeURIComponent(options.subject)}`);
+    if (options.body) params.push(`body=${encodeURIComponent(options.body)}`);
+    const url = `mailto:${to}${params.length ? `?${params.join('&')}` : ''}`;
+    window.location.href = url;
+    return { ok: true, mode: 'mailto' };
+  } catch (err: any) {
+    return { ok: false, mode: 'mailto', error: err?.message || "Impossible d'ouvrir le client de messagerie." };
+  }
+}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Download, Printer, FileText, ExternalLink } from 'lucide-react';
+import { Download, Printer, FileText, ExternalLink, Mail } from 'lucide-react';
 import { Modal } from './ui/Modal';
 import { downloadDataUrl } from '../lib/pdfUtils';
 
@@ -9,6 +9,8 @@ export interface ReportPdfPreviewData {
   filename: string;
   title: string;
   onDownload?: () => void;
+  /** Si fourni, un bouton "Envoyer par mail" est affiché (ex : envoi du devis via Outlook). */
+  onSendByMail?: () => void | Promise<unknown>;
 }
 
 interface ReportPdfPreviewProps {
@@ -97,6 +99,17 @@ export function ReportPdfPreview({ preview, onClose }: ReportPdfPreviewProps) {
               <span>{preview.filename}</span>
             </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {preview.onSendByMail && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => preview.onSendByMail?.()}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#0D9488', borderColor: '#0D9488' }}
+                  title="Envoyer ce devis par e-mail (ouvre votre application de messagerie)"
+                >
+                  <Mail size={15} /> Envoyer par mail
+                </button>
+              )}
               <button
                 type="button"
                 className="btn btn-secondary"

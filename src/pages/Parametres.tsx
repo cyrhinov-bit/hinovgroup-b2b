@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
 import toast from 'react-hot-toast';
 import { THEME_PRESETS, THEME_CATEGORIES, getUserThemeColor, setUserThemeColor, applyTheme } from '../lib/theme';
+import { MailSmtpSettings } from '../components/MailSmtpSettings';
 
 export function Parametres() {
   const { settings, updateSettings } = useAppContext();
@@ -311,6 +312,8 @@ export function Parametres() {
             </div>
           </div>
         </section>
+
+        <MailSmtpSettings />
 
         {/* Section Thème & Apparence */}
         <section style={{ marginBottom: '32px' }}>

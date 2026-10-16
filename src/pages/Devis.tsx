@@ -13,14 +13,18 @@ import {
   Search,
   CheckCircle,
   Calendar,
-  Receipt
+  Receipt,
+  Mail,
+  Settings
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
 import { generateQuotePdf, downloadBlob, ensureDevisPdfAssets } from '../lib/pdfUtils';
+import { sendQuoteByMail } from '../lib/mailUtils';
 import { ReportPdfPreview, type ReportPdfPreviewData } from '../components/ReportPdfPreview';
+import { MailSmtpSettings } from '../components/MailSmtpSettings';
 import type { Quote } from '../context/AppContext';
 import { canViewAll, visibleTo, canManageOwned } from '../lib/scope';
 
@@ -47,6 +51,7 @@ export function Devis() {
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('ALL');
   const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [activeTab, setActiveTab] = useState<'list' | 'mail'>('list');
   const PAGE_SIZE = 20;
 
   useEffect(() => {
@@ -196,8 +201,14 @@ export function Devis() {
       blobUrl,
       filename: `Devis_${q.quoteNumber}.pdf`,
       title: `Aperçu du Devis N° ${q.quoteNumber}`,
-      onDownload: () => downloadBlob(blob, `Devis_${q.quoteNumber}.pdf`)
+      onDownload: () => downloadBlob(blob, `Devis_${q.quoteNumber}.pdf`),
+      onSendByMail: () => sendQuoteByMail(q, client, settings, prestations)
     });
+  };
+
+  const handleSendByMail = (q: Quote) => {
+    const client = clients.find(c => c.id === q.clientId);
+    return sendQuoteByMail(q, client, settings, prestations);
   };
 
   // Qui peut gérer le devis ? Direction ou propriétaire (Responsable inclus).
@@ -238,6 +249,41 @@ export function Devis() {
           <Plus size={16} /> Créer un devis
         </button>
       </div>
+
+      {/* Navigation par onglets (accessible à tous les utilisateurs) */}
+      <div style={{ display: 'flex', gap: '8px', borderBottom: '2px solid var(--color-border)', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <button
+          className={`tab-button ${activeTab === 'list' ? 'active' : ''}`}
+          onClick={() => setActiveTab('list')}
+          style={{
+            padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer',
+            borderBottom: activeTab === 'list' ? '3px solid var(--color-primary)' : '3px solid transparent',
+            color: activeTab === 'list' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+            fontWeight: activeTab === 'list' ? 700 : 500, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px'
+          }}
+        >
+          <Receipt size={16} /> Liste des devis
+        </button>
+        <button
+          className={`tab-button ${activeTab === 'mail' ? 'active' : ''}`}
+          onClick={() => setActiveTab('mail')}
+          style={{
+            padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer',
+            borderBottom: activeTab === 'mail' ? '3px solid var(--color-primary)' : '3px solid transparent',
+            color: activeTab === 'mail' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+            fontWeight: activeTab === 'mail' ? 700 : 500, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px'
+          }}
+        >
+          <Settings size={16} /> Paramètres envoi devis par e-mail
+        </button>
+      </div>
+
+      {activeTab === 'mail' ? (
+        <div className="card" style={{ maxWidth: '900px', padding: 'var(--spacing-5)' }}>
+          <MailSmtpSettings />
+        </div>
+      ) : (
+        <>
 
       {/* ─── BANDEAU DE FILTRES AVANCÉS ───────────────────────── */}
       <div className="card" style={{ marginBottom: '20px', padding: '16px 20px', border: hasActiveFilters ? '1.5px solid rgba(37, 99, 235, 0.4)' : '1px solid var(--color-border)' }}>
@@ -490,6 +536,9 @@ export function Devis() {
                       }} title="Télécharger PDF">
                         <Download size={16} />
                       </button>
+                      <button className="icon-button" style={{ color: '#0D9488' }} onClick={() => handleSendByMail(q)} title="Envoyer par e-mail (ouvre votre messagerie, PDF copié)">
+                        <Mail size={16} />
+                      </button>
                       <button className="icon-button" style={{ color: 'var(--color-error)' }} onClick={() => handleDelete(q)} title="Supprimer le devis">
                         <Trash2 size={16} />
                       </button>
@@ -532,6 +581,8 @@ export function Devis() {
           setPreview(null);
         }} 
       />
+        </>
+      )}
     </div>
   );
 }

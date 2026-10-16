@@ -112,6 +112,16 @@ export interface ElectronAPI {
   configureSync: (config: any) => Promise<any>;
   setSyncAuthToken: (token: string | null) => Promise<any>;
   onSyncEvent: (callback: (payload: { event: string; data: any }) => void) => void;
+
+  // Mail (Outlook natif via COM + SMTP direct)
+  composeOutlookMail: (input: any) => Promise<any>;
+  openDefaultMailClient: (input: any) => Promise<any>;
+  smtpMailStatus: () => Promise<any>;
+  smtpMailSetConfig: (config: any) => Promise<any>;
+  smtpMailClear: () => Promise<any>;
+  smtpMailVerify: () => Promise<any>;
+  smtpMailSendTest: (to: string) => Promise<any>;
+  smtpMailSend: (input: any) => Promise<any>;
 }
 
 declare global {
