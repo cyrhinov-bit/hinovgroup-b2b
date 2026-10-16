@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Mail, Save, PlugZap, Send, CheckCircle2, AlertTriangle, Trash2, Cloud, CloudOff } from 'lucide-react';
+import { Mail, Save, PlugZap, Send, CheckCircle2, AlertTriangle, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { platform } from '../platform';
 import type { SmtpStatus } from '../platform';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
-
-type ServerStatus = 'unknown' | 'checking' | 'ok' | 'no-secrets' | 'not-deployed';
 
 /** Déduit le serveur SMTP depuis le domaine de l'adresse (mail.exemple.com). */
 function deriveSmtpHost(email?: string): string {
@@ -37,24 +34,6 @@ export function MailSmtpSettings() {
   const [testTo, setTestTo] = useState('');
   const [showHelp, setShowHelp] = useState(false);
   const [prefilled, setPrefilled] = useState(false);
-  const [serverStatus, setServerStatus] = useState<ServerStatus>('unknown');
-
-  const checkServer = async () => {
-    setServerStatus('checking');
-    try {
-      // Appel neutre (aucun envoi) : sans destinataire, la fonction répond sans envoyer d'e-mail.
-      const { data, error } = await supabase.functions.invoke('send-quote', { body: { to: '' } });
-      if (error) {
-        setServerStatus('not-deployed');
-        return;
-      }
-      const code = (data as any)?.code;
-      if (code === 'NOT_CONFIGURED') setServerStatus('no-secrets');
-      else setServerStatus('ok'); // NO_RECIPIENT => fonction déployée et configurée
-    } catch {
-      setServerStatus('not-deployed');
-    }
-  };
 
   const refresh = async () => {
     try {
@@ -81,7 +60,6 @@ export function MailSmtpSettings() {
         setPrefilled(true);
       }
     })();
-    checkServer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -176,37 +154,10 @@ export function MailSmtpSettings() {
       </h3>
 
       <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '12px' }}>
-        Envoie un devis <strong>avec le PDF déjà joint</strong>. Deux façons : renseignez
-        <strong> votre boîte ci-dessous</strong> pour que les devis partent de <strong>votre adresse</strong> ;
-        sinon l'application utilise l'<strong>envoi centralisé</strong> (adresse de l'entreprise), puis,
-        à défaut, ouvre votre messagerie.
+        Renseignez <strong>votre boîte</strong> pour que vos devis partent de
+        <strong> votre propre adresse</strong>, <strong>avec le PDF déjà joint</strong>.
+        Tant que ce n'est pas fait, l'application vous invitera à la configurer lors de l'envoi.
       </p>
-
-      {/* Envoi centralisé (serveur) */}
-      <div style={{ marginBottom: '16px', padding: '12px 14px', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '0.85rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {serverStatus === 'ok'
-            ? <Cloud size={16} style={{ color: 'var(--color-success, #16a34a)' }} />
-            : <CloudOff size={16} style={{ color: 'var(--color-text-muted)' }} />}
-          <strong>Envoi centralisé (serveur)</strong>
-          <span style={{ color: 'var(--color-text-muted)' }}>
-            {serverStatus === 'unknown' && '— état inconnu'}
-            {serverStatus === 'checking' && '— vérification…'}
-            {serverStatus === 'ok' && '— actif : aucune configuration nécessaire sur les postes'}
-            {serverStatus === 'no-secrets' && '— déployé, identifiants SMTP à définir côté serveur'}
-            {serverStatus === 'not-deployed' && '— non déployé'}
-          </span>
-          <button type="button" className="btn btn-secondary" style={{ marginLeft: 'auto' }} onClick={checkServer} disabled={serverStatus === 'checking'}>
-            Vérifier
-          </button>
-        </div>
-        {serverStatus === 'ok' && (
-          <p style={{ margin: '8px 0 0', color: 'var(--color-text-muted)' }}>
-            Tous les utilisateurs peuvent envoyer les devis sans rien configurer. Le formulaire
-            ci-dessous n'est utile que pour définir une boîte locale/personnelle (facultatif).
-          </p>
-        )}
-      </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontSize: '0.9rem' }}>
         {status.configured ? (

@@ -1,83 +1,40 @@
 # Envoi des devis par e-mail — Guide
 
-L'application envoie un devis **avec le PDF joint**. Deux modèles possibles, essayés dans cet ordre :
+Chaque utilisateur envoie ses devis **depuis sa propre adresse**, **avec le PDF déjà joint**.
 
-1. **Votre boîte (SMTP local)** — si l'utilisateur renseigne sa propre boîte, les devis
-   partent **de son adresse**. Configuration : une fois par utilisateur (son mot de passe).
-2. **Envoi centralisé (serveur)** — fonction Edge `send-quote` : **une adresse d'entreprise**,
-   aucune configuration pour les utilisateurs.
-3. **Messagerie par défaut** — ouvre Outlook, PDF copié dans le presse-papiers (Ctrl+V).
+## Principe
+
+- Chaque utilisateur configure **une seule fois** sa boîte (adresse + mot de passe) dans
+  **Devis → onglet « Paramètres envoi devis par e-mail »**.
+- Ensuite, **ses** devis partent de **son** adresse ; le client voit bien son e-mail comme expéditeur.
+- Le mot de passe est **chiffré sur le poste** de l'utilisateur (jamais en base, jamais chez les autres).
+- Tant qu'un utilisateur n'a pas configuré sa boîte, l'application l'invite à le faire :
+  **aucun envoi ne part d'une autre adresse**.
 
 > **Pourquoi pas Microsoft Graph / Outlook COM ?**
 > La boîte `hinovgroup.com` est hébergée chez **LWS** en **IMAP/SMTP classique**, pas sur
 > Microsoft 365. Graph et COM ne s'appliquent donc pas.
 
-> **Point clé** : pour qu'un devis partît *au nom* d'une adresse, il faut **authentifier cette
-> boîte** (son mot de passe). Mettre seulement un `From:` sans les identifiants est refusé par
-> le serveur (anti-usurpation). C'est pourquoi « partir de l'adresse de chaque utilisateur »
-> exige que chaque utilisateur saisisse **une fois** son mot de passe.
+> **Pourquoi le mot de passe ?** Pour qu'un devis partît *au nom* d'une adresse, le serveur
+> doit **authentifier cette boîte**. Mettre seulement un champ « De : » sans identifiants est
+> refusé par le serveur (anti-usurpation). D'où la saisie unique du mot de passe par chacun.
 
 ---
 
-## A. Envoyer depuis l'adresse de chaque utilisateur (SMTP local)
+## Procédure (par utilisateur, une fois)
 
-Accessible à **tous les utilisateurs**, sans passer par la page Paramètres :
-
-**Devis → onglet « Paramètres envoi devis par e-mail »**.
-
-Chaque utilisateur fait ceci **une seule fois, sur son poste** :
-
-1. **Paramètres → Envoi des devis par e-mail (SMTP)**.
+1. Ouvrez **Devis** → onglet **« Paramètres envoi devis par e-mail »**.
 2. L'application **pré-remplit automatiquement** :
    - *Votre adresse d'envoi* = l'e-mail de votre compte applicatif ;
    - *Serveur SMTP* = `mail.<votre-domaine>` ;
    - *Port* `465`, *Sécurité* `SSL/TLS`.
-3. Saisissez uniquement **le mot de passe de votre boîte**.
+3. Saisissez **le mot de passe de votre boîte** (celui du webmail, pas celui de Windows).
 4. **Enregistrer**, puis **Tester la connexion**.
 
-✅ Dès lors, chaque devis envoyé par cet utilisateur part **de sa propre adresse** (le client
-le voit comme expéditeur). Le mot de passe reste **chiffré sur son poste** (jamais en base).
+✅ Ensuite, chaque devis que vous envoyez part de votre adresse.
 
-> Si un utilisateur ne configure rien, l'application utilisera l'envoi centralisé (section B)
-> ou, à défaut, ouvrira sa messagerie.
-
----
-
-## B. Envoi centralisé (adresse unique de l'entreprise) — une fois pour tout
-
-À faire par un administrateur, une seule fois.
-
-### 1. Connexion Supabase
-
-```powershell
-cd C:\hinovapp
-supabase login
-```
-
-### 2. Identifiants SMTP (secrets serveur)
-
-```powershell
-supabase secrets set --project-ref wnnoygyyodygxkksxvgr `
-  SMTP_HOST=mail.hinovgroup.com `
-  SMTP_PORT=465 `
-  SMTP_SECURE=true `
-  SMTP_USER=e.gnonskan@hinovgroup.com `
-  SMTP_PASS="LE_MOT_DE_PASSE_DE_LA_BOITE" `
-  SMTP_FROM_NAME="Hinov Group"
-```
-
-### 3. Déploiement
-
-```powershell
-supabase functions deploy send-quote --project-ref wnnoygyyodygxkksxvgr --use-api
-```
-
-### 4. Vérifier
-
-**Paramètres → Envoi des devis par e-mail → « Envoi centralisé (serveur) » → Vérifier** :
-doit afficher **« actif »**.
-
-> Le mot de passe reste uniquement côté serveur (secret Supabase), jamais sur les postes.
+> Ces réglages sont aussi accessibles, pour les personnes qui y ont droit, via
+> **Paramètres → Envoi des devis par e-mail (SMTP)**.
 
 ---
 
@@ -85,19 +42,19 @@ doit afficher **« actif »**.
 
 | Message | Cause | Solution |
 |---|---|---|
-| **Non configuré** | Aucun secret serveur et pas de boîte locale | Refaire A ou B |
+| **Aucune boîte d'envoi configurée** | L'utilisateur n'a pas réglé sa boîte | Refaire la procédure ci-dessus |
 | **Identifiants refusés** | Mot de passe erroné | Vérifier le mot de passe de la boîte (webmail) |
-| **Impossible de joindre le serveur** | Mauvais serveur/port | `mail.hinovgroup.com`, port 465 ou 587 |
-| **Pièce jointe trop volumineuse** | PDF anormalement gros | Vérifier le modèle de devis |
-| L'expéditeur n'est pas la bonne adresse | Boîte locale non configurée | Refaire la section A |
+| **Impossible de joindre le serveur** | Mauvais serveur/port | `mail.hinovgroup.com`, port 465 (SSL) ou 587 (STARTTLS) |
+| **Adresse du destinataire invalide** | E-mail du client erroné | Corriger la fiche client |
 
 ---
 
 ## Notes techniques
 
-- **Client** : `src/lib/mailUtils.ts` (`composeQuoteMail`) — ordre : SMTP local → serveur → mailto.
-- **SMTP local** : `electron/services/mail/SmtpMailService.ts` (`nodemailer`), config dans
-  `userData/smtp-mail.json` (mot de passe chiffré via `safeStorage`).
-- **Fonction Edge** : `supabase/functions/send-quote/index.ts` (Deno + `denomailer`),
-  secrets `SMTP_*`, vérifie l'utilisateur connecté.
-- **UI** : `src/components/MailSmtpSettings.tsx` (section Paramètres + diagnostic serveur).
+- **Client** : `src/lib/mailUtils.ts` (`composeQuoteMail`) — envoi via la boîte de l'utilisateur ;
+  en mode navigateur uniquement, repli `mailto` (PDF dans le presse-papiers).
+- **SMTP** : `electron/services/mail/SmtpMailService.ts` (`nodemailer`), config dans
+  `userData/smtp-mail.json`, mot de passe chiffré via `safeStorage`.
+- **Canaux IPC** : `mail:smtpStatus`, `mail:smtpSetConfig`, `mail:smtpClear`, `mail:smtpVerify`,
+  `mail:smtpSendTest`, `mail:smtpSend` (`electron/ipc/mail/`).
+- **UI** : `src/components/MailSmtpSettings.tsx` (onglet Devis + section Paramètres).

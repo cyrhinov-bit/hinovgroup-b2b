@@ -2,7 +2,6 @@ import toast from 'react-hot-toast';
 import type { Client, Quote, AppSettings, Prestation } from '../context/AppContext';
 import { platform } from '../platform';
 import type { MailComposeResult } from '../platform';
-import { supabase } from './supabase';
 import { generateQuotePdf, ensureDevisPdfAssets } from './pdfUtils';
 
 /** Convertit un Blob en base64 brut (sans le préfixe "data:...;base64,"). */
@@ -119,47 +118,7 @@ export function buildQuoteMailContent(quote: Quote, client: Client | undefined, 
 }
 
 /**
- * Envoi via la fonction Edge `send-quote` (configuration SMTP centralisée côté serveur).
- * Aucune configuration n'est requise sur le poste de l'utilisateur.
- * Repli silencieux si la fonction n'est pas déployée/joignable.
- */
-async function sendQuoteViaServer(options: {
-  to?: string | string[];
-  subject: string;
-  htmlBody?: string;
-  body?: string;
-  attachments: { filename: string; base64: string; mimeType?: string }[];
-}): Promise<MailComposeResult> {
-  try {
-    const { data, error } = await supabase.functions.invoke('send-quote', {
-      body: {
-        to: options.to,
-        subject: options.subject,
-        html: options.htmlBody,
-        text: options.body,
-        attachments: options.attachments,
-      },
-    });
-
-    if (error) {
-      // Fonction non déployée ou serveur injoignable → repli (mailto).
-      return { ok: false, mode: 'smtp', errorCode: 'SERVER_UNAVAILABLE', error: error.message };
-    }
-    const payload: any = data;
-    if (payload?.ok) return { ok: true, mode: 'smtp' };
-    return {
-      ok: false,
-      mode: 'smtp',
-      errorCode: payload?.code || 'SMTP',
-      error: payload?.error || "L'envoi par e-mail via le serveur a échoué.",
-    };
-  } catch (err: any) {
-    return { ok: false, mode: 'smtp', errorCode: 'SERVER_UNAVAILABLE', error: err?.message };
-  }
-}
-
-/**
- * Génère le PDF du devis puis l'envoie par e-mail (SMTP local, serveur, ou messagerie par défaut).
+ * Génère le PDF du devis puis l'envoie par e-mail depuis la boîte de l'utilisateur.
  * Ne bloque jamais : retourne toujours un résultat exploitable.
  */
 export async function composeQuoteMail(
@@ -175,7 +134,7 @@ export async function composeQuoteMail(
     const content = buildQuoteMailContent(quote, client, settings);
     const attachments = [{ filename: content.filename, base64, mimeType: 'application/pdf' }];
 
-    // 1) SMTP local : configuration propre à l'utilisateur/post (envoi direct).
+    // 1) Boîte de l'utilisateur (SMTP local) : envoi direct depuis SA propre adresse.
     try {
       const smtpStatus = await platform.mail.smtp.getStatus();
       if (smtpStatus.configured) {
@@ -192,23 +151,20 @@ export async function composeQuoteMail(
       }
     } catch { /* SMTP local indisponible → étape suivante */ }
 
-    // 2) Envoi via le serveur (fonction Edge « send-quote ») : aucune configuration côté utilisateur.
-    const serverResult = await sendQuoteViaServer({
-      to: content.to,
-      subject: content.subject,
-      body: content.body,
-      htmlBody: content.htmlBody,
-      attachments,
-    });
-    if (serverResult.ok) {
-      return { ...serverResult, filename: content.filename };
-    }
-    // Une vraie erreur d'envoi serveur (identifiants, trop volumineux…) doit être remontée.
-    if (serverResult.errorCode && !['SERVER_UNAVAILABLE', 'NOT_CONFIGURED', 'UNAUTHENTICATED'].includes(serverResult.errorCode)) {
-      return { ...serverResult, filename: content.filename };
+    // 2) Aucune boîte configurée : sur l'application de bureau, on invite l'utilisateur à
+    //    configurer SA boîte (aucun envoi depuis une autre adresse).
+    if (platform.isDesktop) {
+      return {
+        ok: false,
+        mode: 'smtp',
+        errorCode: 'NOT_CONFIGURED',
+        error: "Aucune boîte d'envoi configurée. Ouvrez « Devis → Paramètres envoi devis par e-mail » "
+          + "et renseignez le mot de passe de votre boîte pour envoyer vos devis.",
+        filename: content.filename,
+      };
     }
 
-    // 3) Repli : application de messagerie par défaut (mailto) + PDF dans le presse-papiers.
+    // 3) Repli (mode navigateur uniquement) : ouvre la messagerie par défaut, PDF dans le presse-papiers.
     const result = await platform.mail.openInDefaultMailApp({
       to: content.to,
       subject: content.subject,
