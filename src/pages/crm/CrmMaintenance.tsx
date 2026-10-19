@@ -14,7 +14,7 @@ import type {
 
 export function CrmMaintenance() {
   const { 
-    crmMaintenance, crmTechniciens, crmTiers, users, 
+    crmMaintenance, crmTechniciens, crmTiers, clients, users, 
     addCrmIntervention, updateCrmIntervention, deleteCrmIntervention,
     addCrmTechnicien, updateCrmTechnicien, deleteCrmTechnicien
   } = useAppContext();
@@ -68,7 +68,22 @@ export function CrmMaintenance() {
     statut: 'DISPONIBLE'
   });
 
-  const clientsList = crmTiers.filter(t => t.type === 'CLIENT');
+  // Référentiel clients unifié : tiers CRM (clients_fournisseurs) + clients historiques (table clients)
+  // pour que les clients déjà créés dans le module Clients apparaissent bien dans le sélecteur.
+  const tierClientsList = crmTiers
+    .filter(t => String(t.type || '').toUpperCase() === 'CLIENT')
+    .map(t => ({ id: t.id, nom: t.nom, ville: t.ville }));
+  const legacyClientsList = (clients || []).map(c => ({
+    id: c.id,
+    nom: c.name || c.company || c.contact || 'Client',
+    ville: c.address || undefined
+  }));
+  const _seenClientIds = new Set<string>();
+  const clientsList = [...tierClientsList, ...legacyClientsList].filter(c => {
+    if (_seenClientIds.has(c.id)) return false;
+    _seenClientIds.add(c.id);
+    return true;
+  });
 
   // Pre-defined specialties for auto-suggest
   const defaultSpecialties = [

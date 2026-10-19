@@ -1767,7 +1767,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (crmTiersData && crmTiersData.length > 0) {
           const parsed: ClientFournisseur[] = crmTiersData.map((t: any) => ({
             id: t.id,
-            type: t.type,
+            type: String(t.type || 'CLIENT').toUpperCase() as any,
             nom: t.nom,
             telephone: t.telephone || undefined,
             email: t.email || undefined,
@@ -4644,6 +4644,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const id = tier.id || uuidv4();
     const item: ClientFournisseur = {
       ...tier,
+      type: (String(tier.type || 'CLIENT').toUpperCase() as any),
       id,
       cree_par: tier.cree_par || currentUser?.id,
       cree_par_nom: tier.cree_par_nom || currentUser?.name,
@@ -4656,10 +4657,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const updateCrmTier = async (id: string, tier: Partial<ClientFournisseur>) => {
-    const next = crmTiers.map(t => t.id === id ? { ...t, ...tier } : t);
+    const normalized = tier && tier.type ? { ...tier, type: String(tier.type).toUpperCase() as any } : tier;
+    const next = crmTiers.map(t => t.id === id ? { ...t, ...normalized } : t);
     setCrmTiers(next);
     await db.crmTiers.setItem('data', next);
-    await queueSyncAction('UPDATE_CRM_TIER', { ...tier, id });
+    await queueSyncAction('UPDATE_CRM_TIER', { ...normalized, id });
   };
 
   const deleteCrmTier = async (id: string): Promise<boolean> => {

@@ -61,7 +61,7 @@ export function CrmPrestations() {
     notes: ''
   });
 
-  const clientsList = crmTiers.filter(t => t.type === 'CLIENT');
+  const clientsList = crmTiers.filter(t => String(t.type || '').toUpperCase() === 'CLIENT');
   const apporteursList = crmTiers.filter(t => t.type === 'PARTENAIRE');
 
   // Dynamic calculations — règles métier :
