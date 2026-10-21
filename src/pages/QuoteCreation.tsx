@@ -101,7 +101,7 @@ export function QuoteCreation() {
   // Form states
   const [clientId, setClientId] = useState(sourceQuote?.clientId || clientIdParam || '');
   const [subject, setSubject] = useState(sourceQuote?.subject || '');
-  const [serviceId, setServiceId] = useState(sourceQuote?.serviceId || serviceIdParam || (currentUser?.role === 'Responsable' ? (currentUser?.serviceId || '') : ''));
+  const [serviceId, setServiceId] = useState(sourceQuote?.serviceId || serviceIdParam || currentUser?.serviceId || '');
   const [style, setStyle] = useState<'Classique' | 'Moderne' | 'Minimaliste'>(sourceQuote?.style as any || 'Classique');
   const [accentColor, setAccentColor] = useState(sourceQuote?.accentColor || '#009688');
   const [discountPercent, setDiscountPercent] = useState<number>(sourceQuote?.discountPercent || 0);
