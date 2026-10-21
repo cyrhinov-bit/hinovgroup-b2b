@@ -156,7 +156,7 @@ export function QuoteCreation() {
       if (draft) {
         setClientId(draft.clientId || '');
         setSubject(draft.subject || '');
-        setServiceId(draft.serviceId || '');
+        setServiceId(draft.serviceId || currentUser?.serviceId || '');
         setStyle(draft.style || 'Classique');
         setAccentColor(draft.accentColor || '#009688');
         setDiscountPercent(draft.discountPercent ?? 0);
