@@ -48,7 +48,7 @@ export const CoutModal: React.FC<CoutModalProps> = ({
       setStatus(coutToEdit.status);
     } else {
       setCostType('DIRECT');
-      setServiceId(defaultServiceId || (currentUser?.role === 'Responsable' ? currentUser.serviceId || '' : ''));
+      setServiceId(defaultServiceId || currentUser?.serviceId || '');
       setCategory('SOUS_TRAITANCE');
       setAmountHt(0);
       setVatRate(0);
