@@ -11,6 +11,15 @@ import { Button } from '../../components/ui/Button';
 import { PosEvolutionChart, type DataPoint } from '../../components/pos/PosEvolutionChart';
 import { PosHourlyChart, type HourlyDataPoint } from '../../components/pos/PosHourlyChart';
 import { PosFamilyDistributionChart, type FamilyBreakdown, type PaymentBreakdown } from '../../components/pos/PosFamilyDistributionChart';
+import { PosStoreSelector, POS_SCOPE_STORAGE_KEY } from '../../components/pos/PosStoreSelector';
+import { 
+  filterTransactionsByMagasin, 
+  filterSessionsByMagasin, 
+  filterReturnsByMagasin,
+  getScopedProductStock 
+} from '../../features/pos/utils/posMagasinFilter';
+import { PosMagasinService } from '../../features/pos/services/PosMagasinService';
+import type { PosStockMagasin } from '../../types/posMagasins';
 import { toast } from 'react-hot-toast';
 
 type PeriodType = 'today' | '7d' | '30d' | '12m';
@@ -27,16 +36,44 @@ export default function DashboardPos() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
   const [period, setPeriod] = useState<PeriodType>('today');
+  const [selectedMagasinId, setSelectedMagasinId] = useState<string>(() => {
+    try {
+      return localStorage.getItem(POS_SCOPE_STORAGE_KEY) || 'ALL';
+    } catch {
+      return 'ALL';
+    }
+  });
+  const [stockEntries, setStockEntries] = useState<PosStockMagasin[]>([]);
   const navigate = useNavigate();
 
+  // Charger les entrées de stock localisées
   useEffect(() => {
-    refreshData().catch(() => {});
-  }, [refreshData]);
+    let mounted = true;
+    PosMagasinService.loadAllStockEntries().then(entries => {
+      if (mounted) setStockEntries(entries);
+    }).catch(err => {
+      console.warn('Erreur chargement stocks par magasin :', err);
+    });
+    return () => { mounted = false; };
+  }, []);
+
+  // Écouter les changements de périmètre externe (ex: sélecteur dans un autre onglet ou page)
+  useEffect(() => {
+    const handleScope = (e: any) => {
+      if (e?.detail?.magasinId && e.detail.magasinId !== selectedMagasinId) {
+        setSelectedMagasinId(e.detail.magasinId);
+      }
+    };
+    window.addEventListener('pos-magasin-scope-changed', handleScope);
+    return () => window.removeEventListener('pos-magasin-scope-changed', handleScope);
+  }, [selectedMagasinId]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
       await refreshData();
+      const freshStock = await PosMagasinService.loadAllStockEntries();
+      setStockEntries(freshStock);
       toast.success('Données synchronisées avec succès');
     } catch {
       toast.error('Erreur lors de la synchronisation');
@@ -51,6 +88,8 @@ export default function DashboardPos() {
     try {
       const res = await reconcilePosData({ force: true });
       await refreshData(true);
+      const freshStock = await PosMagasinService.loadAllStockEntries();
+      setStockEntries(freshStock);
       if (res?.success) {
         toast.success(res.message || 'Synchronisation d\'urgence réussie !', { id: toastId, duration: 6000 });
       } else {
@@ -63,37 +102,61 @@ export default function DashboardPos() {
     }
   };
 
-  // 1. Stock global & alertes
-  const totalProducts = posProducts.length;
-  const physicalProducts = posProducts.filter(p => p.family !== 'Service');
+  // 0. Filtrage des données POS par le périmètre boutique sélectionné
+  const scopedTransactions = useMemo(() => {
+    return filterTransactionsByMagasin(posTransactions, selectedMagasinId, posCashSessions);
+  }, [posTransactions, selectedMagasinId, posCashSessions]);
+
+  const scopedCashSessions = useMemo(() => {
+    return filterSessionsByMagasin(posCashSessions, selectedMagasinId);
+  }, [posCashSessions, selectedMagasinId]);
+
+  const scopedReturns = useMemo(() => {
+    return filterReturnsByMagasin(posReturns, selectedMagasinId, posTransactions);
+  }, [posReturns, selectedMagasinId, posTransactions]);
+
+  // Produits avec stock ajusté au magasin sélectionné (ou stock réseau si ALL)
+  const scopedProducts = useMemo(() => {
+    if (!selectedMagasinId || selectedMagasinId === 'ALL') {
+      return posProducts;
+    }
+    return posProducts.map(p => ({
+      ...p,
+      quantity: getScopedProductStock(p.id, p.quantity, selectedMagasinId, stockEntries)
+    }));
+  }, [posProducts, selectedMagasinId, stockEntries]);
+
+  // 1. Stock global / magasin & alertes
+  const totalProducts = scopedProducts.length;
+  const physicalProducts = scopedProducts.filter(p => p.family !== 'Service');
   const totalPurchaseStockValue = physicalProducts.reduce((sum, p) => sum + (p.purchasePrice || 0) * (p.quantity || 0), 0);
   const totalSellingStockValue = physicalProducts.reduce((sum, p) => sum + (p.sellingPrice || 0) * (p.quantity || 0), 0);
   const globalStockMargin = totalSellingStockValue - totalPurchaseStockValue;
   const globalStockMarginRate = totalSellingStockValue > 0 ? ((globalStockMargin / totalSellingStockValue) * 100).toFixed(1) : '0';
   const lowStockProducts = physicalProducts.filter(p => p.quantity <= p.minStock && p.minStock > 0);
 
-  // 2. Session caisse du jour
+  // 2. Session caisse du jour pour le périmètre actif
   const today = todayLocalKey();
-  const openSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today);
-  const staleOpenSession = posCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) < today);
+  const openSession = scopedCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) === today);
+  const staleOpenSession = scopedCashSessions.find(s => s.status === 'Ouverte' && toLocalDayKey(s.openedAt) < today);
 
   // Map rapide des prix d'achat par produit pour calculer la marge exacte
   const productPurchasePriceMap = useMemo(() => {
     const map = new Map<string, number>();
-    posProducts.forEach(p => {
+    scopedProducts.forEach(p => {
       map.set(p.id, p.purchasePrice || 0);
     });
     return map;
-  }, [posProducts]);
+  }, [scopedProducts]);
 
   // 3. Calculs d'évolution selon la période sélectionnée
   const { evolutionData, currentTotalRevenue, currentTotalMargin, currentTicketCount, avgBasket, growthRate, previousRevenue, periodRefunds } = useMemo(() => {
     // G5 : les compléments d'échange (CMP-) sont des encaissements de soulte, pas du
     // CA plein (les articles échangés sont déjà comptés) → neutralisés ici.
-    const validTransactions = posTransactions.filter(t => t.status === 'Validée' && !t.transactionNumber?.startsWith('CMP-'));
+    const validTransactions = scopedTransactions.filter(t => t.status === 'Validée' && !t.transactionNumber?.startsWith('CMP-'));
     const now = new Date();
 
-    const calculateMarginForTx = (tx: typeof posTransactions[0]) => {
+    const calculateMarginForTx = (tx: typeof scopedTransactions[0]) => {
       let margin = 0;
       tx.lines.forEach(l => {
         // Coût figé à la vente si disponible, sinon prix actuel (lignes legacy)
@@ -280,7 +343,7 @@ export default function DashboardPos() {
     const periodKeys = new Set<string>(
       period === 'today' ? [today] : dataPoints.map(d => d.dateKey).filter(Boolean) as string[]
     );
-    const periodReturnList = posReturns.filter(r => {
+    const periodReturnList = scopedReturns.filter(r => {
       if (r.status !== 'Traité') return false;
       const k = toLocalDayKey(r.date);
       return period === '12m' ? periodKeys.has(k.substring(0, 7)) : periodKeys.has(k);
@@ -309,11 +372,11 @@ export default function DashboardPos() {
       previousRevenue: netPrev,
       periodRefunds: refundsTotal
     };
-  }, [posTransactions, posReturns, period, today, productPurchasePriceMap]);
+  }, [scopedTransactions, scopedReturns, period, today, productPurchasePriceMap]);
 
   // 4. Distribution horaire pour la journée en cours
   const hourlyData: HourlyDataPoint[] = useMemo(() => {
-    const validTransactions = posTransactions.filter(t => t.status === 'Validée');
+    const validTransactions = scopedTransactions.filter(t => t.status === 'Validée');
     const result: HourlyDataPoint[] = [];
 
     for (let h = 8; h <= 20; h++) {
@@ -333,12 +396,12 @@ export default function DashboardPos() {
       });
     }
     return result;
-  }, [posTransactions, today]);
+  }, [scopedTransactions, today]);
 
   // 5. Répartition des familles et modes de paiement sur la période filtrée
   const { familyBreakdown, paymentBreakdown } = useMemo(() => {
     // G5 : compléments d'échange exclus (soulte, pas CA plein).
-    const validTransactions = posTransactions.filter(t => t.status === 'Validée' && !t.transactionNumber?.startsWith('CMP-'));
+    const validTransactions = scopedTransactions.filter(t => t.status === 'Validée' && !t.transactionNumber?.startsWith('CMP-'));
     const selectedDateKeys = new Set(evolutionData.map(d => d.dateKey).filter(Boolean));
 
     const filteredTxs = period === 'today'
@@ -357,7 +420,7 @@ export default function DashboardPos() {
     let qtyFournitures = 0;
     filteredTxs.forEach(t => {
       t.lines.forEach(l => {
-        const p = l.productId ? posProducts.find(prod => prod.id === l.productId) : undefined;
+        const p = l.productId ? scopedProducts.find(prod => prod.id === l.productId) : undefined;
         const isLiv = (p && ((p.family && p.family.toLowerCase().startsWith('livre')) || !!(p.isbn && p.isbn.trim()))) ||
                       (l.description && l.description.toLowerCase().includes('livre'));
 
@@ -417,12 +480,12 @@ export default function DashboardPos() {
       }));
 
     return { familyBreakdown: families, paymentBreakdown: payments };
-  }, [posTransactions, posProducts, evolutionData, period, today]);
+  }, [scopedTransactions, scopedProducts, evolutionData, period, today]);
 
   // 6. KPIs Mouvements de Stock
   const stockKpis = useMemo(() => {
     // --- Snapshot actuel du stock (indépendant de la période) ---
-    const physProd = posProducts.filter(p => p.family !== 'Service');
+    const physProd = scopedProducts.filter(p => p.family !== 'Service');
     const stockValAchat = physProd.reduce((s, p) => s + (p.purchasePrice || 0) * (p.quantity || 0), 0);
     const stockValVente = physProd.reduce((s, p) => s + (p.sellingPrice || 0) * (p.quantity || 0), 0);
     const stockBenefice = stockValVente - stockValAchat;
@@ -455,12 +518,12 @@ export default function DashboardPos() {
 
     // --- Ventes dans la période (consolidation automatique si non doublonnées) ---
     // G5 : compléments d'échange (CMP-) exclus : soulte déjà comptée, pas des lignes vendues.
-    const validTransactions = posTransactions.filter(t => t.status === 'Validée' && isDateInPeriod(t.date) && !t.transactionNumber?.startsWith('CMP-'));
+    const validTransactions = scopedTransactions.filter(t => t.status === 'Validée' && isDateInPeriod(t.date) && !t.transactionNumber?.startsWith('CMP-'));
     let ventesCount = explicitMovements.filter(m => m.type === 'Vente').length;
     validTransactions.forEach(t => {
       if (!explicitSaleRefs.has(t.transactionNumber)) {
         const physicalLines = t.lines.filter(l => {
-          const prod = l.productId ? posProducts.find(p => p.id === l.productId) : undefined;
+          const prod = l.productId ? scopedProducts.find(p => p.id === l.productId) : undefined;
           return prod?.family !== 'Service';
         });
         ventesCount += physicalLines.length > 0 ? physicalLines.length : (t.lines.length || 1);
@@ -477,7 +540,7 @@ export default function DashboardPos() {
 
     // --- Retours (consolidation) ---
     let retourCount = explicitMovements.filter(m => m.type === 'Retour').length;
-    (posReturns || []).filter(r => r.status !== 'Annulé' && isDateInPeriod(r.date)).forEach(r => {
+    (scopedReturns || []).filter(r => r.status !== 'Annulé' && isDateInPeriod(r.date)).forEach(r => {
       if (!explicitReturnRefs.has(r.returnNumber)) {
         retourCount += r.lines?.length || 1;
       }
@@ -502,7 +565,7 @@ export default function DashboardPos() {
       mouvementsRetour: retourCount,
       mouvementsAjust: ajustCount,
     };
-  }, [posProducts, posStockEntries, posStockMovements, posTransactions, posReturns, period, today, evolutionData]);
+  }, [scopedProducts, posStockEntries, posStockMovements, scopedTransactions, scopedReturns, period, today, evolutionData]);
 
   const periodLabels: Record<PeriodType, string> = {
     'today': "Aujourd'hui",
@@ -515,13 +578,30 @@ export default function DashboardPos() {
 
   return (
     <div className="pos-page" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Barre supérieure : Titre, Synchronisation et Sélecteur de Période */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0, color: '#0F172A' }}>Tableau de Bord Administrateur POS</h1>
-          <p style={{ fontSize: '13px', color: 'var(--color-text-muted, #64748B)', margin: '4px 0 0' }}>
-            Suivi des ventes, marges, affluence horaire et diagrammes d'évolution en temps réel.
-          </p>
+      {/* Barre supérieure : Titre avec Sélecteur de Boutique et Actions */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0, color: '#0F172A' }}>Tableau de Bord Administrateur POS</h1>
+            <p style={{ fontSize: '13px', color: 'var(--color-text-muted, #64748B)', margin: '4px 0 0' }}>
+              Suivi des ventes, marges, affluence horaire et diagrammes d'évolution en temps réel.
+            </p>
+          </div>
+
+          {/* Sélecteur de Magasin / Réseau Multi-Boutiques */}
+          <div style={{
+            background: '#FFFFFF',
+            border: '2px solid #0D9488',
+            borderRadius: '12px',
+            padding: '2px 4px',
+            boxShadow: '0 2px 8px rgba(13, 148, 136, 0.15)'
+          }}>
+            <PosStoreSelector
+              value={selectedMagasinId}
+              onChange={setSelectedMagasinId}
+              label="Boutique :"
+            />
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>

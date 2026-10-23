@@ -7,6 +7,7 @@ import { ThemeModal } from './ThemeModal';
 import { compressProfileAvatar } from '../lib/imageEnhancer';
 import { db } from '../lib/db';
 import { toast } from 'react-hot-toast';
+import MagasinSwitcher from './pos/MagasinSwitcher';
 import './Topbar.css';
 
 export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
@@ -207,6 +208,13 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
         </div>
 
         <div className="topbar-right">
+          {/* Sélecteur de Librairie / Boutique (Strictement en mode POS) */}
+          {(posWorkspace.active || location.pathname.startsWith('/pos')) && (
+            <div style={{ marginRight: '8px' }}>
+              <MagasinSwitcher />
+            </div>
+          )}
+
           {/* Alerte Erreurs de Synchronisation si présentes */}
           {syncErrorsCount > 0 && (
             <button 

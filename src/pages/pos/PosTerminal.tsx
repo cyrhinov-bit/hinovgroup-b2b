@@ -16,6 +16,8 @@ import { platform } from '../../platform';
 import { todayLocalKey, toLocalDayKey } from '../../lib/dates';
 import { matchesProductSearch } from '../../lib/searchUtils';
 import { calculateCartMargin } from '../../features/pos/services/PosAiService';
+import { useMagasinStock } from '../../features/pos/hooks/useMagasinStock';
+import { PosMagasinService } from '../../features/pos/services/PosMagasinService';
 
 interface CartItem { id: string; productId: string; name: string; reference: string; unitPrice: number; quantity: number; discountType: 'none' | 'percent' | 'amount'; discountPercent: number; discountAmount: number; total: number; }
 
@@ -23,13 +25,12 @@ export default function PosTerminal() {
   const navigate = useNavigate();
   const { posProducts, posSettings, posCashSessions, posTransactions, posReturns, addPosTransaction, addPosCashSession, suspendedCarts, addSuspendedCart, removeSuspendedCart, settings: crmSettings, refreshData, posDiscounts } = useAppContext();
   const { currentUser } = useAuth();
-  const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    if (posProducts.length <= 7) {
-      refreshData();
-    }
-  }, [posProducts.length, refreshData]);
+  // Stock localisé par magasin actif
+  const activeMagasinId = PosMagasinService.getActiveMagasinId();
+  const { getStock, adjustStock, initialized: stockReady } = useMagasinStock(activeMagasinId, posProducts);
+
+  const [search, setSearch] = useState('');
 
   const [cart, setCart] = useState<CartItem[]>(() => {
     if (!currentUser) return [];
@@ -122,10 +123,11 @@ export default function PosTerminal() {
 
   const addToCart = (product: typeof posProducts[0], qtyToAdd: number = 1) => {
     const isService = product.family === 'Service' || product.reference?.startsWith('SRV-');
-    const availableStock = isService ? 999999 : Number(product.quantity ?? 0);
+    // Utilise le stock localisé du magasin actif (fallback sur stock global si pas encore initialisé)
+    const availableStock = isService ? 999999 : getStock(product.id);
 
     if (availableStock <= 0) {
-      toast.error(`"${product.name}" est en rupture de stock.`);
+      toast.error(`« ${product.name} » est en rupture de stock dans cette librairie.`);
       return;
     }
 
@@ -194,10 +196,11 @@ export default function PosTerminal() {
       if (c.id !== id) return c;
       const product = posProducts.find(p => p.id === c.productId);
       const isService = product?.family === 'Service' || product?.reference?.startsWith('SRV-');
-      const maxStock = isService ? 999999 : Number(product?.quantity ?? 999999);
+      // Stock localisé pour ce produit dans le magasin actif
+      const maxStock = isService ? 999999 : getStock(c.productId);
 
       if (delta > 0 && !isService && c.quantity + delta > maxStock) {
-        toast.error(`Stock maximal atteint (${maxStock} disponible${maxStock > 1 ? 's' : ''})`);
+        toast.error(`Stock localisé maximum atteint (${maxStock} disponible${maxStock > 1 ? 's' : ''} dans cette librairie)`);
         return c;
       }
 
@@ -213,12 +216,13 @@ export default function PosTerminal() {
       if (c.id !== id) return c;
       const product = posProducts.find(p => p.id === c.productId);
       const isService = product?.family === 'Service' || product?.reference?.startsWith('SRV-');
-      const maxStock = isService ? 999999 : Number(product?.quantity ?? 999999);
+      // Stock localisé pour cap
+      const maxStock = isService ? 999999 : getStock(c.productId);
 
       let targetQty = Math.max(1, qty || 1);
       if (!isService && targetQty > maxStock) {
         targetQty = Math.max(1, maxStock);
-        toast.error(`Quantité ajustée au stock disponible (${maxStock})`);
+        toast.error(`Quantité ajustée au stock local disponible (${maxStock} dans cette librairie)`);
       }
 
       const lineDiscount = c.discountType === 'percent' ? c.discountPercent / 100 : 0;
@@ -374,6 +378,14 @@ export default function PosTerminal() {
     };
 
     await addPosTransaction(tx);
+
+    // Décrémente le stock localisé du magasin actif pour chaque ligne vendue
+    for (const line of cart) {
+      if (!line.productId) continue;
+      const prod = posProducts.find(p => p.id === line.productId);
+      if (!prod || prod.family === 'Service' || prod.reference?.startsWith('SRV-')) continue;
+      await adjustStock(line.productId, -line.quantity);
+    }
 
     const currentReceiptData = {
       transaction: tx,
@@ -576,6 +588,47 @@ export default function PosTerminal() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'white', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         {/* Top search & family filters */}
         <div style={{ padding: '16px', borderBottom: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {!openSession && (
+            <div style={{
+              background: '#FFFBEB',
+              border: '1px solid #FCD34D',
+              borderRadius: 'var(--radius-md)',
+              padding: '12px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              flexWrap: 'wrap'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#92400E', fontSize: '13px' }}>
+                <AlertTriangle size={20} color="#D97706" style={{ flexShrink: 0 }} />
+                <span>
+                  <strong>Caisse non ouverte :</strong> Aucune session de caisse n'est ouverte pour votre compte aujourd'hui. Vous devez ouvrir votre caisse pour pouvoir enregistrer des ventes.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowOpenModal(true)}
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: 'var(--radius-md)',
+                  background: '#D97706',
+                  color: '#ffffff',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <Wallet size={15} />
+                Ouvrir la Caisse
+              </button>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '12px' }}>
             <button onClick={() => navigate('/pos')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'white', cursor: 'pointer', color: 'var(--color-text)' }} title="Retour au tableau de bord">
               <ArrowLeft size={18} />
@@ -727,8 +780,11 @@ export default function PosTerminal() {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px', alignContent: 'start' }}>
               {filteredProducts.map(p => {
-                const isOutOfStock = p.quantity <= 0;
-                const isLowStock = p.quantity > 0 && p.quantity <= (p.minStock || 10);
+                const isService = p.family === 'Service' || p.reference?.startsWith('SRV-');
+                // Affiche le stock localisé dans le badge de la carte produit
+                const localQty = isService ? 999999 : (stockReady ? getStock(p.id) : p.quantity);
+                const isOutOfStock = !isService && localQty <= 0;
+                const isLowStock = !isService && localQty > 0 && localQty <= (p.minStock || 10);
                 return (
                   <button 
                     key={p.id} 
@@ -781,8 +837,15 @@ export default function PosTerminal() {
                           fontWeight: 600,
                           color: isOutOfStock ? 'var(--color-error)' : isLowStock ? 'var(--color-warning-strong)' : 'var(--color-success)'
                         }}>
-                          {isOutOfStock ? 'Rupture' : `Stock: ${p.quantity}`}
+                          {isService
+                            ? ''
+                            : isOutOfStock
+                              ? '❌ Rupture ici'
+                              : `Stock local : ${localQty}${isLowStock ? ' ⚠️' : ''}`}
                         </span>
+                        {isOutOfStock && p.quantity > 0 && (
+                          <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>Réseau : {p.quantity}</span>
+                        )}
                       </div>
                     </div>
                   </button>
@@ -1227,6 +1290,39 @@ export default function PosTerminal() {
                 </table>
               </div>
             )}
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal d'ouverture de caisse rapide */}
+      <Modal
+        open={showOpenModal}
+        onClose={() => setShowOpenModal(false)}
+        title="Ouvrir la session de caisse"
+        width={420}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: 0 }}>
+            Veuillez saisir le montant physique présent dans le tiroir au démarrage de votre service (fonds de caisse initial).
+          </p>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+              Fonds de caisse initial (FCFA) *
+            </label>
+            <input
+              type="number"
+              min="0"
+              autoFocus
+              placeholder="Ex: 50000"
+              value={initialFund}
+              onChange={e => setInitialFund(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleOpenSession()}
+              style={{ ...inputStyle, fontSize: '16px', fontWeight: 700 }}
+            />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+            <Button variant="outline" onClick={() => setShowOpenModal(false)}>Annuler</Button>
+            <Button variant="primary" onClick={handleOpenSession}>Confirmer & Ouvrir</Button>
           </div>
         </div>
       </Modal>

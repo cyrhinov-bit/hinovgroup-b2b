@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { 
@@ -9,6 +9,12 @@ import {
 import { todayLocalKey, toLocalDayKey } from '../../lib/dates';
 import { toast } from 'react-hot-toast';
 import { Button } from '../../components/ui/Button';
+import { PosStoreSelector, POS_SCOPE_STORAGE_KEY } from '../../components/pos/PosStoreSelector';
+import { 
+  filterTransactionsByMagasin, 
+  filterSessionsByMagasin, 
+  filterReturnsByMagasin 
+} from '../../features/pos/utils/posMagasinFilter';
 
 type Period = 'today' | '7days' | '30days' | 'custom';
 
@@ -24,10 +30,24 @@ export default function PosFinance() {
   const [endDate, setEndDate] = useState(todayLocalKey());
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedMagasinId, setSelectedMagasinId] = useState<string>(() => {
+    try {
+      return localStorage.getItem(POS_SCOPE_STORAGE_KEY) || 'ALL';
+    } catch {
+      return 'ALL';
+    }
+  });
 
+  // Synchronisation inter-composants
   useEffect(() => {
-    refreshData().catch(() => {});
-  }, [refreshData]);
+    const handleScope = (e: any) => {
+      if (e?.detail?.magasinId && e.detail.magasinId !== selectedMagasinId) {
+        setSelectedMagasinId(e.detail.magasinId);
+      }
+    };
+    window.addEventListener('pos-magasin-scope-changed', handleScope);
+    return () => window.removeEventListener('pos-magasin-scope-changed', handleScope);
+  }, [selectedMagasinId]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -40,6 +60,19 @@ export default function PosFinance() {
       setIsRefreshing(false);
     }
   };
+
+  // Filtrage par boutique / périmètre
+  const scopedTransactions = useMemo(() => {
+    return filterTransactionsByMagasin(posTransactions, selectedMagasinId, posCashSessions);
+  }, [posTransactions, selectedMagasinId, posCashSessions]);
+
+  const scopedReturns = useMemo(() => {
+    return filterReturnsByMagasin(posReturns, selectedMagasinId, posTransactions);
+  }, [posReturns, selectedMagasinId, posTransactions]);
+
+  const scopedCashSessions = useMemo(() => {
+    return filterSessionsByMagasin(posCashSessions, selectedMagasinId);
+  }, [posCashSessions, selectedMagasinId]);
 
   // Modal Purge Période
   const [showPurgeModal, setShowPurgeModal] = useState(false);
@@ -66,8 +99,8 @@ export default function PosFinance() {
 
   const { start, end } = getDateRange();
 
-  const validTx = posTransactions.filter(t => t.status === 'Validée');
-  const activeReturns = posReturns.filter(r => r.status === 'Traité');
+  const validTx = scopedTransactions.filter(t => t.status === 'Validée');
+  const activeReturns = scopedReturns.filter(r => r.status === 'Traité');
 
   const inRange = (dateStr: string) => toLocalDayKey(dateStr) >= start && toLocalDayKey(dateStr) <= end;
 
@@ -139,7 +172,7 @@ export default function PosFinance() {
   const periodLivresRev = Math.max(0, Math.round(rawLivresRev - refundLivres));
   const periodFournituresRev = Math.max(0, Math.round(rawFournituresRev - refundFournitures));
 
-  const rangeSessions = posCashSessions.filter(s => inRange(s.openedAt));
+  const rangeSessions = scopedCashSessions.filter(s => inRange(s.openedAt));
   const closedSessions = rangeSessions.filter(s => s.status === 'Fermée');
 
   const productMargins: Record<string, { name: string; qtySold: number; totalRevenue: number; totalCost: number; purchasePrice: number; sellingPrice: number }> = {};
@@ -217,15 +250,15 @@ export default function PosFinance() {
   const formatDate = (d: string) => new Date(d).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' });
 
   // Calcul d'impact de la purge sur la période sélectionnée
-  const purgeTxs = posTransactions.filter(t => {
+  const purgeTxs = scopedTransactions.filter(t => {
     const d = toLocalDayKey(t.date);
     return d >= purgeStartDate && d <= purgeEndDate;
   });
-  const purgeReturns = posReturns.filter(r => {
+  const purgeReturns = scopedReturns.filter(r => {
     const d = toLocalDayKey(r.date);
     return d >= purgeStartDate && d <= purgeEndDate;
   });
-  const purgeSessions = posCashSessions.filter(s => {
+  const purgeSessions = scopedCashSessions.filter(s => {
     const d = toLocalDayKey(s.openedAt);
     return d >= purgeStartDate && d <= purgeEndDate;
   });
@@ -259,7 +292,14 @@ export default function PosFinance() {
   return (
     <div className="pos-page">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>Finance POS</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>Finance POS</h1>
+          <PosStoreSelector
+            value={selectedMagasinId}
+            onChange={setSelectedMagasinId}
+            label="Boutique :"
+          />
+        </div>
         
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <Button 

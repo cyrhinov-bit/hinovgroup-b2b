@@ -1,16 +1,36 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Send, Sparkles, Mic, MicOff, Loader2, TrendingUp, AlertTriangle, ShieldCheck, HelpCircle, RefreshCw, BarChart3, ArrowRight } from 'lucide-react';
+import { Bot, Send, Sparkles, Mic, MicOff, Loader2, RefreshCw, Store } from 'lucide-react';
 import { useAppContext } from '../../../context/AppContext';
 import { useAuth } from '../../../context/AuthContext';
 import { askDirectorCopilot, type CopilotMessage } from '../services/DirectorAiService';
 import { DirectorAiResponseViewer } from './DirectorAiResponseViewer';
 import { formatVoiceTranscription } from '../../../lib/searchUtils';
 import { Button } from '../../../components/ui/Button';
+import { PosMagasinService, DEFAULT_MAGASIN } from '../../pos/services/PosMagasinService';
+import type { PosMagasin, PosStockTransfer } from '../../../types/posMagasins';
 import { toast } from 'react-hot-toast';
 
 export default function DirectorCopilotPage() {
   const { currentUser } = useAuth();
   const { posProducts, posTransactions, posCashSessions, posReturns, users } = useAppContext();
+
+  const [magasins, setMagasins] = useState<PosMagasin[]>([DEFAULT_MAGASIN]);
+  const [stockTransfers, setStockTransfers] = useState<PosStockTransfer[]>([]);
+  const [selectedMagasinId, setSelectedMagasinId] = useState<string>('ALL');
+
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([
+      PosMagasinService.loadMagasins(),
+      PosMagasinService.loadStockTransfers()
+    ]).then(([mList, tList]) => {
+      if (mounted) {
+        setMagasins(mList.length > 0 ? mList : [DEFAULT_MAGASIN]);
+        setStockTransfers(tList);
+      }
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
 
   const [inputQuery, setInputQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,13 +39,13 @@ export default function DirectorCopilotPage() {
     {
       id: 'welcome',
       sender: 'assistant',
-      text: `Bonjour **${currentUser?.name || 'Monsieur le Directeur'}** ! Je suis votre **Copilote Décisionnel IA (Point de Vente)**.\n\nJe suis connecté en direct aux données du magasin : ventes de caisse, stocks, sessions de caisse, remises et rentabilité.\n\nQuelle analyse souhaitez-vous effectuer aujourd'hui ?`,
+      text: `Bonjour **${currentUser?.name || 'Monsieur le Directeur'}** ! Je suis votre **Copilote Décisionnel IA — Réseau Multi-Magasins HINOV GROUP**.\n\nJe suis connecté en direct à l'ensemble de vos magasins : ventes, caisses, stocks, transferts inter-boutiques et rentabilité consolidée.\n\nQuelle analyse souhaitez-vous effectuer ?`,
       timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
       suggestedFollowUps: [
-        "📊 Bilan d'activité du magasin",
-        "⚠️ Quels sont les articles en rupture ou stock critique ?",
-        "💰 Y a-t-il eu des écarts lors des clôtures de caisse ?",
-        "🏆 Quel est le top 5 de nos articles les plus vendus ?"
+        "📊 Comparatif de performance de tous les magasins",
+        "🔄 Quels transferts de stock recommandez-vous entre les librairies ?",
+        "💰 Quel magasin a le plus d'écarts de caisse ?",
+        "📦 Quels articles sont en rupture dans le réseau ?"
       ]
     }
   ]);
@@ -85,6 +105,9 @@ export default function DirectorCopilotPage() {
           posCashSessions,
           posReturns,
           users,
+          posMagasins: magasins,
+          stockTransfers,
+          selectedMagasinId,
           currentUserName: currentUser?.name,
           userId: currentUser?.id
         },
@@ -196,37 +219,54 @@ export default function DirectorCopilotPage() {
   return (
     <div className="dashboard" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 100px)', padding: '0 20px 20px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         <div>
           <h2 style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
-            <Bot size={26} color="#8B5CF6" /> Copilot Décisionnel Direction (IA)
+            <Bot size={26} color="#8B5CF6" /> Copilot Décisionnel Direction — Réseau (IA)
           </h2>
           <p style={{ color: 'var(--color-text-muted)', margin: '4px 0 0', fontSize: '14px' }}>
-            Interrogez en direct toutes les données de vente, caisses, finances et stocks en français
+            Analyses consolidées de l'ensemble des magasins · ventes, caisses, stocks, transferts
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            setMessages([
-              {
-                id: `welcome-${Date.now()}`,
-                sender: 'assistant',
-                text: `Bonjour **${currentUser?.name || 'Monsieur le Directeur'}** ! Conversation réinitialisée. En quoi puis-je vous éclairer ?`,
-                timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-                suggestedFollowUps: [
-                  "Bilan financier global",
-                  "Articles en rupture",
-                  "Contrôle des écarts de caisse"
-                ]
-              }
-            ]);
-          }}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-        >
-          <RefreshCw size={14} /> Nouvelle discussion
-        </Button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* Sélecteur de magasin */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'white', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+            <Store size={15} color="#7c3aed" />
+            <select
+              aria-label="Sélectionner le périmètre du Copilot"
+              value={selectedMagasinId}
+              onChange={e => setSelectedMagasinId(e.target.value)}
+              style={{ border: 'none', outline: 'none', fontWeight: 700, fontSize: '13px', color: '#7c3aed', background: 'transparent', cursor: 'pointer' }}
+            >
+              <option value="ALL">🌐 Tout le Réseau ({magasins.length} magasins)</option>
+              {magasins.map(m => (
+                <option key={m.id} value={m.id}>🏪 {m.nom}</option>
+              ))}
+            </select>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setMessages([
+                {
+                  id: `welcome-${Date.now()}`,
+                  sender: 'assistant',
+                  text: `Conversation réinitialisée, ${currentUser?.name || 'Monsieur le Directeur'}. Je reste à votre disposition pour analyser votre réseau de magasins.`,
+                  timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+                  suggestedFollowUps: [
+                    "📊 Comparatif de performance de tous les magasins",
+                    "🔄 Quels transferts de stock recommandez-vous ?",
+                    "💰 Écarts de caisse par magasin"
+                  ]
+                }
+              ]);
+            }}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <RefreshCw size={14} /> Nouvelle discussion
+          </Button>
+        </div>
       </div>
 
       {/* Main Chat Container */}
@@ -255,71 +295,31 @@ export default function DirectorCopilotPage() {
           </span>
           <button
             type="button"
-            onClick={() => handleSend("Donnez-moi vos conseils et votre plan d'action pour booster le chiffre d'affaires et le panier moyen du magasin")}
-            style={{
-              padding: '4px 10px',
-              borderRadius: '12px',
-              border: '1px solid #DDD6FE',
-              background: 'white',
-              color: '#5B21B6',
-              fontSize: '11.5px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap'
-            }}
+            onClick={() => handleSend("Donnez-moi le comparatif de rentabilité et de performance de tous les magasins du réseau")}
+            style={{ padding: '4px 10px', borderRadius: '12px', border: '1px solid #DDD6FE', background: 'white', color: '#5B21B6', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
           >
-            🚀 Booster le Chiffre d'Affaires
+            📊 Comparatif des Magasins
           </button>
           <button
             type="button"
-            onClick={() => handleSend("Quels sont vos conseils pour l'approvisionnement et la gestion des ruptures de stock ?")}
-            style={{
-              padding: '4px 10px',
-              borderRadius: '12px',
-              border: '1px solid #BAE6FD',
-              background: 'white',
-              color: '#0369A1',
-              fontSize: '11.5px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap'
-            }}
+            onClick={() => handleSend("Quels transferts de stock inter-magasins recommandez-vous d'effectuer en priorité ?")}
+            style={{ padding: '4px 10px', borderRadius: '12px', border: '1px solid #BAE6FD', background: 'white', color: '#0369A1', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
           >
-            📦 Conseils Approvisionnement & Stocks
+            🔄 Transferts de Stock Inter-Magasins
           </button>
           <button
             type="button"
-            onClick={() => handleSend("Comment optimiser nos marges et encadrer les remises accordées en caisse ?")}
-            style={{
-              padding: '4px 10px',
-              borderRadius: '12px',
-              border: '1px solid #FED7AA',
-              background: 'white',
-              color: '#C2410C',
-              fontSize: '11.5px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap'
-            }}
+            onClick={() => handleSend("Quel est le bilan des écarts de caisse et quels magasins sont les plus à risque ?")}
+            style={{ padding: '4px 10px', borderRadius: '12px', border: '1px solid #FECACA', background: 'white', color: '#B91C1C', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
           >
-            🏷️ Optimiser les Marges & Prix
+            🛡️ Sécuriser les Caisses du Réseau
           </button>
           <button
             type="button"
-            onClick={() => handleSend("Quels sont vos conseils pour sécuriser les caisses et supprimer les écarts de fin de journée ?")}
-            style={{
-              padding: '4px 10px',
-              borderRadius: '12px',
-              border: '1px solid #FECACA',
-              background: 'white',
-              color: '#B91C1C',
-              fontSize: '11.5px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap'
-            }}
+            onClick={() => handleSend("Quels sont les articles en rupture dans l'ensemble du réseau et quels approvisionnements lancer ?")}
+            style={{ padding: '4px 10px', borderRadius: '12px', border: '1px solid #D1FAE5', background: 'white', color: '#065F46', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
           >
-            🛡️ Sécuriser les Clôtures de Caisse
+            📦 Ruptures & Approvisionnements
           </button>
         </div>
 

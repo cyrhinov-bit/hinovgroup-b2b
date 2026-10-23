@@ -2,6 +2,27 @@ import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { buildAppConfig, getPlatformLabel } from '@/shared';
 import { Toaster } from 'react-hot-toast';
+function Spinner() {
+  const containerStyle: React.CSSProperties = {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100%',
+  };
+  const spinnerStyle: React.CSSProperties = {
+    border: '4px solid rgba(0,0,0,0.1)',
+    borderLeftColor: '#4a90e2',
+    borderRadius: '50%',
+    width: '40px',
+    height: '40px',
+    animation: 'spin 0.9s linear infinite',
+  };
+  return (
+    <div style={containerStyle} aria-label="Loading">
+      <div style={spinnerStyle} />
+    </div>
+  );
+}
 import { Layout } from './components/Layout';
 import { DashboardDirecteur } from './pages/DashboardDirecteur';
 import { DashboardResponsable } from './pages/DashboardResponsable';
@@ -40,6 +61,7 @@ const DirectorCopilotPage = lazy(() => import('./features/director/presentation/
 const DirectorAuditPage = lazy(() => import('./features/director/presentation/DirectorAuditPage'));
 const DashboardPos = lazy(() => import('./pages/pos/DashboardPos'));
 const PosSettings = lazy(() => import('./pages/pos/PosSettings'));
+const PosMagasins = lazy(() => import('./pages/pos/PosMagasins'));
 const PosUsers = lazy(() => import('./pages/pos/PosUsers'));
 const PosDiscounts = lazy(() => import('./pages/pos/PosDiscounts'));
 const PosReports = lazy(() => import('./pages/pos/PosReports'));
@@ -91,10 +113,7 @@ function ProtectedRoute() {
   
   if (loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: '100vh', justifyContent: 'center', alignItems: 'center', backgroundColor: 'var(--color-background)', color: 'var(--color-primary)' }}>
-        <h2>{webAppConfig.appName}</h2>
-        <small>{getPlatformLabel(webAppConfig.target)}</small>
-      </div>
+      <Spinner />
     );
   }
 
@@ -189,18 +208,18 @@ function App() {
 
                     {/* Diagnostics : authentification + Direction requises (ex-publiques) */}
                     <Route path="/test" element={<RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><TestDashboard /></RequireRole>} />
-                    <Route path="/diagnostics" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><DiagnosticPage /></RequireRole></Suspense>} />
-                    <Route path="/diagnostics/printer" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><PrinterDiagnosticPage /></RequireRole></Suspense>} />
-                    <Route path="/diagnostics/scanner" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><ScannerDiagnosticPage /></RequireRole></Suspense>} />
-                    <Route path="/diagnostics/pos" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><PosDiagnosticPage /></RequireRole></Suspense>} />
-                    <Route path="/diagnostics/performance" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><PerformanceDiagnosticPage /></RequireRole></Suspense>} />
-                    <Route path="/diagnostics/backup" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><BackupDiagnosticPage /></RequireRole></Suspense>} />
-                    <Route path="/diagnostics/files" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><FileDiagnosticPage /></RequireRole></Suspense>} />
-                    <Route path="/diagnostics/sync" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><SyncDiagnosticPage /></RequireRole></Suspense>} />
-                    <Route path="/diagnostics/support" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><SupportDiagnosticPage /></RequireRole></Suspense>} />
-                    <Route path="/diagnostics/security" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><SecurityDiagnosticPage /></RequireRole></Suspense>} />
-                    <Route path="/diagnostics/updater" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><UpdaterDiagnosticPage /></RequireRole></Suspense>} />
-                    <Route path="/diagnostics/hardware" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><HardwareDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><DiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/printer" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><PrinterDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/scanner" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><ScannerDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/pos" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><PosDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/performance" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><PerformanceDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/backup" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><BackupDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/files" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><FileDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/sync" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><SyncDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/support" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><SupportDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/security" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><SecurityDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/updater" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><UpdaterDiagnosticPage /></RequireRole></Suspense>} />
+                    <Route path="/diagnostics/hardware" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><HardwareDiagnosticPage /></RequireRole></Suspense>} />
 
                     <Route path="clients" element={<RequireRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><Clients /></RequireRole>} />
                     <Route path="services" element={<RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><Services /></RequireRole>} />
@@ -208,9 +227,9 @@ function App() {
                     <Route path="devis" element={<RequireRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><Devis /></RequireRole>} />
                     <Route path="devis/nouveau" element={<RequireRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><QuoteCreation /></RequireRole>} />
                     <Route path="factures" element={<RequireCrmModule moduleKey="crmFacturationEnabled"><Factures /></RequireCrmModule>} />
-                    <Route path="fournisseurs-factures" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireCrmModule moduleKey="crmSupFacturesEnabled"><SupFactures /></RequireCrmModule></Suspense>} />
+                    <Route path="fournisseurs-factures" element={<Suspense fallback={<Spinner />}><RequireCrmModule moduleKey="crmSupFacturesEnabled"><SupFactures /></RequireCrmModule></Suspense>} />
                     <Route path="documents" element={<RequireRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><Documents /></RequireRole>} />
-                    <Route path="export" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Directeur adjoint', 'Responsable', 'Gerant', 'SuperAdmin']}><DataExport /></RequireRole></Suspense>} />
+                    <Route path="export" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Directeur adjoint', 'Responsable', 'Gerant', 'SuperAdmin']}><DataExport /></RequireRole></Suspense>} />
                     <Route path="utilisateurs" element={<RequireRole roles={['Directeur', 'SuperAdmin']}><Utilisateurs /></RequireRole>} />
                     <Route path="parametres" element={<RequireRole roles={['Directeur']}><Parametres /></RequireRole>} />
 
@@ -237,32 +256,33 @@ function App() {
                     <Route path="responsable" element={<RequireRole roles={['Responsable', 'SuperAdmin']}><DashboardResponsable /></RequireRole>} />
 
                     {/* POS routes */}
-                    <Route path="pos" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant']}><DashboardPos /></RequireRole></Suspense>} />
-                    <Route path="pos/copilot-ia" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant']}><DirectorCopilotPage /></RequireRole></Suspense>} />
-                    <Route path="pos/audit-ia" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant']}><DirectorAuditPage /></RequireRole></Suspense>} />
-                    <Route path="pos/settings" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur']}><PosSettings /></RequirePosModule></Suspense>} />
-                    <Route path="pos/users" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant']}><PosUsers /></RequirePosModule></Suspense>} />
-                    <Route path="pos/cashier-modules" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant']}><CashierModulesManager /></RequireRole></Suspense>} />
-          <Route path="pos/sync-errors" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant', 'Caissier']}><PosSyncErrors /></RequireRole></Suspense>} />
-                    <Route path="pos/discounts" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur']}><PosDiscounts /></RequirePosModule></Suspense>} />
-                    <Route path="pos/reports" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur']}><PosReports /></RequirePosModule></Suspense>} />
-                    <Route path="pos/finance" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant']}><PosFinance /></RequirePosModule></Suspense>} />
-                    <Route path="pos/returns" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']} moduleKey="posReturnsEnabled"><PosReturns /></RequirePosModule></Suspense>} />
-                    <Route path="pos/products" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']} moduleKey="posCatalogueEnabled"><PosProducts /></RequirePosModule></Suspense>} />
-                    <Route path="pos/stock-movements" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']} moduleKey="posStockEnabled"><PosStockMovements /></RequirePosModule></Suspense>} />
-                    <Route path="pos/categories" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant']}><PosCategories /></RequirePosModule></Suspense>} />
-                    <Route path="pos/brands" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant']}><PosBrands /></RequirePosModule></Suspense>} />
-                    <Route path="pos/suppliers" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant']}><PosSuppliers /></RequirePosModule></Suspense>} />
-                    <Route path="pos/stock" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']} moduleKey="posStockEnabled"><PosStock /></RequirePosModule></Suspense>} />
-                    <Route path="pos/supply" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']} moduleKey="posSupplyEnabled"><PosSupply /></RequirePosModule></Suspense>} />
-                    <Route path="pos/inventory" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']} moduleKey="posInventoryEnabled"><PosInventory /></RequirePosModule></Suspense>} />
-                    <Route path="pos/terminal" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']}><PosTerminal /></RequirePosModule></Suspense>} />
-                    <Route path="pos/transactions" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']}><PosTransactions /></RequirePosModule></Suspense>} />
-                    <Route path="pos/cash" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']}><PosCash /></RequirePosModule></Suspense>} />
-                    <Route path="pos/versements" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Encaisseur']}><VersementsEncaisseur /></RequireRole></Suspense>} />
-                    <Route path="pos/versements/caissier" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']}><VersementsCaissier /></RequirePosModule></Suspense>} />
-                    <Route path="pos/versements/admin" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'SuperAdmin']}><VersementsAdmin /></RequireRole></Suspense>} />
-                    <Route path="pos/parametres-ia" element={<Suspense fallback={<div style={{ padding: 20 }}>Chargement...</div>}><RequireRole roles={['Directeur', 'Gerant', 'Caissier']}><GeminiSettings /></RequireRole></Suspense>} />
+                    <Route path="pos" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Gerant']}><DashboardPos /></RequireRole></Suspense>} />
+                    <Route path="pos/copilot-ia" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Gerant']}><DirectorCopilotPage /></RequireRole></Suspense>} />
+                    <Route path="pos/audit-ia" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Gerant']}><DirectorAuditPage /></RequireRole></Suspense>} />
+                    <Route path="pos/settings" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur']}><PosSettings /></RequirePosModule></Suspense>} />
+                    <Route path="pos/magasins" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Gerant', 'SuperAdmin']}><PosMagasins /></RequireRole></Suspense>} />
+                    <Route path="pos/users" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant']}><PosUsers /></RequirePosModule></Suspense>} />
+                    <Route path="pos/cashier-modules" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Gerant']}><CashierModulesManager /></RequireRole></Suspense>} />
+          <Route path="pos/sync-errors" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Gerant', 'Caissier']}><PosSyncErrors /></RequireRole></Suspense>} />
+                    <Route path="pos/discounts" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur']}><PosDiscounts /></RequirePosModule></Suspense>} />
+                    <Route path="pos/reports" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur']}><PosReports /></RequirePosModule></Suspense>} />
+                    <Route path="pos/finance" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant']}><PosFinance /></RequirePosModule></Suspense>} />
+                    <Route path="pos/returns" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']} moduleKey="posReturnsEnabled"><PosReturns /></RequirePosModule></Suspense>} />
+                    <Route path="pos/products" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']} moduleKey="posCatalogueEnabled"><PosProducts /></RequirePosModule></Suspense>} />
+                    <Route path="pos/stock-movements" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']} moduleKey="posStockEnabled"><PosStockMovements /></RequirePosModule></Suspense>} />
+                    <Route path="pos/categories" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant']}><PosCategories /></RequirePosModule></Suspense>} />
+                    <Route path="pos/brands" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant']}><PosBrands /></RequirePosModule></Suspense>} />
+                    <Route path="pos/suppliers" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant']}><PosSuppliers /></RequirePosModule></Suspense>} />
+                    <Route path="pos/stock" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']} moduleKey="posStockEnabled"><PosStock /></RequirePosModule></Suspense>} />
+                    <Route path="pos/supply" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']} moduleKey="posSupplyEnabled"><PosSupply /></RequirePosModule></Suspense>} />
+                    <Route path="pos/inventory" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']} moduleKey="posInventoryEnabled"><PosInventory /></RequirePosModule></Suspense>} />
+                    <Route path="pos/terminal" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']}><PosTerminal /></RequirePosModule></Suspense>} />
+                    <Route path="pos/transactions" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']}><PosTransactions /></RequirePosModule></Suspense>} />
+                    <Route path="pos/cash" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']}><PosCash /></RequirePosModule></Suspense>} />
+                    <Route path="pos/versements" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Encaisseur']}><VersementsEncaisseur /></RequireRole></Suspense>} />
+                    <Route path="pos/versements/caissier" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant', 'Caissier']}><VersementsCaissier /></RequirePosModule></Suspense>} />
+                    <Route path="pos/versements/admin" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'SuperAdmin']}><VersementsAdmin /></RequireRole></Suspense>} />
+                    <Route path="pos/parametres-ia" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Gerant', 'Caissier']}><GeminiSettings /></RequireRole></Suspense>} />
                     
                     <Route path="*" element={<div style={{ padding: '20px' }}><h1>Page introuvable</h1></div>} />
                   </Route>

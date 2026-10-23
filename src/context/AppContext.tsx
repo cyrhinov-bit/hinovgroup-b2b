@@ -11,6 +11,7 @@ import type { ProductPersistence } from '../features/products/data/repositories/
 import { productService } from '../features/products/services/ProductService';
 import { toLocalDayKey } from '../lib/dates';
 import { platform } from '../platform';
+import { PosMagasinService } from '../features/pos/services/PosMagasinService';
 
 const isUuid = (value?: string) => !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
@@ -399,19 +400,19 @@ export interface V2WeeklyReport {
 export interface PosCategory { id: string; name: string; family: 'Livre' | 'Fourniture' | 'Service'; }
 export interface PosBrand { id: string; name: string; }
 export interface PosSupplier { id: string; name: string; contact?: string; phone?: string; email?: string; address?: string; }
-export interface PosProduct { id: string; reference: string; barcode?: string; isbn?: string; name: string; family?: 'Livre' | 'Fourniture' | 'Service'; categoryId?: string; brandId?: string; supplierId?: string; purchasePrice: number; sellingPrice: number; quantity: number; minStock: number; imageUrl?: string; description?: string; status?: 'Active' | 'Inactive'; isActive: boolean; unit?: string; createdAt?: string; updatedAt?: string; }
+export interface PosProduct { id: string; reference: string; barcode?: string; isbn?: string; name: string; family?: 'Livre' | 'Fourniture' | 'Service'; categoryId?: string; brandId?: string; supplierId?: string; purchasePrice: number; sellingPrice: number; quantity: number; minStock: number; imageUrl?: string; description?: string; status?: 'Active' | 'Inactive'; isActive: boolean; unit?: string; magasinId?: string; createdAt?: string; updatedAt?: string; }
 export interface PosStockEntryLine { id: string; productId: string; quantity: number; purchasePrice: number; total: number; }
 export interface PosStockEntry { id: string; reference: string; supplierId?: string; date: string; totalAmount: number; status: 'Brouillon' | 'Validé' | 'Annulé'; notes?: string; createdBy?: string; lines: PosStockEntryLine[]; }
 export interface PosInventoryLine { id: string; productId: string; expectedQty: number; countedQty: number; difference: number; }
 export interface PosInventory { id: string; reference: string; date: string; status: 'En cours' | 'Terminé' | 'Annulé'; notes?: string; createdBy?: string; lines: PosInventoryLine[]; }
-export interface PosCashSession { id: string; cashierId?: string; openedAt: string; closedAt?: string; initialFund: number; finalAmount?: number; expectedAmount?: number; difference?: number; status: 'Ouverte' | 'Fermée'; }
+export interface PosCashSession { id: string; cashierId?: string; magasinId?: string; openedAt: string; closedAt?: string; initialFund: number; finalAmount?: number; expectedAmount?: number; difference?: number; status: 'Ouverte' | 'Fermée'; }
 export interface PosTransactionLine { id: string; productId?: string; description: string; quantity: number; unitPrice: number; discountPercent: number; discountAmount: number; total: number; costPrice?: number; }
-export interface PosTransaction { id: string; transactionNumber: string; cashierId?: string; sessionId?: string; date: string; subtotal: number; vat: number; discountAmount: number; total: number; receivedAmount?: number; changeAmount?: number; status: 'Validée' | 'Annulée' | 'Retournée'; lines: PosTransactionLine[]; payments: PosPayment[]; }
+export interface PosTransaction { id: string; transactionNumber: string; cashierId?: string; sessionId?: string; magasinId?: string; date: string; subtotal: number; vat: number; discountAmount: number; total: number; receivedAmount?: number; changeAmount?: number; status: 'Validée' | 'Annulée' | 'Retournée'; lines: PosTransactionLine[]; payments: PosPayment[]; }
 export interface PosPayment { id: string; transactionId?: string; method: 'Espèces' | 'Mobile Money' | 'Mixte'; amount: number; reference?: string; }
 export interface PosDiscount { id: string; name: string; type: 'Pourcentage' | 'Montant'; value: number; maxPercent?: number; maxAmount?: number; active: boolean; }
 export interface PosReturnLine { id: string; productId?: string; description: string; quantity: number; unitPrice: number; total: number; reason: string; }
 export interface ExchangeLine { id: string; productId: string; description: string; quantity: number; unitPrice: number; total: number; }
-export interface PosReturn { id: string; returnNumber: string; transactionId?: string; sessionId?: string; date: string; type: 'Retour simple' | 'Retour avec échange'; totalRefund: number; totalExchange: number; amountToPay: number; refundMethod?: 'Espèces' | 'Mobile Money'; complementTransactionId?: string; status: 'En attente' | 'Traité' | 'Annulé'; lines: PosReturnLine[]; exchangeLines?: ExchangeLine[]; notes?: string; createdBy?: string; }
+export interface PosReturn { id: string; returnNumber: string; transactionId?: string; sessionId?: string; magasinId?: string; date: string; type: 'Retour simple' | 'Retour avec échange'; totalRefund: number; totalExchange: number; amountToPay: number; refundMethod?: 'Espèces' | 'Mobile Money'; complementTransactionId?: string; status: 'En attente' | 'Traité' | 'Annulé'; lines: PosReturnLine[]; exchangeLines?: ExchangeLine[]; notes?: string; createdBy?: string; }
 export interface PosCartItem { id: string; productId: string; name: string; reference: string; unitPrice: number; quantity: number; discountType: 'none' | 'percent' | 'amount'; discountPercent: number; discountAmount: number; total: number; }
   export interface SuspendedCart { id: string; reference?: string; date: string; cart: PosCartItem[]; discountType?: 'none' | 'percent' | 'amount'; discountValue?: number; }
 
@@ -611,7 +612,7 @@ interface AppState {
   deleteImportSession: (id: string) => Promise<void>;
   addImportError: (error: ImportError) => Promise<void>;
   completeProduct: (productId: string, updates: Partial<PosProduct>) => Promise<void>;
-  refreshData: (isBackground?: boolean) => Promise<void>;
+  refreshData: (isBackground?: boolean, tables?: string[]) => Promise<void>;
   reconcilePosData: (opts?: { force?: boolean }) => Promise<any>;
   // CRM Modules Responsables
   crmTiers: ClientFournisseur[];
@@ -785,7 +786,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const lastRefreshTimeRef = useRef<number>(0);
 
   // Load from offline cache first, then fetch from Supabase if online
-  const refreshData = useCallback(async (isBackground: boolean = false) => {
+  const refreshData = useCallback(async (isBackground: boolean = false, tables?: string[]) => {
     // Si une synchronisation d'arrière-plan est demandée mais qu'un rafraîchissement a eu lieu il y a moins de 5 secondes, ignorer
     if (isBackground && Date.now() - lastRefreshTimeRef.current < 5000) {
       return;
@@ -797,6 +798,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     const executeRefresh = async () => {
+      const tablesToFetch = tables ? new Set(tables) : null;
       if (!isBackground) {
         setLoading(true);
       }
@@ -1012,10 +1014,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         };
 
+        const safeFetchTable = (table: string, queryFn: () => any): Promise<any> =>
+          !tablesToFetch || tablesToFetch.has(table)
+            ? safeFetch(queryFn, false, table)
+            : Promise.resolve(null);
+
         // Variante paginée (PostgREST tronque à max_rows=1000) : boucle .range()
         // ordonnée par created_at jusqu'à page incomplète. Repli une page si la
         // table n'a pas de colonne created_at.
         const safeFetchAll = async (table: string, select = '*'): Promise<any> => {
+          if (tablesToFetch && !tablesToFetch.has(table)) return null;
           try {
             const PAGE = 1000;
             const out: any[] = [];
@@ -1053,7 +1061,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           () => currentUser ? safeFetchAll('clients') : Promise.resolve(null),
           () => safeFetchAll('services'),
           () => safeFetchAll('prestations'),
-          () => safeFetch(() => supabase.from('settings').select('*').limit(1).maybeSingle()),
+          () => safeFetchTable('settings', () => supabase.from('settings').select('*').limit(1).maybeSingle()),
           () => currentUser ? safeFetchAll('quotes', '*, quote_lines(*)') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('ventes', '*, vente_lines(*)') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('commissions') : Promise.resolve(null),
@@ -1084,7 +1092,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           () => safeFetchAll('pos_transactions', '*, pos_transaction_lines(*), pos_payments(*)'),
           () => safeFetchAll('pos_payments'),
           () => safeFetchAll('pos_discounts'),
-          () => safeFetch(() => supabase.from('pos_settings').select('*').limit(1).maybeSingle()),
+          () => safeFetchTable('pos_settings', () => supabase.from('pos_settings').select('*').limit(1).maybeSingle()),
           () => currentUser ? safeFetchAll('crm_documents') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('crm_folders') : Promise.resolve(null),
           () => currentUser ? safeFetchAll('notifications') : Promise.resolve(null),
@@ -2086,11 +2094,92 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!currentUser) return;
 
+    const realtimeRefreshTargets: Record<string, string[]> = {
+      profiles: ['profiles'],
+      clients: ['clients'],
+      services: ['services'],
+      prestations: ['prestations'],
+      settings: ['settings'],
+      quotes: ['quotes'],
+      quote_lines: ['quotes'],
+      ventes: ['ventes'],
+      vente_lines: ['ventes'],
+      commissions: ['commissions'],
+      vente_echeances: ['vente_echeances'],
+      facture_paiements: ['facture_paiements'],
+      couts: ['couts'],
+      scoring_rules: ['scoring_rules'],
+      objectifs: ['objectifs'],
+      classements: ['classements'],
+      primes: ['primes'],
+      prime_audit_logs: ['prime_audit_logs'],
+      prospects: ['prospects'],
+      prospect_activities: ['prospect_activities'],
+      prospect_follow_ups: ['prospect_follow_ups'],
+      categories: ['categories'],
+      activity_reports: ['activity_reports'],
+      weekly_reports: ['weekly_reports'],
+      v2_daily_reports: ['v2_daily_reports'],
+      v2_weekly_reports: ['v2_weekly_reports'],
+      pos_categories: ['pos_categories'],
+      pos_brands: ['pos_brands'],
+      pos_suppliers: ['pos_suppliers'],
+      pos_products: ['pos_products'],
+      pos_stock_entries: ['pos_stock_entries'],
+      pos_stock_entry_lines: ['pos_stock_entries'],
+      pos_stock_movements: ['pos_stock_movements'],
+      pos_inventories: ['pos_inventories'],
+      pos_inventory_lines: ['pos_inventories'],
+      pos_cash_sessions: ['pos_cash_sessions'],
+      pos_transactions: ['pos_transactions'],
+      pos_transaction_lines: ['pos_transactions'],
+      pos_payments: ['pos_payments', 'pos_transactions'],
+      pos_discounts: ['pos_discounts'],
+      pos_settings: ['pos_settings'],
+      crm_documents: ['crm_documents'],
+      crm_folders: ['crm_folders'],
+      notifications: ['notifications'],
+      pos_returns: ['pos_returns'],
+      pos_return_lines: ['pos_returns'],
+      clients_fournisseurs: ['clients_fournisseurs'],
+      agents_commerciaux: ['agents_commerciaux'],
+      prestations_commandes: ['prestations_commandes'],
+      mouvements_caisse: ['mouvements_caisse'],
+      commissions_prestations: ['commissions_prestations'],
+      catalogue_articles: ['catalogue_articles'],
+      mouvements_stock: ['mouvements_stock'],
+      interventions_maintenance: ['interventions_maintenance'],
+      techniciens_maintenance: ['techniciens_maintenance'],
+      invoices: ['invoices'],
+      invoice_items: ['invoice_items', 'invoices'],
+      invoice_payments: ['invoice_payments'],
+    };
+    const pendingRealtimeTables = new Set<string>();
     let refreshTimeout: any = null;
-    const debouncedRefresh = () => {
+    let hasUnknownRealtimeTable = false;
+    const debouncedRefresh = (payload?: { table?: string }) => {
+      if (payload?.table) pendingRealtimeTables.add(payload.table);
+      else hasUnknownRealtimeTable = true;
       if (refreshTimeout) clearTimeout(refreshTimeout);
       refreshTimeout = setTimeout(() => {
-        refreshData(true);
+        if (hasUnknownRealtimeTable) {
+          refreshData(true);
+        } else {
+          const tablesToRefresh = new Set<string>();
+          for (const table of pendingRealtimeTables) {
+            const targets = realtimeRefreshTargets[table];
+            if (!targets) {
+              refreshData(true);
+              pendingRealtimeTables.clear();
+              hasUnknownRealtimeTable = false;
+              return;
+            }
+            targets.forEach(target => tablesToRefresh.add(target));
+          }
+          if (tablesToRefresh.size > 0) refreshData(true, Array.from(tablesToRefresh));
+        }
+        pendingRealtimeTables.clear();
+        hasUnknownRealtimeTable = false;
       }, 1200);
     };
 
@@ -2105,12 +2194,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .on('postgres_changes', { event: '*', schema: 'public' }, debouncedRefresh)
       .subscribe();
 
-    // Heartbeat polling (toutes les 45s) en tâche de fond transparente
+    // Heartbeat complet de secours ; les changements usuels sont synchronisés par Realtime.
     const heartbeatInterval = setInterval(() => {
       if (navigator.onLine && document.visibilityState === 'visible') {
         refreshData(true);
       }
-    }, 45000);
+    }, 5 * 60 * 1000);
       
     return () => {
       if (refreshTimeout) clearTimeout(refreshTimeout);
@@ -3835,7 +3924,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
     }
-    const newSession = { ...session, id: session.id || uuidv4() };
+    const newSession = { ...session, id: session.id || uuidv4(), magasinId: session.magasinId || PosMagasinService.getActiveMagasinId() };
     const nextSessions = [...posCashSessions, newSession];
     setPosCashSessions(nextSessions);
     await safeSet(db.posCashSessions, nextSessions);
@@ -3977,7 +4066,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addPosTransaction = async (tx: PosTransaction) => {
-    const newTx = { ...tx, id: tx.id || uuidv4(), lines: tx.lines.map(l => ({ ...l, id: l.id || uuidv4() })), payments: tx.payments.map(p => ({ ...p, id: p.id || uuidv4() })) };
+    const activeMagId = tx.magasinId || PosMagasinService.getActiveMagasinId();
+    const newTx = { ...tx, id: tx.id || uuidv4(), magasinId: activeMagId, lines: tx.lines.map(l => ({ ...l, id: l.id || uuidv4() })), payments: tx.payments.map(p => ({ ...p, id: p.id || uuidv4() })) };
     const nextTxs = [newTx, ...posTransactions.filter(t => t.id !== newTx.id)];
     setPosTransactions(nextTxs);
     await safeSet(db.posTransactions, nextTxs);
@@ -5664,4 +5754,3 @@ export const useAppContext = () => {
   if (!context) throw new Error('useAppContext must be used within an AppProvider');
   return context;
 };
-

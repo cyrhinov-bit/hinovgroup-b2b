@@ -29,10 +29,6 @@ export default function PosTransactions() {
   const [isPurging, setIsPurging] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    refreshData().catch(() => {});
-  }, [refreshData]);
-
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {

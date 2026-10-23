@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { BarChart3, TrendingUp, ShoppingCart, Printer, BookOpen, PenTool, RefreshCw } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
@@ -7,10 +7,6 @@ import { toast } from 'react-hot-toast';
 export default function PosReports() {
   const { posTransactions, posProducts, posReturns, refreshData } = useAppContext();
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  useEffect(() => {
-    refreshData().catch(() => {});
-  }, [refreshData]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -223,4 +219,3 @@ export default function PosReports() {
     </div>
   );
 }
-

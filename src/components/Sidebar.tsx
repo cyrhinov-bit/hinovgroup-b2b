@@ -5,7 +5,7 @@ import {
   UserCircle, LogOut, Receipt, Coins, Target, ShoppingCart, Package, Truck, 
   ClipboardList, ClipboardCheck, Warehouse, Tag, BarChart3, DollarSign, RotateCcw, 
   FileSpreadsheet, Wallet, ToggleRight, Trophy, Sparkles, Bot, Building2, ShieldAlert,
-  History, ShoppingBag, Wrench, UserCheck, Award
+  History, ShoppingBag, Wrench, UserCheck, Award, Store
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -152,6 +152,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Paramètres IA Gemini', icon: Bot, path: '/pos/parametres-ia', color: '#D946EF', bg: '#FDF4FF', roles: ['Directeur', 'Gerant', 'Caissier'] },
     { label: 'Versements', icon: Receipt, path: '/pos/versements', color: '#0891B2', bg: '#ECFEFF', roles: ['Encaisseur'] },
     // Administration Directeur
+    { label: 'Boutiques & Transferts', icon: Store, path: '/pos/magasins', color: '#0D9488', bg: '#F0FDFA', roles: ['Directeur', 'Gerant', 'SuperAdmin'] },
     { label: 'Paramètres', icon: Settings, path: '/pos/settings', color: '#64748B', bg: '#F1F5F9', roles: ['Directeur'] },
     { label: 'Utilisateurs', icon: Shield, path: '/pos/users', color: '#475569', bg: '#F8FAFC', roles: ['Directeur', 'Gerant'] },
     { label: 'Modules Caissier', icon: ToggleRight, path: '/pos/cashier-modules', color: '#3B82F6', bg: '#EFF6FF', roles: ['Directeur', 'Gerant'] },
