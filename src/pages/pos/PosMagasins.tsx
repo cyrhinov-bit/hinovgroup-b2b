@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Store, Plus, ArrowRightLeft, CheckCircle2, Clock, MapPin, Phone, Mail, FileText, Search, Package } from 'lucide-react';
+import { Store, Plus, ArrowRightLeft, CheckCircle2, Clock, MapPin, Phone, Mail, FileText, Search, Package, UserPlus, UserMinus } from 'lucide-react';
 import { PosMagasinService } from '../../features/pos/services/PosMagasinService';
-import type { PosMagasin, PosStockTransfer, PosStockTransferLine } from '../../types/posMagasins';
+import type { PosMagasin, PosMagasinRole, PosStockTransfer, PosStockTransferLine, PosUserMagasin } from '../../types/posMagasins';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
@@ -9,7 +9,7 @@ import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 
 export default function PosMagasins() {
-  const { posProducts } = useAppContext();
+  const { posProducts, users } = useAppContext();
   const { currentUser } = useAuth();
   const [magasins, setMagasins] = useState<PosMagasin[]>([]);
   const [transfers, setTransfers] = useState<PosStockTransfer[]>([]);
@@ -35,8 +35,18 @@ export default function PosMagasins() {
   const [transferNotes, setTransferNotes] = useState('');
   const [transferLines, setTransferLines] = useState<PosStockTransferLine[]>([]);
   const [productSearch, setProductSearch] = useState('');
+  const [teamMagasin, setTeamMagasin] = useState<PosMagasin | null>(null);
+  const [teamAssignments, setTeamAssignments] = useState<PosUserMagasin[]>([]);
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [teamBusy, setTeamBusy] = useState(false);
+  const [assignmentUserId, setAssignmentUserId] = useState('');
+  const [assignmentRole, setAssignmentRole] = useState<PosMagasinRole>('Caissier');
 
   const canManage = currentUser && ['SuperAdmin', 'Directeur', 'Directeur adjoint', 'Gerant'].includes(currentUser.role);
+  const canAssignUsers = currentUser && ['SuperAdmin', 'Directeur', 'Directeur adjoint'].includes(currentUser.role);
+  const assignableUsers = users.filter(user =>
+    user.active !== false && (user.role === 'Gerant' || user.role === 'Caissier')
+  );
 
   const loadData = async () => {
     setLoading(true);
@@ -61,6 +71,82 @@ export default function PosMagasins() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const loadTeamAssignments = async (magasinId: string) => {
+    setTeamLoading(true);
+    try {
+      setTeamAssignments(await PosMagasinService.loadUserAssignments(magasinId));
+    } catch (error) {
+      console.error('[PosMagasins] Erreur chargement des affectations :', error);
+      toast.error('Impossible de charger les affectations de cette boutique.');
+    } finally {
+      setTeamLoading(false);
+    }
+  };
+
+  const openTeamManagement = (magasin: PosMagasin) => {
+    setTeamMagasin(magasin);
+    setAssignmentUserId('');
+    setAssignmentRole('Caissier');
+    void loadTeamAssignments(magasin.id);
+  };
+
+  const handleAssignUser = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!teamMagasin || !currentUser || !assignmentUserId) return;
+    setTeamBusy(true);
+    try {
+      await PosMagasinService.assignUserToMagasin(
+        assignmentUserId,
+        teamMagasin.id,
+        assignmentRole,
+        currentUser.id
+      );
+      toast.success('Utilisateur affecté à la boutique.');
+      setAssignmentUserId('');
+      await loadTeamAssignments(teamMagasin.id);
+    } catch (error) {
+      console.error('[PosMagasins] Erreur affectation utilisateur :', error);
+      toast.error("L'affectation n'a pas pu être enregistrée.");
+    } finally {
+      setTeamBusy(false);
+    }
+  };
+
+  const handleChangeAssignmentRole = async (assignment: PosUserMagasin, role: PosMagasinRole) => {
+    if (!teamMagasin || !currentUser || assignment.roleOnStore === role) return;
+    setTeamBusy(true);
+    try {
+      await PosMagasinService.assignUserToMagasin(
+        assignment.profileId,
+        teamMagasin.id,
+        role,
+        currentUser.id
+      );
+      toast.success('Rôle boutique mis à jour.');
+      await loadTeamAssignments(teamMagasin.id);
+    } catch (error) {
+      console.error('[PosMagasins] Erreur modification du rôle boutique :', error);
+      toast.error('Le rôle boutique n’a pas pu être modifié.');
+    } finally {
+      setTeamBusy(false);
+    }
+  };
+
+  const handleRemoveAssignment = async (assignment: PosUserMagasin) => {
+    if (!teamMagasin || !window.confirm('Retirer cet utilisateur de cette boutique ?')) return;
+    setTeamBusy(true);
+    try {
+      await PosMagasinService.removeUserFromMagasin(assignment.profileId, teamMagasin.id);
+      toast.success('Utilisateur retiré de la boutique.');
+      await loadTeamAssignments(teamMagasin.id);
+    } catch (error) {
+      console.error('[PosMagasins] Erreur suppression affectation :', error);
+      toast.error("L'utilisateur n'a pas pu être retiré de la boutique.");
+    } finally {
+      setTeamBusy(false);
+    }
+  };
 
   const handleCreateMagasin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -289,6 +375,12 @@ export default function PosMagasins() {
                   {posProducts.length} articles au catalogue
                 </span>
               </div>
+              {canAssignUsers && (
+                <Button variant="outline" onClick={() => openTeamManagement(mag)} style={{ marginTop: '12px' }}>
+                  <UserPlus size={16} style={{ marginRight: '6px' }} />
+                  Gérer l’équipe
+                </Button>
+              )}
             </div>
           ))}
         </div>
@@ -464,6 +556,101 @@ export default function PosMagasins() {
               <Button type="submit">Enregistrer la Boutique</Button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {teamMagasin && (
+        <Modal
+          open
+          onClose={() => setTeamMagasin(null)}
+          title={`Équipe — ${teamMagasin.nom}`}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {canAssignUsers && assignableUsers.length > 0 ? (
+              <form onSubmit={handleAssignUser} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 150px auto', gap: '8px', alignItems: 'end' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>Utilisateur</label>
+                  <select
+                    required
+                    value={assignmentUserId}
+                    onChange={event => setAssignmentUserId(event.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+                  >
+                    <option value="">Choisir un utilisateur</option>
+                    {assignableUsers.filter(user => !teamAssignments.some(a => a.profileId === user.id)).map(user => (
+                      <option key={user.id} value={user.id}>{user.name} — {user.role === 'Gerant' ? 'Gérant' : 'Caissier'}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>Rôle dans la boutique</label>
+                  <select
+                    value={assignmentRole}
+                    onChange={event => setAssignmentRole(event.target.value as PosMagasinRole)}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+                  >
+                    <option value="Gérant">Gérant</option>
+                    <option value="Caissier">Caissier</option>
+                  </select>
+                </div>
+                <Button type="submit" disabled={teamBusy || !assignmentUserId}>
+                  Affecter
+                </Button>
+              </form>
+            ) : (
+              <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>
+                Aucun utilisateur POS actif disponible. Créez d’abord un compte Gérant ou Caissier dans Utilisateurs POS.
+              </p>
+            )}
+
+            <div>
+              <h3 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 8px' }}>Utilisateurs affectés</h3>
+              {teamLoading ? (
+                <p style={{ color: '#64748b', fontSize: '13px' }}>Chargement des affectations…</p>
+              ) : teamAssignments.length === 0 ? (
+                <p style={{ color: '#64748b', fontSize: '13px' }}>Aucun utilisateur n’est affecté à cette boutique.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {teamAssignments.map(assignment => {
+                    const user = users.find(candidate => candidate.id === assignment.profileId);
+                    return (
+                      <div key={assignment.profileId} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '13px', fontWeight: 600 }}>{user?.name || 'Utilisateur introuvable'}</div>
+                          {user?.email && <div style={{ fontSize: '12px', color: '#64748b' }}>{user.email}</div>}
+                        </div>
+                        {assignment.roleOnStore === 'Encaisseur' ? (
+                          <span style={{ fontSize: '12px', color: '#64748b' }}>Encaisseur (affectation existante)</span>
+                        ) : (
+                          <select
+                            aria-label={`Rôle de ${user?.name || 'l’utilisateur'}`}
+                            value={assignment.roleOnStore}
+                            disabled={!canAssignUsers || teamBusy}
+                            onChange={event => void handleChangeAssignmentRole(assignment, event.target.value as PosMagasinRole)}
+                            style={{ padding: '7px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                          >
+                            <option value="Gérant">Gérant</option>
+                            <option value="Caissier">Caissier</option>
+                          </select>
+                        )}
+                        {canAssignUsers && (
+                          <button
+                            type="button"
+                            aria-label={`Retirer ${user?.name || 'l’utilisateur'} de cette boutique`}
+                            disabled={teamBusy}
+                            onClick={() => void handleRemoveAssignment(assignment)}
+                            style={{ border: 0, background: 'transparent', color: '#dc2626', cursor: teamBusy ? 'not-allowed' : 'pointer', padding: 4 }}
+                          >
+                            <UserMinus size={18} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         </Modal>
       )}
 

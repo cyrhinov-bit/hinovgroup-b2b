@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../../../lib/supabase';
 import { db } from '../../../lib/db';
-import type { PosMagasin, PosStockMagasin, PosStockTransfer, PosStockTransferLine } from '../../../types/posMagasins';
+import type { PosMagasin, PosMagasinRole, PosStockMagasin, PosStockTransfer, PosStockTransferLine, PosUserMagasin } from '../../../types/posMagasins';
 import type { PosProduct } from '../../../context/AppContext';
 
 const CURRENT_MAGASIN_KEY = 'hinov_current_pos_magasin_id';
@@ -17,6 +17,57 @@ export const DEFAULT_MAGASIN: PosMagasin = {
 };
 
 export const PosMagasinService = {
+  async loadUserAssignments(magasinId: string): Promise<PosUserMagasin[]> {
+    const { data, error } = await supabase
+      .from('pos_user_magasins')
+      .select('profile_id, magasin_id, role_on_store, is_primary, assigned_at, assigned_by')
+      .eq('magasin_id', magasinId)
+      .order('assigned_at', { ascending: true });
+
+    if (error) throw error;
+    return (data || []).map(row => ({
+      profileId: row.profile_id,
+      magasinId: row.magasin_id,
+      roleOnStore: row.role_on_store === 'Gérant' || row.role_on_store === 'Caissier'
+        ? row.role_on_store
+        : 'Encaisseur',
+      isPrimary: row.is_primary,
+      assignedAt: row.assigned_at,
+      assignedBy: row.assigned_by || undefined,
+    }));
+  },
+
+  async assignUserToMagasin(
+    profileId: string,
+    magasinId: string,
+    roleOnStore: PosMagasinRole,
+    assignedBy: string
+  ): Promise<void> {
+    const { error } = await supabase
+      .from('pos_user_magasins')
+      .upsert({
+        profile_id: profileId,
+        magasin_id: magasinId,
+        role_on_store: roleOnStore,
+        assigned_by: assignedBy,
+      }, { onConflict: 'profile_id,magasin_id' });
+
+    if (error) throw error;
+  },
+
+  async removeUserFromMagasin(profileId: string, magasinId: string): Promise<void> {
+    const { data, error } = await supabase
+      .from('pos_user_magasins')
+      .delete()
+      .eq('profile_id', profileId)
+      .eq('magasin_id', magasinId)
+      .select('profile_id')
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) throw new Error("L'affectation n'a pas été supprimée.");
+  },
+
   /**
    * Récupère l'ID du magasin actif mémorisé en local
    */

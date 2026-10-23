@@ -15,6 +15,17 @@ export interface PosMagasin {
   updatedAt?: string;
 }
 
+export type PosMagasinRole = 'Gérant' | 'Caissier';
+
+export interface PosUserMagasin {
+  profileId: string;
+  magasinId: string;
+  roleOnStore: PosMagasinRole | 'Encaisseur';
+  isPrimary: boolean;
+  assignedAt: string;
+  assignedBy?: string;
+}
+
 export interface PosStockMagasin {
   id: string;
   magasinId: string;
