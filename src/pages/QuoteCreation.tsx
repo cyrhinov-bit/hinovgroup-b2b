@@ -558,7 +558,7 @@ export function QuoteCreation() {
                   <th style={{ width: '120px' }}>Prix Unit. (FCFA)</th>
                   <th style={{ width: '90px' }}>Remise (%)</th>
                   <th style={{ width: '130px' }}>Total Net</th>
-                  <th style={{ width: '130px', background: 'color-mix(in srgb, var(--color-success) 8%, var(--color-surface))' }} title="Colonne interne — masquée sur le PDF client">Marge 🔒</th>
+                  <th style={{ width: '130px', background: 'color-mix(in srgb, var(--color-success) 8%, var(--color-surface))' }} title="Coût de revient unitaire saisi ici — non visible sur le PDF client">Coût de Revient 🔒</th>
                   <th style={{ width: '40px' }}></th>
                 </tr>
               </thead>
@@ -625,9 +625,12 @@ export function QuoteCreation() {
                           title="Coût de revient unitaire (usage interne pour calcul de marge)"
                         />
                         {costPrice > 0 && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontSize: '0.72rem', color: '#6B7280' }}>
+                              Coût total : {lineCostTotal.toLocaleString('fr-FR')} FCFA
+                            </span>
                             <span style={{ fontWeight: 600, fontSize: '0.80rem', color: getMarginColor(lineMargin) }}>
-                              {lineMargin >= 0 ? '+' : ''}{lineMargin.toLocaleString('fr-FR')} FCFA
+                              Marge : {lineMargin >= 0 ? '+' : ''}{lineMargin.toLocaleString('fr-FR')} FCFA
                             </span>
                           </div>
                         )}

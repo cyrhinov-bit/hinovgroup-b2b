@@ -468,6 +468,7 @@ export function Devis() {
                 <th>Service</th>
                 <th>Sujet</th>
                 <th style={{ textAlign: 'right' }}>Montant Total</th>
+                <th style={{ textAlign: 'right' }} title="Coût de revient total (usage interne — non visible sur le PDF client)">Coût de Revient 🔒</th>
                 <th style={{ textAlign: 'right' }}>Marge Totale</th>
                 <th>Statut</th>
                 <th>Date d'émission</th>
@@ -512,6 +513,20 @@ export function Devis() {
                   <td data-label="Sujet">{q.subject}</td>
                   <td data-label="Montant Total" style={{ textAlign: 'right', fontWeight: 700 }}>
                     {(Number(q.total) || 0).toLocaleString('fr-FR')} FCFA
+                  </td>
+                  <td data-label="Coût de Revient" style={{ textAlign: 'right' }}>
+                    {(() => {
+                      const hasCost = (q.lines || []).some(l => l.costPrice && Number(l.costPrice) > 0);
+                      if (!hasCost) return <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>—</span>;
+                      const cost = (q.lines || []).reduce(
+                        (s, l) => s + ((Number(l.costPrice) || 0) * (Number(l.quantity) || 0)), 0
+                      );
+                      return (
+                        <span style={{ fontWeight: 600, color: '#6B7280' }}>
+                          {cost.toLocaleString('fr-FR')} FCFA
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td data-label="Marge Totale" style={{ textAlign: 'right' }}>
                     {(() => {
@@ -580,7 +595,7 @@ export function Devis() {
               })}
               {filteredQuotes.length === 0 && (
                 <tr>
-                  <td colSpan={isDirector ? 10 : 9} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
+                  <td colSpan={isDirector ? 11 : 10} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
                     Aucun devis trouvé pour les critères de filtre sélectionnés.
                   </td>
                 </tr>
