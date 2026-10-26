@@ -141,8 +141,10 @@ export function QuoteCreation() {
   );
 
   // costPrice per line — UI only, never persisted into PDF
+  // Priorité : coût sauvegardé sur la ligne > catalogue > 0
   const [lineCosts, setLineCosts] = useState<number[]>(
     sourceQuote?.lines.map(l => {
+      if (l.costPrice && Number(l.costPrice) > 0) return Number(l.costPrice);
       const prestation = prestations.find(p => p.id === l.prestationId);
       return prestation?.costPrice || 0;
     }) || []
