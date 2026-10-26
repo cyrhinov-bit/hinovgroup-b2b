@@ -280,6 +280,10 @@ export function QuoteCreation() {
     // @ts-ignore
     line[field] = value;
 
+    // Préserver le coût unitaire de revient lors de la modification d'autres champs
+    // (unité, prix, remise, quantité) — on conserve la valeur existante si elle existe
+    const existingCostPrice = newLines[index].costPrice;
+
     if (field === 'prestationId') {
       const prestation = availablePrestations.find(p => p.id === value);
       if (prestation) {
@@ -293,7 +297,14 @@ export function QuoteCreation() {
         newCosts[index] = prestation.costPrice || 0;
         setLineCosts(newCosts);
         line.costPrice = prestation.costPrice || 0;
+      } else {
+        // Si la prestation n'est plus trouvée, garder le costPrice existant
+        line.costPrice = existingCostPrice;
       }
+    } else {
+      // Pour les modifications de quantity, unitPrice, discountPercent, etc.
+      // Préserver le coût unitaire de revient existant s'il en a un
+      line.costPrice = existingCostPrice !== undefined ? existingCostPrice : (line.costPrice || 0);
     }
 
     const q = Math.max(0, Number(line.quantity) || 0);
