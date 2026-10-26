@@ -80,7 +80,7 @@ async function resolveDeliveryNumber(existing: DeliveryNote[]): Promise<string> 
     const year = new Date().getFullYear();
     const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500));
     const response = await Promise.race([
-      supabase.rpc('next_delivery_number', { p_year: year }).then((r) => r).catch(() => null),
+      Promise.resolve(supabase.rpc('next_delivery_number', { p_year: year })).catch(() => null),
       timeout,
     ]);
     const data = response?.data;
