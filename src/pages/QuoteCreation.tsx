@@ -136,7 +136,8 @@ export function QuoteCreation() {
       unit: l.unit || 'Forfait',
       unitPrice: l.unitPrice,
       discountPercent: l.discountPercent || 0,
-      total: l.total
+      total: l.total,
+      costPrice: l.costPrice || 0
     })) || []
   );
 
@@ -149,6 +150,40 @@ export function QuoteCreation() {
       return prestation?.costPrice || 0;
     }) || []
   );
+
+  // Synchronisation si le devis source se charge après le montage initial (ex: F5)
+  useEffect(() => {
+    if (sourceQuote && (!persistedRef.current || persistedRef.current.id !== sourceQuote.id)) {
+      persistedRef.current = { id: sourceQuote.id, quoteNumber: sourceQuote.quoteNumber };
+      setClientId(sourceQuote.clientId || '');
+      setSubject(sourceQuote.subject || '');
+      setServiceId(sourceQuote.serviceId || '');
+      setStyle((sourceQuote.style as any) || 'Classique');
+      setAccentColor(sourceQuote.accentColor || '#009688');
+      setDiscountPercent(sourceQuote.discountPercent || 0);
+      setQuoteDate(sourceQuote.date || todayStr);
+      setValidUntil(sourceQuote.validUntil || computeValidUntil(sourceQuote.date || todayStr, settings.defaultValidity || 30));
+      setPaymentTerms(sourceQuote.paymentTerms || '50% à la commande, solde à la livraison');
+      setNotes(sourceQuote.notes || '');
+      setSignatoryName(sourceQuote.signatoryName || '');
+      setSignatoryRole(sourceQuote.signatoryRole || '');
+      setLines(sourceQuote.lines.map(l => ({
+        prestationId: l.prestationId,
+        description: l.description,
+        quantity: l.quantity,
+        unit: l.unit || 'Forfait',
+        unitPrice: l.unitPrice,
+        discountPercent: l.discountPercent || 0,
+        total: l.total,
+        costPrice: l.costPrice || 0
+      })));
+      setLineCosts(sourceQuote.lines.map(l => {
+        if (l.costPrice && Number(l.costPrice) > 0) return Number(l.costPrice);
+        const prestation = prestations.find(p => p.id === l.prestationId);
+        return prestation?.costPrice || 0;
+      }));
+    }
+  }, [sourceQuote]);
 
   // Draft state persistence
   const [draftLoaded, setDraftLoaded] = useState(false);
@@ -257,6 +292,7 @@ export function QuoteCreation() {
         const newCosts = [...lineCosts];
         newCosts[index] = prestation.costPrice || 0;
         setLineCosts(newCosts);
+        line.costPrice = prestation.costPrice || 0;
       }
     }
 
@@ -616,11 +652,17 @@ export function QuoteCreation() {
                           placeholder="Coût unitaire"
                           min="0"
                           step="1"
-                          value={lineCosts[idx] || ''}
+                          value={lineCosts[idx] !== undefined && lineCosts[idx] !== null && lineCosts[idx] > 0 ? lineCosts[idx] : ''}
                           onChange={e => {
+                            const val = e.target.value === '' ? 0 : Math.max(0, Number(e.target.value));
                             const newCosts = [...lineCosts];
-                            newCosts[idx] = Math.max(0, Number(e.target.value));
+                            newCosts[idx] = val;
                             setLineCosts(newCosts);
+                            const newLines = [...lines];
+                            if (newLines[idx]) {
+                              newLines[idx] = { ...newLines[idx], costPrice: val };
+                              setLines(newLines);
+                            }
                           }}
                           onKeyDown={handleKeyDown}
                           style={{ marginBottom: '4px', fontSize: '0.82rem' }}
