@@ -19,6 +19,7 @@ export const db = {
   profiles: createStore('profiles'),
   clients: createStore('clients'),
   quotes: createStore('quotes'),
+  deliveryNotes: createStore('deliveryNotes'),
   sales: createStore('sales'),
   commissions: createStore('commissions'),
   installments: createStore('installments'),

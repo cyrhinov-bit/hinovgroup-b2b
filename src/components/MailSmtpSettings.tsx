@@ -63,7 +63,7 @@ export function MailSmtpSettings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const saveConfig = async (): Promise<boolean> => {
+  const saveConfig = async (silent = false): Promise<boolean> => {
     if (!host.trim() || !user.trim()) {
       toast.error('Renseignez le serveur SMTP et l’adresse e-mail.');
       return false;
@@ -85,7 +85,7 @@ export function MailSmtpSettings() {
       });
       setStatus(s);
       setPassword('');
-      toast.success('Configuration enregistrée.');
+      if (!silent) toast.success('Configuration enregistrée.');
       return true;
     } catch (e: any) {
       toast.error(e?.message || "Impossible d'enregistrer la configuration.");
@@ -99,8 +99,9 @@ export function MailSmtpSettings() {
     setBusy(true);
     try {
       // On enregistre d'abord (pour tester les valeurs saisies), puis on vérifie la connexion.
-      const ok = password ? await saveConfig() : true;
-      if (!ok && password) return;
+      const ok = await saveConfig(true);
+      if (!ok) return;
+      setBusy(true);
       const res = await platform.mail.smtp.verify();
       if (res.ok) toast.success('Connexion au serveur SMTP réussie. Les identifiants sont valides.');
       else toast.error(res.error || 'Échec de la connexion au serveur SMTP.', { duration: 9000 });
@@ -118,10 +119,9 @@ export function MailSmtpSettings() {
     }
     setBusy(true);
     try {
-      if (password) {
-        const ok = await saveConfig();
-        if (!ok) return;
-      }
+      const ok = await saveConfig(true);
+      if (!ok) return;
+      setBusy(true);
       const res = await platform.mail.smtp.sendTest(testTo.trim());
       if (res.ok) toast.success(`E-mail de test envoyé à ${testTo.trim()}. Vérifiez la réception.`, { duration: 9000 });
       else toast.error(res.error || "L'envoi de test a échoué.", { duration: 9000 });
@@ -206,10 +206,10 @@ export function MailSmtpSettings() {
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
-        <button type="button" className="btn btn-primary" onClick={saveConfig} disabled={busy}>
+        <button type="button" className="btn btn-primary" onClick={() => saveConfig()} disabled={busy}>
           <Save size={16} /> Enregistrer
         </button>
-        <button type="button" className="btn btn-secondary" onClick={handleVerify} disabled={busy || !status.configured}>
+        <button type="button" className="btn btn-secondary" onClick={handleVerify} disabled={busy}>
           <PlugZap size={16} /> Tester la connexion
         </button>
         <button type="button" className="btn btn-secondary" onClick={() => setShowHelp(v => !v)}>
@@ -233,7 +233,7 @@ export function MailSmtpSettings() {
             value={testTo}
             onChange={e => setTestTo(e.target.value)}
           />
-          <button type="button" className="btn btn-secondary" onClick={handleSendTest} disabled={busy || !status.configured}>
+          <button type="button" className="btn btn-secondary" onClick={handleSendTest} disabled={busy}>
             <Send size={16} /> Envoyer un test
           </button>
         </div>

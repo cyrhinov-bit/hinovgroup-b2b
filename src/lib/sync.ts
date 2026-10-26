@@ -261,6 +261,7 @@ export type SyncActionType = 'INSERT_CLIENT' | 'UPDATE_CLIENT' | 'DELETE_CLIENT'
                              'INSERT_PRIME_AUDIT_LOG' |
                              'UPDATE_SCORING_RULE' | 'UPSERT_CLASSEMENT' |
                              'INSERT_QUOTE' | 'UPDATE_QUOTE' | 'DELETE_QUOTE' |
+                             'UPSERT_DELIVERY_NOTE' | 'DELETE_DELIVERY_NOTE' |
                              'INSERT_SALE' | 'UPDATE_SALE' | 'DELETE_SALE' |
                              'INSERT_COMMISSION' | 'UPDATE_COMMISSION' | 'DELETE_COMMISSION' |
                              'INSERT_INSTALLMENT' | 'UPDATE_INSTALLMENT' | 'DELETE_INSTALLMENT' |
@@ -743,6 +744,8 @@ const ACTION_PRIORITY: Record<string, number> = {
   'INSERT_QUOTE': 4,
   'UPDATE_QUOTE': 4,
   'DELETE_QUOTE': 6,
+  'UPSERT_DELIVERY_NOTE': 5,
+  'DELETE_DELIVERY_NOTE': 6,
   'INSERT_SALE': 4,
   'UPDATE_SALE': 4,
   'DELETE_SALE': 6,
@@ -1476,6 +1479,36 @@ export const processSyncQueue = async () => {
         }
         case 'DELETE_QUOTE': {
           const { error } = await supabase.from('quotes').delete().eq('id', action.payload.id);
+          success = checkResult(error);
+          break;
+        }
+        case 'UPSERT_DELIVERY_NOTE': {
+          const note = action.payload;
+          const nowIso = new Date().toISOString();
+          const { error } = await supabase.from('delivery_notes').upsert([{
+            id: note.id,
+            delivery_number: note.deliveryNumber,
+            quote_id: isUuid(note.quoteId) ? note.quoteId : null,
+            quote_number: note.quoteNumber || '',
+            client_id: isUuid(note.clientId) ? note.clientId : null,
+            client_name: note.clientName || null,
+            commercial_id: isUuid(note.commercialId) ? note.commercialId : null,
+            service_id: isUuid(note.serviceId) ? note.serviceId : null,
+            date: note.date || null,
+            lines: Array.isArray(note.lines) ? note.lines : [],
+            total: Number(note.total) || 0,
+            status: note.status || 'Émis',
+            created_by: isUuid(note.createdBy) ? note.createdBy : null,
+            created_at: note.createdAt || nowIso,
+            updated_at: note.updatedAt || nowIso,
+          }], { onConflict: 'id' });
+          if (error) console.error('[Sync] UPSERT_DELIVERY_NOTE échoué :', error.message);
+          success = checkResult(error);
+          break;
+        }
+        case 'DELETE_DELIVERY_NOTE': {
+          const { error } = await supabase.from('delivery_notes').delete().eq('id', action.payload.id);
+          if (error) console.error('[Sync] DELETE_DELIVERY_NOTE échoué :', error.message);
           success = checkResult(error);
           break;
         }

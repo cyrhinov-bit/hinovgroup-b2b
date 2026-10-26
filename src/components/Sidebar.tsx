@@ -122,6 +122,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Commissions', icon: Award, path: '/crm/commissions', color: '#D97706', bg: '#FFFBEB', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmCommissionsEnabled' },
     // Modules CRM Standard
     { label: 'Devis', icon: FileText, path: '/devis', color: '#D97706', bg: '#FFFBEB', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
+    { label: 'Bon de Livraison', icon: Receipt, path: '/bon-livraison', color: '#F59E0B', bg: '#FFFBEB', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Suivi des factures', icon: Receipt, path: '/factures', color: '#0284C7', bg: '#F0F9FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmFacturationEnabled' },
     { label: 'Factures Fournisseurs', icon: Truck, path: '/fournisseurs-factures', color: '#EA580C', bg: '#FFF7ED', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmSupFacturesEnabled' },
     { label: 'Rapports Hebdo', icon: ClipboardList, path: '/crm/rapports', color: '#059669', bg: '#ECFDF5', roles: ['Responsable', 'Commercial', 'Directeur', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmReportsEnabled' },
@@ -191,6 +192,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
                      location.pathname.startsWith('/responsable') || 
                      location.pathname.startsWith('/crm') || 
                      location.pathname.startsWith('/devis') || 
+                     location.pathname.startsWith('/bon-livraison') ||
                      location.pathname.startsWith('/clients') || 
                      location.pathname.startsWith('/documents') || 
                       location.pathname.startsWith('/factures') ||

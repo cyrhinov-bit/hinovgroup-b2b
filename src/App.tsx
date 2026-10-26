@@ -38,6 +38,7 @@ import { CommercialClients } from './pages/CommercialClients';
 import { Documents } from './pages/Documents';
 import { Utilisateurs } from './pages/Utilisateurs';
 import { Parametres } from './pages/Parametres';
+import { BonLivraison } from './pages/BonLivraison';
 import { GeminiSettings } from './pages/GeminiSettings';
 import { Login } from './pages/Login';
 import { PublicCatalog } from './pages/public/PublicCatalog';
@@ -157,6 +158,19 @@ function RequireRole({ roles, children }: { roles: Role[]; children: ReactNode }
   return <>{children}</>;
 }
 
+/**
+ * Garde des routes CRM : seule l'identité CRM (`currentUser.role`) compte.
+ * Un rôle POS secondaire (`posRole`) ne doit jamais ouvrir un écran CRM :
+ * les deux espaces restent strictement séparés.
+ */
+function RequireCrmRole({ roles, children }: { roles: Role[]; children: ReactNode }) {
+  const { currentUser, loading } = useAuth();
+  if (loading) return null;
+  if (!currentUser) return <Navigate to="/login" replace />;
+  if (!roles.includes(currentUser.role as Role)) return <Navigate to="/pos" replace />;
+  return <>{children}</>;
+}
+
 // Garde de module POS : rôles Sidebar + SuperAdmin, et pour les caissiers le flag du module
 // (miroir du filtrage Sidebar : seul `false` explicite bloque un caissier)
 type PosModuleKey = 'posCatalogueEnabled' | 'posReturnsEnabled' | 'posSupplyEnabled' | 'posInventoryEnabled' | 'posStockEnabled' | null;
@@ -226,6 +240,8 @@ function App() {
                     <Route path="prestations" element={<RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><Prestations /></RequireRole>} />
                     <Route path="devis" element={<RequireRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><Devis /></RequireRole>} />
                     <Route path="devis/nouveau" element={<RequireRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><QuoteCreation /></RequireRole>} />
+                    <Route path="bon-livraison" element={<RequireCrmRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><BonLivraison /></RequireCrmRole>} />
+                    <Route path="bon-livraison/:quoteId" element={<RequireCrmRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><BonLivraison /></RequireCrmRole>} />
                     <Route path="factures" element={<RequireCrmModule moduleKey="crmFacturationEnabled"><Factures /></RequireCrmModule>} />
                     <Route path="fournisseurs-factures" element={<Suspense fallback={<Spinner />}><RequireCrmModule moduleKey="crmSupFacturesEnabled"><SupFactures /></RequireCrmModule></Suspense>} />
                     <Route path="documents" element={<RequireRole roles={['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin']}><Documents /></RequireRole>} />

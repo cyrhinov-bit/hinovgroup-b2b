@@ -2,7 +2,8 @@ import toast from 'react-hot-toast';
 import type { Client, Quote, AppSettings, Prestation } from '../context/AppContext';
 import { platform } from '../platform';
 import type { MailComposeResult } from '../platform';
-import { generateQuotePdf, ensureDevisPdfAssets } from './pdfUtils';
+import { generateQuotePdf, generateBonLivraisonPdf, ensureDevisPdfAssets } from './pdfUtils';
+import { deliveryNoteToQuote, type DeliveryNote } from './deliveryNotes';
 
 /** Convertit un Blob en base64 brut (sans le préfixe "data:...;base64,"). */
 export function blobToBase64(blob: Blob): Promise<string> {
@@ -128,10 +129,19 @@ export async function composeQuoteMail(
   prestations?: Prestation[],
 ): Promise<MailComposeResult & { filename?: string }> {
   try {
+    const content = buildQuoteMailContent(quote, client, settings);
+    if (!content.to) {
+      return {
+        ok: false,
+        mode: 'smtp',
+        errorCode: 'NO_RECIPIENT',
+        error: "Ce client n'a pas d'adresse e-mail. Renseignez son adresse dans la fiche client avant d'envoyer le devis.",
+        filename: content.filename,
+      };
+    }
     await ensureDevisPdfAssets();
     const blob = generateQuotePdf(quote, client, settings, prestations);
     const base64 = await blobToBase64(blob);
-    const content = buildQuoteMailContent(quote, client, settings);
     const attachments = [{ filename: content.filename, base64, mimeType: 'application/pdf' }];
 
     // 1) Boîte de l'utilisateur (SMTP local) : envoi direct depuis SA propre adresse.
@@ -164,7 +174,9 @@ export async function composeQuoteMail(
       };
     }
 
-    // 3) Repli (mode navigateur uniquement) : ouvre la messagerie par défaut, PDF dans le presse-papiers.
+    // 3) Repli (mode navigateur uniquement) : ouvre la messagerie par défaut.
+    //    Le navigateur ne peut pas joindre automatiquement le PDF : l'utilisateur
+    //    le télécharge depuis l'aperçu et l'ajoute à son message.
     const result = await platform.mail.openInDefaultMailApp({
       to: content.to,
       subject: content.subject,
@@ -190,7 +202,6 @@ export async function sendQuoteByMail(
   settings: AppSettings,
   prestations?: Prestation[],
 ): Promise<boolean> {
-  const missingEmail = !(client?.email || '').trim();
   const toastId = toast.loading('Préparation du devis et envoi de l’e-mail...');
   const result = await composeQuoteMail(quote, client, settings, prestations);
   toast.dismiss(toastId);
@@ -200,32 +211,170 @@ export async function sendQuoteByMail(
     return false;
   }
 
-  const emailWarning = missingEmail
-    ? " ⚠️ Ce client n'a pas d'adresse e-mail : renseignez le destinataire."
-    : '';
-
   if (result.mode === 'smtp') {
     toast.success(
-      `Le devis a été envoyé par e-mail, avec le PDF joint.${emailWarning}`,
+      'Le devis a été envoyé par e-mail, avec le PDF joint.',
       { duration: 9000 }
     );
   } else if (result.mode === 'mailto' && result.copiedToClipboard) {
     toast.success(
-      `Votre Outlook est ouvert. Le PDF est déjà dans le presse-papiers : faites Ctrl+V pour le joindre.${emailWarning}`,
+      'Votre Outlook est ouvert. Le PDF est déjà dans le presse-papiers : faites Ctrl+V pour le joindre.',
       { duration: 11000 }
     );
   } else if (result.mode === 'mailto' && result.filePath) {
     toast.success(
-      `Votre Outlook est ouvert. Joignez le PDF enregistré dans : ${result.filePath}${emailWarning}`,
+      `Votre Outlook est ouvert. Joignez le PDF enregistré dans : ${result.filePath}`,
       { duration: 11000 }
     );
   } else if (result.mode === 'mailto') {
     toast.success(
-      `Votre application de messagerie est ouverte. Pensez à joindre le PDF du devis.${emailWarning}`,
-      { duration: 10000 }
+      'Votre application de messagerie est ouverte. Téléchargez le PDF depuis l’aperçu du devis et joignez-le à votre message.',
+      { duration: 12000 }
     );
   } else {
     toast.success('Devis prêt dans Outlook. Vérifiez le message puis cliquez sur Envoyer.', { duration: 6000 });
+  }
+  return true;
+}
+
+/** Construit le destinataire, l'objet, le corps texte ET HTML du mail de bon de livraison. */
+export function buildDeliveryNoteMailContent(
+  note: DeliveryNote,
+  client: Client | undefined,
+  settings: AppSettings,
+): QuoteMailContent {
+  const companyName = settings.companyName || 'HINOV GROUP';
+  const clientLabel = client?.company || client?.name || note.clientName || 'Madame, Monsieur';
+  const clientEmail = (client?.email || '').trim();
+  const dateFr = formatDateFr(note.date);
+  const subject = `Bon de livraison N° ${note.deliveryNumber} — Devis ${note.quoteNumber}`;
+  const filename = `BonLivraison_${note.deliveryNumber}.pdf`;
+
+  const textLines: string[] = [
+    `Bonjour${client?.contact ? ` ${client.contact}` : ''},`,
+    '',
+    `Veuillez trouver ci-joint notre bon de livraison N° ${note.deliveryNumber} (réf. devis ${note.quoteNumber}).`,
+    '',
+    `• Montant total : ${formatAmount(note.total)}`,
+    `• Date d'émission : ${dateFr || '-'}`,
+    '',
+    'Nous restons à votre disposition pour toute information complémentaire.',
+    '',
+    'Cordialement,',
+    companyName,
+  ];
+
+  const htmlBody = `
+<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1E293B;line-height:1.55;max-width:640px;">
+  <p>Bonjour${client?.contact ? ` ${escapeHtml(client.contact)}` : ''},</p>
+  <p>Veuillez trouver ci-joint notre bon de livraison <strong>N° ${escapeHtml(note.deliveryNumber)}</strong> (réf. devis ${escapeHtml(note.quoteNumber)}).</p>
+  <table style="width:100%;border-collapse:collapse;margin:16px 0;border:1px solid #E2E8F0;border-radius:6px;">
+    <tbody>
+      <tr style="background:#E0F2F1;"><td style="padding:8px 12px;font-weight:700;color:#1F3A5F;">Récapitulatif</td><td style="padding:8px 12px;text-align:right;font-weight:700;color:#1F3A5F;">${escapeHtml(clientLabel)}</td></tr>
+      <tr><td style="padding:6px 12px;color:#64748B;">Montant total</td><td style="padding:6px 12px;text-align:right;font-weight:700;color:#1F3A5F;">${escapeHtml(formatAmount(note.total))}</td></tr>
+      <tr style="background:#F8FAFC;"><td style="padding:6px 12px;color:#64748B;">Date d'émission</td><td style="padding:6px 12px;text-align:right;font-weight:600;">${escapeHtml(dateFr || '-')}</td></tr>
+    </tbody>
+  </table>
+  <p>Nous restons à votre disposition pour toute information complémentaire.</p>
+  <p style="margin-bottom:2px;">Cordialement,</p>
+  <p style="margin:0;font-weight:700;color:#1F3A5F;">${escapeHtml(companyName)}</p>
+  <p style="margin:10px 0 0;color:#64748B;font-size:12px;border-top:1px solid #E2E8F0;padding-top:8px;">
+    ${escapeHtml(companyName)}${settings.companyPhone ? ` — Tél : ${escapeHtml(settings.companyPhone)}` : ''}${settings.companyEmail ? ` — ${escapeHtml(settings.companyEmail)}` : ''}
+  </p>
+</div>`.trim();
+
+  return { to: clientEmail, subject, body: textLines.join('\n'), htmlBody, filename };
+}
+
+/** Génère le PDF du BL puis l'envoie par e-mail avec la même logique que les devis. */
+export async function composeDeliveryNoteMail(
+  note: DeliveryNote,
+  client: Client | undefined,
+  settings: AppSettings,
+): Promise<MailComposeResult & { filename?: string }> {
+  try {
+    const content = buildDeliveryNoteMailContent(note, client, settings);
+    if (!content.to) {
+      return {
+        ok: false,
+        mode: 'smtp',
+        errorCode: 'NO_RECIPIENT',
+        error: "Ce client n'a pas d'adresse e-mail. Renseignez son adresse dans la fiche client avant d'envoyer le bon de livraison.",
+        filename: content.filename,
+      };
+    }
+    await ensureDevisPdfAssets();
+    const blob = generateBonLivraisonPdf(deliveryNoteToQuote(note), client, settings, note.deliveryNumber);
+    const base64 = await blobToBase64(blob);
+    const attachments = [{ filename: content.filename, base64, mimeType: 'application/pdf' }];
+
+    try {
+      const smtpStatus = await platform.mail.smtp.getStatus();
+      if (smtpStatus.configured) {
+        const smtpResult = await platform.mail.smtp.send({
+          to: content.to,
+          subject: content.subject,
+          body: content.body,
+          htmlBody: content.htmlBody,
+          attachments,
+        });
+        if (smtpResult.ok || smtpResult.errorCode !== 'NOT_CONFIGURED') {
+          return { ...smtpResult, filename: content.filename };
+        }
+      }
+    } catch { /* SMTP local indisponible → étape suivante */ }
+
+    if (platform.isDesktop) {
+      return {
+        ok: false,
+        mode: 'smtp',
+        errorCode: 'NOT_CONFIGURED',
+        error: "Aucune boîte d'envoi configurée. Ouvrez « Devis → Paramètres envoi devis par e-mail » "
+          + 'et renseignez le mot de passe de votre boîte pour envoyer vos bons de livraison.',
+        filename: content.filename,
+      };
+    }
+
+    const result = await platform.mail.openInDefaultMailApp({
+      to: content.to,
+      subject: content.subject,
+      body: content.body,
+      htmlBody: content.htmlBody,
+      attachments,
+      send: false,
+    });
+
+    return { ...result, filename: content.filename };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Erreur lors de la préparation du mail.' };
+  }
+}
+
+/** Envoi d'un bon de livraison par mail avec retours utilisateur (toasts). */
+export async function sendDeliveryNoteByMail(
+  note: DeliveryNote,
+  client: Client | undefined,
+  settings: AppSettings,
+): Promise<boolean> {
+  const toastId = toast.loading('Préparation du bon de livraison et envoi de l’e-mail...');
+  const result = await composeDeliveryNoteMail(note, client, settings);
+  toast.dismiss(toastId);
+
+  if (!result.ok) {
+    toast.error(result.error || "Impossible d'envoyer l'e-mail.", { duration: 9000 });
+    return false;
+  }
+
+  if (result.mode === 'smtp') {
+    toast.success('Le bon de livraison a été envoyé par e-mail, avec le PDF joint.', { duration: 9000 });
+  } else if (result.mode === 'mailto' && result.copiedToClipboard) {
+    toast.success('Votre Outlook est ouvert. Le PDF est dans le presse-papiers : faites Ctrl+V pour le joindre.', { duration: 11000 });
+  } else if (result.mode === 'mailto' && result.filePath) {
+    toast.success(`Votre Outlook est ouvert. Joignez le PDF enregistré dans : ${result.filePath}`, { duration: 11000 });
+  } else if (result.mode === 'mailto') {
+    toast.success('Votre application de messagerie est ouverte. Téléchargez le PDF depuis l’aperçu du bon de livraison et joignez-le à votre message.', { duration: 12000 });
+  } else {
+    toast.success('Bon de livraison prêt dans Outlook. Vérifiez le message puis cliquez sur Envoyer.', { duration: 6000 });
   }
   return true;
 }
