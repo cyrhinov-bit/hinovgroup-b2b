@@ -142,6 +142,18 @@ export function Devis() {
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [allowedQuotes, filter, statusFilter, serviceFilter, authorFilter, periodFilter, clients, users]);
 
+  // Calcul de la marge totale d'un devis (total vente - coût de revient)
+  const computeQuoteMargin = (q: Quote): number => {
+    const cost = (q.lines || []).reduce((s, l) => s + ((Number(l.costPrice) || 0) * (Number(l.quantity) || 0)), 0);
+    return (Number(q.total) || 0) - cost;
+  };
+
+  const computeQuoteMarginPct = (q: Quote): number => {
+    const total = Number(q.total) || 0;
+    if (total === 0) return 0;
+    return Math.round((computeQuoteMargin(q) / total) * 100);
+  };
+
   // KPIs pour la sélection filtrée
   const totalFilteredCount = filteredQuotes.length;
   const totalFilteredAmount = filteredQuotes.filter(q => q.status !== 'Refusé').reduce((sum, q) => sum + (Number(q.total) || 0), 0);
@@ -456,6 +468,7 @@ export function Devis() {
                 <th>Service</th>
                 <th>Sujet</th>
                 <th style={{ textAlign: 'right' }}>Montant Total</th>
+                <th style={{ textAlign: 'right' }}>Marge Totale</th>
                 <th>Statut</th>
                 <th>Date d'émission</th>
                 <th style={{ textAlign: 'center' }}>Actions</th>
@@ -499,6 +512,24 @@ export function Devis() {
                   <td data-label="Sujet">{q.subject}</td>
                   <td data-label="Montant Total" style={{ textAlign: 'right', fontWeight: 700 }}>
                     {(Number(q.total) || 0).toLocaleString('fr-FR')} FCFA
+                  </td>
+                  <td data-label="Marge Totale" style={{ textAlign: 'right' }}>
+                    {(() => {
+                      const marge = computeQuoteMargin(q);
+                      const pct = computeQuoteMarginPct(q);
+                      const hasNoCost = (q.lines || []).every(l => !l.costPrice);
+                      if (hasNoCost) return <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>—</span>;
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '1px' }}>
+                          <span style={{ fontWeight: 700, color: marge >= 0 ? '#059669' : '#DC2626' }}>
+                            {marge.toLocaleString('fr-FR')} FCFA
+                          </span>
+                          <span style={{ fontSize: '0.72rem', color: marge >= 0 ? '#059669' : '#DC2626', fontWeight: 600 }}>
+                            {pct}%
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td data-label="Statut">
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -549,7 +580,7 @@ export function Devis() {
               })}
               {filteredQuotes.length === 0 && (
                 <tr>
-                  <td colSpan={isDirector ? 9 : 8} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
+                  <td colSpan={isDirector ? 10 : 9} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
                     Aucun devis trouvé pour les critères de filtre sélectionnés.
                   </td>
                 </tr>
