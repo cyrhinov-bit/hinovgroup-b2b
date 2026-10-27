@@ -668,6 +668,36 @@ function fitText(doc: jsPDF, text: string, maxW: number, baseSize: number, minSi
   return { text: t, size };
 }
 
+const DESC_FONT_SIZE = 9;
+const DESC_LINE_HEIGHT = 4.2;
+const DESC_MAX_LINES = 10;
+const DESC_MIN_ROW_HEIGHT = 10;
+
+/**
+ * Découpe une désignation en plusieurs lignes (taille de police constante)
+ * et calcule la hauteur de ligne nécessaire.
+ */
+function wrapDescription(
+  doc: jsPDF,
+  text: string,
+  maxW: number,
+  size = DESC_FONT_SIZE,
+  lineH = DESC_LINE_HEIGHT,
+  maxLines = DESC_MAX_LINES,
+  minH = DESC_MIN_ROW_HEIGHT,
+): { lines: string[]; h: number } {
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(size);
+  let lines = doc.splitTextToSize(text, maxW) as string[];
+  if (lines.length > maxLines) {
+    lines = lines.slice(0, maxLines);
+    let last = lines[maxLines - 1];
+    while (last.length > 4 && doc.getTextWidth(`${last}...`) > maxW) last = last.slice(0, -1);
+    lines[maxLines - 1] = `${last}...`;
+  }
+  return { lines, h: Math.max(minH, lines.length * lineH + 3.5) };
+}
+
 // ====================== DEVIS PDF — design moderne HINOV (devis.jpeg) ======================
 // Reproduction du visuel couleur : bannière photo, titre + badge client navy,
 // barre d'infos à pastilles, tableau 6 colonnes aux filets couleur, cartes de
@@ -764,6 +794,7 @@ const DV_BLUE: [number, number, number] = [37, 99, 235];
 const DV_BG: [number, number, number] = [241, 245, 249];
 const DV_GRAY: [number, number, number] = [100, 116, 139];
 const DV_LINE: [number, number, number] = [226, 232, 240];
+const DV_TABLE_LINE: [number, number, number] = [148, 163, 184];
 const DV_DARK: [number, number, number] = [30, 34, 42];
 const DV_WHITE: [number, number, number] = [255, 255, 255];
 
@@ -1015,18 +1046,20 @@ function drawDeliveryRow(
   ln: { desc: string; qty: number },
   top: number,
   h: number,
+  descLines: string[],
 ): void {
   doc.setDrawColor(...DV_LINE);
   doc.setLineWidth(0.25);
   for (let i = 0; i < cx.length; i++) doc.line(cx[i], top, cx[i], top + h);
   doc.line(cx[0], top + h, cx[cx.length - 1], top + h);
-  const baseY = top + 6.5;
+  const baseY = top + h / 2 + 1.5;
 
-  const rFit = fitText(doc, ln.desc, cx[1] - cx[0] - 4, 9, 6);
+  // Désignation sur plusieurs lignes, taille de police fixe
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(rFit.size);
+  doc.setFontSize(DESC_FONT_SIZE);
   doc.setTextColor(...DV_DARK);
-  doc.text(rFit.text, cx[0] + 2, baseY);
+  const descStartY = top + h / 2 - ((descLines.length - 1) * DESC_LINE_HEIGHT) / 2 + 1.6;
+  descLines.forEach((dl, i) => doc.text(dl, cx[0] + 2, descStartY + i * DESC_LINE_HEIGHT));
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
@@ -1119,8 +1152,8 @@ export function generateQuotePdf(
   const COL_ACCENTS: Array<[number, number, number]> = [DV_GREEN, DV_PURPLE, DV_ORANGE, DV_BLUE, DV_GREEN, DV_NAVY];
   const drawTableHead = (top: number): number => {
     doc.setFillColor(252, 253, 255);
-    doc.setDrawColor(...DV_LINE);
-    doc.setLineWidth(0.3);
+    doc.setDrawColor(...DV_TABLE_LINE);
+    doc.setLineWidth(0.5);
     doc.roundedRect(CX[0], top, CX[6] - CX[0], 9, 1.5, 1.5, 'FD');
     doc.setLineWidth(1.2);
     for (let i = 0; i < 6; i++) {
@@ -1136,22 +1169,36 @@ export function generateQuotePdf(
     return top + 9;
   };
 
-  const drawRow = (ln: { desc: string; qty: number; unitPrice: number; disc: number; total: number }, ref: string, top: number, h: number) => {
-    doc.setDrawColor(...DV_LINE);
-    doc.setLineWidth(0.25);
+  // Désignation : retour à la ligne (police constante) et hauteur de ligne dynamique
+  const DESC_MAX_W = CX[2] - CX[1] - 4;
+
+  /** Découpe la désignation et calcule la hauteur nécessaire de la ligne. */
+  const measureRow = (ln: { desc: string }) => wrapDescription(doc, ln.desc, DESC_MAX_W);
+
+  const drawRow = (
+    ln: { desc: string; qty: number; unitPrice: number; disc: number; total: number },
+    ref: string,
+    top: number,
+    h: number,
+    descLines: string[],
+  ) => {
+    // Traits de lignes renforcés : séparateurs horizontaux gras, colonnes plus visibles.
+    doc.setDrawColor(...DV_TABLE_LINE);
+    doc.setLineWidth(0.4);
     for (let i = 0; i < 7; i++) doc.line(CX[i], top, CX[i], top + h);
+    doc.setLineWidth(0.7);
     doc.line(CX[0], top + h, CX[6], top + h);
-    const baseY = top + 6.5;
+    const baseY = top + h / 2 + 1.5;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     setDark();
     doc.text(ref, (CX[0] + CX[1]) / 2, baseY, { align: 'center' });
-    // Désignation sur une seule ligne : police réduite si longue
-    const rFit = fitText(doc, ln.desc, CX[2] - CX[1] - 3, 9, 6);
+    // Désignation sur plusieurs lignes, taille de police fixe
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(rFit.size);
+    doc.setFontSize(DESC_FONT_SIZE);
     setDark();
-    doc.text(rFit.text, CX[1] + 2, baseY);
+    const descStartY = top + h / 2 - ((descLines.length - 1) * DESC_LINE_HEIGHT) / 2 + 1.6;
+    descLines.forEach((dl, i) => doc.text(dl, CX[1] + 2, descStartY + i * DESC_LINE_HEIGHT));
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     setDark();
@@ -1258,15 +1305,17 @@ export function generateQuotePdf(
 
   // Tableau : en-tête + lignes (pagination si long)
   let y = drawTableHead(98);
-  const rowH = 10;
+  let lastRowPage = 1;
   const rowLimit = 222;
   const newTablePage = () => {
     doc.addPage();
     y = drawTableHead(14);
   };
   lines.forEach((ln, idx) => {
+    const { lines: descLines, h: rowH } = measureRow(ln);
     if (y + rowH > rowLimit) newTablePage();
-    drawRow(ln, String(idx + 1), y, rowH);
+    drawRow(ln, String(idx + 1), y, rowH, descLines);
+    lastRowPage = doc.getCurrentPageInfo().pageNumber;
     y += rowH;
   });
   if (lines.length === 0) {
@@ -1329,12 +1378,26 @@ export function generateQuotePdf(
   });
   y += cardH;
 
-  // ---- Signature (pointillés) ----
-  y += 12;
-  if (y + 48 > 232) {
-    doc.addPage();
-    y = 20;
+  // ---- Signature + 3 blocs bas : ancrés au plus près du pied de page ----
+  // Hauteur consommée : signature 43 mm + blocs 36 mm. Le bas des blocs est
+  // calé à 276 mm, soit juste au-dessus du pied de page (première ligne à 280,5 mm).
+  const BOTTOM_END = 276;
+  const SECTION_H = 43 + 36;
+  const anchoredY = BOTTOM_END - SECTION_H; // 197 mm
+  if (doc.getCurrentPageInfo().pageNumber === lastRowPage) {
+    if (y + 4 <= anchoredY) {
+      // Le tableau et les totaux tiennent sur la page : on ancre la section en bas.
+      y = anchoredY;
+    } else {
+      // Pas assez de place sous les totaux : la section passe en haut d'une nouvelle page.
+      doc.addPage();
+      y = 20;
+    }
+  } else {
+    // Page de continuation (totaux seuls) : la section enchaîne sous les totaux.
+    y += 8;
   }
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   setNavy();
@@ -1361,10 +1424,6 @@ export function generateQuotePdf(
   y += 43;
 
   // ---- 3 blocs bas à icônes ----
-  if (y + 34 > 262) {
-    doc.addPage();
-    y = 20;
-  }
   doc.setDrawColor(...DV_LINE);
   doc.setLineWidth(0.3);
   doc.line(72, y, 72, y + 32);
@@ -1980,7 +2039,7 @@ export function generateBonLivraisonPdf(
   const BL_CX = [10, 166, 200];
   const BL_HEADS = ['Désignation', 'Qté'];
   let y = drawDocumentTableHead(doc, 104, BL_HEADS, BL_CX);
-  const rowH = 10;
+  const blDescW = BL_CX[1] - BL_CX[0] - 4;
   const rowLimit = 222;
   const newTablePage = () => {
     doc.addPage();
@@ -1988,8 +2047,9 @@ export function generateBonLivraisonPdf(
   };
 
   lines.forEach((ln) => {
+    const { lines: descLines, h: rowH } = wrapDescription(doc, ln.desc, blDescW);
     if (y + rowH > rowLimit) newTablePage();
-    drawDeliveryRow(doc, BL_CX, ln, y, rowH);
+    drawDeliveryRow(doc, BL_CX, ln, y, rowH, descLines);
     y += rowH;
   });
 
@@ -2004,9 +2064,15 @@ export function generateBonLivraisonPdf(
     doc.line(BL_CX[0], y, BL_CX[2], y);
   }
 
-  // ---- Signatures (même style pointillé que le devis) ----
-  y += 12;
-  if (y + 48 > 262) {
+  // ---- Signatures (ancrées près du pied de page) ----
+  // Bloc signature : 47 mm de haut, bas calé juste au-dessus du pied de page.
+  const SIG_BOTTOM_END = 276;
+  const SIG_BLOCK_H = 47;
+  const sigY = SIG_BOTTOM_END - SIG_BLOCK_H; // 229 mm
+  if (y + 8 <= sigY) {
+    y = sigY;
+  } else {
+    // Pas assez de place sous le tableau : signatures en haut d'une nouvelle page.
     doc.addPage();
     y = 20;
   }
