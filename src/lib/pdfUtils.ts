@@ -880,17 +880,18 @@ function drawDocumentTableHead(
   doc.setFillColor(252, 253, 255);
   doc.setDrawColor(...DV_LINE);
   doc.setLineWidth(0.3);
-  doc.roundedRect(cx[0], top, cx[6] - cx[0], 9, 1.5, 1.5, 'FD');
+  const colCount = heads.length;
+  doc.roundedRect(cx[0], top, cx[colCount] - cx[0], 9, 1.5, 1.5, 'FD');
   doc.setLineWidth(1.2);
-  for (let i = 0; i < 6; i++) {
-    doc.setDrawColor(...DOC_TABLE_ACCENTS[i]);
+  for (let i = 0; i < colCount; i++) {
+    doc.setDrawColor(...DOC_TABLE_ACCENTS[i % DOC_TABLE_ACCENTS.length]);
     doc.line(cx[i] + 0.5, top + 0.4, cx[i + 1] - 0.5, top + 0.4);
   }
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(...DV_NAVY);
   const ty = top + 6;
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < colCount; i++) {
     doc.text(heads[i], (cx[i] + cx[i + 1]) / 2, ty, { align: 'center' });
   }
   return top + 9;
@@ -1011,46 +1012,26 @@ function drawDocumentTitleBlock(
 function drawDeliveryRow(
   doc: jsPDF,
   cx: number[],
-  ln: { desc: string; unit: string; qty: number; unitPrice: number; total: number },
-  ref: string,
+  ln: { desc: string; qty: number },
   top: number,
   h: number,
 ): void {
   doc.setDrawColor(...DV_LINE);
   doc.setLineWidth(0.25);
-  for (let i = 0; i < 7; i++) doc.line(cx[i], top, cx[i], top + h);
-  doc.line(cx[0], top + h, cx[6], top + h);
+  for (let i = 0; i < cx.length; i++) doc.line(cx[i], top, cx[i], top + h);
+  doc.line(cx[0], top + h, cx[cx.length - 1], top + h);
   const baseY = top + 6.5;
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(...DV_DARK);
-  doc.text(ref, (cx[0] + cx[1]) / 2, baseY, { align: 'center' });
-
-  const rFit = fitText(doc, ln.desc, cx[2] - cx[1] - 3, 9, 6);
+  const rFit = fitText(doc, ln.desc, cx[1] - cx[0] - 4, 9, 6);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(rFit.size);
   doc.setTextColor(...DV_DARK);
-  doc.text(rFit.text, cx[1] + 2, baseY);
+  doc.text(rFit.text, cx[0] + 2, baseY);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(...DV_DARK);
-  doc.text(String(ln.qty), (cx[2] + cx[3]) / 2, baseY, { align: 'center' });
-
-  const unitFit = fitText(doc, ln.unit, cx[4] - cx[3] - 2, 9, 6);
-  doc.setFontSize(unitFit.size);
-  doc.text(unitFit.text, (cx[3] + cx[4]) / 2, baseY, { align: 'center' });
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(...DV_DARK);
-  doc.text(formatMontant(ln.unitPrice), (cx[4] + cx[5]) / 2, baseY, { align: 'center' });
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(...DV_NAVY);
-  doc.text(formatMontant(ln.total), (cx[5] + cx[6]) / 2, baseY, { align: 'center' });
+  doc.text(String(ln.qty), (cx[1] + cx[2]) / 2, baseY, { align: 'center' });
 }
 
 export function generateQuotePdf(
@@ -1951,8 +1932,8 @@ export function generateInvoicePdf(
 
 /**
  * Génère le PDF d'un Bon de Livraison à partir d'un devis.
- * Design allégé : titre "BON DE LIVRAISON", focus sur les articles à livrer,
- * moins de blocs de totaux et pas de conditions de règlement complexes.
+ * Design allégé : titre "BON DE LIVRAISON", focus sur les articles à livrer
+ * (désignation et quantité uniquement, sans aucun montant).
  */
 
 export function generateBonLivraisonPdf(
@@ -1979,25 +1960,9 @@ export function generateBonLivraisonPdf(
   const lines = rawLines.map((line: any) => {
     const descRaw = line.description || line.designation || line.name || line.prestation_name || line.label || 'Article sans désignation';
     const qty = Number(line.quantity ?? line.qte ?? line.qty ?? 1);
-    const unitPrice = Number(line.unitPrice ?? line.unit_price ?? line.price ?? line.pu ?? 0);
-    const disc = Number(line.discountPercent ?? line.discount_percent ?? line.remise ?? 0);
-    let totalVal = line.total !== undefined && line.total !== null ? Number(line.total) : undefined;
-    if (totalVal === undefined || isNaN(totalVal)) {
-      if (line.total_price !== undefined) totalVal = Number(line.total_price);
-      else if (line.totalPrice !== undefined) totalVal = Number(line.totalPrice);
-      else {
-        const rawTotal = qty * unitPrice;
-        totalVal = Math.max(0, rawTotal - Math.round((rawTotal * disc) / 100));
-      }
-    }
-    const unit = cleanPdfText(line.unit || line.unite || 'Forfait');
     return {
       desc: cleanPdfText(descRaw) || 'Article sans désignation',
-      unit,
-      qty,
-      unitPrice,
-      disc,
-      total: totalVal || 0,
+      qty: Number.isFinite(qty) ? qty : 1,
     };
   });
 
@@ -2011,10 +1976,9 @@ export function generateBonLivraisonPdf(
     referenceLine: `Réf. devis : ${quote.quoteNumber}`,
   });
 
-  // ---- Tableau : mêmes codes visuels que le devis ----
-  // Colonnes adaptées au BL : Référence / Désignation / Qté / Unité / P. Unitaire / Montant
-  const BL_CX = [10, 42, 122, 136, 158, 178, 200];
-  const BL_HEADS = ['Référence', 'Désignation', 'Qté', 'Unité', 'P. Unitaire', 'Montant'];
+  // ---- Tableau simplifié : Désignation / Quantité uniquement (aucun montant) ----
+  const BL_CX = [10, 166, 200];
+  const BL_HEADS = ['Désignation', 'Qté'];
   let y = drawDocumentTableHead(doc, 104, BL_HEADS, BL_CX);
   const rowH = 10;
   const rowLimit = 222;
@@ -2023,9 +1987,9 @@ export function generateBonLivraisonPdf(
     y = drawDocumentTableHead(doc, 14, BL_HEADS, BL_CX);
   };
 
-  lines.forEach((ln, idx) => {
+  lines.forEach((ln) => {
     if (y + rowH > rowLimit) newTablePage();
-    drawDeliveryRow(doc, BL_CX, ln, String(idx + 1), y, rowH);
+    drawDeliveryRow(doc, BL_CX, ln, y, rowH);
     y += rowH;
   });
 
@@ -2037,64 +2001,8 @@ export function generateBonLivraisonPdf(
     y += 10;
     doc.setDrawColor(...DV_LINE);
     doc.setLineWidth(0.25);
-    doc.line(BL_CX[0], y, BL_CX[6], y);
+    doc.line(BL_CX[0], y, BL_CX[2], y);
   }
-
-  // ---- Cartes de totaux (même style que le devis) ----
-  const total = Math.round(quote.total || lines.reduce((sum, l) => sum + (l.total || 0), 0));
-  const totRows: Array<{
-    icon: 'coins' | 'pct' | null;
-    color: [number, number, number];
-    label: string;
-    value: string;
-    bar: boolean;
-  }> = [
-    { icon: 'coins', color: DV_BLUE, label: 'Total H.T. :', value: formatMontant(total), bar: false },
-    { icon: null, color: DV_GREEN, label: 'Total global :', value: formatMontant(total), bar: true },
-  ];
-  const cardH = 12 + totRows.length * 9;
-  if (y + cardH + 8 > 232) {
-    doc.addPage();
-    y = 20;
-  }
-  y += 6;
-
-  // Carte gauche : montant en lettres
-  doc.setFillColor(...DV_BG);
-  doc.roundedRect(10, y, 100, cardH, 2, 2, 'F');
-  dvBadge(doc, 21, y + cardH / 2, 6, DV_GREEN, 'coins');
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...DV_GRAY);
-  const wordsTitle = doc.splitTextToSize('Soit la présente livraison arrêtée à la somme de :', 84) as string[];
-  doc.text(wordsTitle, 31, y + 7);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(...DV_NAVY);
-  const words = doc.splitTextToSize(`${nombreEnLettres(total)} FRANCS CFA`, 84) as string[];
-  doc.text(words.slice(0, 4), 31, y + 7 + wordsTitle.length * 4 + 5);
-
-  // Carte droite : lignes de totaux
-  doc.setFillColor(...DV_BG);
-  doc.roundedRect(116, y, 84, cardH, 2, 2, 'F');
-  let totalsY = y + 9;
-  totRows.forEach((r) => {
-    if (r.bar) {
-      doc.setFillColor(...DV_GREEN);
-      doc.rect(116, totalsY - 5.5, 2.5, 9, 'F');
-    }
-    if (r.icon) dvBadge(doc, 125, totalsY - 1.5, 3.5, r.color, r.icon);
-    doc.setFont('helvetica', r.bar ? 'bold' : 'normal');
-    doc.setFontSize(r.bar ? 9.5 : 8.5);
-    doc.setTextColor(...DV_NAVY);
-    doc.text(cleanPdfText(r.label), 132, totalsY);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(r.bar ? 11 : 10);
-    doc.setTextColor(...DV_NAVY);
-    doc.text(r.value, 196, totalsY, { align: 'right' });
-    totalsY += 9;
-  });
-  y += cardH;
 
   // ---- Signatures (même style pointillé que le devis) ----
   y += 12;

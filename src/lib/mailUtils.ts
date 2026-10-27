@@ -255,7 +255,6 @@ export function buildDeliveryNoteMailContent(
     '',
     `Veuillez trouver ci-joint notre bon de livraison N° ${note.deliveryNumber} (réf. devis ${note.quoteNumber}).`,
     '',
-    `• Montant total : ${formatAmount(note.total)}`,
     `• Date d'émission : ${dateFr || '-'}`,
     '',
     'Nous restons à votre disposition pour toute information complémentaire.',
@@ -271,7 +270,7 @@ export function buildDeliveryNoteMailContent(
   <table style="width:100%;border-collapse:collapse;margin:16px 0;border:1px solid #E2E8F0;border-radius:6px;">
     <tbody>
       <tr style="background:#E0F2F1;"><td style="padding:8px 12px;font-weight:700;color:#1F3A5F;">Récapitulatif</td><td style="padding:8px 12px;text-align:right;font-weight:700;color:#1F3A5F;">${escapeHtml(clientLabel)}</td></tr>
-      <tr><td style="padding:6px 12px;color:#64748B;">Montant total</td><td style="padding:6px 12px;text-align:right;font-weight:700;color:#1F3A5F;">${escapeHtml(formatAmount(note.total))}</td></tr>
+      <tr><td style="padding:6px 12px;color:#64748B;">Référence devis</td><td style="padding:6px 12px;text-align:right;font-weight:600;">${escapeHtml(note.quoteNumber)}</td></tr>
       <tr style="background:#F8FAFC;"><td style="padding:6px 12px;color:#64748B;">Date d'émission</td><td style="padding:6px 12px;text-align:right;font-weight:600;">${escapeHtml(dateFr || '-')}</td></tr>
     </tbody>
   </table>

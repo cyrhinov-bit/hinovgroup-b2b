@@ -110,6 +110,53 @@ export async function createDeliveryNote(
   return note;
 }
 
+/**
+ * Retourne le BL émis correspondant à un devis.
+ * Rapprochement par `quoteId` puis, à défaut, par `quoteNumber` (BL créés avant
+ * une resynchronisation d'identifiants). Le plus récent gagne, pour ne jamais
+ * afficher un ancien BL lorsqu'il existe des doublons pour le même devis.
+ */
+export function findDeliveryNoteForQuote(
+  notes: DeliveryNote[],
+  quoteId: string,
+  quoteNumber?: string,
+): DeliveryNote | null {
+  const candidates = notes.filter((note) => {
+    if (note.status !== 'Émis') return false;
+    if (quoteId && note.quoteId === quoteId) return true;
+    return !!(quoteNumber && note.quoteNumber === quoteNumber);
+  });
+  if (candidates.length === 0) return null;
+  return candidates.reduce((latest, note) =>
+    (note.createdAt || '') > (latest.createdAt || '') ? note : latest,
+  );
+}
+
+/**
+ * Met à jour un BL existant (même numéro) avec les données actuelles du devis.
+ * Utilisé pour les BL générés avant une modification du devis.
+ */
+export async function updateDeliveryNote(
+  noteId: string,
+  patch: Partial<Pick<DeliveryNote, 'quoteNumber' | 'clientId' | 'clientName' | 'commercialId' | 'serviceId' | 'date' | 'lines' | 'total'>>,
+): Promise<DeliveryNote | null> {
+  const existing = await loadLocalDeliveryNotes();
+  const current = existing.find((n) => n.id === noteId);
+  if (!current) return null;
+  const updated: DeliveryNote = {
+    ...current,
+    ...patch,
+    id: current.id,
+    deliveryNumber: current.deliveryNumber,
+    status: current.status,
+    createdAt: current.createdAt,
+    updatedAt: new Date().toISOString(),
+  };
+  await saveLocalNotes(sortNotes(existing.map((n) => (n.id === noteId ? updated : n))));
+  await queueSyncAction('UPSERT_DELIVERY_NOTE', updated);
+  return updated;
+}
+
 export async function deleteDeliveryNote(noteId: string): Promise<void> {
   const existing = await loadLocalDeliveryNotes();
   await saveLocalNotes(existing.filter((n) => n.id !== noteId));

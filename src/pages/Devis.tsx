@@ -585,7 +585,7 @@ export function Devis() {
                       <button className="icon-button" style={{ color: '#0D9488' }} onClick={() => handleSendByMail(q)} title="Envoyer le devis par e-mail">
                         <Mail size={16} />
                       </button>
-                      <button className="icon-button" style={{ color: '#F59E0B' }} onClick={() => navigate(`/bon-livraison?quoteId=${q.id}`)} title="Générer le Bon de Livraison">
+                      <button className="icon-button" style={{ color: '#F59E0B' }} onClick={() => navigate(`/bon-livraison?quoteId=${encodeURIComponent(q.id)}&quoteNumber=${encodeURIComponent(q.quoteNumber)}`)} title="Générer le Bon de Livraison">
                         <Receipt size={16} />
                       </button>
                       <button className="icon-button" style={{ color: 'var(--color-error)' }} onClick={() => handleDelete(q)} title="Supprimer le devis">

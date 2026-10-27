@@ -6,13 +6,14 @@ import {
   Eye,
   Mail,
   Receipt,
+  RefreshCw,
   Save,
   Search,
   Trash2,
 } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext, type Quote } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { canViewAll, visibleTo } from '../lib/scope';
 import {
@@ -24,8 +25,10 @@ import {
   createDeliveryNote,
   deleteDeliveryNote,
   deliveryNoteToQuote,
+  findDeliveryNoteForQuote,
   loadLocalDeliveryNotes,
   syncDeliveryNotesCache,
+  updateDeliveryNote,
   type DeliveryNote,
 } from '../lib/deliveryNotes';
 import { sendDeliveryNoteByMail } from '../lib/mailUtils';
@@ -49,6 +52,7 @@ export function BonLivraison() {
     crmStockMouvements,
     updateCrmArticle,
     addCrmStockMouvement,
+    loading: appLoading,
   } = useAppContext();
 
   const currentUser = users.find((u) => u.id === authUser?.id) || authUser;
@@ -59,7 +63,11 @@ export function BonLivraison() {
   const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
   const [search, setSearch] = useState('');
 
-  const quoteId = routeQuoteId || searchParams.get('quoteId') || '';
+  // Identifiants transmis par le devis : l'id est la clé principale, le numéro
+  // sert de secours si les identifiants ont été resynchronisés entre-temps.
+  const rawQuoteId = (routeQuoteId || searchParams.get('quoteId') || '').trim();
+  const quoteId = rawQuoteId === 'undefined' || rawQuoteId === 'null' ? '' : rawQuoteId;
+  const quoteNumberParam = (searchParams.get('quoteNumber') || '').trim();
 
   const getClientName = (id: string) => {
     const c = clients.find((cl) => cl.id === id);
@@ -71,22 +79,24 @@ export function BonLivraison() {
   };
   const getUserName = (id?: string) => users.find((u) => u.id === id)?.name || 'Non assigné';
 
-  // ---- Chargement du cache local + fusion serveur ----
+  // ---- Chargement du cache local + fusion serveur (relancé à chaque devis) ----
   useEffect(() => {
     let cancelled = false;
+    setNotesLoading(true);
+    setPreview(null);
     (async () => {
       const local = await loadLocalDeliveryNotes();
       if (!cancelled) {
         setNotes(local);
         setNotesLoading(false);
       }
-      const merged = await syncDeliveryNotesCache();
+      const merged = await syncDeliveryNotesCache().catch(() => local);
       if (!cancelled) setNotes(merged);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [quoteId, quoteNumberParam]);
 
   // ---- Périmètre : mêmes règles que les devis (direction = tout, sinon propriétaire) ----
   const allowedQuotes = useMemo(
@@ -99,7 +109,16 @@ export function BonLivraison() {
     [notes, currentUser?.role, currentUser?.id],
   );
 
-  const sourceQuote = quoteId ? allowedQuotes.find((q) => q.id === quoteId) || null : null;
+  // Le devis ciblé est retrouvé par id, puis par numéro de devis en secours.
+  const sourceQuote = useMemo(() => {
+    if (!quoteId && !quoteNumberParam) return null;
+    const byId = quoteId ? allowedQuotes.find((q) => q.id === quoteId) : undefined;
+    if (byId) return byId;
+    const byNumber = quoteNumberParam
+      ? allowedQuotes.find((q) => q.quoteNumber === quoteNumberParam)
+      : undefined;
+    return byNumber || null;
+  }, [allowedQuotes, quoteId, quoteNumberParam]);
 
   const acceptedQuotes = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -115,9 +134,17 @@ export function BonLivraison() {
     );
   }, [allowedQuotes, clients, search]);
 
-  const existingNote = quoteId
-    ? notes.find((n) => n.quoteId === quoteId && n.status === 'Émis') || null
-    : null;
+  /**
+   * BL du devis ciblé : rapprochement par id puis par numéro de devis, et
+   * toujours le plus récent (évite d'afficher un ancien BL en cas de doublon).
+   */
+  const existingNote = useMemo(
+    () =>
+      sourceQuote
+        ? findDeliveryNoteForQuote(notes, sourceQuote.id, sourceQuote.quoteNumber)
+        : null,
+    [notes, sourceQuote],
+  );
 
   const isDirector = canViewAll(currentUser?.role);
 
@@ -186,6 +213,33 @@ export function BonLivraison() {
     return moved;
   };
 
+  const buildNoteLines = (quote: Quote): DeliveryNote['lines'] =>
+    (quote.lines || []).map((l) => ({
+      id: l.id,
+      prestationId: l.prestationId,
+      description: l.description,
+      quantity: Number(l.quantity) || 0,
+      unit: l.unit,
+      unitPrice: Number(l.unitPrice) || 0,
+      discountPercent: l.discountPercent,
+      total: Number(l.total) || 0,
+    }));
+
+  const computeNoteTotal = (quote: Quote) =>
+    (quote.lines || []).reduce((sum, l) => sum + (Number(l.total) || 0), 0);
+
+  /** Relit les BL (cache + serveur) avec un délai max : évite doublons et BL obsolètes. */
+  const refreshNotesSafely = async (): Promise<DeliveryNote[]> => {
+    try {
+      return await Promise.race([
+        syncDeliveryNotesCache(),
+        new Promise<DeliveryNote[]>((resolve) => setTimeout(() => resolve([]), 4000)),
+      ]);
+    } catch {
+      return [];
+    }
+  };
+
   const handleGenerate = async () => {
     if (!sourceQuote || generating || notesLoading) return;
     if (sourceQuote.status !== 'Accepté') {
@@ -195,7 +249,15 @@ export function BonLivraison() {
 
     setGenerating(true);
     try {
-      let note: DeliveryNote | null = existingNote;
+      // Toujours relire cache + serveur avant de décider : on ouvre le BL de CE
+      // devis (le plus récent) au lieu d'en créer un doublon ou d'en afficher un autre.
+      const fresh = await refreshNotesSafely();
+      if (fresh.length > 0) setNotes(fresh);
+
+      let note =
+        findDeliveryNoteForQuote(fresh, sourceQuote.id, sourceQuote.quoteNumber) ??
+        findDeliveryNoteForQuote(notes, sourceQuote.id, sourceQuote.quoteNumber);
+
       if (!note) {
         let created: DeliveryNote;
         try {
@@ -207,17 +269,8 @@ export function BonLivraison() {
             commercialId: sourceQuote.commercialId,
             serviceId: sourceQuote.serviceId,
             date: new Date().toISOString().slice(0, 10),
-            lines: (sourceQuote.lines || []).map((l) => ({
-              id: l.id,
-              prestationId: l.prestationId,
-              description: l.description,
-              quantity: Number(l.quantity) || 0,
-              unit: l.unit,
-              unitPrice: Number(l.unitPrice) || 0,
-              discountPercent: l.discountPercent,
-              total: Number(l.total) || 0,
-            })),
-            total: (sourceQuote.lines || []).reduce((sum, l) => sum + (Number(l.total) || 0), 0),
+            lines: buildNoteLines(sourceQuote),
+            total: computeNoteTotal(sourceQuote),
             createdBy: currentUser?.id,
           });
         } catch (err: any) {
@@ -233,6 +286,40 @@ export function BonLivraison() {
       }
 
       if (note) await previewNote(note);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  /** Aligne un BL existant sur les lignes actuelles du devis (même numéro de BL). */
+  const handleRegenerate = async () => {
+    if (!sourceQuote || !existingNote || generating) return;
+    if (sourceQuote.status !== 'Accepté') {
+      toast.error('Le devis doit être accepté pour mettre à jour son bon de livraison.');
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const updated = await updateDeliveryNote(existingNote.id, {
+        quoteNumber: sourceQuote.quoteNumber,
+        clientId: sourceQuote.clientId,
+        clientName: getClientName(sourceQuote.clientId),
+        commercialId: sourceQuote.commercialId,
+        serviceId: sourceQuote.serviceId,
+        date: new Date().toISOString().slice(0, 10),
+        lines: buildNoteLines(sourceQuote),
+        total: computeNoteTotal(sourceQuote),
+      });
+      if (!updated) {
+        toast.error('Bon de livraison introuvable : il a peut-être été supprimé.');
+        return;
+      }
+      setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+      toast.success(`BL ${updated.deliveryNumber} mis à jour depuis le devis ${sourceQuote.quoteNumber}.`);
+      await previewNote(updated);
+    } catch (err: any) {
+      toast.error(err?.message || 'Impossible de mettre à jour le bon de livraison.');
     } finally {
       setGenerating(false);
     }
@@ -294,7 +381,12 @@ export function BonLivraison() {
 
       {!sourceQuote && (
         <>
-          {quoteId && (
+          {quoteId && !sourceQuote && appLoading && (
+            <div className="card" style={{ marginBottom: '16px' }}>
+              <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>Chargement du devis…</p>
+            </div>
+          )}
+          {quoteId && !sourceQuote && !appLoading && (
             <div className="card" style={{ marginBottom: '16px', borderLeft: '4px solid #F59E0B' }}>
               <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
                 Le devis demandé est introuvable ou ne fait pas partie de votre périmètre.
@@ -344,7 +436,7 @@ export function BonLivraison() {
                           className="icon-button"
                           title="Générer le Bon de Livraison"
                           style={{ color: '#F59E0B' }}
-                          onClick={() => navigate(`/bon-livraison?quoteId=${q.id}`)}
+                          onClick={() => navigate(`/bon-livraison?quoteId=${encodeURIComponent(q.id)}&quoteNumber=${encodeURIComponent(q.quoteNumber)}`)}
                         >
                           <Receipt size={16} />
                         </button>
@@ -382,6 +474,23 @@ export function BonLivraison() {
             </div>
           )}
 
+          {existingNote && (
+            <div
+              className="card"
+              style={{ marginBottom: '16px', borderLeft: '4px solid #0D9488', display: 'flex', gap: '10px', alignItems: 'flex-start' }}
+            >
+              <Receipt size={20} color="#0D9488" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div>
+                <strong>Un bon de livraison existe déjà pour ce devis</strong>
+                <p style={{ margin: '4px 0 0', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                  BL <strong>{existingNote.deliveryNumber}</strong>
+                  {existingNote.date ? ` — émis le ${new Date(existingNote.date).toLocaleDateString('fr-FR')}` : ''}.
+                  « Aperçu » ouvre ce BL ; « Régénérer depuis le devis » le réécrit avec les lignes actuelles du devis {sourceQuote.quoteNumber}.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Barre d'actions */}
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '20px' }}>
             <button
@@ -393,6 +502,17 @@ export function BonLivraison() {
               {existingNote ? <Eye size={16} /> : <Save size={16} />}
               {existingNote ? `Aperçu du BL ${existingNote.deliveryNumber}` : 'Générer le bon de livraison'}
             </button>
+            {existingNote && (
+              <button
+                className="btn btn-secondary"
+                onClick={handleRegenerate}
+                disabled={!canGenerate || generating}
+                title="Réécrire ce BL avec les lignes actuelles du devis (même numéro de BL)"
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <RefreshCw size={16} /> Régénérer depuis le devis
+              </button>
+            )}
             <button
               className="btn btn-secondary"
               onClick={() => preview?.onDownload?.()}
@@ -441,9 +561,9 @@ export function BonLivraison() {
               )}
 
               <div className="card" style={{ padding: '14px 18px', borderLeft: '4px solid #D97706' }}>
-                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Total HT</div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Articles à livrer</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text)' }}>
-                  {(Number(sourceQuote.total) || 0).toLocaleString('fr-FR')} FCFA
+                  {(sourceQuote.lines || []).length}
                 </div>
               </div>
             </div>
@@ -459,28 +579,20 @@ export function BonLivraison() {
                     <th>Désignation</th>
                     <th style={{ textAlign: 'center' }}>Qté</th>
                     <th style={{ width: '110px' }}>Unité</th>
-                    <th style={{ width: '130px', textAlign: 'right' }}>P. Unité (FCFA)</th>
-                    <th style={{ width: '130px', textAlign: 'right' }}>Montant (FCFA)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(sourceQuote.lines || []).map((line, idx) => {
-                    const unitPrice = Number(line.unitPrice) || 0;
-                    const lineTotal = Number(line.total) || 0;
-                    return (
-                      <tr key={line.id || idx}>
-                        <td>{idx + 1}</td>
-                        <td style={{ fontSize: '0.85rem' }}>{line.description || 'Non spécifié'}</td>
-                        <td style={{ textAlign: 'center', fontSize: '0.85rem' }}>{Number(line.quantity) || 1}</td>
-                        <td style={{ fontSize: '0.85rem' }}>{line.unit || 'Forfait'}</td>
-                        <td style={{ textAlign: 'right', fontSize: '0.85rem' }}>{unitPrice.toLocaleString('fr-FR')} FCFA</td>
-                        <td style={{ textAlign: 'right', fontSize: '0.85rem', fontWeight: 600 }}>{lineTotal.toLocaleString('fr-FR')} FCFA</td>
-                      </tr>
-                    );
-                  })}
+                  {(sourceQuote.lines || []).map((line, idx) => (
+                    <tr key={line.id || idx}>
+                      <td>{idx + 1}</td>
+                      <td style={{ fontSize: '0.85rem' }}>{line.description || 'Non spécifié'}</td>
+                      <td style={{ textAlign: 'center', fontSize: '0.85rem' }}>{Number(line.quantity) || 1}</td>
+                      <td style={{ fontSize: '0.85rem' }}>{line.unit || 'Forfait'}</td>
+                    </tr>
+                  ))}
                   {(sourceQuote.lines || []).length === 0 && (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '20px', color: 'var(--color-text-muted)' }}>
+                      <td colSpan={4} style={{ textAlign: 'center', padding: '20px', color: 'var(--color-text-muted)' }}>
                         Aucune ligne de prestation dans ce devis.
                       </td>
                     </tr>
@@ -533,7 +645,6 @@ export function BonLivraison() {
                 <th>Devis</th>
                 <th>Client</th>
                 <th>Date</th>
-                <th style={{ textAlign: 'right' }}>Total (FCFA)</th>
                 <th style={{ textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
@@ -545,9 +656,6 @@ export function BonLivraison() {
                   <td>{getNoteClientName(note)}</td>
                   <td style={{ fontSize: '0.85rem' }}>
                     {note.date ? new Date(note.date).toLocaleDateString('fr-FR') : '—'}
-                  </td>
-                  <td style={{ textAlign: 'right', fontWeight: 600 }}>
-                    {(Number(note.total) || 0).toLocaleString('fr-FR')}
                   </td>
                   <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                     <button
@@ -582,14 +690,14 @@ export function BonLivraison() {
               ))}
               {!notesLoading && visibleNotes.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-muted)' }}>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-muted)' }}>
                     Aucun bon de livraison émis.
                   </td>
                 </tr>
               )}
               {notesLoading && (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-muted)' }}>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-muted)' }}>
                     Chargement des bons de livraison...
                   </td>
                 </tr>
