@@ -28,7 +28,29 @@ import { MailSmtpSettings } from '../components/MailSmtpSettings';
 import type { Quote } from '../context/AppContext';
 import { canViewAll, visibleTo, canManageOwned } from '../lib/scope';
 
-type PeriodFilter = 'ALL' | 'TODAY' | '7_DAYS' | 'THIS_MONTH' | 'THIS_QUARTER' | 'THIS_YEAR';
+type PeriodFilter = 
+  | 'ALL' 
+  | 'TODAY' 
+  | '7_DAYS' 
+  | 'THIS_MONTH' 
+  | 'THIS_QUARTER' 
+  | 'THIS_YEAR'
+  | `MONTH_${number}`;
+
+const MONTH_OPTIONS = [
+  { value: 'MONTH_1', label: 'Janvier' },
+  { value: 'MONTH_2', label: 'Février' },
+  { value: 'MONTH_3', label: 'Mars' },
+  { value: 'MONTH_4', label: 'Avril' },
+  { value: 'MONTH_5', label: 'Mai' },
+  { value: 'MONTH_6', label: 'Juin' },
+  { value: 'MONTH_7', label: 'Juillet' },
+  { value: 'MONTH_8', label: 'Août' },
+  { value: 'MONTH_9', label: 'Septembre' },
+  { value: 'MONTH_10', label: 'Octobre' },
+  { value: 'MONTH_11', label: 'Novembre' },
+  { value: 'MONTH_12', label: 'Décembre' },
+] as const;
 
 function isQuoteExpired(q: Quote): boolean {
   if (!q.validUntil) return false;
@@ -49,10 +71,24 @@ export function Devis() {
   const [serviceFilter, setServiceFilter] = useState('');
   const [authorFilter, setAuthorFilter] = useState<string>(searchParams.get('authorId') || '');
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('ALL');
+  const [yearFilter, setYearFilter] = useState<string>(new Date().getFullYear().toString());
   const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [activeTab, setActiveTab] = useState<'list' | 'mail'>('list');
   const PAGE_SIZE = 20;
+
+  const availableYears = useMemo(() => {
+    const setY = new Set<number>();
+    const currentY = new Date().getFullYear();
+    setY.add(currentY);
+    quotes.forEach(q => {
+      if (q.date) {
+        const y = new Date(q.date).getFullYear();
+        if (!isNaN(y)) setY.add(y);
+      }
+    });
+    return Array.from(setY).sort((a, b) => b - a);
+  }, [quotes]);
 
   useEffect(() => {
     const authorParam = searchParams.get('authorId');
@@ -74,8 +110,18 @@ export function Devis() {
     
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return false;
+
+    // Filtrage par mois spécifique (1 à 12)
+    if (period.startsWith('MONTH_')) {
+      const monthNum = parseInt(period.replace('MONTH_', ''), 10) - 1; // 0-indexed
+      if (d.getMonth() !== monthNum) return false;
+      if (yearFilter && yearFilter !== 'ALL') {
+        return d.getFullYear() === Number(yearFilter);
+      }
+      return true;
+    }
+
     const now = new Date();
-    
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     
     switch (period) {
@@ -140,7 +186,7 @@ export function Devis() {
 
       return true;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [allowedQuotes, filter, statusFilter, serviceFilter, authorFilter, periodFilter, clients, users]);
+  }, [allowedQuotes, filter, statusFilter, serviceFilter, authorFilter, periodFilter, yearFilter, clients, users]);
 
   // Calcul de la marge totale d'un devis (total vente - coût de revient)
   const computeQuoteMargin = (q: Quote): number => {
@@ -167,7 +213,7 @@ export function Devis() {
   const paginatedQuotes = filteredQuotes.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   // Reset page à chaque changement de filtre
-  useEffect(() => { setCurrentPage(1); }, [filter, statusFilter, serviceFilter, authorFilter, periodFilter]);
+  useEffect(() => { setCurrentPage(1); }, [filter, statusFilter, serviceFilter, authorFilter, periodFilter, yearFilter]);
 
   // Liste des utilisateurs éligibles pour le filtre + compteur pré-calculé (O(N))
   const quoteCountByAuthor = useMemo(() => {
@@ -189,6 +235,7 @@ export function Devis() {
     setServiceFilter('');
     setAuthorFilter('');
     setPeriodFilter('ALL');
+    setYearFilter(new Date().getFullYear().toString());
     setCurrentPage(1);
     setSearchParams({});
   };
@@ -308,6 +355,11 @@ export function Devis() {
                 👤 {getUserName(authorFilter)}
               </span>
             )}
+            {periodFilter.startsWith('MONTH_') && (
+              <span className="badge-status" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#059669', fontSize: '11px', fontWeight: 600 }}>
+                📅 {MONTH_OPTIONS.find(m => m.value === periodFilter)?.label} {yearFilter !== 'ALL' && yearFilter ? yearFilter : ''}
+              </span>
+            )}
             {hasActiveFilters && (
               <span className="badge-status" style={{ background: 'var(--color-surface-alt)', color: 'var(--color-text-muted)', fontSize: '11px' }}>
                 {totalFilteredCount} devis trouvé(s)
@@ -370,21 +422,45 @@ export function Devis() {
             </div>
           )}
 
-          {/* Période */}
+          {/* Période & Mois */}
           <div>
-            <select
-              className="table-input"
-              style={{ width: '100%', fontSize: '0.85rem' }}
-              value={periodFilter}
-              onChange={e => setPeriodFilter(e.target.value as PeriodFilter)}
-            >
-              <option value="ALL">📅 Toute la période</option>
-              <option value="TODAY">Aujourd'hui</option>
-              <option value="7_DAYS">7 derniers jours</option>
-              <option value="THIS_MONTH">Ce mois-ci</option>
-              <option value="THIS_QUARTER">Ce trimestre</option>
-              <option value="THIS_YEAR">Cette année</option>
-            </select>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <select
+                className="table-input"
+                style={{ width: '100%', fontSize: '0.85rem', fontWeight: periodFilter !== 'ALL' ? 600 : 400 }}
+                value={periodFilter}
+                onChange={e => setPeriodFilter(e.target.value as PeriodFilter)}
+              >
+                <option value="ALL">📅 Toute la période</option>
+                <option value="TODAY">Aujourd'hui</option>
+                <option value="7_DAYS">7 derniers jours</option>
+                <option value="THIS_MONTH">Ce mois-ci</option>
+                <option value="THIS_QUARTER">Ce trimestre</option>
+                <option value="THIS_YEAR">Cette année</option>
+                <optgroup label="── Mois (1 à 12) ──">
+                  {MONTH_OPTIONS.map(m => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+
+              {periodFilter.startsWith('MONTH_') && (
+                <select
+                  className="table-input"
+                  style={{ width: '92px', fontSize: '0.85rem', fontWeight: 600, borderColor: 'var(--color-primary)' }}
+                  value={yearFilter}
+                  onChange={e => setYearFilter(e.target.value)}
+                  title="Année de l'exercice"
+                >
+                  <option value="ALL">Toutes</option>
+                  {availableYears.map(yr => (
+                    <option key={yr} value={yr}>{yr}</option>
+                  ))}
+                </select>
+              )}
+            </div>
           </div>
 
           {/* Statut */}
