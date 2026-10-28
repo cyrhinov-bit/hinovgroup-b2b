@@ -1305,7 +1305,6 @@ export function generateQuotePdf(
 
   // Tableau : en-tête + lignes (pagination si long)
   let y = drawTableHead(98);
-  let lastRowPage = 1;
   const rowLimit = 222;
   const newTablePage = () => {
     doc.addPage();
@@ -1315,7 +1314,6 @@ export function generateQuotePdf(
     const { lines: descLines, h: rowH } = measureRow(ln);
     if (y + rowH > rowLimit) newTablePage();
     drawRow(ln, String(idx + 1), y, rowH, descLines);
-    lastRowPage = doc.getCurrentPageInfo().pageNumber;
     y += rowH;
   });
   if (lines.length === 0) {
@@ -1378,24 +1376,15 @@ export function generateQuotePdf(
   });
   y += cardH;
 
-  // ---- Signature + 3 blocs bas : ancrés au plus près du pied de page ----
-  // Hauteur consommée : signature 43 mm + blocs 36 mm. Le bas des blocs est
-  // calé à 276 mm, soit juste au-dessus du pied de page (première ligne à 280,5 mm).
-  const BOTTOM_END = 276;
+  // ---- Signature + 3 blocs bas : juste sous le tableau et les totaux ----
+  // Hauteur consommée : signature 43 mm + blocs 36 mm. La section suit
+  // immédiatement le tableau (plus d'ancrage au pied de page).
   const SECTION_H = 43 + 36;
-  const anchoredY = BOTTOM_END - SECTION_H; // 197 mm
-  if (doc.getCurrentPageInfo().pageNumber === lastRowPage) {
-    if (y + 4 <= anchoredY) {
-      // Le tableau et les totaux tiennent sur la page : on ancre la section en bas.
-      y = anchoredY;
-    } else {
-      // Pas assez de place sous les totaux : la section passe en haut d'une nouvelle page.
-      doc.addPage();
-      y = 20;
-    }
-  } else {
-    // Page de continuation (totaux seuls) : la section enchaîne sous les totaux.
-    y += 8;
+  y += 8;
+  if (y + SECTION_H > 276) {
+    // Pas assez de place sous les totaux : la section passe en haut d'une nouvelle page.
+    doc.addPage();
+    y = 20;
   }
 
   doc.setFont('helvetica', 'bold');
@@ -2064,14 +2053,12 @@ export function generateBonLivraisonPdf(
     doc.line(BL_CX[0], y, BL_CX[2], y);
   }
 
-  // ---- Signatures (ancrées près du pied de page) ----
-  // Bloc signature : 47 mm de haut, bas calé juste au-dessus du pied de page.
-  const SIG_BOTTOM_END = 276;
+  // ---- Signatures : juste sous le tableau ----
+  // Bloc signature de 47 mm de haut, enchaîné directement après les articles
+  // (plus d'ancrage au pied de page).
   const SIG_BLOCK_H = 47;
-  const sigY = SIG_BOTTOM_END - SIG_BLOCK_H; // 229 mm
-  if (y + 8 <= sigY) {
-    y = sigY;
-  } else {
+  y += 10;
+  if (y + SIG_BLOCK_H > 276) {
     // Pas assez de place sous le tableau : signatures en haut d'une nouvelle page.
     doc.addPage();
     y = 20;
