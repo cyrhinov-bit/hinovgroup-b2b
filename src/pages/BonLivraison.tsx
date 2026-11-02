@@ -386,7 +386,8 @@ export function BonLivraison() {
       prestationId,
       description: prestation?.name || '',
       unit: prestation?.unit || '',
-      unitPrice: Number(prestation?.price) || 0,
+      unitPrice: 0,
+      total: 0,
     });
   };
 
@@ -402,7 +403,7 @@ export function BonLivraison() {
     }
 
     const client = clients.find((item) => item.id === standaloneClientId);
-    const total = lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0), 0);
+    const total = 0;
     setCreatingStandalone(true);
     try {
       const created = await createDeliveryNote({
@@ -521,7 +522,6 @@ export function BonLivraison() {
                       <th>Désignation *</th>
                       <th style={{ width: '100px', textAlign: 'center' }}>Qté *</th>
                       <th style={{ width: '110px' }}>Unité</th>
-                      <th style={{ width: '130px', textAlign: 'right' }}>PU (FCFA)</th>
                       <th style={{ width: '40px' }}></th>
                     </tr>
                   </thead>
@@ -550,9 +550,6 @@ export function BonLivraison() {
                         </td>
                         <td>
                           <input className="table-input" value={line.unit || ''} onChange={(event) => updateStandaloneLine(line.id, { unit: event.target.value })} />
-                        </td>
-                        <td>
-                          <input className="table-input" style={{ textAlign: 'right' }} type="number" min="0" step="1" value={line.unitPrice} onChange={(event) => updateStandaloneLine(line.id, { unitPrice: Number(event.target.value) || 0 })} />
                         </td>
                         <td>
                           <button
