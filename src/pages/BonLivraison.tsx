@@ -5,12 +5,15 @@ import {
   Download,
   Eye,
   Mail,
+  Plus,
   Receipt,
   RefreshCw,
   Save,
   Search,
   Trash2,
+  X,
 } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAppContext, type Quote } from '../context/AppContext';
@@ -62,6 +65,13 @@ export function BonLivraison() {
   const [generating, setGenerating] = useState(false);
   const [preview, setPreview] = useState<ReportPdfPreviewData | null>(null);
   const [search, setSearch] = useState('');
+  const [standaloneOpen, setStandaloneOpen] = useState(false);
+  const [standaloneClientId, setStandaloneClientId] = useState('');
+  const [standaloneDate, setStandaloneDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [standaloneLines, setStandaloneLines] = useState<DeliveryNote['lines']>([
+    { id: uuidv4(), description: '', quantity: 1, unit: '', unitPrice: 0, total: 0 },
+  ]);
+  const [creatingStandalone, setCreatingStandalone] = useState(false);
 
   // Identifiants transmis par le devis : l'id est la clé principale, le numéro
   // sert de secours si les identifiants ont été resynchronisés entre-temps.
@@ -347,6 +357,87 @@ export function BonLivraison() {
     });
   };
 
+  const resetStandaloneForm = () => {
+    setStandaloneClientId('');
+    setStandaloneDate(new Date().toISOString().slice(0, 10));
+    setStandaloneLines([
+      { id: uuidv4(), description: '', quantity: 1, unit: '', unitPrice: 0, total: 0 },
+    ]);
+  };
+
+  const updateStandaloneLine = (
+    lineId: string,
+    patch: Partial<DeliveryNote['lines'][number]>,
+  ) => {
+    setStandaloneLines((lines) =>
+      lines.map((line) => {
+        if (line.id !== lineId) return line;
+        const next = { ...line, ...patch };
+        const quantity = Number(next.quantity) || 0;
+        const unitPrice = Number(next.unitPrice) || 0;
+        return { ...next, total: quantity * unitPrice };
+      }),
+    );
+  };
+
+  const selectStandalonePrestation = (lineId: string, prestationId: string) => {
+    const prestation = prestations.find((item) => item.id === prestationId);
+    updateStandaloneLine(lineId, {
+      prestationId,
+      description: prestation?.name || '',
+      unit: prestation?.unit || '',
+      unitPrice: Number(prestation?.price) || 0,
+    });
+  };
+
+  const handleCreateStandalone = async () => {
+    if (!standaloneClientId) {
+      toast.error('Sélectionnez un client.');
+      return;
+    }
+    const lines = standaloneLines.filter((line) => line.description.trim() && Number(line.quantity) > 0);
+    if (lines.length === 0) {
+      toast.error('Ajoutez au moins un article à livrer.');
+      return;
+    }
+
+    const client = clients.find((item) => item.id === standaloneClientId);
+    const total = lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0), 0);
+    setCreatingStandalone(true);
+    try {
+      const created = await createDeliveryNote({
+        quoteId: '',
+        quoteNumber: '',
+        clientId: standaloneClientId,
+        clientName: client?.company || client?.name || getClientName(standaloneClientId),
+        commercialId: currentUser?.id,
+        serviceId: client?.serviceId,
+        date: standaloneDate,
+        lines: lines.map((line) => ({
+          ...line,
+          description: line.description.trim(),
+          quantity: Number(line.quantity) || 0,
+          unitPrice: Number(line.unitPrice) || 0,
+          total: (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0),
+        })),
+        total,
+        createdBy: currentUser?.id,
+      });
+      setNotes((prev) => [created, ...prev.filter((note) => note.id !== created.id)]);
+      const moved = await applyCrmStockMovements(created);
+      toast.success(moved > 0
+        ? `BL ${created.deliveryNumber} créé (${moved} article(s) décrémenté(s) dans le stock CRM).`
+        : `BL ${created.deliveryNumber} créé.`);
+      setStandaloneOpen(false);
+      resetStandaloneForm();
+      await previewNote(created);
+    } catch (err: any) {
+      toast.error(err?.message || 'Impossible de créer le bon de livraison.');
+    } finally {
+      setCreatingStandalone(false);
+    }
+  };
+
   const canGenerate = !!sourceQuote && sourceQuote.status === 'Accepté';
 
   return (
@@ -370,17 +461,133 @@ export function BonLivraison() {
             Documents générés depuis les devis acceptés (module CRM, séparé du POS).
           </p>
         </div>
-        <button
-          className="btn btn-outline"
-          onClick={() => navigate('/devis')}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-        >
-          <ArrowLeft size={16} /> Retour aux devis
-        </button>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {!sourceQuote && (
+            <button
+              className="btn btn-primary"
+              onClick={() => setStandaloneOpen((open) => !open)}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              {standaloneOpen ? <X size={16} /> : <Plus size={16} />}
+              {standaloneOpen ? 'Fermer' : 'Nouveau bon de livraison'}
+            </button>
+          )}
+          <button
+            className="btn btn-outline"
+            onClick={() => navigate('/devis')}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+          >
+            <ArrowLeft size={16} /> Retour aux devis
+          </button>
+        </div>
       </div>
 
       {!sourceQuote && (
         <>
+          {standaloneOpen && (
+            <div className="card" style={{ marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                <div>
+                  <h3 style={{ margin: 0 }}>Nouveau bon de livraison</h3>
+                  <p style={{ margin: '4px 0 0', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                    Création indépendante, sans devis associé.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+                <div>
+                  <label className="form-label">Client *</label>
+                  <select className="input" value={standaloneClientId} onChange={(event) => setStandaloneClientId(event.target.value)}>
+                    <option value="">Sélectionner un client...</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.company || client.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label">Date de livraison *</label>
+                  <input className="input" type="date" value={standaloneDate} onChange={(event) => setStandaloneDate(event.target.value)} />
+                </div>
+              </div>
+
+              <div className="table-responsive">
+                <table className="data-table responsive-table">
+                  <thead>
+                    <tr>
+                      <th>Prestation / article</th>
+                      <th>Désignation *</th>
+                      <th style={{ width: '100px', textAlign: 'center' }}>Qté *</th>
+                      <th style={{ width: '110px' }}>Unité</th>
+                      <th style={{ width: '130px', textAlign: 'right' }}>PU (FCFA)</th>
+                      <th style={{ width: '40px' }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {standaloneLines.map((line) => (
+                      <tr key={line.id}>
+                        <td>
+                          <select
+                            className="table-input"
+                            value={line.prestationId || ''}
+                            onChange={(event) => selectStandalonePrestation(line.id, event.target.value)}
+                          >
+                            <option value="">Saisie libre...</option>
+                            {prestations.map((prestation) => (
+                              <option key={prestation.id} value={prestation.id}>
+                                {prestation.code ? `[${prestation.code}] ` : ''}{prestation.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <input className="table-input" value={line.description} onChange={(event) => updateStandaloneLine(line.id, { description: event.target.value })} />
+                        </td>
+                        <td>
+                          <input className="table-input" type="number" min="0" step="1" value={line.quantity} onChange={(event) => updateStandaloneLine(line.id, { quantity: Number(event.target.value) || 0 })} />
+                        </td>
+                        <td>
+                          <input className="table-input" value={line.unit || ''} onChange={(event) => updateStandaloneLine(line.id, { unit: event.target.value })} />
+                        </td>
+                        <td>
+                          <input className="table-input" style={{ textAlign: 'right' }} type="number" min="0" step="1" value={line.unitPrice} onChange={(event) => updateStandaloneLine(line.id, { unitPrice: Number(event.target.value) || 0 })} />
+                        </td>
+                        <td>
+                          <button
+                            className="icon-button"
+                            type="button"
+                            title="Retirer la ligne"
+                            disabled={standaloneLines.length === 1}
+                            onClick={() => setStandaloneLines((lines) => lines.filter((item) => item.id !== line.id))}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginTop: '12px', flexWrap: 'wrap' }}>
+                <button
+                  className="btn btn-outline"
+                  onClick={() => setStandaloneLines((lines) => [
+                    ...lines,
+                    { id: uuidv4(), description: '', quantity: 1, unit: '', unitPrice: 0, total: 0 },
+                  ])}
+                >
+                  <Plus size={16} /> Ajouter une ligne
+                </button>
+                <button className="btn btn-primary" onClick={() => void handleCreateStandalone()} disabled={creatingStandalone}>
+                  <Save size={16} /> {creatingStandalone ? 'Création...' : 'Créer le bon de livraison'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {quoteId && !sourceQuote && appLoading && (
             <div className="card" style={{ marginBottom: '16px' }}>
               <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>Chargement du devis…</p>
@@ -652,7 +859,7 @@ export function BonLivraison() {
               {visibleNotes.map((note) => (
                 <tr key={note.id}>
                   <td style={{ fontWeight: 700, color: '#B45309' }}>{note.deliveryNumber}</td>
-                  <td>{note.quoteNumber}</td>
+                  <td>{note.quoteNumber || 'Sans devis'}</td>
                   <td>{getNoteClientName(note)}</td>
                   <td style={{ fontSize: '0.85rem' }}>
                     {note.date ? new Date(note.date).toLocaleDateString('fr-FR') : '—'}

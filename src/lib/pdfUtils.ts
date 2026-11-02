@@ -2021,7 +2021,9 @@ export function generateBonLivraisonPdf(
     dateFr,
     number: blNumber,
     clientName: upClient,
-    referenceLine: `Réf. devis : ${quote.quoteNumber}`,
+    referenceLine: quote.quoteNumber
+      ? `Réf. devis : ${quote.quoteNumber}`
+      : 'Création indépendante, sans devis associé',
   });
 
   // ---- Tableau simplifié : Désignation / Quantité uniquement (aucun montant) ----
