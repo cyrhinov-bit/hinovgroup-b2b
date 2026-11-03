@@ -3,7 +3,7 @@ export class EnvironmentValidator {
     return {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true
+      sandbox: false
     };
   }
 }

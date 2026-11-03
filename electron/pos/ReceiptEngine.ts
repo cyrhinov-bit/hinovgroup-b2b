@@ -14,7 +14,8 @@ export class ReceiptEngine {
       throw new Error('Ticket invalide : génération impossible.');
     }
     try {
-      await PrinterManager.printHtml(html, data?.printerName);
+      const printerTarget = data?.printerName || data?.settings?.selectedPrinter || data?.posSettings?.selectedPrinter;
+      await PrinterManager.printHtml(html, printerTarget);
       return 'receipt_printed';
     } catch (err: any) {
       // Échec remonté en exception (le renderer affiche un fallback au lieu

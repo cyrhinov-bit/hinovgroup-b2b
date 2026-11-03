@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { Save, CheckCircle2 } from 'lucide-react';
 import { useCanManagePosReferentials } from '../../hooks/useCanManagePosReferentials';
+import { platform } from '../../platform';
 
 export default function PosSettings() {
   const { posSettings, updatePosSettings } = useAppContext();
@@ -9,6 +10,15 @@ export default function PosSettings() {
   const [form, setForm] = useState(posSettings);
   const [saved, setSaved] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
+  const [availablePrinters, setAvailablePrinters] = useState<Array<{ name: string; isDefault: boolean }>>([]);
+
+  useEffect(() => {
+    if (platform.isDesktop) {
+      platform.printer.getPrinters().then(printers => {
+        setAvailablePrinters(printers || []);
+      }).catch(() => {});
+    }
+  }, []);
 
   // Resynchroniser le formulaire si les paramètres chargent après le montage
   useEffect(() => {
@@ -89,13 +99,30 @@ export default function PosSettings() {
             <input style={inputStyle} value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value })} />
           </div>
           <div>
-            <div style={labelStyle}>Type d'imprimante</div>
+            <div style={labelStyle}>Format de ticket</div>
             <select style={inputStyle} value={form.printerType} onChange={e => setForm({ ...form, printerType: e.target.value })}>
               <option>Thermique 58mm</option>
               <option>Thermique 80mm</option>
               <option>A4</option>
             </select>
           </div>
+          {platform.isDesktop && availablePrinters.length > 0 && (
+            <div>
+              <div style={labelStyle}>Imprimante système (Desktop)</div>
+              <select 
+                style={inputStyle} 
+                value={(form as any).selectedPrinter || ''} 
+                onChange={e => setForm({ ...form, selectedPrinter: e.target.value } as any)}
+              >
+                <option value="">Imprimante par défaut Windows</option>
+                {availablePrinters.map(p => (
+                  <option key={p.name} value={p.name}>
+                    {p.name} {p.isDefault ? '(Par défaut)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div style={{ gridColumn: '1 / -1' }}>
             <div style={labelStyle}>Message sur le ticket</div>
             <textarea style={{ ...inputStyle, minHeight: '80px' }} value={form.ticketMessage} onChange={e => setForm({ ...form, ticketMessage: e.target.value })} />

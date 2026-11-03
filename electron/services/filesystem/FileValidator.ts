@@ -8,8 +8,11 @@ export class FileValidator {
     const base = (paths as any)[baseFolder];
     if (!base) throw new Error(`Base folder '${baseFolder}' inconnu.`);
     
-    const resolvedPath = path.resolve(base, targetPath);
-    if (!resolvedPath.startsWith(base)) {
+    const resolvedBase = path.resolve(base);
+    const resolvedPath = path.resolve(resolvedBase, targetPath || '');
+    const baseWithSep = resolvedBase.endsWith(path.sep) ? resolvedBase : resolvedBase + path.sep;
+    
+    if (resolvedPath !== resolvedBase && !resolvedPath.startsWith(baseWithSep)) {
       throw new PathTraversalSecurityError(`Accès refusé : Tentative de Path Traversal détectée (${targetPath})`);
     }
     

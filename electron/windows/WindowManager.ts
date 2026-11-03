@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { WindowStateService } from './WindowStateService.js';
@@ -27,13 +27,25 @@ export class WindowManager {
   static init(): void {
     this.createSplashScreen();
     
-    // Délai pour simuler le splash et laisser le temps à Vite
+    // Délai pour afficher le splash et laisser le temps au chargement
     setTimeout(() => {
       this.createMainWindow();
     }, 1000);
   }
 
   private static createSplashScreen(): void {
+    const splashCandidates = [
+      path.join(__dirname, 'splash.html'),
+      path.join(app.getAppPath(), 'dist-electron/windows/splash.html'),
+      path.join(app.getAppPath(), 'electron/windows/splash.html'),
+      path.join(process.cwd(), 'electron/windows/splash.html')
+    ];
+    const splashPath = splashCandidates.find(p => fs.existsSync(p));
+
+    if (!splashPath) {
+      return;
+    }
+
     const iconPath = this.getAppIconPath();
     this.splashScreen = new BrowserWindow({
       width: 400,
@@ -50,8 +62,7 @@ export class WindowManager {
       }
     });
 
-    const splashPath = path.join(app.getAppPath(), 'electron/windows/splash.html');
-    this.splashScreen.loadFile(splashPath);
+    this.splashScreen.loadFile(splashPath).catch(() => {});
     
     this.splashScreen.once('ready-to-show', () => {
       this.splashScreen?.show();
@@ -83,6 +94,22 @@ export class WindowManager {
       },
     });
 
+    // Sécurisation de la navigation : liens externes ouverts dans le navigateur par défaut
+    this.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+      if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('mailto:')) {
+        void shell.openExternal(url);
+      }
+      return { action: 'deny' };
+    });
+
+    this.mainWindow.webContents.on('will-navigate', (event, url) => {
+      const isLocal = url.startsWith('file://') || url.startsWith('http://localhost:5173');
+      if (!isLocal) {
+        event.preventDefault();
+        void shell.openExternal(url);
+      }
+    });
+
     if (state.isMaximized) {
       this.mainWindow.maximize();
     }
@@ -101,15 +128,11 @@ export class WindowManager {
       this.mainWindow?.show();
     });
 
-    this.mainWindow.on('close', (_e) => {
-      // Emplacement pour de futures actions de vérification (ex: confirmation avant fermeture)
-    });
-
     this.mainWindow.on('closed', () => {
       this.mainWindow = null;
     });
 
-    const isDev = Boolean(!app?.isPackaged && process.env.NODE_ENV === 'development');
+    const isDev = Boolean(!app?.isPackaged && (process.env.NODE_ENV === 'development' || process.env.ELECTRON_DEV === 'true'));
     if (isDev) {
       this.mainWindow.loadURL('http://localhost:5173');
     } else {
