@@ -127,6 +127,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Factures Fournisseurs', icon: Truck, path: '/fournisseurs-factures', color: '#EA580C', bg: '#FFF7ED', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmSupFacturesEnabled' },
     { label: 'Rapports Hebdo', icon: ClipboardList, path: '/crm/rapports', color: '#059669', bg: '#ECFDF5', roles: ['Responsable', 'Commercial', 'Directeur', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmReportsEnabled' },
     { label: 'Rapports Equipe', icon: ClipboardCheck, path: '/crm/rapports-equipe', color: '#7C3AED', bg: '#FAF5FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin', 'Responsable', 'Commercial'], permissionKey: 'crmTeamReportsEnabled' },
+    { label: 'Erreurs Sync', icon: Shield, path: '/crm/sync-errors', color: '#DC2626', bg: '#FEF2F2', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin', 'Gerant', 'Caissier', 'Encaisseur'] },
     { label: 'Clients', icon: Users, path: '/clients', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Services', icon: Briefcase, path: '/services', color: '#4F46E5', bg: '#EEF2FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Prestations', icon: FileText, path: '/prestations', color: '#6366F1', bg: '#EEF2FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
@@ -301,7 +302,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
                     </span>
                     <span>{item.label}</span>
                   </div>
-                  {item.path === '/pos/sync-errors' && syncErrorsCount > 0 && (
+                  {(item.path === '/pos/sync-errors' || item.path === '/crm/sync-errors') && syncErrorsCount > 0 && (
                     <span className="sidebar-sync-badge" title={`${syncErrorsCount} action(s) en erreur`}>
                       {syncErrorsCount > 99 ? '99+' : syncErrorsCount}
                     </span>

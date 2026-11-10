@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { db } from '../../lib/db';
 import { ShieldAlert, Trash2, RefreshCw, CloudUpload, CheckCircle, AlertTriangle, Wrench } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
-import { queueSyncAction, reconcileLocalPosDataWithCloud, isRetiredServicePayload, type SyncAction } from '../../lib/sync';
+import { queueSyncAction, processSyncQueue, reconcileLocalPosDataWithCloud, isRetiredServicePayload, type SyncAction } from '../../lib/sync';
 import { useAppContext } from '../../context/AppContext';
 import { toast } from 'react-hot-toast';
+import { useLocation } from 'react-router-dom';
 
 interface SyncError {
   action: SyncAction;
@@ -26,8 +27,11 @@ export default function PosSyncErrors() {
   const [loading, setLoading] = useState(true);
   const [isReconciling, setIsReconciling] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
+  const [isPushing, setIsPushing] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<{ success: boolean; message: string } | null>(null);
   const { repairLocalCatalog } = useAppContext();
+  const location = useLocation();
+  const isCrmSyncPage = location.pathname === '/crm/sync-errors';
 
   const loadErrors = async () => {
     setLoading(true);
@@ -164,6 +168,42 @@ export default function PosSyncErrors() {
     }
   };
 
+  const pushPendingData = async () => {
+    if (pendingQueue.length === 0) {
+      toast('Aucune donnée en attente d’envoi.');
+      return;
+    }
+    if (!navigator.onLine) {
+      toast.error('Connexion Internet requise pour envoyer les données.');
+      return;
+    }
+
+    setIsPushing(true);
+    const toastId = toast.loading('Envoi des données en attente...');
+    try {
+      await processSyncQueue();
+      const [queue, storedErrors] = await Promise.all([
+        db.syncQueue.getItem<SyncAction[]>('queue'),
+        db.syncErrors.getItem<SyncError[]>('errors')
+      ]);
+      const remainingQueue = (queue || []).filter(action => !isRetiredServicePayload(action.type, action.payload));
+      const validErrors = (storedErrors || []).filter(error => !isRetiredServicePayload(error.action?.type, error.action?.payload));
+      setPendingQueue(remainingQueue);
+      setErrors(validErrors);
+      if (remainingQueue.length === 0 && validErrors.length === 0) {
+        toast.success('Toutes les données en attente ont été envoyées.', { id: toastId });
+      } else if (remainingQueue.length === 0) {
+        toast.error(`File traitée, mais ${validErrors.length} erreur(s) de synchronisation nécessitent un nouvel essai.`, { id: toastId });
+      } else {
+        toast.error(`${remainingQueue.length} action(s) restent en attente. Consultez les erreurs ci-dessous.`, { id: toastId });
+      }
+    } catch (e: any) {
+      toast.error(`Envoi impossible : ${e?.message || e}`, { id: toastId });
+    } finally {
+      setIsPushing(false);
+    }
+  };
+
   if (loading) return <div style={{ padding: 24 }}>Chargement...</div>;
 
   const pendingByType = pendingQueue.reduce<Record<string, number>>((acc, a) => {
@@ -177,7 +217,7 @@ export default function PosSyncErrors() {
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <ShieldAlert size={24} color="var(--color-error)" />
-            Erreurs & Réconciliation de Synchronisation
+            {isCrmSyncPage ? 'Erreurs de Synchronisation CRM' : 'Erreurs & Réconciliation de Synchronisation'}
           </h1>
           <p style={{ color: 'var(--color-text-muted)', marginTop: '4px', fontSize: '14px' }}>
             Affiche les données non synchronisées et permet le rapprochement automatique de la base locale avec le serveur Cloud.
@@ -185,18 +225,31 @@ export default function PosSyncErrors() {
         </div>
         
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <Button 
-            variant="primary" 
-            icon={<CloudUpload size={16} />} 
-            onClick={handleGlobalReconciliation}
-            disabled={isReconciling}
-          >
-            {isReconciling ? 'Rapprochement en cours...' : 'Forcer Réconciliation Globale POS'}
-          </Button>
+          {isCrmSyncPage ? (
+            <Button
+              variant="primary"
+              icon={<CloudUpload size={16} />}
+              onClick={pushPendingData}
+              disabled={isPushing || pendingQueue.length === 0}
+            >
+              {isPushing ? 'Envoi en cours...' : 'Pousser les données en attente'}
+            </Button>
+          ) : (
+            <Button
+              icon={<CloudUpload size={16} />}
+              variant="primary"
+              onClick={handleGlobalReconciliation}
+              disabled={isReconciling}
+            >
+              {isReconciling ? 'Rapprochement en cours...' : 'Forcer Réconciliation Globale POS'}
+            </Button>
+          )}
 
-          <Button variant="secondary" icon={<Wrench size={16} />} onClick={handleRepairCatalog} disabled={isRepairing} title="Remappe les doublons locaux du catalogue vers les produits du serveur (ventes, stocks, file). À lancer si des ventes perdent leurs lignes ou si des produits échouent.">
-            {isRepairing ? 'Réparation...' : 'Réparer le catalogue local'}
-          </Button>
+          {!isCrmSyncPage && (
+            <Button variant="secondary" icon={<Wrench size={16} />} onClick={handleRepairCatalog} disabled={isRepairing} title="Remappe les doublons locaux du catalogue vers les produits du serveur (ventes, stocks, file). À lancer si des ventes perdent leurs lignes ou si des produits échouent.">
+              {isRepairing ? 'Réparation...' : 'Réparer le catalogue local'}
+            </Button>
+          )}
 
           {errors.length > 0 && (
             <>

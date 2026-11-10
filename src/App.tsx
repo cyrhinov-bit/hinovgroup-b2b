@@ -259,6 +259,7 @@ function App() {
                     <Route path="crm/commissions" element={<RequireCrmModule moduleKey="crmCommissionsEnabled"><CrmCommissions /></RequireCrmModule>} />
                     <Route path="crm/rapports" element={<RequireCrmModule moduleKey="crmReportsEnabled"><CrmWeeklyReports /></RequireCrmModule>} />
                     <Route path="crm/rapports-equipe" element={<RequireCrmModule moduleKey="crmTeamReportsEnabled"><CrmWeeklyReports /></RequireCrmModule>} />
+                    <Route path="crm/sync-errors" element={<Suspense fallback={<Spinner />}><PosSyncErrors /></Suspense>} />
                     <Route path="rapports-equipe" element={<Navigate to="/crm/rapports-equipe" replace />} />
                     <Route path="rapports-hebdo" element={<Navigate to="/crm/rapports" replace />} />
                     <Route path="crm/modules" element={<RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><CrmModulesManager /></RequireRole>} />
@@ -279,7 +280,7 @@ function App() {
                     <Route path="pos/magasins" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Gerant', 'SuperAdmin']}><PosMagasins /></RequireRole></Suspense>} />
                     <Route path="pos/users" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant']}><PosUsers /></RequirePosModule></Suspense>} />
                     <Route path="pos/cashier-modules" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Gerant']}><CashierModulesManager /></RequireRole></Suspense>} />
-          <Route path="pos/sync-errors" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Gerant', 'Caissier']}><PosSyncErrors /></RequireRole></Suspense>} />
+                    <Route path="pos/sync-errors" element={<Suspense fallback={<Spinner />}><RequireRole roles={['Directeur', 'Gerant', 'Caissier']}><PosSyncErrors /></RequireRole></Suspense>} />
                     <Route path="pos/discounts" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur']}><PosDiscounts /></RequirePosModule></Suspense>} />
                     <Route path="pos/reports" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur']}><PosReports /></RequirePosModule></Suspense>} />
                     <Route path="pos/finance" element={<Suspense fallback={<Spinner />}><RequirePosModule roles={['Directeur', 'Gerant']}><PosFinance /></RequirePosModule></Suspense>} />

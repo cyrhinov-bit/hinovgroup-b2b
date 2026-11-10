@@ -219,7 +219,7 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
           {syncErrorsCount > 0 && (
             <button 
               className="icon-button" 
-              onClick={() => navigate('/pos/sync-errors')} 
+              onClick={() => navigate('/crm/sync-errors')}
               title={`${syncErrorsCount} erreur(s) de synchronisation - Cliquez pour réconcilier`}
               style={{
                 backgroundColor: '#FEF2F2',
@@ -272,7 +272,7 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
                       gap: '12px',
                       transition: 'background-color 0.15s'
                     }}
-                    onClick={() => { navigate('/pos/sync-errors'); setShowNotifications(false); }}
+                    onClick={() => { navigate('/crm/sync-errors'); setShowNotifications(false); }}
                     onMouseOver={e => e.currentTarget.style.backgroundColor = '#FEE2E2'}
                     onMouseOut={e => e.currentTarget.style.backgroundColor = '#FEF2F2'}
                   >
