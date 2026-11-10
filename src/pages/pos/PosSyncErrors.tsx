@@ -169,7 +169,7 @@ export default function PosSyncErrors() {
   };
 
   const pushPendingData = async () => {
-    if (pendingQueue.length === 0) {
+    if (pendingQueue.length === 0 && errors.length === 0) {
       toast('Aucune donnée en attente d’envoi.');
       return;
     }
@@ -181,13 +181,47 @@ export default function PosSyncErrors() {
     setIsPushing(true);
     const toastId = toast.loading('Envoi des données en attente...');
     try {
+      const [queuedActions, storedErrors] = await Promise.all([
+        db.syncQueue.getItem<SyncAction[]>('queue'),
+        db.syncErrors.getItem<SyncError[]>('errors')
+      ]);
+      const initialQueue = queuedActions || [];
+      const pendingKeys = new Set(initialQueue.map(action =>
+        `${action.type}::${action.payload?.id ?? action.payload?.reference ?? JSON.stringify(action.payload)}`
+      ));
+      const retryableErrors = (storedErrors || []).filter(error =>
+        error.action && !isRetiredServicePayload(error.action.type, error.action.payload)
+      );
+
+      for (const error of retryableErrors) {
+        const key = `${error.action.type}::${error.action.payload?.id ?? error.action.payload?.reference ?? JSON.stringify(error.action.payload)}`;
+        if (pendingKeys.has(key)) continue;
+        await queueSyncAction(error.action.type, error.action.payload, { processImmediately: false });
+        pendingKeys.add(key);
+      }
+
+      const currentQueue = (await db.syncQueue.getItem<SyncAction[]>('queue')) || [];
+      const currentQueueKeys = new Set(currentQueue.map(action =>
+        `${action.type}::${action.payload?.id ?? action.payload?.reference ?? JSON.stringify(action.payload)}`
+      ));
+      const retriedErrors = retryableErrors.filter(error => {
+        const key = `${error.action.type}::${error.action.payload?.id ?? error.action.payload?.reference ?? JSON.stringify(error.action.payload)}`;
+        return currentQueueKeys.has(key);
+      });
+      const retainedErrors = (storedErrors || []).filter(error => !retriedErrors.includes(error));
+      if (retriedErrors.length > 0) {
+        await archiveErrors(retriedErrors);
+        await db.syncErrors.setItem('errors', retainedErrors);
+        window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: retainedErrors.length } }));
+      }
+
       await processSyncQueue();
-      const [queue, storedErrors] = await Promise.all([
+      const [queue, currentStoredErrors] = await Promise.all([
         db.syncQueue.getItem<SyncAction[]>('queue'),
         db.syncErrors.getItem<SyncError[]>('errors')
       ]);
       const remainingQueue = (queue || []).filter(action => !isRetiredServicePayload(action.type, action.payload));
-      const validErrors = (storedErrors || []).filter(error => !isRetiredServicePayload(error.action?.type, error.action?.payload));
+      const validErrors = (currentStoredErrors || []).filter(error => !isRetiredServicePayload(error.action?.type, error.action?.payload));
       setPendingQueue(remainingQueue);
       setErrors(validErrors);
       if (remainingQueue.length === 0 && validErrors.length === 0) {
@@ -195,7 +229,7 @@ export default function PosSyncErrors() {
       } else if (remainingQueue.length === 0) {
         toast.error(`File traitée, mais ${validErrors.length} erreur(s) de synchronisation nécessitent un nouvel essai.`, { id: toastId });
       } else {
-        toast.error(`${remainingQueue.length} action(s) restent en attente. Consultez les erreurs ci-dessous.`, { id: toastId });
+        toast.error(`${remainingQueue.length} action(s) restent en attente et ${validErrors.length} erreur(s) subsistent. Consultez les détails ci-dessous.`, { id: toastId });
       }
     } catch (e: any) {
       toast.error(`Envoi impossible : ${e?.message || e}`, { id: toastId });
@@ -230,7 +264,7 @@ export default function PosSyncErrors() {
               variant="primary"
               icon={<CloudUpload size={16} />}
               onClick={pushPendingData}
-              disabled={isPushing || pendingQueue.length === 0}
+              disabled={isPushing || (pendingQueue.length === 0 && errors.length === 0)}
             >
               {isPushing ? 'Envoi en cours...' : 'Pousser les données en attente'}
             </Button>

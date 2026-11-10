@@ -857,7 +857,7 @@ export const isRetiredServicePayload = (type: SyncActionType, payload: any): boo
 };
 
 // Ajouter une action à la file d'attente
-export const queueSyncAction = async (type: SyncActionType, payload: any) => {
+export const queueSyncAction = async (type: SyncActionType, payload: any, options?: { processImmediately?: boolean }) => {
   // Ignorer immédiatement les actions portant sur l'ancien module services/photocopies
   if (isRetiredServicePayload(type, payload)) {
     console.log('[Sync] Action ignorée car liée au module de services retiré :', type);
@@ -895,7 +895,7 @@ export const queueSyncAction = async (type: SyncActionType, payload: any) => {
   await queueChain;
 
   // Tenter de synchroniser immédiatement si on est en ligne
-  if (navigator.onLine) {
+  if (options?.processImmediately !== false && navigator.onLine) {
     processSyncQueue();
   }
 };
@@ -4540,4 +4540,3 @@ export const reconcileAllOfflineDataWithCloud = async () => {
 
   return posResult;
 };
-
