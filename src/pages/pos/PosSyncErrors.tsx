@@ -4,6 +4,9 @@ import { ShieldAlert, Trash2, RefreshCw, CloudUpload, CheckCircle, AlertTriangle
 import { Button } from '../../components/ui/Button';
 import { queueSyncAction, processSyncQueue, reconcileLocalPosDataWithCloud, isRetiredServicePayload, type SyncAction } from '../../lib/sync';
 import { useAppContext } from '../../context/AppContext';
+import type { Quote } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { useLocation } from 'react-router-dom';
 
@@ -28,8 +31,10 @@ export default function PosSyncErrors() {
   const [isReconciling, setIsReconciling] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
+  const [isRecoveringQuotes, setIsRecoveringQuotes] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<{ success: boolean; message: string } | null>(null);
   const { repairLocalCatalog } = useAppContext();
+  const { currentUser } = useAuth();
   const location = useLocation();
   const isCrmSyncPage = location.pathname === '/crm/sync-errors';
 
@@ -238,6 +243,96 @@ export default function PosSyncErrors() {
     }
   };
 
+  const recoverMissingQuotes = async () => {
+    if (!currentUser) {
+      toast.error('Connectez-vous au compte concerné avant de récupérer ses devis.');
+      return;
+    }
+    if (!navigator.onLine) {
+      toast.error('Connexion Internet requise pour comparer les devis avec Supabase.');
+      return;
+    }
+
+    setIsRecoveringQuotes(true);
+    const toastId = toast.loading('Comparaison des devis locaux avec Supabase...');
+    try {
+      const localQuotes = (await db.quotes.getItem<Quote[]>('data')) || [];
+      const ownedQuotes = localQuotes.filter(quote => quote.commercialId === currentUser.id);
+      if (ownedQuotes.length === 0) {
+        toast('Aucun devis local associé au compte connecté.', { id: toastId });
+        return;
+      }
+
+      const { data: remoteQuotes, error: remoteError } = await supabase
+        .from('quotes')
+        .select('id')
+        .eq('commercial_id', currentUser.id);
+      if (remoteError) throw new Error(`Lecture des devis Supabase impossible : ${remoteError.message}`);
+
+      const remoteIds = new Set((remoteQuotes || []).map(quote => quote.id));
+      const missingQuotes = ownedQuotes.filter(quote => !remoteIds.has(quote.id));
+      if (missingQuotes.length === 0) {
+        toast.success(`${ownedQuotes.length} devis locaux du compte ${currentUser.name} sont déjà présents dans Supabase.`, { id: toastId });
+        return;
+      }
+
+      if (!window.confirm(
+        `${missingQuotes.length} devis locaux absents de Supabase ont été trouvés pour ${currentUser.name} (${currentUser.email}). Les envoyer maintenant ?`
+      )) {
+        toast.dismiss(toastId);
+        return;
+      }
+
+      const queue = (await db.syncQueue.getItem<SyncAction[]>('queue')) || [];
+      const queuedQuoteIds = new Set(
+        queue
+          .filter(action => action.type === 'INSERT_QUOTE' || action.type === 'UPDATE_QUOTE')
+          .map(action => action.payload?.id)
+      );
+      const errorsToArchive = errors.filter(error =>
+        (error.action.type === 'INSERT_QUOTE' || error.action.type === 'UPDATE_QUOTE')
+        && missingQuotes.some(quote => quote.id === error.action.payload?.id)
+        && !queuedQuoteIds.has(error.action.payload?.id)
+      );
+
+      for (const quote of missingQuotes) {
+        if (!queuedQuoteIds.has(quote.id)) {
+          await queueSyncAction('INSERT_QUOTE', quote, { processImmediately: false });
+        }
+      }
+
+      if (errorsToArchive.length > 0) {
+        const archived = (await db.syncErrors.getItem<SyncError[]>('archived')) || [];
+        await db.syncErrors.setItem('archived', [...errorsToArchive, ...archived].slice(0, 200));
+        const remainingErrors = errors.filter(error => !errorsToArchive.includes(error));
+        await db.syncErrors.setItem('errors', remainingErrors);
+        setErrors(remainingErrors);
+        window.dispatchEvent(new CustomEvent('sync-errors-updated', { detail: { count: remainingErrors.length } }));
+      }
+
+      await processSyncQueue();
+
+      const { data: verifiedQuotes, error: verifyError } = await supabase
+        .from('quotes')
+        .select('id')
+        .eq('commercial_id', currentUser.id);
+      if (verifyError) throw new Error(`Vérification après envoi impossible : ${verifyError.message}`);
+
+      const verifiedIds = new Set((verifiedQuotes || []).map(quote => quote.id));
+      const remainingMissing = missingQuotes.filter(quote => !verifiedIds.has(quote.id));
+      await loadErrors();
+      if (remainingMissing.length === 0) {
+        toast.success(`${missingQuotes.length} devis récupéré(s) et vérifié(s) dans Supabase.`, { id: toastId, duration: 7000 });
+      } else {
+        toast.error(`${remainingMissing.length} devis restent absents de Supabase. Consultez leurs erreurs de synchronisation.`, { id: toastId, duration: 8000 });
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Récupération des devis impossible.', { id: toastId, duration: 8000 });
+    } finally {
+      setIsRecoveringQuotes(false);
+    }
+  };
+
   if (loading) return <div style={{ padding: 24 }}>Chargement...</div>;
 
   const pendingByType = pendingQueue.reduce<Record<string, number>>((acc, a) => {
@@ -260,14 +355,24 @@ export default function PosSyncErrors() {
         
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           {isCrmSyncPage ? (
-            <Button
-              variant="primary"
-              icon={<CloudUpload size={16} />}
-              onClick={pushPendingData}
-              disabled={isPushing || (pendingQueue.length === 0 && errors.length === 0)}
-            >
-              {isPushing ? 'Envoi en cours...' : 'Pousser les données en attente'}
-            </Button>
+            <>
+              <Button
+                variant="primary"
+                icon={<CloudUpload size={16} />}
+                onClick={recoverMissingQuotes}
+                disabled={isRecoveringQuotes || isPushing}
+              >
+                {isRecoveringQuotes ? 'Comparaison des devis...' : 'Récupérer mes devis absents'}
+              </Button>
+              <Button
+                variant="secondary"
+                icon={<CloudUpload size={16} />}
+                onClick={pushPendingData}
+                disabled={isPushing || isRecoveringQuotes || (pendingQueue.length === 0 && errors.length === 0)}
+              >
+                {isPushing ? 'Envoi en cours...' : 'Pousser les données en attente'}
+              </Button>
+            </>
           ) : (
             <Button
               icon={<CloudUpload size={16} />}
