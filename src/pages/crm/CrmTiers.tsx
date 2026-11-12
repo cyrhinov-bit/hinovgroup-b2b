@@ -3,6 +3,7 @@ import { Plus, Search, Edit2, Trash2, Phone, Mail, MapPin, Building2, User, User
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
+import { CrmUserFilter, CRM_UNASSIGNED_USER } from '../../components/crm/CrmUserFilter';
 import type { ClientFournisseur, TypeTier } from '../../types/crmModules';
 
 export function CrmTiers() {
@@ -27,18 +28,26 @@ export function CrmTiers() {
 
   // Cloisonnement : un simple user ne voit que les tiers qu'il a créés, admin/directeur voit tout
   const isAdmin = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
-  const filteredTiers = crmTiers.filter(t => {
-    const matchesPermission = isAdmin || t.cree_par === currentUser?.id;
+  const [selectedUserId, setSelectedUserId] = useState('ALL');
+  const isViewingOtherUser = isAdmin && selectedUserId !== 'ALL' && selectedUserId !== currentUser?.id;
+  const ownerTiers = crmTiers.filter(t => {
+    if (!isAdmin) return t.cree_par === currentUser?.id;
+    if (selectedUserId === 'ALL') return true;
+    return selectedUserId === CRM_UNASSIGNED_USER ? !t.cree_par : t.cree_par === selectedUserId;
+  });
+  const canManageTier = (tier: ClientFournisseur) => tier.cree_par === currentUser?.id;
+  const filteredTiers = ownerTiers.filter(t => {
     const matchesTab = activeTab === 'ALL' || t.type === activeTab;
     const matchesSearch =
       (t.nom || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (t.telephone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (t.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (t.ville || '').toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesPermission && matchesTab && matchesSearch;
+    return matchesTab && matchesSearch;
   });
 
   const handleOpenAdd = () => {
+    if (isViewingOtherUser) return;
     setEditingTier(null);
     setFormData({
       type: activeTab === 'ALL' ? 'CLIENT' : activeTab,
@@ -52,6 +61,7 @@ export function CrmTiers() {
   };
 
   const handleOpenEdit = (tier: ClientFournisseur) => {
+    if (!canManageTier(tier)) return;
     setEditingTier(tier);
     setFormData({
       type: tier.type,
@@ -66,6 +76,7 @@ export function CrmTiers() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewingOtherUser || (editingTier && !canManageTier(editingTier))) return;
     if (!formData.nom?.trim()) {
       alert('Veuillez saisir un nom valide.');
       return;
@@ -90,6 +101,7 @@ export function CrmTiers() {
   };
 
   const handleDelete = (tier: ClientFournisseur) => {
+    if (!canManageTier(tier)) return;
     confirm({
       title: 'Supprimer le tiers',
       message: `Êtes-vous sûr de vouloir supprimer ${tier.nom} (${tier.type}) ?`,
@@ -106,10 +118,10 @@ export function CrmTiers() {
   };
 
   const counts = {
-    all: crmTiers.filter(t => isAdmin || t.cree_par === currentUser?.id).length,
-    client: crmTiers.filter(t => (isAdmin || t.cree_par === currentUser?.id) && t.type === 'CLIENT').length,
-    fournisseur: crmTiers.filter(t => (isAdmin || t.cree_par === currentUser?.id) && t.type === 'FOURNISSEUR').length,
-    partenaire: crmTiers.filter(t => (isAdmin || t.cree_par === currentUser?.id) && t.type === 'PARTENAIRE').length
+    all: ownerTiers.length,
+    client: ownerTiers.filter(t => t.type === 'CLIENT').length,
+    fournisseur: ownerTiers.filter(t => t.type === 'FOURNISSEUR').length,
+    partenaire: ownerTiers.filter(t => t.type === 'PARTENAIRE').length
   };
 
   const getTypeBadge = (type: TypeTier) => {
@@ -146,10 +158,23 @@ export function CrmTiers() {
             Annuaire centralisé des tiers et apporteurs d'affaires pour les prestations CRM.
           </p>
         </div>
-        <button className="btn btn-primary" onClick={handleOpenAdd}>
+        {isAdmin && (
+          <CrmUserFilter
+            users={users}
+            value={selectedUserId}
+            onChange={setSelectedUserId}
+            label="Consulter les tiers d'un utilisateur"
+          />
+        )}
+        {!isViewingOtherUser && <button className="btn btn-primary" onClick={handleOpenAdd}>
           <Plus size={16} style={{ marginRight: '8px' }} /> Nouveau Tiers
-        </button>
+        </button>}
       </div>
+      {isViewingOtherUser && (
+        <div className="card" role="status" style={{ marginBottom: '16px', padding: '12px 16px', color: 'var(--color-text-muted)' }}>
+          Consultation en lecture seule : les données d’un autre utilisateur ne peuvent pas être modifiées.
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid var(--color-border)', paddingBottom: '12px', flexWrap: 'wrap' }}>
@@ -269,12 +294,16 @@ export function CrmTiers() {
                   </td>
                   <td data-label="Actions">
                     <div style={{ display: 'flex', gap: '6px' }}>
-                      <button className="icon-button" title="Modifier" onClick={() => handleOpenEdit(tier)} style={{ color: 'var(--color-primary)' }}>
-                        <Edit2 size={15} />
-                      </button>
-                      <button className="icon-button text-error" title="Supprimer" onClick={() => handleDelete(tier)}>
-                        <Trash2 size={15} />
-                      </button>
+                      {canManageTier(tier) ? (
+                        <>
+                          <button className="icon-button" title="Modifier" onClick={() => handleOpenEdit(tier)} style={{ color: 'var(--color-primary)' }}>
+                            <Edit2 size={15} />
+                          </button>
+                          <button className="icon-button text-error" title="Supprimer" onClick={() => handleDelete(tier)}>
+                            <Trash2 size={15} />
+                          </button>
+                        </>
+                      ) : <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Lecture seule</span>}
                     </div>
                   </td>
                 </tr>

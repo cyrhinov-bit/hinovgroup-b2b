@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
+import { CrmUserFilter, CRM_UNASSIGNED_USER } from '../../components/crm/CrmUserFilter';
 import type { CatalogueArticle } from '../../types/crmModules';
 
 interface ArticleFormData {
@@ -25,11 +26,11 @@ export function CrmStocks() {
   const isDirecteur = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
   const { confirm } = useConfirm();
 
-  // Propriété alignée sur le RLS serveur (auteur ou Direction) : sans elle,
-  // l'édition locale est rejetée côté serveur (42501) et l'objet « revient ».
-  // Les lignes historiques sans auteur sont réservées à la Direction.
+  const [selectedUserId, setSelectedUserId] = useState('ALL');
+  const isViewingOtherUser = isDirecteur && selectedUserId !== 'ALL' && selectedUserId !== currentUser?.id;
+
   const canManageArticle = (art: Pick<CatalogueArticle, 'cree_par'>) =>
-    isDirecteur || (!!art.cree_par && art.cree_par === currentUser?.id);
+    !!art.cree_par && art.cree_par === currentUser?.id;
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAlertOnly, setFilterAlertOnly] = useState(false);
@@ -54,9 +55,16 @@ export function CrmStocks() {
     prix_unitaire_vente: ''
   });
 
-  const categories = Array.from(new Set(crmArticles.map(a => a.categorie || 'Général')));
+  const ownerArticles = crmArticles.filter((article) => {
+    if (!isDirecteur && article.cree_par !== currentUser?.id) return false;
+    if (isDirecteur && selectedUserId !== 'ALL') {
+      return selectedUserId === CRM_UNASSIGNED_USER ? !article.cree_par : article.cree_par === selectedUserId;
+    }
+    return true;
+  });
+  const categories = Array.from(new Set(ownerArticles.map(a => a.categorie || 'Général')));
 
-  const filteredArticles = crmArticles.filter(a => {
+  const filteredArticles = ownerArticles.filter(a => {
     const matchesSearch =
       (a.code_article || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (a.designation || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -67,14 +75,15 @@ export function CrmStocks() {
   });
 
   // Financial Valuations
-  const valAchatTotal = crmArticles.reduce((sum, a) => sum + (a.quantite_stock || 0) * (a.cout_unitaire_achat || 0), 0);
-  const valVenteTotal = crmArticles.reduce((sum, a) => sum + (a.quantite_stock || 0) * (a.prix_unitaire_vente || 0), 0);
+  const valAchatTotal = ownerArticles.reduce((sum, a) => sum + (a.quantite_stock || 0) * (a.cout_unitaire_achat || 0), 0);
+  const valVenteTotal = ownerArticles.reduce((sum, a) => sum + (a.quantite_stock || 0) * (a.prix_unitaire_vente || 0), 0);
   const margePotentielle = valVenteTotal - valAchatTotal;
-  const alertesCount = crmArticles.filter(a => (a.quantite_stock || 0) <= (a.seuil_alerte || 5)).length;
+  const alertesCount = ownerArticles.filter(a => (a.quantite_stock || 0) <= (a.seuil_alerte || 5)).length;
 
   const handleOpenAdd = () => {
+    if (isViewingOtherUser) return;
     setEditingArticle(null);
-    const seq = (crmArticles.length + 1).toString().padStart(3, '0');
+    const seq = (ownerArticles.length + 1).toString().padStart(3, '0');
     setFormData({
       code_article: `ART-${seq}`,
       designation: '',
@@ -88,6 +97,7 @@ export function CrmStocks() {
   };
 
   const handleOpenEdit = (art: CatalogueArticle) => {
+    if (!canManageArticle(art)) return;
     setEditingArticle(art);
     // Normaliser en strings (permet l'effacement complet dans les inputs)
     setFormData({
@@ -104,6 +114,7 @@ export function CrmStocks() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewingOtherUser || (editingArticle && !canManageArticle(editingArticle))) return;
     if (!formData.designation?.trim() || !formData.code_article?.trim()) {
       alert('Veuillez saisir le code et la désignation.');
       return;
@@ -251,10 +262,23 @@ export function CrmStocks() {
             Suivi quantitatif, valorisation financière de l'inventaire en temps réel et alertes de réapprovisionnement.
           </p>
         </div>
-        <button className="btn btn-primary" onClick={handleOpenAdd}>
+        {isDirecteur && (
+          <CrmUserFilter
+            users={users}
+            value={selectedUserId}
+            onChange={setSelectedUserId}
+            label="Consulter le stock métier d'un utilisateur"
+          />
+        )}
+        {!isViewingOtherUser && <button className="btn btn-primary" onClick={handleOpenAdd}>
           <Plus size={16} style={{ marginRight: '8px' }} /> Nouvel Article
-        </button>
+        </button>}
       </div>
+      {isViewingOtherUser && (
+        <div className="card" role="status" style={{ marginBottom: '16px', padding: '12px 16px', color: 'var(--color-text-muted)' }}>
+          Consultation en lecture seule : les données d’un autre utilisateur ne peuvent pas être modifiées.
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>

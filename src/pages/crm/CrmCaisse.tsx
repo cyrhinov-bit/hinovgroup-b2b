@@ -27,6 +27,8 @@ const CATEGORIES_ENTREES = [
   { value: 'AUTRE', label: 'Autre Recette' }
 ];
 
+const UNASSIGNED_USER = '__unassigned__';
+
 export function CrmCaisse() {
   const { crmCaisse, users, addCrmMouvementCaisse, deleteCrmMouvementCaisse } = useAppContext();
   const { currentUser: authUser } = useAuth();
@@ -38,6 +40,9 @@ export function CrmCaisse() {
   const [typeFilter, setTypeFilter] = useState<'ALL' | TypeMouvementCaisse>('ALL');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [showModal, setShowModal] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState('ALL');
+  const isViewingOtherUser = isDirecteur && selectedUserId !== 'ALL' && selectedUserId !== currentUser?.id;
+  const crmUsers = users.filter(u => !['Caissier', 'Gerant', 'Encaisseur'].includes(u.role));
 
   const [formData, setFormData] = useState<{
     type: TypeMouvementCaisse;
@@ -57,8 +62,14 @@ export function CrmCaisse() {
     reference_piece: ''
   });
 
-  // Scopage : direction = tout, autres = uniquement ses propres mouvements
-  const ownCaisse = isDirecteur ? crmCaisse : crmCaisse.filter(m => (m as any).cree_par === currentUser?.id);
+  // La Direction peut consulter le périmètre global ou celui d'un utilisateur précis.
+  const ownCaisse = isDirecteur
+    ? (selectedUserId === 'ALL'
+      ? crmCaisse
+      : selectedUserId === UNASSIGNED_USER
+        ? crmCaisse.filter(m => !m.cree_par)
+        : crmCaisse.filter(m => m.cree_par === selectedUserId))
+    : crmCaisse.filter(m => m.cree_par === currentUser?.id);
 
   const filteredMouvements = useMemo(() => {
     return ownCaisse.filter(m => {
@@ -81,6 +92,7 @@ export function CrmCaisse() {
   const soldeGlobal = soldeDisponible;
 
   const handleOpenAdd = (defaultType: TypeMouvementCaisse = 'SORTIE') => {
+    if (isViewingOtherUser) return;
     setFormData({
       type: defaultType,
       categorie: defaultType === 'SORTIE' ? 'ACHATS' : 'PRESTATION',
@@ -95,6 +107,7 @@ export function CrmCaisse() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewingOtherUser) return;
     if (!formData.motif?.trim() || formData.montant <= 0) {
       alert('Veuillez saisir un motif et un montant supérieur à 0.');
       return;
@@ -127,6 +140,10 @@ export function CrmCaisse() {
   };
 
   const handleDelete = (m: MouvementCaisse) => {
+    if (isDirecteur && m.cree_par !== currentUser?.id) {
+      alert('Consultation uniquement : vous ne pouvez pas supprimer le mouvement d’un autre utilisateur.');
+      return;
+    }
     // Écritures système (encaissements / règlements auto) : suppression interdite,
     // elles sont la contrepartie d'une prestation ou commission — les modifier casserait la cohérence.
     if (m.module_code && m.module_code !== 'CAISSE_DEPENSES') {
@@ -174,15 +191,38 @@ export function CrmCaisse() {
             Suivi centralisé en temps réel des flux de trésorerie physique (encaissements et décaissements).
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-secondary" onClick={() => handleOpenAdd('ENTREE')} style={{ color: '#10B981' }}>
-            <ArrowDownLeft size={16} style={{ marginRight: '6px' }} /> Entrée Caisse
-          </button>
-          <button className="btn btn-primary" onClick={() => handleOpenAdd('SORTIE')}>
-            <Plus size={16} style={{ marginRight: '6px' }} /> Nouvelle Dépense
-          </button>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+          {isDirecteur && (
+            <select
+              className="table-input"
+              aria-label="Consulter les mouvements d'un utilisateur"
+              value={selectedUserId}
+              onChange={e => setSelectedUserId(e.target.value)}
+            >
+              <option value="ALL">Tous les utilisateurs</option>
+              <option value={UNASSIGNED_USER}>Données historiques sans auteur</option>
+              {crmUsers.map(user => (
+                <option key={user.id} value={user.id}>{user.name} — {user.role}</option>
+              ))}
+            </select>
+          )}
+          {!isViewingOtherUser && (
+            <>
+              <button className="btn btn-secondary" onClick={() => handleOpenAdd('ENTREE')} style={{ color: '#10B981' }}>
+                <ArrowDownLeft size={16} style={{ marginRight: '6px' }} /> Entrée Caisse
+              </button>
+              <button className="btn btn-primary" onClick={() => handleOpenAdd('SORTIE')}>
+                <Plus size={16} style={{ marginRight: '6px' }} /> Nouvelle Dépense
+              </button>
+            </>
+          )}
         </div>
       </div>
+      {isViewingOtherUser && (
+        <div className="card" role="status" style={{ marginBottom: '16px', padding: '12px 16px', color: 'var(--color-text-muted)' }}>
+          Consultation en lecture seule : les mouvements d’un autre utilisateur ne peuvent pas être modifiés.
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
@@ -334,9 +374,13 @@ export function CrmCaisse() {
                     </strong>
                   </td>
                   <td data-label="Actions">
-                    <button className="icon-button text-error" title="Supprimer" onClick={() => handleDelete(m)}>
-                      <Trash2 size={15} />
-                    </button>
+                    {m.cree_par === currentUser?.id ? (
+                      <button className="icon-button text-error" title="Supprimer" onClick={() => handleDelete(m)}>
+                        <Trash2 size={15} />
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Lecture seule</span>
+                    )}
                   </td>
                 </tr>
               ))}

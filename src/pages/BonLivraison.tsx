@@ -37,6 +37,7 @@ import {
 import { sendDeliveryNoteByMail } from '../lib/mailUtils';
 import { ReportPdfPreview, type ReportPdfPreviewData } from '../components/ReportPdfPreview';
 import { useConfirm } from '../components/ConfirmModal';
+import { CrmUserFilter, CRM_UNASSIGNED_USER } from '../components/crm/CrmUserFilter';
 
 export function BonLivraison() {
   const navigate = useNavigate();
@@ -59,6 +60,7 @@ export function BonLivraison() {
   } = useAppContext();
 
   const currentUser = users.find((u) => u.id === authUser?.id) || authUser;
+  const isDirector = canViewAll(currentUser?.role);
 
   const [notes, setNotes] = useState<DeliveryNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(true);
@@ -72,6 +74,8 @@ export function BonLivraison() {
     { id: uuidv4(), description: '', quantity: 1, unit: '', unitPrice: 0, total: 0 },
   ]);
   const [creatingStandalone, setCreatingStandalone] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState('ALL');
+  const isViewingOtherUser = isDirector && selectedUserId !== 'ALL' && selectedUserId !== currentUser?.id;
 
   // Identifiants transmis par le devis : l'id est la clé principale, le numéro
   // sert de secours si les identifiants ont été resynchronisés entre-temps.
@@ -110,14 +114,26 @@ export function BonLivraison() {
 
   // ---- Périmètre : mêmes règles que les devis (direction = tout, sinon propriétaire) ----
   const allowedQuotes = useMemo(
-    () => visibleTo(quotes, currentUser?.role, currentUser?.id, (q) => [q.commercialId]),
-    [quotes, currentUser?.role, currentUser?.id],
+    () => visibleTo(quotes, currentUser?.role, currentUser?.id, (q) => [q.commercialId])
+      .filter((quote) => {
+        if (!isDirector || selectedUserId === 'ALL') return true;
+        return selectedUserId === CRM_UNASSIGNED_USER ? !quote.commercialId : quote.commercialId === selectedUserId;
+      }),
+    [quotes, currentUser?.role, currentUser?.id, isDirector, selectedUserId],
   );
 
   const visibleNotes = useMemo(
-    () => visibleTo(notes, currentUser?.role, currentUser?.id, (n) => [n.commercialId, n.createdBy]),
-    [notes, currentUser?.role, currentUser?.id],
+    () => visibleTo(notes, currentUser?.role, currentUser?.id, (n) => [n.commercialId, n.createdBy])
+      .filter((note) => {
+        if (!isDirector || selectedUserId === 'ALL') return true;
+        const owner = note.commercialId || note.createdBy;
+        return selectedUserId === CRM_UNASSIGNED_USER ? !owner : owner === selectedUserId;
+      }),
+    [notes, currentUser?.role, currentUser?.id, isDirector, selectedUserId],
   );
+  const canManageNote = (note: DeliveryNote) =>
+    !isDirector || (note.commercialId || note.createdBy) === currentUser?.id;
+  const canManageQuote = (quote: Quote) => !isDirector || quote.commercialId === currentUser?.id;
 
   // Le devis ciblé est retrouvé par id, puis par numéro de devis en secours.
   const sourceQuote = useMemo(() => {
@@ -156,8 +172,6 @@ export function BonLivraison() {
     [notes, sourceQuote],
   );
 
-  const isDirector = canViewAll(currentUser?.role);
-
   const previewNote = async (note: DeliveryNote) => {
     try {
       await ensureDevisPdfAssets().catch(() => {});
@@ -191,6 +205,7 @@ export function BonLivraison() {
       if (!code) continue;
       const article = crmArticles.find((a) => (a.code_article || '').trim().toLowerCase() === code);
       if (!article) continue;
+      if (isDirector && article.cree_par !== currentUser?.id) continue;
       const qty = Math.max(0, Math.round(Number(line.quantity) || 0));
       if (qty <= 0) continue;
       const current = totals.get(article.id) || { article, qty: 0 };
@@ -269,7 +284,11 @@ export function BonLivraison() {
         findDeliveryNoteForQuote(notes, sourceQuote.id, sourceQuote.quoteNumber);
 
       if (!note) {
-        let created: DeliveryNote;
+          if (!canManageQuote(sourceQuote)) {
+            toast.error('Vous pouvez consulter ce devis, mais pas créer un bon de livraison pour un autre utilisateur.');
+            return;
+          }
+          let created: DeliveryNote;
         try {
           created = await createDeliveryNote({
             quoteId: sourceQuote.id,
@@ -304,6 +323,7 @@ export function BonLivraison() {
   /** Aligne un BL existant sur les lignes actuelles du devis (même numéro de BL). */
   const handleRegenerate = async () => {
     if (!sourceQuote || !existingNote || generating) return;
+    if (!canManageQuote(sourceQuote) || !canManageNote(existingNote)) return;
     if (sourceQuote.status !== 'Accepté') {
       toast.error('Le devis doit être accepté pour mettre à jour son bon de livraison.');
       return;
@@ -336,6 +356,7 @@ export function BonLivraison() {
   };
 
   const handleDelete = (note: DeliveryNote) => {
+    if (!canManageNote(note)) return;
     confirm({
       title: 'Supprimer le bon de livraison',
       message: `Supprimer définitivement le BL ${note.deliveryNumber} ? Cette action est irréversible.`,
@@ -392,6 +413,7 @@ export function BonLivraison() {
   };
 
   const handleCreateStandalone = async () => {
+    if (isViewingOtherUser) return;
     if (!standaloneClientId) {
       toast.error('Sélectionnez un client.');
       return;
@@ -463,7 +485,15 @@ export function BonLivraison() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {!sourceQuote && (
+          {isDirector && (
+            <CrmUserFilter
+              users={users}
+              value={selectedUserId}
+              onChange={setSelectedUserId}
+              label="Consulter les bons de livraison d'un utilisateur"
+            />
+          )}
+          {!sourceQuote && !isViewingOtherUser && (
             <button
               className="btn btn-primary"
               onClick={() => setStandaloneOpen((open) => !open)}
@@ -482,8 +512,13 @@ export function BonLivraison() {
           </button>
         </div>
       </div>
+      {isViewingOtherUser && (
+        <div className="card" role="status" style={{ marginBottom: '16px', padding: '12px 16px', color: 'var(--color-text-muted)' }}>
+          Consultation en lecture seule : les données d’un autre utilisateur ne peuvent pas être modifiées.
+        </div>
+      )}
 
-      {!sourceQuote && (
+      {!sourceQuote && !isViewingOtherUser && (
         <>
           {standaloneOpen && (
             <div className="card" style={{ marginBottom: '20px' }}>
@@ -700,13 +735,13 @@ export function BonLivraison() {
             <button
               className="btn btn-primary"
               onClick={handleGenerate}
-              disabled={!canGenerate || notesLoading || generating}
+              disabled={!canGenerate || (!existingNote && !canManageQuote(sourceQuote)) || notesLoading || generating}
               style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
             >
               {existingNote ? <Eye size={16} /> : <Save size={16} />}
               {existingNote ? `Aperçu du BL ${existingNote.deliveryNumber}` : 'Générer le bon de livraison'}
             </button>
-            {existingNote && (
+            {existingNote && canManageQuote(sourceQuote) && canManageNote(existingNote) && (
               <button
                 className="btn btn-secondary"
                 onClick={handleRegenerate}
@@ -881,14 +916,16 @@ export function BonLivraison() {
                     >
                       <Mail size={16} />
                     </button>
-                    <button
-                      className="icon-button"
-                      title="Supprimer"
-                      style={{ color: '#EF4444' }}
-                      onClick={() => handleDelete(note)}
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    {canManageNote(note) ? (
+                      <button
+                        className="icon-button"
+                        title="Supprimer"
+                        style={{ color: '#EF4444' }}
+                        onClick={() => handleDelete(note)}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    ) : <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Lecture seule</span>}
                   </td>
                 </tr>
               ))}

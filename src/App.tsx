@@ -103,6 +103,7 @@ const HardwareDiagnosticPage = lazy(() => import('./components/HardwareDiagnosti
 
 import { AppProvider } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { isCrmModuleAvailable, type CrmModuleKey } from './config/crmModuleAccess';
 import { ConfirmProvider } from './components/ConfirmModal';
 import { ProductImagesProvider } from './features/products/images/ProductImagesContext';
 
@@ -188,16 +189,14 @@ function RequirePosModule({ roles, moduleKey = null, children }: { roles: Role[]
   }
   return <>{children}</>;
 }
-// Garde de module CRM : Caissier/Gerant jamais admis, autres rôles selon le flag
-// (miroir des gardes in-page ; défaut cohérent Sidebar opt-out : seul `false` explicite bloque)
-type CrmModuleKey = 'crmPrestationsEnabled' | 'crmCaisseEnabled' | 'crmMaintenanceEnabled' | 'crmStocksEnabled' | 'crmTiersEnabled' | 'crmCommerciauxEnabled' | 'crmCommissionsEnabled' | 'crmFacturationEnabled' | 'crmSupFacturesEnabled' | 'crmReportsEnabled' | 'crmTeamReportsEnabled';
+// Les rôles, le menu et l'activation sont vérifiés ensemble : un flag seul ne confère pas un rôle CRM.
 function RequireCrmModule({ moduleKey, children }: { moduleKey: CrmModuleKey; children: ReactNode }) {
   const { currentUser, loading } = useAuth();
   if (loading) return null;
   if (!currentUser) return <Navigate to="/login" replace />;
-  if (currentUser.role === 'Caissier' || currentUser.role === 'Gerant') return <Navigate to="/" replace />;
-  if (['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser.role)) return <>{children}</>;
-  if ((currentUser as unknown as Record<string, unknown>)[moduleKey] === false) return <Navigate to="/" replace />;
+  if (!isCrmModuleAvailable(moduleKey, currentUser.role) || currentUser[moduleKey] === false) {
+    return <Navigate to="/" replace />;
+  }
   return <>{children}</>;
 }
 

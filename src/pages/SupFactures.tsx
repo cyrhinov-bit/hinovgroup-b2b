@@ -19,8 +19,10 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useAppContext } from '../context/AppContext';
 import { useConfirm } from '../components/ConfirmModal';
 import { MonthlyBars } from '../components/MonthlyBars';
+import { CrmUserFilter, CRM_UNASSIGNED_USER } from '../components/crm/CrmUserFilter';
 import { SupInvoiceProvider, useSupInvoices } from '../features/supplierInvoices/SupInvoiceContext';
 import type { SupInvoice, SupInvoiceStatus, SupSupplier } from '../features/supplierInvoices/types';
 import { SUP_INVOICE_STATUSES, SUP_PAYMENT_METHODS, SUP_ATTACHMENT_MAX_BYTES } from '../features/supplierInvoices/types';
@@ -43,6 +45,11 @@ const MONTH_NAMES = [
 ];
 
 const todayStr = () => new Date().toISOString().split('T')[0];
+
+const matchesSelectedOwner = (ownerId: string | undefined, isDirector: boolean, selectedUserId: string) => {
+  if (!isDirector || selectedUserId === 'ALL') return true;
+  return selectedUserId === CRM_UNASSIGNED_USER ? !ownerId : ownerId === selectedUserId;
+};
 
 function badgeClass(status: string): string {
   switch (status) {
@@ -69,7 +76,9 @@ function base64ToBlob(b64: string, mime: string): Blob {
 }
 
 function SupFacturesInner() {
-  const { currentUser } = useAuth();
+  const { currentUser: authUser } = useAuth();
+  const { users } = useAppContext();
+  const currentUser = users.find((user) => user.id === authUser?.id) || authUser;
   const { confirm } = useConfirm();
   const {
     suppliers,
@@ -92,6 +101,7 @@ function SupFacturesInner() {
   const nowMonth = nowRef.getMonth() + 1;
 
   const [tab, setTab] = useState<Tab>('invoices');
+  const [selectedUserId, setSelectedUserId] = useState('ALL');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [supplierFilter, setSupplierFilter] = useState('');
@@ -137,6 +147,19 @@ function SupFacturesInner() {
   const [sAddress, setSAddress] = useState('');
   const [sNotes, setSNotes] = useState('');
 
+  const isDirector = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes((currentUser as any)?.role || '');
+  const isViewingOtherUser = isDirector && selectedUserId !== 'ALL' && selectedUserId !== currentUser?.id;
+  const canManageInvoice = (invoice: SupInvoice) => !isDirector || invoice.createdBy === currentUser?.id;
+  const canManageSupplier = (supplier: SupSupplier) => !isDirector || supplier.createdBy === currentUser?.id;
+  const ownerInvoices = useMemo(
+    () => invoices.filter((invoice) => matchesSelectedOwner(invoice.createdBy, isDirector, selectedUserId)),
+    [invoices, isDirector, selectedUserId],
+  );
+  const ownerSuppliers = useMemo(
+    () => suppliers.filter((supplier) => matchesSelectedOwner(supplier.createdBy, isDirector, selectedUserId)),
+    [suppliers, isDirector, selectedUserId],
+  );
+
   const supplierNameOf = (id?: string) => suppliers.find((s) => s.id === id)?.name || '';
 
   // Statut effectif : PAYÉE auto si soldée, EN_RETARD si échéance dépassée
@@ -156,16 +179,16 @@ function SupFacturesInner() {
 
   const availableYears = useMemo(() => {
     const set = new Set<number>([nowYear]);
-    for (const inv of invoices) set.add(issuePeriod(inv.issueDate).y);
+    for (const inv of ownerInvoices) set.add(issuePeriod(inv.issueDate).y);
     return Array.from(set).sort((a, b) => a - b);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoices]);
+  }, [ownerInvoices]);
 
   // Niveau 1 : exercice puis mois (rattachement = date d'émission)
   const yearInvoices = useMemo(
-    () => invoices.filter((inv) => issuePeriod(inv.issueDate).y === selectedYear),
+    () => ownerInvoices.filter((inv) => issuePeriod(inv.issueDate).y === selectedYear),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [invoices, selectedYear],
+    [ownerInvoices, selectedYear],
   );
 
   const monthCounts = useMemo(() => {
@@ -221,8 +244,9 @@ function SupFacturesInner() {
       const inMonth = active.filter((i) => issuePeriod(i.issueDate).m === m.num);
       const v1 = inMonth.reduce((s, i) => s + (Number(i.amountTtc) || 0), 0);
       const prefix = `${selectedYear}-${String(m.num).padStart(2, '0')}`;
+      const ownerInvoiceIds = new Set(ownerInvoices.map((invoice) => invoice.id));
       const v2 = payments
-        .filter((p) => (p.paymentDate || '').startsWith(prefix))
+        .filter((p) => ownerInvoiceIds.has(p.invoiceId) && (p.paymentDate || '').startsWith(prefix))
         .reduce((s, p) => s + (Number(p.amount) || 0), 0);
       return { label: m.short, v1, v2 };
     });
@@ -265,6 +289,7 @@ function SupFacturesInner() {
 
   // ── Facture : ouvrir / enregistrer ──────────────────────────────────────────
   const openNewInvoice = () => {
+    if (isViewingOtherUser) return;
     setEditingInvoice(null);
     setFSupplierId(supplierFilter || '');
     setFNumber('');
@@ -281,6 +306,7 @@ function SupFacturesInner() {
   };
 
   const openEditInvoice = (inv: SupInvoice) => {
+    if (!canManageInvoice(inv)) return;
     setEditingInvoice(inv);
     setFSupplierId(inv.supplierId || '');
     setFNumber(inv.invoiceNumber);
@@ -315,6 +341,7 @@ function SupFacturesInner() {
 
   const handleSaveInvoice = async () => {
     if (savingInvoice) return;
+    if (isViewingOtherUser || (editingInvoice && !canManageInvoice(editingInvoice))) return;
     const supplierName = supplierNameOf(fSupplierId) || '';
     if (!fSupplierId || !supplierName) {
       alert('Sélectionnez un fournisseur (onglet Fournisseurs pour en créer un).');
@@ -374,7 +401,23 @@ function SupFacturesInner() {
     }
   };
 
+  const handleDeletePayment = (payment: (typeof payments)[number]) => {
+    if (isDirector && payment.createdBy !== currentUser?.id) return;
+    confirm({
+      title: 'Supprimer le paiement',
+      message: `Supprimer ce paiement de ${(Number(payment.amount) || 0).toLocaleString('fr-FR')} FCFA ?`,
+      confirmLabel: 'Supprimer',
+      variant: 'danger',
+      onConfirm: () => void deletePayment(payment.id),
+    });
+  };
+
   const handleDeleteInvoice = (inv: SupInvoice) => {
+    if (!canManageInvoice(inv)) return;
+    if (isDirector && payments.some((payment) => payment.invoiceId === inv.id && payment.createdBy !== currentUser?.id)) {
+      alert('Suppression impossible : cette facture contient des paiements créés par un autre utilisateur.');
+      return;
+    }
     confirm({
       title: 'Supprimer la facture',
       message: `Supprimer la facture « ${inv.invoiceNumber} » (${(inv.amountTtc || 0).toLocaleString('fr-FR')} FCFA) ? Les paiements liés seront aussi supprimés.`,
@@ -404,6 +447,7 @@ function SupFacturesInner() {
 
   // ── Fournisseur : ouvrir / enregistrer ──────────────────────────────────────
   const openNewSupplier = () => {
+    if (isViewingOtherUser) return;
     setEditingSupplier(null);
     setSName('');
     setSContact('');
@@ -416,6 +460,7 @@ function SupFacturesInner() {
   };
 
   const openEditSupplier = (s: SupSupplier) => {
+    if (!canManageSupplier(s)) return;
     setEditingSupplier(s);
     setSName(s.name);
     setSContact(s.contact || '');
@@ -429,6 +474,7 @@ function SupFacturesInner() {
 
   const handleSaveSupplier = async () => {
     if (savingSupplier) return;
+    if (isViewingOtherUser || (editingSupplier && !canManageSupplier(editingSupplier))) return;
     const name = sName.trim();
     if (!name) {
       alert('Nom du fournisseur requis.');
@@ -461,7 +507,13 @@ function SupFacturesInner() {
   };
 
   const handleDeleteSupplier = (s: SupSupplier) => {
-    const linked = invoices.filter((i) => i.supplierId === s.id).length;
+    if (!canManageSupplier(s)) return;
+    const linkedInvoices = invoices.filter((i) => i.supplierId === s.id);
+    if (isDirector && linkedInvoices.some((invoice) => invoice.createdBy !== currentUser?.id)) {
+      alert('Suppression impossible : ce fournisseur est lié aux factures d’un autre utilisateur.');
+      return;
+    }
+    const linked = linkedInvoices.length;
     confirm({
       title: 'Supprimer le fournisseur',
       message:
@@ -479,6 +531,7 @@ function SupFacturesInner() {
 
   // ── Paiements ───────────────────────────────────────────────────────────────
   const openPayments = (inv: SupInvoice) => {
+    if (!canManageInvoice(inv)) return;
     setPayFor(inv);
     setPayAmount(Math.max(0, (Number(inv.amountTtc) || 0) - paidForInvoice(inv.id)));
     setPayDate(todayStr());
@@ -488,6 +541,7 @@ function SupFacturesInner() {
 
   const handleAddPayment = async () => {
     if (!payFor || savingPay) return;
+    if (!canManageInvoice(payFor)) return;
     const rest = Math.max(0, (Number(payFor.amountTtc) || 0) - paidForInvoice(payFor.id));
     if (!(payAmount > 0)) {
       alert('Montant du paiement requis.');
@@ -546,14 +600,13 @@ function SupFacturesInner() {
   };
 
   const supplierStats = (id: string) => {
-    const list = invoices.filter((i) => i.supplierId === id && i.status !== 'ANNULÉE');
+    const list = ownerInvoices.filter((i) => i.supplierId === id && i.status !== 'ANNULÉE');
     const ttc = list.reduce((s, i) => s + (Number(i.amountTtc) || 0), 0);
     const paid = list.reduce((s, i) => s + paidForInvoice(i.id), 0);
     return { count: list.length, ttc, paid, rest: Math.max(0, ttc - paid) };
   };
 
   // Permission : Direction toujours admise, autres rôles selon activation du module
-  const isDirector = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes((currentUser as any)?.role || '');
   if (!isDirector && (currentUser as any)?.crmSupFacturesEnabled === false) {
     return (
       <div className="dashboard" style={{ textAlign: 'center', padding: '60px 20px' }}>
@@ -584,17 +637,33 @@ function SupFacturesInner() {
               <button className="btn btn-secondary" onClick={handleExport} title="Exporter la sélection en CSV">
                 <Download size={16} /> Export CSV
               </button>
-              <button className="btn btn-primary" onClick={openNewInvoice} disabled={savingInvoice}>
+              {!isViewingOtherUser && <button className="btn btn-primary" onClick={openNewInvoice} disabled={savingInvoice}>
                 <Plus size={16} /> Nouvelle facture
-              </button>
+              </button>}
             </>
           ) : (
-            <button className="btn btn-primary" onClick={openNewSupplier} disabled={savingSupplier}>
+            !isViewingOtherUser && <button className="btn btn-primary" onClick={openNewSupplier} disabled={savingSupplier}>
               <Plus size={16} /> Nouveau fournisseur
             </button>
           )}
         </div>
       </div>
+
+      {isDirector && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '16px' }}>
+          <CrmUserFilter
+            users={users}
+            value={selectedUserId}
+            onChange={setSelectedUserId}
+            label="Consulter les factures fournisseurs d'un utilisateur"
+          />
+          {isViewingOtherUser && (
+            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+              Consultation en lecture seule : les données d’un autre utilisateur ne peuvent pas être modifiées.
+            </span>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="card" style={{ marginBottom: '16px', padding: '10px 16px', borderLeft: '4px solid #F59E0B', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -608,10 +677,10 @@ function SupFacturesInner() {
       {/* Onglets */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
         <button className={`btn ${tab === 'invoices' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('invoices')}>
-          <Receipt size={16} /> Factures ({invoices.length})
+          <Receipt size={16} /> Factures ({ownerInvoices.length})
         </button>
         <button className={`btn ${tab === 'suppliers' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('suppliers')}>
-          <Truck size={16} /> Fournisseurs ({suppliers.length})
+          <Truck size={16} /> Fournisseurs ({ownerSuppliers.length})
         </button>
       </div>
 
@@ -818,7 +887,7 @@ function SupFacturesInner() {
                   </tr>
                 </thead>
                 <tbody>
-                  {loading && invoices.length === 0 && (
+                  {loading && ownerInvoices.length === 0 && (
                     <tr><td colSpan={9} style={{ textAlign: 'center', padding: '24px' }}>Chargement…</td></tr>
                   )}
                   {filteredInvoices.map((inv) => {
@@ -840,12 +909,18 @@ function SupFacturesInner() {
                         </td>
                         <td data-label="Actions">
                           <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                            <button className="icon-button" style={{ color: '#059669' }} title="Encaisser / payer" onClick={() => openPayments(inv)}><Wallet size={16} /></button>
-                            <button className="icon-button" style={{ color: 'var(--color-primary)' }} title="Modifier" onClick={() => openEditInvoice(inv)}><Edit2 size={16} /></button>
+                            {canManageInvoice(inv) && (
+                              <>
+                                <button className="icon-button" style={{ color: '#059669' }} title="Encaisser / payer" onClick={() => openPayments(inv)}><Wallet size={16} /></button>
+                                <button className="icon-button" style={{ color: 'var(--color-primary)' }} title="Modifier" onClick={() => openEditInvoice(inv)}><Edit2 size={16} /></button>
+                              </>
+                            )}
                             {inv.attachmentData && (
                               <button className="icon-button" style={{ color: '#0D9488' }} title="Télécharger la pièce" onClick={() => downloadAttachment(inv)}><Download size={16} /></button>
                             )}
-                            <button className="icon-button" style={{ color: 'var(--color-error)' }} title="Supprimer" onClick={() => handleDeleteInvoice(inv)}><Trash2 size={16} /></button>
+                            {canManageInvoice(inv)
+                              ? <button className="icon-button" style={{ color: 'var(--color-error)' }} title="Supprimer" onClick={() => handleDeleteInvoice(inv)}><Trash2 size={16} /></button>
+                              : <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Lecture seule</span>}
                           </div>
                         </td>
                       </tr>
@@ -888,7 +963,7 @@ function SupFacturesInner() {
                 </tr>
               </thead>
               <tbody>
-                {suppliers.map((s) => {
+                {ownerSuppliers.map((s) => {
                   const st = supplierStats(s.id);
                   return (
                     <tr key={s.id}>
@@ -900,14 +975,18 @@ function SupFacturesInner() {
                       <td data-label="Reste dû" style={{ textAlign: 'right', fontWeight: 700 }}>{st.rest.toLocaleString('fr-FR')} FCFA</td>
                       <td data-label="Actions">
                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                          <button className="icon-button" style={{ color: 'var(--color-primary)' }} title="Modifier" onClick={() => openEditSupplier(s)}><Edit2 size={16} /></button>
-                          <button className="icon-button" style={{ color: 'var(--color-error)' }} title="Supprimer" onClick={() => handleDeleteSupplier(s)}><Trash2 size={16} /></button>
+                          {canManageSupplier(s) ? (
+                            <>
+                              <button className="icon-button" style={{ color: 'var(--color-primary)' }} title="Modifier" onClick={() => openEditSupplier(s)}><Edit2 size={16} /></button>
+                              <button className="icon-button" style={{ color: 'var(--color-error)' }} title="Supprimer" onClick={() => handleDeleteSupplier(s)}><Trash2 size={16} /></button>
+                            </>
+                          ) : <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Lecture seule</span>}
                         </div>
                       </td>
                     </tr>
                   );
                 })}
-                {suppliers.length === 0 && (
+                {ownerSuppliers.length === 0 && (
                   <tr><td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>Aucun fournisseur. Créez le premier avec « Nouveau fournisseur ».</td></tr>
                 )}
               </tbody>
@@ -1053,21 +1132,15 @@ function SupFacturesInner() {
             {payments.filter((p) => p.invoiceId === payFor.id).map((p) => (
               <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--color-border)', fontSize: '0.85rem' }}>
                 <span>{p.paymentDate} — <strong>{(Number(p.amount) || 0).toLocaleString('fr-FR')} FCFA</strong> ({p.method || '-'}){p.reference ? ` — ${p.reference}` : ''}</span>
-                <button
-                  className="icon-button"
-                  style={{ color: 'var(--color-error)' }}
-                  onClick={() => {
-                    confirm({
-                      title: 'Supprimer le paiement',
-                      message: `Supprimer ce paiement de ${(Number(p.amount) || 0).toLocaleString('fr-FR')} FCFA ?`,
-                      confirmLabel: 'Supprimer',
-                      variant: 'danger',
-                      onConfirm: () => void deletePayment(p.id),
-                    });
-                  }}
-                >
-                  <Trash2 size={15} />
-                </button>
+                {(!isDirector || p.createdBy === currentUser?.id) && (
+                  <button
+                    className="icon-button"
+                    style={{ color: 'var(--color-error)' }}
+                    onClick={() => handleDeletePayment(p)}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
               </div>
             ))}
             {payments.filter((p) => p.invoiceId === payFor.id).length === 0 && (
@@ -1097,7 +1170,7 @@ function SupFacturesInner() {
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
               <button className="btn btn-secondary" onClick={() => setPayFor(null)}>Fermer</button>
-              <button className="btn btn-primary" onClick={() => void handleAddPayment()} disabled={savingPay}>
+              <button className="btn btn-primary" onClick={() => void handleAddPayment()} disabled={savingPay || !canManageInvoice(payFor)}>
                 <Wallet size={16} /> {savingPay ? 'Ajout…' : 'Ajouter le paiement'}
               </button>
             </div>

@@ -13,6 +13,7 @@ import { useAppContext } from '../context/AppContext';
 import { InstallButton } from './InstallButton';
 import './Sidebar.css';
 import type { User } from '../context/AppContext';
+import { CRM_MODULE_ACCESS } from '../config/crmModuleAccess';
 
 interface NavItemConfig {
   label: string;
@@ -20,7 +21,7 @@ interface NavItemConfig {
   path: string;
   color: string;
   bg: string;
-  roles: Array<'Directeur' | 'Responsable' | 'Commercial' | 'Directeur adjoint' | 'SuperAdmin' | 'Gerant' | 'Caissier' | 'Encaisseur'>;
+  roles: readonly ('Directeur' | 'Responsable' | 'Commercial' | 'Directeur adjoint' | 'SuperAdmin' | 'Gerant' | 'Caissier' | 'Encaisseur')[];
   permissionKey?: keyof User;
 }
 
@@ -113,20 +114,20 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     // Bascule SuperAdmin vers le dashboard Responsable (l'espace commercial lui est interdit)
     { label: 'Dashboard Responsable', icon: Home, path: '/responsable', color: '#7C3AED', bg: '#FAF5FF', roles: ['SuperAdmin'] },
     // Modules CRM Responsables de Service & Collaborateurs
-    { label: 'Commandes', icon: ShoppingBag, path: '/crm/prestations', color: '#10B981', bg: '#ECFDF5', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmPrestationsEnabled' },
-    { label: 'Caisse & Dépenses', icon: Wallet, path: '/crm/caisse', color: '#EF4444', bg: '#FEF2F2', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmCaisseEnabled' },
-    { label: 'Maintenance', icon: Wrench, path: '/crm/maintenance', color: '#F59E0B', bg: '#FFFBEB', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmMaintenanceEnabled' },
-    { label: 'Stocks Métier', icon: Package, path: '/crm/stocks', color: '#6366F1', bg: '#EEF2FF', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmStocksEnabled' },
-    { label: 'Tiers & Apporteurs', icon: Users, path: '/crm/tiers', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmTiersEnabled' },
-    { label: 'Commerciaux', icon: UserCheck, path: '/crm/commerciaux', color: '#0D9488', bg: '#F0FDFA', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmCommerciauxEnabled' },
-    { label: 'Commissions', icon: Award, path: '/crm/commissions', color: '#D97706', bg: '#FFFBEB', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmCommissionsEnabled' },
+    { label: 'Commandes', icon: ShoppingBag, path: '/crm/prestations', color: '#10B981', bg: '#ECFDF5', roles: CRM_MODULE_ACCESS.crmPrestationsEnabled, permissionKey: 'crmPrestationsEnabled' },
+    { label: 'Caisse & Dépenses', icon: Wallet, path: '/crm/caisse', color: '#EF4444', bg: '#FEF2F2', roles: CRM_MODULE_ACCESS.crmCaisseEnabled, permissionKey: 'crmCaisseEnabled' },
+    { label: 'Maintenance', icon: Wrench, path: '/crm/maintenance', color: '#F59E0B', bg: '#FFFBEB', roles: CRM_MODULE_ACCESS.crmMaintenanceEnabled, permissionKey: 'crmMaintenanceEnabled' },
+    { label: 'Stocks Métier', icon: Package, path: '/crm/stocks', color: '#6366F1', bg: '#EEF2FF', roles: CRM_MODULE_ACCESS.crmStocksEnabled, permissionKey: 'crmStocksEnabled' },
+    { label: 'Tiers & Apporteurs', icon: Users, path: '/crm/tiers', color: '#8B5CF6', bg: '#F5F3FF', roles: CRM_MODULE_ACCESS.crmTiersEnabled, permissionKey: 'crmTiersEnabled' },
+    { label: 'Commerciaux', icon: UserCheck, path: '/crm/commerciaux', color: '#0D9488', bg: '#F0FDFA', roles: CRM_MODULE_ACCESS.crmCommerciauxEnabled, permissionKey: 'crmCommerciauxEnabled' },
+    { label: 'Commissions', icon: Award, path: '/crm/commissions', color: '#D97706', bg: '#FFFBEB', roles: CRM_MODULE_ACCESS.crmCommissionsEnabled, permissionKey: 'crmCommissionsEnabled' },
     // Modules CRM Standard
     { label: 'Devis', icon: FileText, path: '/devis', color: '#D97706', bg: '#FFFBEB', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Bon de Livraison', icon: Receipt, path: '/bon-livraison', color: '#F59E0B', bg: '#FFFBEB', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
-    { label: 'Suivi des factures', icon: Receipt, path: '/factures', color: '#0284C7', bg: '#F0F9FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmFacturationEnabled' },
-    { label: 'Factures Fournisseurs', icon: Truck, path: '/fournisseurs-factures', color: '#EA580C', bg: '#FFF7ED', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmSupFacturesEnabled' },
-    { label: 'Rapports Hebdo', icon: ClipboardList, path: '/crm/rapports', color: '#059669', bg: '#ECFDF5', roles: ['Responsable', 'Commercial', 'Directeur', 'Directeur adjoint', 'SuperAdmin'], permissionKey: 'crmReportsEnabled' },
-    { label: 'Rapports Equipe', icon: ClipboardCheck, path: '/crm/rapports-equipe', color: '#7C3AED', bg: '#FAF5FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin', 'Responsable', 'Commercial'], permissionKey: 'crmTeamReportsEnabled' },
+    { label: 'Suivi des factures', icon: Receipt, path: '/factures', color: '#0284C7', bg: '#F0F9FF', roles: CRM_MODULE_ACCESS.crmFacturationEnabled, permissionKey: 'crmFacturationEnabled' },
+    { label: 'Factures Fournisseurs', icon: Truck, path: '/fournisseurs-factures', color: '#EA580C', bg: '#FFF7ED', roles: CRM_MODULE_ACCESS.crmSupFacturesEnabled, permissionKey: 'crmSupFacturesEnabled' },
+    { label: 'Rapports Hebdo', icon: ClipboardList, path: '/crm/rapports', color: '#059669', bg: '#ECFDF5', roles: CRM_MODULE_ACCESS.crmReportsEnabled, permissionKey: 'crmReportsEnabled' },
+    { label: 'Rapports Equipe', icon: ClipboardCheck, path: '/crm/rapports-equipe', color: '#7C3AED', bg: '#FAF5FF', roles: CRM_MODULE_ACCESS.crmTeamReportsEnabled, permissionKey: 'crmTeamReportsEnabled' },
     { label: 'Erreurs Sync', icon: Shield, path: '/crm/sync-errors', color: '#DC2626', bg: '#FEF2F2', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin', 'Gerant', 'Caissier', 'Encaisseur'] },
     { label: 'Clients', icon: Users, path: '/clients', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Services', icon: Briefcase, path: '/services', color: '#4F46E5', bg: '#EEF2FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },

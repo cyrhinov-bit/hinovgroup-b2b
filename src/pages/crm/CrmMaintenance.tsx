@@ -12,6 +12,8 @@ import type {
   TechnicienMaintenance, StatutTechnicien
 } from '../../types/crmModules';
 
+const UNASSIGNED_USER = '__unassigned__';
+
 export function CrmMaintenance() {
   const { 
     crmMaintenance, crmTechniciens, crmTiers, clients, users, 
@@ -23,6 +25,9 @@ export function CrmMaintenance() {
   const { confirm } = useConfirm();
 
   const isDirecteur = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
+  const [selectedUserId, setSelectedUserId] = useState('ALL');
+  const isViewingOtherUser = isDirecteur && selectedUserId !== 'ALL' && selectedUserId !== currentUser?.id;
+  const crmUsers = users.filter(u => !['Caissier', 'Gerant', 'Encaisseur'].includes(u.role));
 
   // Navigation Tab
   const [activeTab, setActiveTab] = useState<'TICKETS' | 'TECHNICIENS'>('TICKETS');
@@ -102,7 +107,10 @@ export function CrmMaintenance() {
   // TICKETS LOGIC
   // ----------------------------------------------------
   const filteredInterventions = crmMaintenance.filter(m => {
-    // Scopage : direction = tout, autres = uniquement ses propres tickets
+    if (isDirecteur && selectedUserId !== 'ALL') {
+      const matchesOwner = selectedUserId === UNASSIGNED_USER ? !m.cree_par : m.cree_par === selectedUserId;
+      if (!matchesOwner) return false;
+    }
     if (!isDirecteur && m.cree_par !== currentUser?.id) return false;
     const matchesSearch =
       (m.reference || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -117,6 +125,7 @@ export function CrmMaintenance() {
   });
 
   const handleOpenAddTicket = () => {
+    if (isViewingOtherUser) return;
     setEditingIntervention(null);
     const defaultTech = crmTechniciens.find(t => t.statut === 'DISPONIBLE')?.nom || crmTechniciens[0]?.nom || '';
     setFormData({
@@ -138,6 +147,7 @@ export function CrmMaintenance() {
   };
 
   const handleOpenEditTicket = (m: InterventionMaintenance) => {
+    if (isDirecteur && m.cree_par !== currentUser?.id) return;
     setEditingIntervention(m);
     setFormData({
       client_id: m.client_id || '',
@@ -169,6 +179,7 @@ export function CrmMaintenance() {
 
   const handleSubmitTicket = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewingOtherUser || (isDirecteur && editingIntervention && editingIntervention.cree_par !== currentUser?.id)) return;
     if (!formData.equipement?.trim() || !formData.site_agence?.trim() || !formData.technicien_assigne?.trim()) {
       alert('Veuillez renseigner le site, l\'équipement et le technicien assigné.');
       return;
@@ -204,6 +215,7 @@ export function CrmMaintenance() {
   };
 
   const handleDeleteTicket = (m: InterventionMaintenance) => {
+    if (isDirecteur && m.cree_par !== currentUser?.id) return;
     confirm({
       title: 'Supprimer l\'intervention',
       message: `Êtes-vous sûr de vouloir supprimer le ticket ${m.reference} (${m.equipement}) ?`,
@@ -216,6 +228,10 @@ export function CrmMaintenance() {
   // TECHNICIENS LOGIC
   // ----------------------------------------------------
   const filteredTechniciens = crmTechniciens.filter(t => {
+    if (isDirecteur && selectedUserId !== 'ALL') {
+      const matchesOwner = selectedUserId === UNASSIGNED_USER ? !t.cree_par : t.cree_par === selectedUserId;
+      if (!matchesOwner) return false;
+    }
     const matchesSearch =
       (t.nom || '').toLowerCase().includes(techSearchTerm.toLowerCase()) ||
       (t.specialite || '').toLowerCase().includes(techSearchTerm.toLowerCase()) ||
@@ -226,6 +242,7 @@ export function CrmMaintenance() {
   });
 
   const handleOpenAddTech = () => {
+    if (isViewingOtherUser) return;
     setEditingTechnicien(null);
     setTechFormData({
       nom: '',
@@ -238,6 +255,7 @@ export function CrmMaintenance() {
   };
 
   const handleOpenEditTech = (t: TechnicienMaintenance) => {
+    if (t.cree_par !== currentUser?.id) return;
     setEditingTechnicien(t);
     setTechFormData({
       nom: t.nom,
@@ -251,6 +269,7 @@ export function CrmMaintenance() {
 
   const handleSubmitTech = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewingOtherUser || (editingTechnicien && editingTechnicien.cree_par !== currentUser?.id)) return;
     if (!techFormData.nom?.trim()) {
       alert('Veuillez renseigner le nom du technicien.');
       return;
@@ -280,6 +299,7 @@ export function CrmMaintenance() {
   };
 
   const handleDeleteTech = (t: TechnicienMaintenance) => {
+    if (t.cree_par !== currentUser?.id) return;
     const assignedTicketsCount = crmMaintenance.filter(m => m.technicien_assigne === t.nom).length;
     // Intégrité (M3) : technicien avec tickets = suppression interdite (assignation par nom, pas de FK)
     if (assignedTicketsCount > 0) {
@@ -353,10 +373,10 @@ export function CrmMaintenance() {
   const totalFacturation = filteredInterventions.filter(m => m.statut !== 'ANNULE' && m.statut !== 'ANNULEE').reduce((sum, m) => sum + (m.prix_total || 0), 0);
 
   // KPIs - Techniciens
-  const totalTechs = crmTechniciens.length;
-  const disponiblesCount = crmTechniciens.filter(t => t.statut === 'DISPONIBLE').length;
-  const enInterventionCount = crmTechniciens.filter(t => t.statut === 'EN_INTERVENTION').length;
-  const indisponiblesCount = crmTechniciens.filter(t => ['CONGE', 'INACTIF'].includes(t.statut)).length;
+  const totalTechs = filteredTechniciens.length;
+  const disponiblesCount = filteredTechniciens.filter(t => t.statut === 'DISPONIBLE').length;
+  const enInterventionCount = filteredTechniciens.filter(t => t.statut === 'EN_INTERVENTION').length;
+  const indisponiblesCount = filteredTechniciens.filter(t => ['CONGE', 'INACTIF'].includes(t.statut)).length;
 
   if (!isDirecteur && currentUser?.crmMaintenanceEnabled === false) {
     return (
@@ -381,18 +401,37 @@ export function CrmMaintenance() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          {activeTab === 'TICKETS' ? (
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {isDirecteur && (
+            <select
+              className="table-input"
+              aria-label="Consulter les données de maintenance d'un utilisateur"
+              value={selectedUserId}
+              onChange={e => setSelectedUserId(e.target.value)}
+            >
+              <option value="ALL">Tous les utilisateurs</option>
+              <option value={UNASSIGNED_USER}>Données historiques sans auteur</option>
+              {crmUsers.map(user => (
+                <option key={user.id} value={user.id}>{user.name} — {user.role}</option>
+              ))}
+            </select>
+          )}
+          {!isViewingOtherUser && activeTab === 'TICKETS' ? (
             <button className="btn btn-primary" onClick={handleOpenAddTicket}>
               <Plus size={16} style={{ marginRight: '8px' }} /> Nouveau Ticket
             </button>
-          ) : (
+          ) : !isViewingOtherUser ? (
             <button className="btn btn-primary" onClick={handleOpenAddTech}>
               <Plus size={16} style={{ marginRight: '8px' }} /> Nouveau Technicien
             </button>
-          )}
+          ) : null}
         </div>
       </div>
+      {isViewingOtherUser && (
+        <div className="card" role="status" style={{ marginBottom: '16px', padding: '12px 16px', color: 'var(--color-text-muted)' }}>
+          Consultation en lecture seule : les données d’un autre utilisateur ne peuvent pas être modifiées.
+        </div>
+      )}
 
       {/* Modern Sub-Tab Navigation Bar */}
       <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--color-border)', marginBottom: '20px' }}>
@@ -577,6 +616,7 @@ export function CrmMaintenance() {
                     <th>Priorité</th>
                     <th>Technicien Assigné</th>
                     <th>Statut</th>
+                    <th>Enregistré par</th>
                     <th style={{ textAlign: 'right' }}>Montant Facturé</th>
                     <th>Actions</th>
                   </tr>
@@ -614,6 +654,7 @@ export function CrmMaintenance() {
                         </button>
                       </td>
                       <td data-label="Statut">{getStatusBadge(m.statut)}</td>
+                      <td data-label="Enregistré par">{m.cree_par_nom || 'N/A'}</td>
                       <td data-label="Montant" style={{ textAlign: 'right', fontWeight: 600 }}>
                         {(m.prix_total || 0).toLocaleString('fr-FR')} FCFA
                       </td>
@@ -622,19 +663,23 @@ export function CrmMaintenance() {
                           <button className="icon-button" title="Voir diagnostic et détails" onClick={() => setViewingIntervention(m)}>
                             <Eye size={14} />
                           </button>
-                          <button className="icon-button" title="Modifier" onClick={() => handleOpenEditTicket(m)} style={{ color: 'var(--color-primary)' }}>
-                            <Edit2 size={14} />
-                          </button>
-                          <button className="icon-button text-error" title="Supprimer" onClick={() => handleDeleteTicket(m)}>
-                            <Trash2 size={14} />
-                          </button>
+                          {(!isDirecteur || m.cree_par === currentUser?.id) ? (
+                            <>
+                              <button className="icon-button" title="Modifier" onClick={() => handleOpenEditTicket(m)} style={{ color: 'var(--color-primary)' }}>
+                                <Edit2 size={14} />
+                              </button>
+                              <button className="icon-button text-error" title="Supprimer" onClick={() => handleDeleteTicket(m)}>
+                                <Trash2 size={14} />
+                              </button>
+                            </>
+                          ) : <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Lecture seule</span>}
                         </div>
                       </td>
                     </tr>
                   ))}
                   {filteredInterventions.length === 0 && (
                     <tr>
-                      <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
+                      <td colSpan={9} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
                         Aucune intervention enregistrée.
                       </td>
                     </tr>
@@ -717,16 +762,17 @@ export function CrmMaintenance() {
                     <th>Spécialité</th>
                     <th>Coordonnées</th>
                     <th>Statut</th>
+                    <th>Ajouté par</th>
                     <th style={{ textAlign: 'center' }}>Tickets Assignés</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredTechniciens.map(t => {
-                    const activeTickets = crmMaintenance.filter(m => 
+                    const activeTickets = filteredInterventions.filter(m =>
                       m.technicien_assigne === t.nom && ['NOUVEAU', 'EN_COURS', 'EN_ATTENTE_PIECE'].includes(m.statut)
                     ).length;
-                    const totalAssigned = crmMaintenance.filter(m => m.technicien_assigne === t.nom).length;
+                    const totalAssigned = filteredInterventions.filter(m => m.technicien_assigne === t.nom).length;
 
                     return (
                       <tr key={t.id}>
@@ -776,6 +822,7 @@ export function CrmMaintenance() {
                         <td data-label="Statut">
                           {getTechStatusBadge(t.statut)}
                         </td>
+                        <td data-label="Ajouté par">{t.cree_par_nom || 'N/A'}</td>
                         <td data-label="Tickets Assignés" style={{ textAlign: 'center' }}>
                           <button
                             type="button"
@@ -807,12 +854,16 @@ export function CrmMaintenance() {
                         </td>
                         <td data-label="Actions">
                           <div style={{ display: 'flex', gap: '4px' }}>
-                            <button className="icon-button" title="Modifier le technicien" onClick={() => handleOpenEditTech(t)} style={{ color: 'var(--color-primary)' }}>
-                              <Edit2 size={14} />
-                            </button>
-                            <button className="icon-button text-error" title="Supprimer le technicien" onClick={() => handleDeleteTech(t)}>
-                              <Trash2 size={14} />
-                            </button>
+                            {t.cree_par === currentUser?.id ? (
+                              <>
+                                <button className="icon-button" title="Modifier le technicien" onClick={() => handleOpenEditTech(t)} style={{ color: 'var(--color-primary)' }}>
+                                  <Edit2 size={14} />
+                                </button>
+                                <button className="icon-button text-error" title="Supprimer le technicien" onClick={() => handleDeleteTech(t)}>
+                                  <Trash2 size={14} />
+                                </button>
+                              </>
+                            ) : <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Lecture seule</span>}
                           </div>
                         </td>
                       </tr>
@@ -820,7 +871,7 @@ export function CrmMaintenance() {
                   })}
                   {filteredTechniciens.length === 0 && (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
                         Aucun technicien répertorié. Cliquez sur "Nouveau Technicien" pour en ajouter un.
                       </td>
                     </tr>

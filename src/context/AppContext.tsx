@@ -1139,7 +1139,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const parsedUsers = profilesData.map((p: any) => {
             const cachedUser = cachedUsers?.find((u: any) => u.id === p.id);
             const isDir = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(p.role);
-            const crmDefault = !['Caissier', 'Gerant'].includes(p.role);
+            const crmDefault = !['Caissier', 'Gerant', 'Encaisseur'].includes(p.role);
             
             const resolveBool = (dbVal: any, localVal: any, defaultVal: boolean) => {
               if (dbVal === true) return true;
@@ -1175,7 +1175,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               crmCommissionsEnabled: resolveBool(p.crm_commissions_enabled, cachedUser?.crmCommissionsEnabled, crmDefault),
               crmFacturationEnabled: resolveBool(p.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, crmDefault),
               crmSupFacturesEnabled: resolveBool(p.crm_sup_factures_enabled, cachedUser?.crmSupFacturesEnabled, isDir),
-              crmReportsEnabled: resolveBool(p.crm_reports_enabled, cachedUser?.crmReportsEnabled, !isDir),
+              crmReportsEnabled: resolveBool(p.crm_reports_enabled, cachedUser?.crmReportsEnabled, crmDefault && !isDir),
               crmTeamReportsEnabled: resolveBool(p.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
             };
           });
@@ -4361,7 +4361,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!session) { alert('Session expirée. Veuillez vous reconnecter.'); return; }
 
     const isDirRole = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(user.role);
-    const crmDefaultNew = !['Caissier', 'Gerant'].includes(user.role);
+    const crmDefaultNew = !['Caissier', 'Gerant', 'Encaisseur'].includes(user.role);
 
     const response = await fetch(
       `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
@@ -4392,7 +4392,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           crmCommissionsEnabled: user.crmCommissionsEnabled ?? crmDefaultNew,
           crmFacturationEnabled: user.crmFacturationEnabled ?? crmDefaultNew,
           crmSupFacturesEnabled: user.crmSupFacturesEnabled ?? isDirRole,
-          crmReportsEnabled: user.crmReportsEnabled ?? !isDirRole,
+          crmReportsEnabled: user.crmReportsEnabled ?? (crmDefaultNew && !isDirRole),
           crmTeamReportsEnabled: user.crmTeamReportsEnabled ?? isDirRole
         }),
       }
@@ -4430,7 +4430,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       crmCommissionsEnabled: user.crmCommissionsEnabled ?? crmDefaultNew,
       crmFacturationEnabled: user.crmFacturationEnabled ?? crmDefaultNew,
       crmSupFacturesEnabled: user.crmSupFacturesEnabled ?? isDirRole,
-      crmReportsEnabled: user.crmReportsEnabled ?? !isDirRole,
+      crmReportsEnabled: user.crmReportsEnabled ?? (crmDefaultNew && !isDirRole),
       crmTeamReportsEnabled: user.crmTeamReportsEnabled ?? isDirRole
     };
     const newUsers = dedupeUsers([...users.filter(u => u.id !== newUser.id && u.email.trim().toLowerCase() !== newUser.email.trim().toLowerCase()), newUser]);
@@ -5399,7 +5399,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (tech.nom && current && tech.nom.trim() !== '' && current.nom !== tech.nom) {
       const oldNom = current.nom;
       const newNom = tech.nom;
-      const nextTickets = crmMaintenance.map(m => m.technicien_assigne === oldNom ? { ...m, technicien_assigne: newNom } : m);
+      const nextTickets = crmMaintenance.map(m =>
+        m.technicien_assigne === oldNom && m.cree_par === currentUser?.id
+          ? { ...m, technicien_assigne: newNom }
+          : m
+      );
       const changed = nextTickets.filter((m, i) => m !== crmMaintenance[i]);
       if (changed.length > 0) {
         setCrmMaintenance(nextTickets);

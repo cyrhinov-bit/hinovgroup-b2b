@@ -188,7 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           crmCommissionsEnabled: resolveBool(data.crm_commissions_enabled, cachedUser?.crmCommissionsEnabled, crmDefault),
           crmFacturationEnabled: resolveBool(data.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, crmDefault),
           crmSupFacturesEnabled: resolveBool(data.crm_sup_factures_enabled, cachedUser?.crmSupFacturesEnabled, isDir),
-          crmReportsEnabled: resolveBool(data.crm_reports_enabled, cachedUser?.crmReportsEnabled, !isDir),
+          crmReportsEnabled: resolveBool(data.crm_reports_enabled, cachedUser?.crmReportsEnabled, crmDefault && !isDir),
           crmTeamReportsEnabled: resolveBool(data.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
         };
 
@@ -340,7 +340,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {}
 
         const isDir = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(profile.role);
-        const crmDefault = !['Caissier', 'Gerant'].includes(profile.role);
+        const crmDefault = !['Caissier', 'Gerant', 'Encaisseur'].includes(profile.role);
         const resolveBool = (dbVal: any, localVal: any, defaultVal: boolean) => {
           if (dbVal === true) return true;
           if (dbVal === false) return false;
@@ -375,7 +375,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           crmCommissionsEnabled: resolveBool(profile.crm_commissions_enabled, cachedUser?.crmCommissionsEnabled, crmDefault),
           crmFacturationEnabled: resolveBool(profile.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, crmDefault),
           crmSupFacturesEnabled: resolveBool(profile.crm_sup_factures_enabled, cachedUser?.crmSupFacturesEnabled, isDir),
-          crmReportsEnabled: resolveBool(profile.crm_reports_enabled, cachedUser?.crmReportsEnabled, !isDir),
+          crmReportsEnabled: resolveBool(profile.crm_reports_enabled, cachedUser?.crmReportsEnabled, crmDefault && !isDir),
           crmTeamReportsEnabled: resolveBool(profile.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
         };
         logoutRequestedRef.current = false;
@@ -410,8 +410,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginAsTestUser = (role: User['role']) => {
     const isDir = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(role);
-    const isCashierRole = role === 'Caissier' || role === 'Gerant';
-    const crmDefault = !isCashierRole;
+    const crmDefault = !['Caissier', 'Gerant', 'Encaisseur'].includes(role);
     const testUser: User = {
       id: 'test-' + role.toLowerCase(),
       name: role === 'Caissier' ? 'Caissier Test' : role === 'Gerant' ? 'Gérant Test' : role + ' Test',
@@ -431,7 +430,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       crmCommissionsEnabled: crmDefault,
       crmFacturationEnabled: crmDefault,
       crmSupFacturesEnabled: isDir,
-      crmReportsEnabled: !isDir,
+      crmReportsEnabled: crmDefault && !isDir,
       crmTeamReportsEnabled: isDir,
     };
     setCurrentUser(testUser);

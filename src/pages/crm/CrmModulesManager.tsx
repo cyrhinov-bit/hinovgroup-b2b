@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import type { User } from '../../context/AppContext';
+import { isCrmModuleAvailable, type CrmModuleKey } from '../../config/crmModuleAccess';
 import { 
   Shield, 
   Search, 
@@ -24,19 +25,7 @@ import {
 } from 'lucide-react';
 
 interface ModuleDef {
-  key: keyof Pick<User, 
-    'crmPrestationsEnabled' | 
-    'crmCaisseEnabled' | 
-    'crmMaintenanceEnabled' | 
-    'crmStocksEnabled' | 
-    'crmTiersEnabled' | 
-    'crmCommerciauxEnabled' | 
-    'crmCommissionsEnabled' |
-    'crmFacturationEnabled' |
-    'crmSupFacturesEnabled' |
-    'crmReportsEnabled' |
-    'crmTeamReportsEnabled'
-  >;
+  key: CrmModuleKey;
   label: string;
   shortDesc: string;
   icon: React.ReactNode;
@@ -157,10 +146,10 @@ export default function CrmModulesManager() {
     );
   }
 
-  // Filtrer les utilisateurs (les Caissiers/Gérants purs relèvent du POS, pas du CRM)
+  // Les comptes POS purs et Encaisseurs ne relèvent pas de la gestion des modules CRM.
   const eligibleUsers = users.filter(u => {
     if (u.active === false) return false;
-    if (u.role === 'Caissier' || u.role === 'Gerant') return false;
+    if (['Caissier', 'Gerant', 'Encaisseur'].includes(u.role)) return false;
     const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
     const matchRole = roleFilter === 'ALL' || u.role === roleFilter;
     const matchService = serviceFilter === 'ALL' || u.serviceId === serviceFilter;
@@ -168,11 +157,10 @@ export default function CrmModulesManager() {
   });
 
   const toggleModule = async (user: User, moduleKey: ModuleDef['key']) => {
+    if (!isCrmModuleAvailable(moduleKey, user.role)) return;
     setSavingUserId(user.id);
     const currentValue = !!user[moduleKey];
-    // Coherent avec setAllModules : 'Rapports Equipe' reserve a la Direction.
-    const isDir = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(user.role);
-    const nextValue = (moduleKey === 'crmTeamReportsEnabled' && !isDir) ? false : !currentValue;
+    const nextValue = !currentValue;
     try {
       await updateUser(user.id, {
         name: user.name,
@@ -187,24 +175,16 @@ export default function CrmModulesManager() {
 
   const setAllModules = async (user: User, state: boolean) => {
     setSavingUserId(user.id);
-    const isDir = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(user.role);
+    const updates: Partial<User> = {
+      name: user.name,
+      role: user.role,
+      serviceId: user.serviceId
+    };
+    for (const mod of CRM_MODULES) {
+      if (isCrmModuleAvailable(mod.key, user.role)) updates[mod.key] = state;
+    }
     try {
-      await updateUser(user.id, {
-        name: user.name,
-        role: user.role,
-        serviceId: user.serviceId,
-        crmPrestationsEnabled: state,
-        crmCaisseEnabled: state,
-        crmMaintenanceEnabled: state,
-        crmStocksEnabled: state,
-        crmTiersEnabled: state,
-        crmCommerciauxEnabled: state,
-        crmCommissionsEnabled: state,
-        crmFacturationEnabled: state,
-        crmSupFacturesEnabled: state,
-        crmReportsEnabled: isDir ? false : state,
-        crmTeamReportsEnabled: isDir ? state : false
-      });
+      await updateUser(user.id, updates);
     } finally {
       setSavingUserId(null);
     }
@@ -292,10 +272,9 @@ export default function CrmModulesManager() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {eligibleUsers.map(user => {
           const isUserAdmin = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(user.role);
-          const activeCount = CRM_MODULES.filter(m => !!user[m.key]).length;
-          // Rapports Hebdo (saisie) reserve aux collaborateurs, Rapports Equipe a la Direction :
-          // le plein attendu est donc total - 1 dans les deux cas.
-          const expectedTotal = CRM_MODULES.length - 1;
+          const availableModules = CRM_MODULES.filter(mod => isCrmModuleAvailable(mod.key, user.role));
+          const activeCount = availableModules.filter(mod => !!user[mod.key]).length;
+          const expectedTotal = availableModules.length;
           const isFull = activeCount >= expectedTotal;
 
           return (
@@ -378,7 +357,7 @@ export default function CrmModulesManager() {
 
               {/* Grille des 7 modules pour cet utilisateur */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
-                {CRM_MODULES.filter(mod => isUserAdmin || mod.key !== 'crmTeamReportsEnabled').map(mod => {
+                {CRM_MODULES.filter(mod => isCrmModuleAvailable(mod.key, user.role)).map(mod => {
                   const isEnabled = !!user[mod.key];
                   return (
                     <div 

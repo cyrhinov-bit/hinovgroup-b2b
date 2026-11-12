@@ -3,6 +3,7 @@ import { Plus, Search, Edit2, Trash2, CheckCircle, ArrowRight, DollarSign, Filte
 import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/ConfirmModal';
+import { CrmUserFilter, CRM_UNASSIGNED_USER } from '../../components/crm/CrmUserFilter';
 import type { PrestationCommande, StatutPrestation } from '../../types/crmModules';
 
 export function CrmPrestations() {
@@ -20,6 +21,11 @@ export function CrmPrestations() {
   const currentUser = users.find(u => u.id === authUser?.id) || authUser;
   const isDirecteur = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
   const { confirm } = useConfirm();
+
+  const [selectedUserId, setSelectedUserId] = useState('ALL');
+  const isViewingOtherUser = isDirecteur && selectedUserId !== 'ALL' && selectedUserId !== currentUser?.id;
+  const canManagePrestation = (prestation: PrestationCommande) =>
+    !isDirecteur || prestation.cree_par === currentUser?.id;
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -94,6 +100,10 @@ export function CrmPrestations() {
   const filteredPrestations = crmPrestations.filter(p => {
     // Scopage : direction = tout, autres = uniquement ses propres commandes
     if (!isDirecteur && p.cree_par !== currentUser?.id && p.commercial_id !== currentUser?.id && p.apporteur_id !== currentUser?.id) return false;
+    if (isDirecteur && selectedUserId !== 'ALL') {
+      const ownerMatches = selectedUserId === CRM_UNASSIGNED_USER ? !p.cree_par : p.cree_par === selectedUserId;
+      if (!ownerMatches) return false;
+    }
     const matchesSearch =
       (p.reference || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (p.designation || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -104,6 +114,7 @@ export function CrmPrestations() {
   });
 
   const handleOpenAdd = () => {
+    if (isViewingOtherUser) return;
     setEditingPrestation(null);
     setFormData({
       client_id: '',
@@ -135,6 +146,7 @@ export function CrmPrestations() {
   };
 
   const handleOpenEdit = (p: PrestationCommande) => {
+    if (!canManagePrestation(p)) return;
     setEditingPrestation(p);
     const pt = (p.quantite || 1) * (p.prix_vente_unitaire || 0);
     const marge = p.marge_interne ?? (pt - (p.quantite || 1) * (p.cout_unitaire_achat || 0));
@@ -216,6 +228,7 @@ export function CrmPrestations() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewingOtherUser || (editingPrestation && !canManagePrestation(editingPrestation))) return;
     if (!formData.client_nom?.trim() || !formData.designation?.trim()) {
       alert('Veuillez sélectionner un client et saisir une désignation.');
       return;
@@ -278,6 +291,7 @@ export function CrmPrestations() {
   };
 
   const handleDelete = (p: PrestationCommande) => {
+    if (!canManagePrestation(p)) return;
     confirm({
       title: 'Supprimer la commande / prestation',
       message: `Êtes-vous sûr de vouloir supprimer la commande ${p.reference} (${p.designation}) ?`,
@@ -287,6 +301,7 @@ export function CrmPrestations() {
   };
 
   const handleOpenEncaissement = (p: PrestationCommande) => {
+    if (!canManagePrestation(p)) return;
     setPrestationToEncaisser(p);
     setModeReglement('ESPECES');
     setShowEncaissementModal(true);
@@ -294,6 +309,7 @@ export function CrmPrestations() {
 
   const handleConfirmEncaissement = async () => {
     if (!prestationToEncaisser || isEncaissing) return;
+    if (!canManagePrestation(prestationToEncaisser)) return;
     setIsEncaissing(true);
     try {
       const ok = await encaisserCrmPrestation(prestationToEncaisser.id, modeReglement);
@@ -361,10 +377,23 @@ export function CrmPrestations() {
             Grille financière rigoureuse à 11 colonnes, ventilation automatique des commissions et encaissement en trésorerie.
           </p>
         </div>
-        <button className="btn btn-primary" onClick={handleOpenAdd}>
+        {isDirecteur && (
+          <CrmUserFilter
+            users={users}
+            value={selectedUserId}
+            onChange={setSelectedUserId}
+            label="Consulter les commandes d'un utilisateur"
+          />
+        )}
+        {!isViewingOtherUser && <button className="btn btn-primary" onClick={handleOpenAdd}>
           <Plus size={16} style={{ marginRight: '8px' }} /> Nouvelle Commande
-        </button>
+        </button>}
       </div>
+      {isViewingOtherUser && (
+        <div className="card" role="status" style={{ marginBottom: '16px', padding: '12px 16px', color: 'var(--color-text-muted)' }}>
+          Consultation en lecture seule : les données d’un autre utilisateur ne peuvent pas être modifiées.
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
@@ -498,7 +527,7 @@ export function CrmPrestations() {
                   </td>
                   <td data-label="Actions">
                     <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                      {p.statut !== 'PAYEE' && p.statut !== 'CLOTUREE' && p.statut !== 'ANNULEE' && (
+                      {canManagePrestation(p) && p.statut !== 'PAYEE' && p.statut !== 'CLOTUREE' && p.statut !== 'ANNULEE' && (
                         <button
                           className="btn btn-primary"
                           style={{ padding: '3px 8px', fontSize: '11px' }}
@@ -511,12 +540,16 @@ export function CrmPrestations() {
                       <button className="icon-button" title="Détails" onClick={() => setViewingPrestation(p)}>
                         <Eye size={14} />
                       </button>
-                      <button className="icon-button" title="Modifier" onClick={() => handleOpenEdit(p)} style={{ color: 'var(--color-primary)' }}>
-                        <Edit2 size={14} />
-                      </button>
-                      <button className="icon-button text-error" title="Supprimer" onClick={() => handleDelete(p)}>
-                        <Trash2 size={14} />
-                      </button>
+                      {canManagePrestation(p) ? (
+                        <>
+                          <button className="icon-button" title="Modifier" onClick={() => handleOpenEdit(p)} style={{ color: 'var(--color-primary)' }}>
+                            <Edit2 size={14} />
+                          </button>
+                          <button className="icon-button text-error" title="Supprimer" onClick={() => handleDelete(p)}>
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      ) : <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Lecture seule</span>}
                     </div>
                   </td>
                 </tr>

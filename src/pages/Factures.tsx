@@ -31,6 +31,7 @@ import { visibleTo } from '../lib/scope';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../components/ConfirmModal';
 import { MonthlyBars } from '../components/MonthlyBars';
+import { CrmUserFilter, CRM_UNASSIGNED_USER } from '../components/crm/CrmUserFilter';
 import type { Invoice, InvoiceStatus } from '../types/crmModules';
 import toast from 'react-hot-toast';
 
@@ -70,6 +71,20 @@ export function Factures() {
   const currentUser = users.find(u => u.id === authUser?.id) || authUser;
   const { confirm } = useConfirm();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const isDirector = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
+  const [selectedUserId, setSelectedUserId] = useState('ALL');
+  const isViewingOtherUser = isDirector && selectedUserId !== 'ALL' && selectedUserId !== currentUser?.id;
+
+  const invoiceOwner = (invoice: Invoice) => [
+    invoice.commercialId,
+    invoice.commercial_id,
+    invoice.createdBy,
+    invoice.created_by,
+  ].find((owner): owner is string => !!owner);
+  const canManageInvoice = (invoice: Invoice) =>
+    !isDirector || invoiceOwner(invoice) === currentUser?.id;
+  const canManageInvoicePayment = (payment: (typeof invoicePayments)[number]) =>
+    !isDirector || (payment.createdBy || payment.created_by) === currentUser?.id;
 
   // Période de suivi (Année & Mois)
   const [selectedYear, setSelectedYear] = useState<number>(2026);
@@ -156,8 +171,6 @@ export function Factures() {
     setCommercialSearchTerm('');
   };
 
-  const isDirector = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
-
   // Helper functions
   const getClient = (id?: string) => clients.find(c => c.id === id);
   const getClientDisplayName = (inv: Invoice) => {
@@ -219,6 +232,7 @@ export function Factures() {
 
   // Ouverture création d'une nouvelle ligne de suivi
   const handleOpenNewTrackingRow = () => {
+    if (isViewingOtherUser) return;
     setEditingInvoiceId(null);
     setFormPeriodYear(selectedYear);
     setFormPeriodMonth(selectedMonth);
@@ -244,6 +258,7 @@ export function Factures() {
   };
 
   const handleEditTrackingRow = (inv: Invoice) => {
+    if (!canManageInvoice(inv)) return;
     setEditingInvoiceId(inv.id);
     const year = inv.periodYear || (inv.deliveryDate ? new Date(inv.deliveryDate).getFullYear() : selectedYear);
     const month = inv.periodMonth || (inv.deliveryDate ? new Date(inv.deliveryDate).getMonth() + 1 : selectedMonth);
@@ -271,6 +286,8 @@ export function Factures() {
   // Enregistrement / Mise à jour
   const handleSaveInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
+    const editingInvoice = editingInvoiceId ? invoices.find(i => i.id === editingInvoiceId) : undefined;
+    if (isViewingOtherUser || (editingInvoiceId && (!editingInvoice || !canManageInvoice(editingInvoice)))) return;
 
     if (!formClientName.trim()) {
       toast.error('Veuillez renseigner le Client.');
@@ -365,6 +382,14 @@ export function Factures() {
 
   // Suppression
   const handleDelete = (inv: Invoice) => {
+    if (!canManageInvoice(inv)) return;
+    if (isDirector && invoicePayments.some((payment) =>
+      payment.invoiceId === inv.id &&
+      (payment.createdBy || payment.created_by) !== currentUser?.id
+    )) {
+      toast.error('Suppression impossible : cette facture contient des règlements créés par un autre utilisateur.');
+      return;
+    }
     confirm({
       title: 'Supprimer cette facture du suivi ?',
       message: `Êtes-vous sûr de vouloir supprimer la facture pour le client "${getClientDisplayName(inv)}" (Montant : ${inv.totalAmount.toLocaleString('fr-FR')} FCFA) ?`,
@@ -384,6 +409,7 @@ export function Factures() {
 
   // Paiement Modal
   const handleOpenPaymentModal = (inv: Invoice) => {
+    if (!canManageInvoice(inv)) return;
     setSelectedInvoice(inv);
     const remaining = inv.remainingAmount !== undefined ? inv.remainingAmount : Math.max(0, inv.totalAmount - (inv.amountPaid || 0));
     setPayAmount(remaining);
@@ -397,6 +423,7 @@ export function Factures() {
   const handleSavePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedInvoice) return;
+    if (!canManageInvoice(selectedInvoice)) return;
     if (payAmount <= 0) {
       toast.error('Veuillez saisir un montant supérieur à zéro.');
       return;
@@ -453,6 +480,7 @@ export function Factures() {
 
   // Import Excel (.xlsx) handler
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isViewingOtherUser) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -561,6 +589,7 @@ export function Factures() {
 
   // Quick Seed Septembre 2026
   const handleSeedSeptembre2026 = async () => {
+    if (isViewingOtherUser) return;
     const defaultData = [
       {
         clientName: 'CORIS',
@@ -708,8 +737,16 @@ export function Factures() {
     return visibleTo(invoices, currentUser?.role, currentUser?.id, i => [i.commercialId, (i as any).commercial_id, (i as any).createdBy, (i as any).created_by]);
   }, [invoices, currentUser]);
 
+  const ownerInvoices = useMemo(() => {
+    if (!isDirector || selectedUserId === 'ALL') return allowedInvoices;
+    return allowedInvoices.filter((invoice) => {
+      const owner = invoiceOwner(invoice);
+      return selectedUserId === CRM_UNASSIGNED_USER ? !owner : owner === selectedUserId;
+    });
+  }, [allowedInvoices, isDirector, selectedUserId]);
+
   const monthInvoices = useMemo(() => {
-    return allowedInvoices.filter(inv => {
+    return ownerInvoices.filter(inv => {
       // Même règle que getInvoicePeriod : période comptable saisie en priorité,
       // repli sur livraison puis émission, avec garde anti-dates invalides.
       const d = inv.deliveryDate || inv.issueDate;
@@ -719,7 +756,7 @@ export function Factures() {
       const month = inv.periodMonth || (fallbackValid ? parsed.getMonth() + 1 : selectedMonth);
       return year === selectedYear && month === selectedMonth;
     });
-  }, [allowedInvoices, selectedYear, selectedMonth]);
+  }, [ownerInvoices, selectedYear, selectedMonth]);
 
   const filteredInvoices = useMemo(() => {
     return monthInvoices.filter(inv => {
@@ -813,7 +850,7 @@ export function Factures() {
 
   // Totaux annuels globaux (exercice sélectionné, tous mois confondus)
   const annualTotals = useMemo(() => {
-    const yearList = allowedInvoices.filter(inv => getInvoicePeriod(inv).y === selectedYear);
+    const yearList = ownerInvoices.filter(inv => getInvoicePeriod(inv).y === selectedYear);
     let totalToPay = 0;
     let totalPaid = 0;
     let totalRemaining = 0;
@@ -860,7 +897,7 @@ export function Factures() {
       series,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allowedInvoices, selectedYear]);
+  }, [ownerInvoices, selectedYear]);
 
   // Permission Check
   if (!isDirector && currentUser?.crmFacturationEnabled === false) {
@@ -895,23 +932,26 @@ export function Factures() {
 
         {/* Boutons d'actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileUpload} 
-            accept=".xlsx, .xls, .csv" 
-            style={{ display: 'none' }} 
-          />
-
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="btn btn-secondary"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
-            title="Importer un fichier Excel de suivi"
-          >
-            <Upload size={14} color="var(--color-success)" />
-            <span>Importer Excel</span>
-          </button>
+          {!isViewingOtherUser && (
+            <>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept=".xlsx, .xls, .csv"
+                style={{ display: 'none' }}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="btn btn-secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
+                title="Importer un fichier Excel de suivi"
+              >
+                <Upload size={14} color="var(--color-success)" />
+                <span>Importer Excel</span>
+              </button>
+            </>
+          )}
 
           <button
             onClick={handleExportExcel}
@@ -923,16 +963,34 @@ export function Factures() {
             <span>Exporter Excel</span>
           </button>
 
-          <button
-            onClick={handleOpenNewTrackingRow}
-            className="btn btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
-          >
-            <Plus size={16} />
-            <span>+ Ajouter une facture</span>
-          </button>
+          {!isViewingOtherUser && (
+            <button
+              onClick={handleOpenNewTrackingRow}
+              className="btn btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+            >
+              <Plus size={16} />
+              <span>+ Ajouter une facture</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {isDirector && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '16px' }}>
+          <CrmUserFilter
+            users={users}
+            value={selectedUserId}
+            onChange={setSelectedUserId}
+            label="Consulter le suivi des factures d'un utilisateur"
+          />
+          {isViewingOtherUser && (
+            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+              Consultation en lecture seule : les données d’un autre utilisateur ne peuvent pas être modifiées.
+            </span>
+          )}
+        </div>
+      )}
 
       {/* ─── SÉLECTEUR D'ANNÉE ET ONGLETS MENSUELS ───────────────── */}
       <div className="card" style={{ padding: '14px 18px', marginBottom: '20px' }}>
@@ -962,7 +1020,7 @@ export function Factures() {
             </div>
           </div>
 
-          {monthInvoices.length === 0 && selectedYear === 2026 && selectedMonth === 9 && (
+          {!isViewingOtherUser && monthInvoices.length === 0 && selectedYear === 2026 && selectedMonth === 9 && (
             <button
               onClick={handleSeedSeptembre2026}
               className="btn btn-secondary"
@@ -978,7 +1036,7 @@ export function Factures() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(75px, 1fr))', gap: '6px' }}>
           {MONTH_NAMES.map(m => {
             const isSelected = selectedMonth === m.num;
-            const countInMonth = allowedInvoices.filter(i => {
+            const countInMonth = ownerInvoices.filter(i => {
               const d = i.deliveryDate || i.issueDate;
               const parsed = d ? new Date(d) : null;
               const valid = parsed && !isNaN(parsed.getTime());
@@ -1365,42 +1423,46 @@ export function Factures() {
                       {/* Actions */}
                       <td style={{ padding: '8px', textAlign: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                          {remaining > 0 && (
-                            <button
-                              onClick={() => handleOpenPaymentModal(inv)}
-                              className="btn btn-secondary"
-                              style={{ padding: '5px 7px', color: '#0D9488', borderRadius: '6px' }}
-                              title="Encaisser un règlement"
-                            >
-                              <CreditCard size={13} />
-                            </button>
-                          )}
-                          {remaining > 0 && (
-                            <button
-                              onClick={() => handleSendWhatsApp(inv)}
-                              className="btn btn-secondary"
-                              style={{ padding: '5px 7px', color: '#059669', borderRadius: '6px' }}
-                              title="Relance WhatsApp"
-                            >
-                              <Share2 size={13} />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleEditTrackingRow(inv)}
-                            className="btn btn-secondary"
-                            style={{ padding: '5px 7px', color: 'var(--color-primary)', borderRadius: '6px' }}
-                            title="Modifier"
-                          >
-                            <Edit3 size={13} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(inv)}
-                            className="btn btn-secondary"
-                            style={{ padding: '5px 7px', color: '#E11D48', borderRadius: '6px' }}
-                            title="Supprimer"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                          {canManageInvoice(inv) ? (
+                            <>
+                              {remaining > 0 && (
+                                <button
+                                  onClick={() => handleOpenPaymentModal(inv)}
+                                  className="btn btn-secondary"
+                                  style={{ padding: '5px 7px', color: '#0D9488', borderRadius: '6px' }}
+                                  title="Encaisser un règlement"
+                                >
+                                  <CreditCard size={13} />
+                                </button>
+                              )}
+                              {remaining > 0 && (
+                                <button
+                                  onClick={() => handleSendWhatsApp(inv)}
+                                  className="btn btn-secondary"
+                                  style={{ padding: '5px 7px', color: '#059669', borderRadius: '6px' }}
+                                  title="Relance WhatsApp"
+                                >
+                                  <Share2 size={13} />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleEditTrackingRow(inv)}
+                                className="btn btn-secondary"
+                                style={{ padding: '5px 7px', color: 'var(--color-primary)', borderRadius: '6px' }}
+                                title="Modifier"
+                              >
+                                <Edit3 size={13} />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(inv)}
+                                className="btn btn-secondary"
+                                style={{ padding: '5px 7px', color: '#E11D48', borderRadius: '6px' }}
+                                title="Supprimer"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </>
+                          ) : <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Lecture seule</span>}
                         </div>
                       </td>
                     </tr>
@@ -1984,31 +2046,34 @@ export function Factures() {
                         {' — '}<strong>{(Number(p.amount) || 0).toLocaleString('fr-FR')} F</strong>
                         {` (${p.paymentMethod || '-'})`}{p.reference ? ` — ${p.reference}` : ''}
                       </span>
-                      <button
-                        type="button"
-                        className="icon-button"
-                        style={{ color: 'var(--color-error)' }}
-                        title="Supprimer cet encaissement"
-                        onClick={() => {
-                          confirm({
-                            title: "Supprimer l'encaissement",
-                            message: `Supprimer l'encaissement du ${p.paymentDate} de ${(Number(p.amount) || 0).toLocaleString('fr-FR')} FCFA ? Les totaux de la facture seront recalculés.`,
-                            confirmLabel: 'Supprimer',
-                            cancelLabel: 'Annuler',
-                            variant: 'danger',
-                            onConfirm: async () => {
-                              try {
-                                await deleteInvoicePayment(p.id);
-                                toast.success('Encaissement supprimé.');
-                              } catch {
-                                toast.error("Erreur lors de la suppression.");
+                      {canManageInvoice(selectedInvoice) && canManageInvoicePayment(p) && (
+                        <button
+                          type="button"
+                          className="icon-button"
+                          style={{ color: 'var(--color-error)' }}
+                          title="Supprimer cet encaissement"
+                          onClick={() => {
+                            confirm({
+                              title: "Supprimer l'encaissement",
+                              message: `Supprimer l'encaissement du ${p.paymentDate} de ${(Number(p.amount) || 0).toLocaleString('fr-FR')} FCFA ? Les totaux de la facture seront recalculés.`,
+                              confirmLabel: 'Supprimer',
+                              cancelLabel: 'Annuler',
+                              variant: 'danger',
+                              onConfirm: async () => {
+                                if (!canManageInvoice(selectedInvoice) || !canManageInvoicePayment(p)) return;
+                                try {
+                                  await deleteInvoicePayment(p.id);
+                                  toast.success('Encaissement supprimé.');
+                                } catch {
+                                  toast.error("Erreur lors de la suppression.");
+                                }
                               }
-                            }
-                          });
-                        }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                            });
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </div>
                   ))}
                 {invoicePayments.filter(p => p.invoiceId === selectedInvoice.id).length === 0 && (
@@ -2091,6 +2156,7 @@ export function Factures() {
                   type="submit"
                   className="btn btn-primary"
                   style={{ background: '#0D9488', borderColor: '#0D9488', fontWeight: 700 }}
+                  disabled={!canManageInvoice(selectedInvoice)}
                 >
                   Valider le règlement
                 </button>
