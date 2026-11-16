@@ -36,9 +36,12 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
 
   const isDirection = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
 
-  // Compteur Direction : uniquement les nouveaux rapports reçus (pas les rappels/validations)
+  // Compteur Supervision Équipe : nouveaux rapports reçus pour les profils autorisés
   const unreadDirectionReportsCount = React.useMemo(() => {
-    if (!currentUser || !isDirection) return 0;
+    const isSupervisionAuthorized = isDirection
+      ? currentUser?.crmTeamReportsEnabled !== false
+      : currentUser?.crmTeamReportsEnabled === true;
+    if (!currentUser || !isSupervisionAuthorized) return 0;
     return (notifications || []).filter(n =>
       n.user_id === currentUser.id &&
       !n.is_read &&

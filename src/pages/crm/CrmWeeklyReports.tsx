@@ -92,9 +92,13 @@ export function CrmWeeklyReports() {
 
   const isDirection = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
   const isSupervisionRoute = location.pathname.includes('rapports-equipe');
-  // Supervision des rapports d'équipe : direction uniquement.
-  // Les autres rôles (Responsable inclus) voient uniquement leurs propres rapports.
-  const showSupervision = isDirection && (isSupervisionRoute || !location.pathname.includes('/crm/rapports'));
+  // La vue Supervision d'équipe est affichée :
+  // 1. Soit si l'utilisateur est sur la route dédiée /crm/rapports-equipe
+  // 2. Soit pour la Direction accédant directement par défaut
+  const isSupervisionAuthorized = isDirection
+    ? currentUser?.crmTeamReportsEnabled !== false
+    : currentUser?.crmTeamReportsEnabled === true;
+  const showSupervision = isSupervisionAuthorized && (isSupervisionRoute || (isDirection && !location.pathname.includes('/crm/rapports')));
 
   // Format local Date as YYYY-MM-DD
   const formatYMD = (d: Date) => {
