@@ -127,7 +127,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Suivi des factures', icon: Receipt, path: '/factures', color: '#0284C7', bg: '#F0F9FF', roles: CRM_MODULE_ACCESS.crmFacturationEnabled, permissionKey: 'crmFacturationEnabled' },
     { label: 'Factures Fournisseurs', icon: Truck, path: '/fournisseurs-factures', color: '#EA580C', bg: '#FFF7ED', roles: CRM_MODULE_ACCESS.crmSupFacturesEnabled, permissionKey: 'crmSupFacturesEnabled' },
     { label: 'Rapports Hebdo', icon: ClipboardList, path: '/crm/rapports', color: '#059669', bg: '#ECFDF5', roles: CRM_MODULE_ACCESS.crmReportsEnabled, permissionKey: 'crmReportsEnabled' },
-    { label: 'Rapports Equipe', icon: ClipboardCheck, path: '/crm/rapports-equipe', color: '#7C3AED', bg: '#FAF5FF', roles: CRM_MODULE_ACCESS.crmTeamReportsEnabled, permissionKey: 'crmTeamReportsEnabled' },
+    { label: 'Rapport Supervision Équipe', icon: ClipboardCheck, path: '/crm/rapports-equipe', color: '#7C3AED', bg: '#FAF5FF', roles: CRM_MODULE_ACCESS.crmTeamReportsEnabled, permissionKey: 'crmTeamReportsEnabled' },
     { label: 'Erreurs Sync', icon: Shield, path: '/crm/sync-errors', color: '#DC2626', bg: '#FEF2F2', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin', 'Gerant', 'Caissier', 'Encaisseur'] },
     { label: 'Clients', icon: Users, path: '/clients', color: '#8B5CF6', bg: '#F5F3FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Services', icon: Briefcase, path: '/services', color: '#4F46E5', bg: '#EEF2FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
