@@ -33,7 +33,7 @@ export const CRM_MODULE_ACCESS = {
   crmFacturationEnabled: OPERATIONAL_CRM,
   crmSupFacturesEnabled: OPERATIONAL_CRM,
   crmReportsEnabled: OPERATIONAL_CRM,
-  crmTeamReportsEnabled: DIRECTION,
+  crmTeamReportsEnabled: OPERATIONAL_CRM,
 } satisfies Record<CrmModuleKey, readonly CrmRole[]>;
 
 export function isCrmModuleAvailable(moduleKey: CrmModuleKey, role: string): boolean {

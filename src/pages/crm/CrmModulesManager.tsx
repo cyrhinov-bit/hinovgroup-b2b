@@ -116,8 +116,8 @@ const CRM_MODULES: ModuleDef[] = [
   },
   {
     key: 'crmTeamReportsEnabled',
-    label: 'Rapports Équipe (Supervision Direction)',
-    shortDesc: 'Cockpit de supervision d\'équipe, KPIs, réception, relance et validation des rapports',
+    label: 'Rapports Équipe',
+    shortDesc: 'Supervision d\'équipe, KPIs, réception, relance et validation des rapports hebdomadaires',
     icon: <ClipboardCheck size={18} />,
     color: '#7C3AED',
     badge: 'Module 10'
