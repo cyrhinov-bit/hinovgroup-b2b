@@ -16,7 +16,8 @@ export type CrmModuleKey =
   | 'crmFacturationEnabled'
   | 'crmSupFacturesEnabled'
   | 'crmReportsEnabled'
-  | 'crmTeamReportsEnabled';
+  | 'crmTeamReportsEnabled'
+  | 'crmMenuOrderEnabled';
 
 const DIRECTION: readonly CrmRole[] = ['Directeur', 'Directeur adjoint', 'SuperAdmin'];
 const DIRECTION_AND_RESPONSABLE: readonly CrmRole[] = [...DIRECTION, 'Responsable'];
@@ -34,6 +35,7 @@ export const CRM_MODULE_ACCESS = {
   crmSupFacturesEnabled: OPERATIONAL_CRM,
   crmReportsEnabled: OPERATIONAL_CRM,
   crmTeamReportsEnabled: OPERATIONAL_CRM,
+  crmMenuOrderEnabled: OPERATIONAL_CRM,
 } satisfies Record<CrmModuleKey, readonly CrmRole[]>;
 
 export function isCrmModuleAvailable(moduleKey: CrmModuleKey, role: string): boolean {

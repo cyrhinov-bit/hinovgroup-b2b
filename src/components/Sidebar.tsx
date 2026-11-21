@@ -5,7 +5,7 @@ import {
   UserCircle, LogOut, Receipt, Coins, Target, ShoppingCart, Package, Truck, 
   ClipboardList, ClipboardCheck, Warehouse, Tag, BarChart3, DollarSign, RotateCcw, 
   FileSpreadsheet, Wallet, ToggleRight, Trophy, Sparkles, Bot, Building2, ShieldAlert,
-  History, ShoppingBag, Wrench, UserCheck, Award, Store
+  History, ShoppingBag, Wrench, UserCheck, Award, Store, ArrowUpDown
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -14,6 +14,7 @@ import { InstallButton } from './InstallButton';
 import './Sidebar.css';
 import type { User } from '../context/AppContext';
 import { CRM_MODULE_ACCESS } from '../config/crmModuleAccess';
+import { getSavedCrmMenuOrder, CRM_MENU_ORDER_EVENT } from '../utils/crmMenuOrder';
 
 interface NavItemConfig {
   label: string;
@@ -33,6 +34,21 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
   const currentUser = users.find(u => u.id === authUser?.id) || authUser;
   const [clickedPath, setClickedPath] = useState<string | null>(null);
   const [syncErrorsCount, setSyncErrorsCount] = useState<number>(0);
+  const [customMenuOrder, setCustomMenuOrder] = useState<string[] | null>(() => getSavedCrmMenuOrder(currentUser?.id));
+
+  // Écouter les modifications de l'ordre du menu
+  useEffect(() => {
+    setCustomMenuOrder(getSavedCrmMenuOrder(currentUser?.id));
+    const handleOrderChange = (e: any) => {
+      if (e.detail?.userId === currentUser?.id) {
+        setCustomMenuOrder(e.detail?.paths || null);
+      }
+    };
+    window.addEventListener(CRM_MENU_ORDER_EVENT, handleOrderChange);
+    return () => {
+      window.removeEventListener(CRM_MENU_ORDER_EVENT, handleOrderChange);
+    };
+  }, [currentUser?.id]);
 
   const isDirection = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
 
@@ -137,6 +153,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     { label: 'Prestations', icon: FileText, path: '/prestations', color: '#6366F1', bg: '#EEF2FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Documents (GED)', icon: Folder, path: '/documents', color: '#0284C7', bg: '#F0F9FF', roles: ['Directeur', 'Responsable', 'Commercial', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Activation Modules', icon: ToggleRight, path: '/crm/modules', color: '#3B82F6', bg: '#EFF6FF', roles: ['Directeur', 'Directeur adjoint', 'SuperAdmin'] },
+    { label: 'Organisation Menu', icon: ArrowUpDown, path: '/crm/menu-order', color: '#0891B2', bg: '#ECFEFF', roles: CRM_MODULE_ACCESS.crmMenuOrderEnabled, permissionKey: 'crmMenuOrderEnabled' },
     { label: 'Exports Excel', icon: FileSpreadsheet, path: '/export', color: '#059669', bg: '#ECFDF5', roles: ['Directeur', 'Responsable', 'Directeur adjoint', 'SuperAdmin'] },
     { label: 'Utilisateurs', icon: Shield, path: '/utilisateurs', color: '#475569', bg: '#F8FAFC', roles: ['Directeur', 'SuperAdmin'] },
     { label: 'Paramètres', icon: Settings, path: '/parametres', color: '#64748B', bg: '#F1F5F9', roles: ['Directeur'] },
@@ -258,6 +275,23 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
     index === self.findIndex(i => i.path === item.path)
   );
 
+  // Appliquer l'ordre personnalisé pour le menu CRM si défini
+  const finalVisibleNavItems = React.useMemo(() => {
+    if (isPos || !customMenuOrder || customMenuOrder.length === 0) {
+      return uniqueVisibleNavItems;
+    }
+    const orderMap = new Map<string, number>();
+    customMenuOrder.forEach((path, idx) => {
+      orderMap.set(path, idx);
+    });
+
+    return [...uniqueVisibleNavItems].sort((a, b) => {
+      const indexA = orderMap.has(a.path) ? orderMap.get(a.path)! : 999;
+      const indexB = orderMap.has(b.path) ? orderMap.get(b.path)! : 999;
+      return indexA - indexB;
+    });
+  }, [uniqueVisibleNavItems, isPos, customMenuOrder]);
+
   return (
     <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
       <div className="user-profile">
@@ -278,7 +312,7 @@ export function Sidebar({ mobileOpen, setMobileOpen }: { mobileOpen?: boolean; s
 
       <nav className="nav-menu">
         <ul className="nav-list">
-          {uniqueVisibleNavItems.map((item) => {
+          {finalVisibleNavItems.map((item) => {
             const isActive = location.pathname === item.path || 
               (item.path === '/crm/rapports-equipe' && (location.pathname === '/crm/rapports-equipe' || (location.pathname === '/crm/rapports' && location.search.includes('tab=supervision')))) ||
               (item.path === '/crm/rapports' && location.pathname === '/crm/rapports' && !location.search.includes('tab=supervision')) ||

@@ -3,6 +3,7 @@ import { useAppContext } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import type { User } from '../../context/AppContext';
 import { isCrmModuleAvailable, type CrmModuleKey } from '../../config/crmModuleAccess';
+import CrmMenuOrganizer from './CrmMenuOrganizer';
 import { 
   Shield, 
   Search, 
@@ -21,7 +22,8 @@ import {
   Receipt,
   ClipboardList,
   ClipboardCheck,
-  Truck
+  Truck,
+  ArrowUpDown
 } from 'lucide-react';
 
 interface ModuleDef {
@@ -121,6 +123,14 @@ const CRM_MODULES: ModuleDef[] = [
     icon: <ClipboardCheck size={18} />,
     color: '#7C3AED',
     badge: 'Module 10'
+  },
+  {
+    key: 'crmMenuOrderEnabled',
+    label: 'Organisation du Menu Latéral',
+    shortDesc: 'Permet au collaborateur de personnaliser et classer les onglets de son menu par glissement',
+    icon: <ArrowUpDown size={18} />,
+    color: '#0891B2',
+    badge: 'Module 12'
   }
 ];
 
@@ -131,6 +141,7 @@ export default function CrmModulesManager() {
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [serviceFilter, setServiceFilter] = useState<string>('ALL');
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  const [currentTab, setCurrentTab] = useState<'activation' | 'organizer'>('activation');
 
   const isAdmin = ['Directeur', 'Directeur adjoint', 'SuperAdmin'].includes(currentUser?.role || '');
 
@@ -212,7 +223,58 @@ export default function CrmModulesManager() {
             </div>
           </div>
         </div>
+
+        {/* Onglets de navigation au sein du gestionnaire */}
+        <div style={{ display: 'flex', gap: '8px', background: 'var(--color-card)', padding: '4px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+          <button
+            type="button"
+            className="tab-button"
+            style={{
+              padding: '8px 16px',
+              borderRadius: '6px',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: currentTab === 'activation' ? 700 : 500,
+              background: currentTab === 'activation' ? '#2563EB' : 'transparent',
+              color: currentTab === 'activation' ? '#FFFFFF' : 'var(--color-text-muted)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.9rem',
+              transition: 'all 0.15s ease'
+            }}
+            onClick={() => setCurrentTab('activation')}
+          >
+            <Layers size={16} /> Droits & Activation
+          </button>
+          <button
+            type="button"
+            className="tab-button"
+            style={{
+              padding: '8px 16px',
+              borderRadius: '6px',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: currentTab === 'organizer' ? 700 : 500,
+              background: currentTab === 'organizer' ? '#0891B2' : 'transparent',
+              color: currentTab === 'organizer' ? '#FFFFFF' : 'var(--color-text-muted)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.9rem',
+              transition: 'all 0.15s ease'
+            }}
+            onClick={() => setCurrentTab('organizer')}
+          >
+            <ArrowUpDown size={16} /> Organisation du Menu
+          </button>
+        </div>
       </div>
+
+      {currentTab === 'organizer' ? (
+        <CrmMenuOrganizer />
+      ) : (
+        <>
 
       {/* Barre de filtres et recherche */}
       <div className="card" style={{ marginBottom: '24px', padding: '16px 20px' }}>
@@ -441,6 +503,8 @@ export default function CrmModulesManager() {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

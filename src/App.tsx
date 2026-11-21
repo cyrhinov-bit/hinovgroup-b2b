@@ -54,6 +54,7 @@ import { CrmCommerciaux } from './pages/crm/CrmCommerciaux';
 import { CrmCommissions } from './pages/crm/CrmCommissions';
 import CrmModulesManager from './pages/crm/CrmModulesManager';
 import { CrmWeeklyReports } from './pages/crm/CrmWeeklyReports';
+import CrmMenuOrganizer from './pages/crm/CrmMenuOrganizer';
 
 // POS Pages (lazy loaded)
 import { lazy, Suspense } from 'react';
@@ -262,6 +263,7 @@ function App() {
                     <Route path="rapports-equipe" element={<Navigate to="/crm/rapports-equipe" replace />} />
                     <Route path="rapports-hebdo" element={<Navigate to="/crm/rapports" replace />} />
                     <Route path="crm/modules" element={<RequireRole roles={['Directeur', 'Directeur adjoint', 'SuperAdmin']}><CrmModulesManager /></RequireRole>} />
+                    <Route path="crm/menu-order" element={<RequireCrmModule moduleKey="crmMenuOrderEnabled"><CrmMenuOrganizer /></RequireCrmModule>} />
 
                     {/* Commercial routes (Commercial uniquement : le SuperAdmin n'y bascule plus) */}
                     <Route path="commercial" element={<RequireRole roles={['Commercial']}><DashboardCommercial /></RequireRole>} />

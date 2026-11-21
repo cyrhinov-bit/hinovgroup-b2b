@@ -176,6 +176,7 @@ export interface User {
   crmSupFacturesEnabled?: boolean;
   crmReportsEnabled?: boolean;
   crmTeamReportsEnabled?: boolean;
+  crmMenuOrderEnabled?: boolean;
 }
 export interface Client { id: string; name: string; email: string; phone: string; contact: string; company: string; address: string; status?: string; commercialId?: string; serviceId?: string; createdAt?: string; }
 export interface Service { id: string; name: string; description: string; members?: number; managerId?: string; commissionRate?: number; }
@@ -1176,7 +1177,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
               crmFacturationEnabled: resolveBool(p.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, crmDefault),
               crmSupFacturesEnabled: resolveBool(p.crm_sup_factures_enabled, cachedUser?.crmSupFacturesEnabled, isDir),
               crmReportsEnabled: resolveBool(p.crm_reports_enabled, cachedUser?.crmReportsEnabled, crmDefault && !isDir),
-              crmTeamReportsEnabled: resolveBool(p.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
+              crmTeamReportsEnabled: resolveBool(p.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir),
+              crmMenuOrderEnabled: resolveBool(p.crm_menu_order_enabled, cachedUser?.crmMenuOrderEnabled, isDir)
             };
           });
           const mergedUsers = dedupeUsers(parsedUsers);
@@ -4393,7 +4395,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           crmFacturationEnabled: user.crmFacturationEnabled ?? crmDefaultNew,
           crmSupFacturesEnabled: user.crmSupFacturesEnabled ?? isDirRole,
           crmReportsEnabled: user.crmReportsEnabled ?? (crmDefaultNew && !isDirRole),
-          crmTeamReportsEnabled: user.crmTeamReportsEnabled ?? isDirRole
+          crmTeamReportsEnabled: user.crmTeamReportsEnabled ?? isDirRole,
+          crmMenuOrderEnabled: user.crmMenuOrderEnabled ?? isDirRole
         }),
       }
     );
@@ -4431,7 +4434,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       crmFacturationEnabled: user.crmFacturationEnabled ?? crmDefaultNew,
       crmSupFacturesEnabled: user.crmSupFacturesEnabled ?? isDirRole,
       crmReportsEnabled: user.crmReportsEnabled ?? (crmDefaultNew && !isDirRole),
-      crmTeamReportsEnabled: user.crmTeamReportsEnabled ?? isDirRole
+      crmTeamReportsEnabled: user.crmTeamReportsEnabled ?? isDirRole,
+      crmMenuOrderEnabled: user.crmMenuOrderEnabled ?? isDirRole
     };
     const newUsers = dedupeUsers([...users.filter(u => u.id !== newUser.id && u.email.trim().toLowerCase() !== newUser.email.trim().toLowerCase()), newUser]);
     setUsers(newUsers);
@@ -4463,6 +4467,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (data.crmSupFacturesEnabled !== undefined) payload.crm_sup_factures_enabled = data.crmSupFacturesEnabled;
     if (data.crmReportsEnabled !== undefined) payload.crm_reports_enabled = data.crmReportsEnabled;
     if (data.crmTeamReportsEnabled !== undefined) payload.crm_team_reports_enabled = data.crmTeamReportsEnabled;
+    if (data.crmMenuOrderEnabled !== undefined) payload.crm_menu_order_enabled = data.crmMenuOrderEnabled;
     if (currentUser && currentUser.id === id) {
       updateCurrentUser(data);
     }

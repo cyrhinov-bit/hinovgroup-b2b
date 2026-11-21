@@ -189,7 +189,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           crmFacturationEnabled: resolveBool(data.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, crmDefault),
           crmSupFacturesEnabled: resolveBool(data.crm_sup_factures_enabled, cachedUser?.crmSupFacturesEnabled, isDir),
           crmReportsEnabled: resolveBool(data.crm_reports_enabled, cachedUser?.crmReportsEnabled, crmDefault && !isDir),
-          crmTeamReportsEnabled: resolveBool(data.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
+          crmTeamReportsEnabled: resolveBool(data.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir),
+          crmMenuOrderEnabled: resolveBool(data.crm_menu_order_enabled, cachedUser?.crmMenuOrderEnabled, isDir)
         };
 
         setCurrentUser(userObj);
@@ -376,7 +377,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           crmFacturationEnabled: resolveBool(profile.crm_facturation_enabled, cachedUser?.crmFacturationEnabled, crmDefault),
           crmSupFacturesEnabled: resolveBool(profile.crm_sup_factures_enabled, cachedUser?.crmSupFacturesEnabled, isDir),
           crmReportsEnabled: resolveBool(profile.crm_reports_enabled, cachedUser?.crmReportsEnabled, crmDefault && !isDir),
-          crmTeamReportsEnabled: resolveBool(profile.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir)
+          crmTeamReportsEnabled: resolveBool(profile.crm_team_reports_enabled, cachedUser?.crmTeamReportsEnabled, isDir),
+          crmMenuOrderEnabled: resolveBool(profile.crm_menu_order_enabled, cachedUser?.crmMenuOrderEnabled, isDir)
         };
         logoutRequestedRef.current = false;
         setCurrentUser(userObj);
@@ -432,6 +434,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       crmSupFacturesEnabled: isDir,
       crmReportsEnabled: crmDefault && !isDir,
       crmTeamReportsEnabled: isDir,
+      crmMenuOrderEnabled: isDir,
     };
     setCurrentUser(testUser);
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(testUser));
